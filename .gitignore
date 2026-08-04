@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+backend/venv/
+backend/__pycache__/
+backend/*.log
+*.env
+
+# Node / React
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/*.log
+.DS_Store
+
+# Media Storage & Sensitive Tokens
+OmniClip_Storage/local_downloads/*
+OmniClip_Storage/edited_clips/*
+OmniClip_Storage/account_tokens/*
+!OmniClip_Storage/**/.gitkeep
