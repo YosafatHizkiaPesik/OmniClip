@@ -1,0 +1,165 @@
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { apiPost } from '../../lib/api';
+
+/**
+ * Satu-satunya sumber kebenaran untuk klip yang sedang diedit.
+ *
+ * Bug lama yang diperbaiki di sini: StudioEditor menyimpan start/end/hook/
+ * subtitle sebagai SALINAN useState dari clipList, lalu sebuah efek menyalin
+ * ulang dari clipList setiap kali indeks klip ATAU clipList berubah — sementara
+ * tidak ada yang pernah menulis balik. Akibatnya setiap suntingan subtitle
+ * hilang begitu pengguna berpindah klip, dan menambah klip menghapus suntingan
+ * klip yang sedang dibuka.
+ *
+ * Sekarang tidak ada state cermin: setiap panel membaca dari `clips` dan menulis
+ * lewat `updateClip`.
+ */
+export function useClipEditor() {
+  const [clips, setClips] = useState([]);
+  const [selectedId, setSelectedId] = useState(null);
+  const [checked, setChecked] = useState(() => new Set());
+  const [dirty, setDirty] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const videoIdRef = useRef(null);
+
+  const load = useCallback((videoId, incoming) => {
+    videoIdRef.current = videoId;
+    const prepared = (incoming || []).map((c, i) => ({
+      ...c,
+      clip_id: c.clip_id || `clip_${i}`,
+      segments: c.segments?.length
+        ? c.segments.map((s) => ({ ...s }))
+        : [{ start: c.start_seconds, end: c.end_seconds }],
+    }));
+    setClips(prepared);
+    setSelectedId(prepared[0]?.clip_id ?? null);
+    setChecked(new Set(prepared.map((c) => c.clip_id)));
+    setDirty(false);
+  }, []);
+
+  const selected = useMemo(
+    () => clips.find((c) => c.clip_id === selectedId) ?? null,
+    [clips, selectedId],
+  );
+
+  const updateClip = useCallback((id, patch) => {
+    setClips((prev) => prev.map((c) => (c.clip_id === id ? { ...c, ...patch } : c)));
+    setDirty(true);
+  }, []);
+
+  /**
+   * Meminta backend menghitung ulang subtitle untuk susunan segmen baru.
+   * Perhitungan hanya ada di satu tempat, sehingga preview dan hasil render
+   * memakai subtitle yang persis sama.
+   */
+  const recomputeSubtitles = useCallback(async (id, segments) => {
+    const videoId = videoIdRef.current;
+    if (!videoId) return;
+    setBusy(true);
+    try {
+      const res = await apiPost('/clip-preview', { video_id: videoId, segments });
+      updateClip(id, {
+        segments: res.segments,
+        subtitles: res.subtitles,
+        duration: res.duration,
+        start_seconds: res.segments[0].start,
+        end_seconds: res.segments[res.segments.length - 1].end,
+      });
+    } catch {
+      // Kalau transkrip tidak ada, batas tetap berubah tanpa subtitle baru.
+      updateClip(id, {
+        segments,
+        duration: segments.reduce((a, s) => a + (s.end - s.start), 0),
+        start_seconds: segments[0].start,
+        end_seconds: segments[segments.length - 1].end,
+      });
+    } finally {
+      setBusy(false);
+    }
+  }, [updateClip]);
+
+  /** Menggeser batas satu segmen; nilai negatif memundurkan, positif memajukan. */
+  const nudgeSegment = useCallback((id, segIndex, edge, delta, maxDuration) => {
+    const clip = clips.find((c) => c.clip_id === id);
+    if (!clip) return;
+    const segments = clip.segments.map((s) => ({ ...s }));
+    const seg = segments[segIndex];
+    if (!seg) return;
+
+    if (edge === 'start') {
+      seg.start = Math.max(0, Math.min(seg.end - 1.5, seg.start + delta));
+    } else {
+      seg.end = Math.min(maxDuration || seg.end + delta, Math.max(seg.start + 1.5, seg.end + delta));
+    }
+    recomputeSubtitles(id, segments);
+  }, [clips, recomputeSubtitles]);
+
+  const setSegmentBounds = useCallback((id, segIndex, start, end) => {
+    const clip = clips.find((c) => c.clip_id === id);
+    if (!clip) return;
+    const segments = clip.segments.map((s) => ({ ...s }));
+    if (!segments[segIndex]) return;
+    segments[segIndex] = { start: Math.max(0, start), end: Math.max(start + 1.5, end) };
+    recomputeSubtitles(id, segments);
+  }, [clips, recomputeSubtitles]);
+
+  /** Menambahkan potongan dari bagian lain video ke klip yang sama. */
+  const addSegment = useCallback((id, start, end) => {
+    const clip = clips.find((c) => c.clip_id === id);
+    if (!clip) return;
+    recomputeSubtitles(id, [...clip.segments.map((s) => ({ ...s })), { start, end }]);
+  }, [clips, recomputeSubtitles]);
+
+  const removeSegment = useCallback((id, segIndex) => {
+    const clip = clips.find((c) => c.clip_id === id);
+    if (!clip || clip.segments.length <= 1) return;
+    recomputeSubtitles(id, clip.segments.filter((_, i) => i !== segIndex));
+  }, [clips, recomputeSubtitles]);
+
+  const updateSubtitle = useCallback((id, lineIndex, patch) => {
+    const clip = clips.find((c) => c.clip_id === id);
+    if (!clip) return;
+    const subtitles = clip.subtitles.map((l, i) => (i === lineIndex ? { ...l, ...patch } : l));
+    updateClip(id, { subtitles });
+  }, [clips, updateClip]);
+
+  const removeSubtitle = useCallback((id, lineIndex) => {
+    const clip = clips.find((c) => c.clip_id === id);
+    if (!clip) return;
+    updateClip(id, { subtitles: clip.subtitles.filter((_, i) => i !== lineIndex) });
+  }, [clips, updateClip]);
+
+  const toggleChecked = useCallback((id) => {
+    setChecked((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const setAllChecked = useCallback((value) => {
+    setChecked(value ? new Set(clips.map((c) => c.clip_id)) : new Set());
+  }, [clips]);
+
+  const removeClip = useCallback((id) => {
+    setClips((prev) => {
+      const next = prev.filter((c) => c.clip_id !== id);
+      if (selectedId === id) setSelectedId(next[0]?.clip_id ?? null);
+      return next;
+    });
+    setChecked((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  }, [selectedId]);
+
+  return {
+    clips, selected, selectedId, checked, dirty, busy,
+    load, setSelectedId, updateClip,
+    nudgeSegment, setSegmentBounds, addSegment, removeSegment, recomputeSubtitles,
+    updateSubtitle, removeSubtitle,
+    toggleChecked, setAllChecked, removeClip,
+  };
+}

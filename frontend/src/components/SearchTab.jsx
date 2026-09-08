@@ -1,18 +1,25 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Search, Download, Scissors, Play, ArrowLeft, CheckCircle2, Sparkles, Loader2, Video, TrendingUp, Flame, Music, Gamepad2, Cpu, Globe, Eye, Clock } from 'lucide-react';
 import { formatTime, formatDurationHuman } from '../utils/timeFormat';
+import { apiGet, apiPost, downloadToDisk } from '../lib/api';
+import { useJobRunner } from '../hooks/useJob';
+import JobProgress from './JobProgress';
 
+// Tahun sengaja tidak dicantumkan: menempelkan "2024" ke setiap kueri menyaring
+// hasil ke tahun yang sudah lewat, dan chip pertama dulu sama persis dengan
+// chip "Trending".
 const CATEGORY_SHORTCUTS = [
-  { label: 'Semua', query: 'trending viral indonesia 2024' },
-  { label: '🔥 Trending', query: 'trending viral indonesia 2024' },
-  { label: '🎙️ Podcast', query: 'podcast viral indonesia 2024' },
-  { label: '🎮 Gaming', query: 'gaming highlights indonesia 2024' },
-  { label: '🎵 Musik', query: 'musik viral indonesia 2024' },
-  { label: '💻 Tech', query: 'teknologi AI indonesia 2024' },
-  { label: '💰 Finance', query: 'investasi tips keuangan indonesia 2024' },
-  { label: '😂 Komedi', query: 'komedi lucu indonesia 2024' },
-  { label: '🍜 Kuliner', query: 'kuliner makanan enak indonesia 2024' },
-  { label: '✈️ Travel', query: 'travel wisata indonesia 2024' },
+  { label: '🔥 Trending', query: 'trending viral indonesia' },
+  { label: '🎙️ Podcast', query: 'podcast indonesia terbaru' },
+  { label: '🎤 Wawancara', query: 'wawancara eksklusif indonesia' },
+  { label: '📚 Edukasi', query: 'edukasi menarik indonesia' },
+  { label: '🎮 Gaming', query: 'gaming highlights indonesia' },
+  { label: '🎵 Musik', query: 'musik viral indonesia' },
+  { label: '💻 Tech', query: 'teknologi AI indonesia' },
+  { label: '💰 Finance', query: 'investasi tips keuangan indonesia' },
+  { label: '😂 Komedi', query: 'komedi lucu indonesia' },
+  { label: '🍜 Kuliner', query: 'kuliner makanan enak indonesia' },
+  { label: '✈️ Travel', query: 'travel wisata indonesia' },
 ];
 
 // Format view count YouTube-style
@@ -148,7 +155,7 @@ function RelatedVideoCard({ video, onClick }) {
   );
 }
 
-export default function SearchTab({ onOpenClipEditor }) {
+export default function SearchTab({ onOpenStudio }) {
   const [query, setQuery] = useState('');
   const [feed, setFeed] = useState([]);           // Main grid feed (trending/search results)
   const [relatedVideos, setRelatedVideos] = useState([]); // Related videos (sidebar)
@@ -160,75 +167,67 @@ export default function SearchTab({ onOpenClipEditor }) {
   // Download modal state
   const [showDownloadModal, setShowDownloadModal] = useState(false);
   const [selectedResolution, setSelectedResolution] = useState('720p');
-  const [downloading, setDownloading] = useState(false);
-  const [downloadResult, setDownloadResult] = useState(null);
+  const downloadJob = useJobRunner();
+  const downloadResult = downloadJob.result;
 
-  // AI clip analyze
+  // Pengklipan berjalan sebagai job di latar belakang. Halaman ini tidak
+  // berpindah ke Studio: pengguna bisa langsung mengantre video berikutnya.
   const [analyzingClip, setAnalyzingClip] = useState(false);
+  const [clipPending, setClipPending] = useState(null);  // konfirmasi video panjang
+  const [clipNotice, setClipNotice] = useState(null);    // {kind, text}
+  // Kegagalan pencarian harus terlihat. Sebelumnya `catch { setFeed([]) }`
+  // membuat rate limit YouTube tampak persis seperti "tidak ada hasil".
+  const [feedError, setFeedError] = useState(null);
+  // Model transkripsi. 'base' cepat tapi sering salah pada percakapan Indonesia
+  // yang cepat; 'small' jauh lebih akurat dengan biaya ~5x waktu proses.
+  const [whisperModel, setWhisperModel] = useState('base');
 
   // Load trending on mount (YouTube homepage style)
   useEffect(() => {
     loadTrending();
   }, []);
 
-  const loadTrending = async () => {
+  /** Satu jalur untuk semua pengisian feed, lengkap dengan error yang terlihat. */
+  const fillFeed = async (path) => {
     setFeedLoading(true);
+    setFeedError(null);
     try {
-      const res = await fetch('http://localhost:8000/api/trending?limit=20');
-      const data = await res.json();
+      const data = await apiGet(path);
       setFeed(Array.isArray(data) ? data : []);
     } catch (err) {
-      console.error('Trending error:', err);
       setFeed([]);
+      setFeedError(err);
     } finally {
       setFeedLoading(false);
     }
   };
 
-  const loadCategory = async (catQuery, catIndex) => {
+  const loadTrending = () => fillFeed('/trending?limit=20');
+
+  const loadCategory = (catQuery, catIndex) => {
     setActiveCategory(catIndex);
-    setFeedLoading(true);
     setSelectedVideo(null);
-    try {
-      const res = await fetch(`http://localhost:8000/api/search?q=${encodeURIComponent(catQuery)}&limit=20`);
-      const data = await res.json();
-      setFeed(Array.isArray(data) ? data : []);
-    } catch (err) {
-      setFeed([]);
-    } finally {
-      setFeedLoading(false);
-    }
+    return fillFeed(`/search?q=${encodeURIComponent(catQuery)}&limit=20`);
   };
 
-  const handleSearchSubmit = async (e) => {
+  const handleSearchSubmit = (e) => {
     if (e) e.preventDefault();
     if (!query.trim()) return;
-    setFeedLoading(true);
     setSelectedVideo(null);
     setActiveCategory(-1);
-    try {
-      const res = await fetch(`http://localhost:8000/api/search?q=${encodeURIComponent(query.trim())}&limit=20`);
-      const data = await res.json();
-      setFeed(Array.isArray(data) ? data : []);
-    } catch {
-      setFeed([]);
-    } finally {
-      setFeedLoading(false);
-    }
+    return fillFeed(`/search?q=${encodeURIComponent(query.trim())}&limit=20`);
   };
 
   // When user selects a video → load related videos from a related query
   const handleSelectVideo = async (video) => {
     setSelectedVideo(video);
     setRelatedLoading(true);
-    setDownloadResult(null);
     // Scroll to top
     window.scrollTo({ top: 0, behavior: 'smooth' });
     try {
       // Search for related videos based on channel + title keywords
       const relatedQuery = `${video.channel} ${video.title.split(' ').slice(0, 4).join(' ')}`;
-      const res = await fetch(`http://localhost:8000/api/search?q=${encodeURIComponent(relatedQuery)}&limit=15`);
-      const data = await res.json();
+      const data = await apiGet(`/search?q=${encodeURIComponent(relatedQuery)}&limit=15`);
       // Exclude the current video
       const filtered = (Array.isArray(data) ? data : []).filter(v => v.id !== video.id);
       setRelatedVideos(filtered.slice(0, 12));
@@ -239,47 +238,68 @@ export default function SearchTab({ onOpenClipEditor }) {
     }
   };
 
+  // Unduhan berjalan sebagai job di backend: progresnya nyata, bisa dibatalkan,
+  // dan tetap berjalan meski modal ditutup.
   const handleDownloadSubmit = async () => {
     if (!selectedVideo) return;
-    setDownloading(true);
-    setDownloadResult(null);
     try {
-      const res = await fetch('http://localhost:8000/api/download', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: selectedVideo.url, resolution: selectedResolution })
+      await downloadJob.run('/download', {
+        url: selectedVideo.id || selectedVideo.url,
+        resolution: selectedResolution,
       });
-      const data = await res.json();
-      if (res.ok) {
-        setDownloadResult(data);
-      } else {
-        alert(data.detail || 'Pengunduhan gagal. Coba resolusi lain.');
-      }
     } catch {
-      alert('Gagal terhubung ke backend. Pastikan server berjalan.');
-    } finally {
-      setDownloading(false);
+      /* error sudah tersimpan di downloadJob.error dan ditampilkan di modal */
     }
   };
 
   const handleProxyDownload = async (fileName) => {
     try {
-      const res = await fetch(`http://localhost:8000/api/file/local_downloads/${encodeURIComponent(fileName)}`);
-      if (!res.ok) throw new Error('File tidak ditemukan');
-      const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = fileName;
-      document.body.appendChild(a); a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-    } catch (err) { alert(`Gagal download: ${err.message}`); }
+      await downloadToDisk('local_downloads', fileName);
+    } catch (err) {
+      setClipNotice({ kind: 'error', text: `Gagal menyimpan file: ${err.message}` });
+    }
   };
 
-  const handleTriggerClip = () => {
-    if (!selectedVideo) return;
-    // Immediately open Studio Editor (aiData=null triggers smooth loading screen in StudioEditor)
-    onOpenClipEditor(selectedVideo, null);
+  /** Mengantre pekerjaan klip tanpa memindahkan halaman. */
+  const startClipJob = async (video) => {
+    setClipPending(null);
+    setAnalyzingClip(true);
+    try {
+      const res = await apiPost('/auto-clip', {
+        video_id: video.id, max_clips: 8, whisper_model: whisperModel,
+      });
+      setClipNotice({
+        kind: res.cached ? 'cached' : 'queued',
+        text: res.cached
+          ? 'Video ini sudah pernah diklip. Hasilnya menunggu di Clip Studio.'
+          : 'Diantrekan. Prosesnya berjalan di latar belakang — Anda bisa langsung memilih video lain.',
+      });
+    } catch (err) {
+      setClipNotice({ kind: 'error', text: err.message });
+    } finally {
+      setAnalyzingClip(false);
+    }
+  };
+
+  const handleTriggerClip = async () => {
+    if (!selectedVideo || analyzingClip) return;
+    setClipNotice(null);
+    setAnalyzingClip(true);
+    try {
+      const info = await apiGet(`/video-info?url=${encodeURIComponent(selectedVideo.id)}`);
+      const minutes = (info.duration || 0) / 60;
+      // Video panjang tanpa subtitle harus disalin ucapannya di CPU. Pengguna
+      // berhak tahu perkiraan waktunya sebelum pekerjaan itu dimulai.
+      if (!info.has_captions && minutes > 12) {
+        setClipPending({ video: selectedVideo, minutes, estimate: Math.ceil(minutes * 0.3) });
+        setAnalyzingClip(false);
+        return;
+      }
+      await startClipJob(selectedVideo);
+    } catch (err) {
+      setClipNotice({ kind: 'error', text: err.message });
+      setAnalyzingClip(false);
+    }
   };
 
   // ===== RENDER PLAYER + SIDEBAR VIEW (when video selected) =====
@@ -312,7 +332,7 @@ export default function SearchTab({ onOpenClipEditor }) {
           <div style={{ background: '#000', borderRadius: '14px', overflow: 'hidden', position: 'relative' }}>
             <iframe
               key={selectedVideo.id}
-              src={`https://www.youtube-nocookie.com/embed/${selectedVideo.id}?autoplay=1&rel=0&enablejsapi=1&origin=http://localhost:5173`}
+              src={`https://www.youtube-nocookie.com/embed/${selectedVideo.id}?autoplay=1&rel=0&enablejsapi=1&origin=${window.location.origin}`}
               title={selectedVideo.title}
               style={{ width: '100%', height: '420px', border: 'none', display: 'block' }}
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
@@ -341,7 +361,7 @@ export default function SearchTab({ onOpenClipEditor }) {
               {/* Action Buttons */}
               <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                 <button
-                  onClick={() => { setDownloadResult(null); setShowDownloadModal(true); }}
+                  onClick={() => { downloadJob.reset(); setShowDownloadModal(true); }}
                   className="btn-secondary"
                   style={{ background: 'rgba(79, 172, 254, 0.12)', borderColor: 'rgba(79, 172, 254, 0.35)', color: '#4facfe', fontSize: '0.85rem' }}
                 >
@@ -354,11 +374,106 @@ export default function SearchTab({ onOpenClipEditor }) {
                   style={{ background: 'linear-gradient(135deg, #ff0844, #ff4e50)', color: '#fff', fontSize: '0.85rem' }}
                 >
                   {analyzingClip
-                    ? <><Loader2 size={16} className="animate-spin" /> Gemini menganalisis...</>
-                    : <><Scissors size={16} /><Sparkles size={14} /> AI Clip Studio</>}
+                    ? <><Loader2 size={16} className="animate-spin" /> Mengantre…</>
+                    : <><Scissors size={16} /><Sparkles size={14} /> Clip Video</>}
                 </button>
               </div>
             </div>
+
+            {/* Konfirmasi untuk video panjang tanpa subtitle */}
+            {clipPending && (
+              <div style={{
+                marginTop: '14px', padding: '14px 16px',
+                background: 'var(--bg-card)', border: '1px solid var(--border-color)',
+                borderRadius: 'var(--radius-md)',
+              }}>
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', marginBottom: '10px' }}>
+                  <Clock size={18} style={{ color: 'var(--accent-cyan)', flexShrink: 0, marginTop: '2px' }} />
+                  <div>
+                    <div style={{ fontSize: '0.92rem', fontWeight: 800, marginBottom: '4px' }}>
+                      Video ini tidak punya subtitle di YouTube
+                    </div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                      Durasinya {Math.round(clipPending.minutes)} menit, jadi ucapannya harus
+                      disalin dulu di komputer ini — perkiraan{' '}
+                      <strong style={{ color: 'var(--accent-cyan)' }}>± {clipPending.estimate} menit</strong>.
+                      Prosesnya berjalan di latar belakang, jadi Anda tetap bisa menonton
+                      dan mengantre video lain sementara menunggu.
+                    </div>
+                  </div>
+                </div>
+                <div style={{ marginBottom: '12px' }}>
+                  <div style={{
+                    fontSize: '0.72rem', fontWeight: 800, color: 'var(--text-secondary)',
+                    marginBottom: '7px', letterSpacing: '0.02em',
+                  }}>
+                    KETELITIAN TRANSKRIP
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                    {[
+                      { id: 'base', title: 'Cepat', detail: `± ${clipPending.estimate} menit`,
+                        note: 'Cukup untuk bicara jelas dan pelan.' },
+                      { id: 'small', title: 'Akurat', detail: `± ${clipPending.estimate * 5} menit`,
+                        note: 'Jauh lebih baik untuk percakapan cepat dan bahasa gaul.' },
+                    ].map((opt) => (
+                      <button key={opt.id} onClick={() => setWhisperModel(opt.id)} style={{
+                        textAlign: 'left', padding: '9px 11px', cursor: 'pointer',
+                        borderRadius: 'var(--radius-sm)',
+                        border: whisperModel === opt.id
+                          ? '2px solid var(--accent-cyan)' : '1px solid var(--border-color)',
+                        background: whisperModel === opt.id ? 'rgba(0,242,254,0.08)' : 'transparent',
+                      }}>
+                        <div style={{
+                          fontSize: '0.82rem', fontWeight: 800,
+                          color: whisperModel === opt.id ? 'var(--accent-cyan)' : 'var(--text-primary)',
+                        }}>
+                          {opt.title} <span style={{ fontWeight: 600, color: 'var(--text-muted)' }}>{opt.detail}</span>
+                        </div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', lineHeight: 1.4, marginTop: '2px' }}>
+                          {opt.note}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <button className="btn-primary" style={{ fontSize: '0.82rem' }}
+                          onClick={() => startClipJob(clipPending.video)}>
+                    <Sparkles size={14} /> Lanjutkan
+                  </button>
+                  <button className="btn-secondary" style={{ fontSize: '0.82rem' }}
+                          onClick={() => setClipPending(null)}>
+                    Batal
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Hasil pengantrean */}
+            {clipNotice && (
+              <div style={{
+                marginTop: '14px', padding: '12px 15px', borderRadius: 'var(--radius-md)',
+                display: 'flex', alignItems: 'center', gap: '11px', flexWrap: 'wrap',
+                background: clipNotice.kind === 'error' ? 'rgba(255,77,109,0.1)' : 'rgba(0,242,254,0.08)',
+                border: `1px solid ${clipNotice.kind === 'error' ? 'rgba(255,77,109,0.3)' : 'rgba(0,242,254,0.3)'}`,
+              }}>
+                {clipNotice.kind === 'error'
+                  ? <Loader2 size={16} style={{ color: 'var(--accent-red, #ff4d6d)' }} />
+                  : <CheckCircle2 size={16} style={{ color: 'var(--accent-cyan)' }} />}
+                <span style={{ fontSize: '0.83rem', flex: 1, minWidth: '200px' }}>{clipNotice.text}</span>
+                {clipNotice.kind !== 'error' && (
+                  <button className="btn-primary" style={{ fontSize: '0.78rem', padding: '6px 12px' }}
+                          onClick={onOpenStudio}>
+                    <Scissors size={13} /> Buka Clip Studio
+                  </button>
+                )}
+                <button className="btn-secondary" style={{ fontSize: '0.78rem', padding: '6px 12px' }}
+                        onClick={() => setClipNotice(null)}>
+                  Tutup
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -403,18 +518,35 @@ export default function SearchTab({ onOpenClipEditor }) {
                   </button>
                 ))}
               </div>
-              {downloadResult && (
-                <div style={{ padding: '10px', background: 'rgba(16,185,129,0.15)', border: '1px solid #10b981', borderRadius: '8px', fontSize: '0.82rem', color: '#10b981' }}>
-                  <div style={{ fontWeight: 700, marginBottom: '6px' }}>✅ {downloadResult.file_name}</div>
-                  <button onClick={() => handleProxyDownload(downloadResult.file_name)} className="btn-primary" style={{ background: '#10b981', color: '#fff', fontSize: '0.78rem', padding: '5px 12px' }}>
-                    <Download size={13} /> Simpan ke Perangkat
-                  </button>
+              {(downloadJob.job || downloadJob.error) && (
+                <div style={{ padding: '12px', background: 'var(--bg-glass)', border: '1px solid var(--border-color)', borderRadius: '10px' }}>
+                  <JobProgress job={downloadJob.job} error={downloadJob.error} onCancel={downloadJob.cancel} />
+
+                  {downloadResult && (
+                    <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {downloadResult.note && (
+                        <div style={{ fontSize: '0.76rem', color: 'var(--text-secondary)' }}>{downloadResult.note}</div>
+                      )}
+                      <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                        {downloadResult.width}×{downloadResult.height} · {(downloadResult.file_size / 1048576).toFixed(1)} MB
+                      </div>
+                      <button
+                        onClick={() => handleProxyDownload(downloadResult.file_name)}
+                        className="btn-primary"
+                        style={{ background: '#10b981', color: '#fff', fontSize: '0.78rem', padding: '6px 12px', alignSelf: 'flex-start' }}
+                      >
+                        <Download size={13} /> Simpan ke Perangkat
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
                 <button className="btn-secondary" onClick={() => setShowDownloadModal(false)}>Tutup</button>
-                <button className="btn-primary" onClick={handleDownloadSubmit} disabled={downloading}>
-                  {downloading ? <><Loader2 size={15} className="animate-spin" /> Mengunduh...</> : <><Download size={15} /> Unduh via Server</>}
+                <button className="btn-primary" onClick={handleDownloadSubmit} disabled={downloadJob.active}>
+                  {downloadJob.active
+                    ? <><Loader2 size={15} className="animate-spin" /> Mengunduh…</>
+                    : <><Download size={15} /> Unduh via Server</>}
                 </button>
               </div>
             </div>
@@ -481,11 +613,34 @@ export default function SearchTab({ onOpenClipEditor }) {
             </div>
           ))}
         </div>
+      ) : feedError ? (
+        <div style={{
+          padding: '46px 24px', textAlign: 'center', background: 'var(--bg-card)',
+          borderRadius: '16px', border: '1px solid rgba(255,77,109,0.35)',
+        }}>
+          <Video size={38} style={{ color: 'var(--accent-red, #ff4d6d)', marginBottom: '12px' }} />
+          <h3 style={{ fontWeight: 700, marginBottom: '6px' }}>Pencarian gagal</h3>
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.6, maxWidth: '440px', margin: '0 auto' }}>
+            {feedError.message}
+          </p>
+          {feedError.code === 'YTDLP_RATE_LIMIT' && (
+            <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '10px', lineHeight: 1.6 }}>
+              YouTube sedang membatasi permintaan dari komputer ini. Tunggu beberapa
+              menit, atau pasang berkas cookies di halaman Settings.
+            </p>
+          )}
+          <button className="btn-secondary" style={{ marginTop: '16px', fontSize: '0.83rem' }}
+                  onClick={() => (activeCategory >= 0
+                    ? loadCategory(CATEGORY_SHORTCUTS[activeCategory].query, activeCategory)
+                    : handleSearchSubmit())}>
+            Coba lagi
+          </button>
+        </div>
       ) : feed.length === 0 ? (
         <div style={{ padding: '60px 20px', textAlign: 'center', background: 'var(--bg-card)', borderRadius: '16px', border: '1px dashed var(--border-color)' }}>
           <Video size={40} style={{ color: 'var(--text-muted)', marginBottom: '12px' }} />
           <h3 style={{ fontWeight: 700 }}>Tidak ada video ditemukan</h3>
-          <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '4px' }}>Coba kata kunci yang berbeda atau periksa koneksi internet.</p>
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '4px' }}>Coba kata kunci yang berbeda.</p>
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px 16px' }}>

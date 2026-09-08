@@ -1,11 +1,33 @@
+# --- Web framework ---
 fastapi>=0.110.0
 uvicorn>=0.28.0
-yt-dlp>=2024.3.10
-google-genai>=0.1.1
-google-generativeai>=0.4.0
-google-api-python-client>=2.120.0
-google-auth-httplib2>=0.2.0
-google-auth-oauthlib>=1.2.0
-python-multipart>=0.0.9
 pydantic>=2.6.0
-requests>=2.31.0
+python-dotenv>=1.0.0
+
+# --- YouTube ---
+# yt-dlp harus tetap mutakhir. YouTube rutin mematahkan versi lama: gejalanya
+# adalah HTTP 403 di tengah unduhan atau "Sign in to confirm you're not a bot".
+# Perbaikannya selalu: pip install -U yt-dlp
+yt-dlp>=2026.8.19
+
+# --- Transkripsi lokal (cadangan bila video tidak punya caption) ---
+# Dijalankan int8 di CPU. Model 'base' butuh ~400 MB RAM, 'small' ~900 MB.
+faster-whisper>=1.2.1
+
+# --- Smart reframe: mengikuti wajah pembicara saat memotong 9:16 ---
+# Versi di-pin: cv2.FaceDetectorYN stabil di 4.11 dan wheel-nya teruji.
+# Varian 'headless' dipakai karena server tidak pernah membuka jendela GUI —
+# paket biasa menarik GTK/Qt yang tidak ada gunanya di sini.
+#
+# Model YuNet (232 KB) harus ada di backend/models/. Bila tidak ada, render
+# otomatis memakai mode bilah kabur, tanpa error:
+#   curl -sL -o models/face_detection_yunet_2023mar.onnx \
+#     https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx
+opencv-python-headless==4.11.0.86
+
+# --- AI (opsional) ---
+# Tanpa API key, pemilihan klip tetap berjalan memakai mesin heuristik lokal.
+google-genai>=0.1.1
+
+# Prasyarat sistem (bukan paket pip): ffmpeg dan ffprobe harus ada di PATH.
+#   Ubuntu/Debian: sudo apt install ffmpeg

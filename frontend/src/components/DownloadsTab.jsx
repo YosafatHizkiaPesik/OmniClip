@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Download, Film, Music, Trash2, RefreshCw, Search, Play, X, CheckCircle, Loader2 } from 'lucide-react';
+import { Download, Film, Music, Trash2, RefreshCw, Search, Play, X, CheckCircle, Loader2, AlertTriangle } from 'lucide-react';
+import { apiGet, apiDelete, downloadToDisk } from '../lib/api';
 
 function formatBytes(bytes) {
   if (bytes < 1024) return `${bytes} B`;
@@ -17,7 +18,7 @@ function formatDate(timestamp) {
 
 // Video Player Modal
 function VideoPlayerModal({ item, onClose }) {
-  const src = `http://localhost:8000${item.web_url}`;
+  const src = `${item.web_url}`;
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div onClick={e => e.stopPropagation()} style={{
@@ -53,16 +54,21 @@ export default function DownloadsTab() {
   const [previewItem, setPreviewItem] = useState(null);
   const [selectedItems, setSelectedItems] = useState(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [loadError, setLoadError] = useState(null);
+  // Kegagalan aksi (hapus / simpan) ditampilkan inline, bukan lewat window.alert
+  // yang memblokir dan tidak bisa disalin teksnya.
+  const [actionError, setActionError] = useState(null);
   const [filter, setFilter] = useState('all'); // 'all' | 'video' | 'audio'
 
   const fetchDownloads = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
-      const res = await fetch('http://localhost:8000/api/downloads');
-      const data = await res.json();
+      const data = await apiGet('/downloads');
       setDownloads(Array.isArray(data) ? data : []);
     } catch (err) {
-      console.error(err);
+      // Jangan samarkan backend mati sebagai "tidak ada unduhan".
+      setLoadError(err);
       setDownloads([]);
     } finally {
       setLoading(false);
@@ -74,26 +80,35 @@ export default function DownloadsTab() {
   const handleDelete = async (filename) => {
     if (!window.confirm(`Hapus file "${filename}"?`)) return;
     setDeleting(filename);
+    setActionError(null);
     try {
-      const res = await fetch(`http://localhost:8000/api/downloads/${encodeURIComponent(filename)}`, { method: 'DELETE' });
-      if (res.ok) {
-        setDownloads(prev => prev.filter(d => d.file_name !== filename));
-        setSelectedItems(prev => { const s = new Set(prev); s.delete(filename); return s; });
-      } else {
-        alert('Gagal menghapus file.');
-      }
-    } catch { alert('Error saat menghapus file.'); }
-    finally { setDeleting(null); }
+      await apiDelete(`/downloads/${encodeURIComponent(filename)}`);
+      setDownloads(prev => prev.filter(d => d.file_name !== filename));
+      setSelectedItems(prev => { const s = new Set(prev); s.delete(filename); return s; });
+    } catch (err) {
+      setActionError(`Gagal menghapus "${filename}": ${err.message}`);
+    } finally {
+      setDeleting(null);
+    }
   };
 
   const handleBulkDelete = async () => {
     if (selectedItems.size === 0) return;
     if (!window.confirm(`Hapus ${selectedItems.size} file yang dipilih?`)) return;
     setBulkDeleting(true);
+    setActionError(null);
+    const failed = [];
     for (const fname of selectedItems) {
       try {
-        await fetch(`http://localhost:8000/api/downloads/${encodeURIComponent(fname)}`, { method: 'DELETE' });
-      } catch {}
+        // eslint-disable-next-line no-await-in-loop
+        await apiDelete(`/downloads/${encodeURIComponent(fname)}`);
+      } catch {
+        // Kegagalan per file dikumpulkan, bukan ditelan diam-diam seperti dulu.
+        failed.push(fname);
+      }
+    }
+    if (failed.length) {
+      setActionError(`${failed.length} file gagal dihapus: ${failed.join(', ')}`);
     }
     setSelectedItems(new Set());
     await fetchDownloads();
@@ -101,17 +116,12 @@ export default function DownloadsTab() {
   };
 
   const handleProxyDownload = async (fileName) => {
+    setActionError(null);
     try {
-      const res = await fetch(`http://localhost:8000/api/file/local_downloads/${encodeURIComponent(fileName)}`);
-      if (!res.ok) throw new Error('File tidak ditemukan');
-      const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = fileName;
-      document.body.appendChild(a); a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-    } catch (err) { alert(`Gagal: ${err.message}`); }
+      await downloadToDisk('local_downloads', fileName);
+    } catch (err) {
+      setActionError(`Gagal menyimpan file: ${err.message}`);
+    }
   };
 
   const toggleSelect = (fname) => {
@@ -198,9 +208,32 @@ export default function DownloadsTab() {
         </div>
       </div>
 
+      {actionError && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap',
+          padding: '11px 14px', marginBottom: '14px', fontSize: '0.83rem',
+          borderRadius: 'var(--radius-md)', color: 'var(--accent-red, #ff4d6d)',
+          background: 'rgba(255,77,109,0.1)', border: '1px solid rgba(255,77,109,0.3)',
+        }}>
+          <AlertTriangle size={15} style={{ flexShrink: 0 }} />
+          <span style={{ flex: 1, minWidth: '180px' }}>{actionError}</span>
+          <button className="btn-secondary" style={{ fontSize: '0.76rem', padding: '5px 11px' }}
+                  onClick={() => setActionError(null)}>Tutup</button>
+        </div>
+      )}
+
       {loading ? (
         <div style={{ padding: '60px', textAlign: 'center' }}>
           <Loader2 size={32} className="animate-spin" style={{ color: 'var(--accent-cyan)', margin: '0 auto' }} />
+        </div>
+      ) : loadError ? (
+        <div style={{ padding: '40px 20px', textAlign: 'center', background: 'var(--bg-card)', borderRadius: '16px', border: '1px solid var(--accent-red)' }}>
+          <AlertTriangle size={40} style={{ color: 'var(--accent-red)', marginBottom: '12px' }} />
+          <h3 style={{ fontWeight: 700 }}>Gagal memuat daftar unduhan</h3>
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '4px' }}>{loadError.message}</p>
+          <button className="btn-secondary" onClick={fetchDownloads} style={{ marginTop: '14px' }}>
+            <RefreshCw size={14} /> Coba lagi
+          </button>
         </div>
       ) : filtered.length === 0 ? (
         <div style={{ padding: '60px 20px', textAlign: 'center', background: 'var(--bg-card)', borderRadius: '16px', border: '1px dashed var(--border-color)' }}>

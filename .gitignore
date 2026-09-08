@@ -14,8 +14,11 @@ frontend/dist/
 frontend/*.log
 .DS_Store
 
-# Media Storage & Sensitive Tokens
+# Media Storage
 OmniClip_Storage/local_downloads/*
 OmniClip_Storage/edited_clips/*
-OmniClip_Storage/account_tokens/*
+OmniClip_Storage/logs/*
+OmniClip_Storage/*.db
+OmniClip_Storage/*.db-wal
+OmniClip_Storage/*.db-shm
 !OmniClip_Storage/**/.gitkeep
