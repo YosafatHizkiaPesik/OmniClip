@@ -814,6 +814,30 @@ export function StylePanel({
         )}
 
         <div>
+          <div style={{ ...label, marginBottom: '8px' }}>
+            Lebar kotak teks — {Math.round(style.box_w ?? 84)}%
+          </div>
+          <input type="range" min="20" max="100" step="1" value={style.box_w ?? 84}
+                 onChange={(e) => set({ box_w: Number(e.target.value) })}
+                 style={{ width: '100%', accentColor: 'var(--accent-cyan)' }} />
+          <p style={{ fontSize: '0.67rem', color: 'var(--text-muted)', margin: '5px 0 0', lineHeight: 1.5 }}>
+            Menentukan di lebar berapa baris subtitle mulai dibungkus. Kotak
+            sempit memberi baris pendek yang menumpuk — gaya yang biasa dipakai
+            klip vertikal. Bisa juga ditarik langsung lewat batang di kiri/kanan
+            subtitle pada pratinjau.
+          </p>
+        </div>
+
+        <div>
+          <div style={{ ...label, marginBottom: '8px' }}>
+            Posisi mendatar — {Math.round(style.pos_x ?? 50)}%
+          </div>
+          <input type="range" min="0" max="100" step="1" value={style.pos_x ?? 50}
+                 onChange={(e) => set({ pos_x: Number(e.target.value) })}
+                 style={{ width: '100%', accentColor: 'var(--accent-cyan)' }} />
+        </div>
+
+        <div>
           <div style={{ ...label, marginBottom: '8px' }}>Animasi</div>
           <Segmented columns={2} options={ANIMATIONS} value={style.animation}
                      onChange={(v) => set({ animation: v })} />

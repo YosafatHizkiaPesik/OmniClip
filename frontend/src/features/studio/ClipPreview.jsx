@@ -207,7 +207,10 @@ export default function ClipPreview({
       if (constrained && seg && (v.currentTime < seg.start || v.currentTime > seg.end)) {
         v.currentTime = seg.start;
       }
-      v.play();
+      // play() mengembalikan promise yang ditolak bila pause() menyusul
+      // sebelum ia sempat selesai. Itu bukan kegagalan yang perlu ditangani —
+      // hanya perlu tidak dibiarkan jadi penolakan promise yang menganggur.
+      v.play().catch(() => { /* dibatalkan oleh pause berikutnya */ });
       bgRef.current?.play().catch(() => { /* latar kabur boleh gagal diam-diam */ });
     }
   };
@@ -218,7 +221,7 @@ export default function ClipPreview({
     setSegIndex(0);
     v.currentTime = segments[0].start;
     setClipTime(0);
-    v.play();
+    v.play().catch(() => { /* dibatalkan oleh pause berikutnya */ });
   };
 
   const lines = clip?.subtitles ?? [];
@@ -264,9 +267,18 @@ export default function ClipPreview({
     const anchorTop = style?.position === 'top';
     const perPx = CANVAS_H / boxH;      // piksel layar -> satuan kanvas
 
+    // Tepi kotak saat seretan dimulai. Menahan salah satu tepi tetap di
+    // tempatnya adalah yang membuat gagangnya terasa seperti kotak teks di
+    // editor mana pun: menarik tepi kanan memperlebar ke kanan, bukan
+    // memekarkan kotak dari tengah ke dua arah sekaligus.
+    const left0 = startPosX - startBoxW / 2;
+    const right0 = startPosX + startBoxW / 2;
+    const MIN_W = 14;
+
     const onMove = (ev) => {
       const dy = (ev.clientY - y0) * perPx;
       const dx = ((ev.clientX - x0) / boxW) * 100;   // piksel layar -> persen lebar
+
       if (mode === 'move') {
         // Dua sumbu sekaligus. Jangkar bawah: menyeret ke bawah mengecilkan
         // margin. Mendatar dibatasi setengah lebar kotak dari tiap tepi supaya
@@ -277,9 +289,29 @@ export default function ClipPreview({
             anchorTop ? startMargin + dy : startMargin - dy))),
           pos_x: Math.round(Math.max(half, Math.min(100 - half, startPosX + dx)) * 10) / 10,
         });
-      } else {
-        onStyleChange({ size: Math.round(Math.max(36, Math.min(220, startSize - dy))) });
+        return;
       }
+
+      if (mode === 'width-right') {
+        const right = Math.max(left0 + MIN_W, Math.min(100, right0 + dx));
+        onStyleChange({
+          box_w: Math.round((right - left0) * 10) / 10,
+          pos_x: Math.round(((left0 + right) / 2) * 10) / 10,
+        });
+        return;
+      }
+
+      if (mode === 'width-left') {
+        const left = Math.min(right0 - MIN_W, Math.max(0, left0 + dx));
+        onStyleChange({
+          box_w: Math.round((right0 - left) * 10) / 10,
+          pos_x: Math.round(((left + right0) / 2) * 10) / 10,
+        });
+        return;
+      }
+
+      // mode === 'size': ukuran huruf, menyeret ke atas memperbesar.
+      onStyleChange({ size: Math.round(Math.max(36, Math.min(220, startSize - dy))) });
     };
     const onUp = () => {
       setDragging(null);
@@ -414,7 +446,9 @@ export default function ClipPreview({
           }}>
             {dragging === 'move'
               ? `X ${Math.round(style?.pos_x ?? 50)}% · Y ${style?.margin_v ?? 300}`
-              : `Ukuran ${style?.size ?? 96}`}
+              : dragging === 'size'
+                ? `Ukuran teks ${style?.size ?? 96}`
+                : `Lebar kotak ${Math.round(style?.box_w ?? 84)}%`}
           </div>
         )}
 
@@ -454,7 +488,9 @@ export default function ClipPreview({
                           draggable={Boolean(onStyleChange)}
                           dragging={dragging}
                           onMoveStart={startDrag('move')}
-                          onSizeStart={startDrag('size')} />
+                          onSizeStart={startDrag('size')}
+                          onWidthLeftStart={startDrag('width-left')}
+                          onWidthRightStart={startDrag('width-right')} />
         )}
       </div>
       </div>
@@ -484,8 +520,9 @@ export default function ClipPreview({
           fontSize: '0.68rem', color: 'var(--text-muted)', margin: 0,
           display: 'flex', alignItems: 'center', gap: '5px', textAlign: 'center',
         }}>
-          <Move size={11} /> Seret subtitle untuk memindahkannya, tarik bulatan
-          di kanan untuk mengubah ukurannya.
+          <Move size={11} /> Seret subtitle untuk memindahkannya, tarik batang
+          di kiri/kanan untuk melebar-sempitkan kotaknya, bulatan di sudut untuk
+          ukuran hurufnya.
         </p>
       )}
     </div>
@@ -495,14 +532,21 @@ export default function ClipPreview({
 /**
  * Subtitle di pratinjau, mencerminkan gaya yang akan dibakar ke video.
  *
+ * Diekspor supaya bisa diuji sendiri: di dalam ClipPreview ia baru muncul
+ * setelah ResizeObserver mengisi tinggi kotak, jadi ia tidak pernah ikut
+ * ter-render pada uji asap — padahal justru bagian ini yang paling sering
+ * berubah.
+ *
  * Ukuran, jarak dari tepi, dan tebal garis luar semuanya dihitung dari satuan
  * kanvas 1920 yang sama dengan file ASS, jadi yang terlihat di sini benar-benar
  * proporsi hasil akhirnya — bukan perkiraan berbasis lebar layar.
  */
-function CaptionOverlay({
+export function CaptionOverlay({
   line, activeWordIndex, style, clipTime, boxH, ghost,
   draggable, dragging, onMoveStart, onSizeStart,
+  onWidthLeftStart, onWidthRightStart,
 }) {
+  const [hover, setHover] = useState(false);
   const words = line.words?.length ? line.words : [{ w: line.text }];
   const anim = style?.animation ?? 'karaoke_pop';
   const uppercase = style?.uppercase !== false;
@@ -546,6 +590,8 @@ function CaptionOverlay({
   return (
     <div
       onPointerDown={draggable ? onMoveStart : undefined}
+      onPointerEnter={() => setHover(true)}
+      onPointerLeave={() => setHover(false)}
       style={{
         position: 'absolute',
         left: `${posX - boxWidth / 2}%`, width: `${boxWidth}%`,
@@ -565,8 +611,11 @@ function CaptionOverlay({
         textShadow: `0 ${(fontPx * 0.06).toFixed(1)}px ${(fontPx * 0.2).toFixed(1)}px rgba(0,0,0,0.55)`,
         textTransform: uppercase ? 'uppercase' : 'none',
         opacity: ghost ? 0.45 : 1,
-        outline: dragging === 'move' ? '1px dashed rgba(0,229,255,0.85)' : 'none',
-        outlineOffset: '6px',
+        // Kotak batas ditampilkan saat disentuh. Tanpa melihat kotaknya, tidak
+        // ada cara tahu bahwa lebarnya bisa diubah — dan lebar itulah yang
+        // menentukan di kata keberapa barisnya dibungkus.
+        outline: dragging || hover ? '1px dashed rgba(0,229,255,0.8)' : 'none',
+        outlineOffset: '5px',
         ...entry,
         ...(transform ? { transform } : {}),
       }}
@@ -585,19 +634,51 @@ function CaptionOverlay({
       })}
 
       {draggable && (
-        <span
-          onPointerDown={onSizeStart}
-          title="Tarik untuk mengubah ukuran teks"
-          style={{
-            position: 'absolute', right: '-13px', bottom: '-13px',
-            width: '20px', height: '20px', borderRadius: '50%',
-            background: 'var(--accent-cyan, #00E5FF)', border: '2px solid #06121a',
-            cursor: 'ns-resize', boxShadow: '0 1px 5px rgba(0,0,0,0.6)',
-            WebkitTextStroke: '0', opacity: dragging ? 1 : 0.75,
-          }}
-        />
+        <>
+          {/* Gagang tepi: mengubah LEBAR kotak, tepi seberangnya diam.
+              Gagang sudut: mengubah UKURAN HURUF. Dua hal berbeda yang
+              sebelumnya ditumpuk pada satu bulatan, sehingga menyempitkan
+              subtitle sama sekali tidak bisa dilakukan. */}
+          <Handle side="left" active={dragging === 'width-left'} visible={hover || !!dragging}
+                  onPointerDown={onWidthLeftStart} />
+          <Handle side="right" active={dragging === 'width-right'} visible={hover || !!dragging}
+                  onPointerDown={onWidthRightStart} />
+          <span
+            onPointerDown={onSizeStart}
+            title="Tarik ke atas/bawah untuk mengubah ukuran huruf"
+            style={{
+              position: 'absolute', right: '-14px', bottom: '-14px',
+              width: '18px', height: '18px', borderRadius: '50%',
+              background: 'var(--accent-cyan, #00E5FF)', border: '2px solid #06121a',
+              cursor: 'ns-resize', boxShadow: '0 1px 5px rgba(0,0,0,0.6)',
+              WebkitTextStroke: '0',
+              opacity: dragging === 'size' ? 1 : (hover || dragging ? 0.9 : 0.55),
+              transition: 'opacity 120ms',
+            }}
+          />
+        </>
       )}
     </div>
+  );
+}
+
+/** Gagang tepi kiri/kanan untuk melebarkan dan menyempitkan kotak teks. */
+function Handle({ side, active, visible, onPointerDown }) {
+  return (
+    <span
+      onPointerDown={onPointerDown}
+      title={`Tarik untuk ${side === 'left' ? 'melebarkan ke kiri' : 'melebarkan ke kanan'}`}
+      style={{
+        position: 'absolute', top: '50%', transform: 'translateY(-50%)',
+        [side]: '-11px',
+        width: '9px', height: '34px', borderRadius: '5px',
+        background: active ? 'var(--accent-cyan, #00E5FF)' : 'rgba(0,229,255,0.85)',
+        border: '2px solid #06121a', cursor: 'ew-resize',
+        boxShadow: '0 1px 5px rgba(0,0,0,0.6)', WebkitTextStroke: '0',
+        opacity: active ? 1 : (visible ? 0.9 : 0),
+        transition: 'opacity 120ms',
+      }}
+    />
   );
 }
 

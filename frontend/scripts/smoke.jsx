@@ -15,7 +15,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { VideoCard, RelatedVideoCard } from '../src/components/VideoCards.jsx';
 import { TrimPanel, SubtitlePanel, StylePanel } from '../src/features/studio/EditorPanels.jsx';
-import ClipPreview from '../src/features/studio/ClipPreview.jsx';
+import ClipPreview, { CaptionOverlay } from '../src/features/studio/ClipPreview.jsx';
 
 const video = {
   id: 'dQw4w9WgXcQ',
@@ -79,6 +79,16 @@ const cases = [
   ['ClipPreview', <ClipPreview src="/x.mp4" clip={clip} aspectRatio="9:16"
                                style={style} frameMode="blur" onStyleChange={noop} />],
   ['ClipPreview tanpa klip', <ClipPreview src={null} clip={null} style={style} />],
+  // Overlay diuji sendiri: di dalam ClipPreview ia baru muncul setelah
+  // ResizeObserver mengisi tinggi kotak, yang tidak pernah terjadi di sini.
+  ['CaptionOverlay + gagang', <CaptionOverlay line={clip.subtitles[0]} activeWordIndex={0}
+                                              style={style} clipTime={1} boxH={533}
+                                              ghost={false} draggable dragging={null}
+                                              onMoveStart={noop} onSizeStart={noop}
+                                              onWidthLeftStart={noop} onWidthRightStart={noop} />],
+  ['CaptionOverlay tanpa gagang', <CaptionOverlay line={clip.subtitles[1]} activeWordIndex={-1}
+                                                  style={style} clipTime={3} boxH={533}
+                                                  ghost draggable={false} dragging={null} />],
 ];
 
 let failed = 0;
