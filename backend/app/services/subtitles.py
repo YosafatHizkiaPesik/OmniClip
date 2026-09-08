@@ -261,3 +261,45 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         )
 
     return head + "\n".join(events) + "\n"
+
+
+# --- Font yang dibundel --------------------------------------------------------
+# Satu daftar untuk dua pemakai: libass (lewat `fontsdir`) dan pratinjau di
+# browser (lewat @font-face ke /api/fonts/...). Sebelumnya daftar font hanya ada
+# di frontend sebagai teks, jadi pratinjau memakai font UI sementara hasil render
+# memakai font display — mengganti font "tidak mengubah apa-apa" di layar, dan
+# baru terlihat setelah render selesai.
+#
+# `family` HARUS sama persis dengan nama keluarga di dalam berkasnya, karena
+# nilai itulah yang ditulis ke baris Style file ASS dan dicari libass.
+BUNDLED_FONTS: list[dict] = [
+    {"family": "Montserrat", "file": "Montserrat-ExtraBold.ttf", "weight": 800,
+     "label": "Montserrat", "note": "tebal & bulat, gaya CapCut"},
+    {"family": "Poppins", "file": "Poppins-ExtraBold.ttf", "weight": 800,
+     "label": "Poppins", "note": "geometris, bersih"},
+    {"family": "Anton", "file": "Anton-Regular.ttf", "weight": 400,
+     "label": "Anton", "note": "sangat tebal dan rapat"},
+    {"family": "Archivo Black", "file": "ArchivoBlack-Regular.ttf", "weight": 400,
+     "label": "Archivo Black", "note": "blok tebal, sangat tegas"},
+    {"family": "Bebas Neue", "file": "BebasNeue-Regular.ttf", "weight": 400,
+     "label": "Bebas Neue", "note": "tinggi ramping, huruf besar"},
+    {"family": "Oswald", "file": "Oswald-Bold.ttf", "weight": 700,
+     "label": "Oswald", "note": "rapat, mudah dibaca"},
+    {"family": "Fjalla One", "file": "FjallaOne-Regular.ttf", "weight": 400,
+     "label": "Fjalla One", "note": "sempit, hemat ruang"},
+    {"family": "Teko", "file": "Teko-Bold.ttf", "weight": 700,
+     "label": "Teko", "note": "sangat sempit, banyak kata per baris"},
+    {"family": "Lilita One", "file": "LilitaOne-Regular.ttf", "weight": 400,
+     "label": "Lilita One", "note": "bulat ramah, gaya kartun"},
+    {"family": "Luckiest Guy", "file": "LuckiestGuy-Regular.ttf", "weight": 400,
+     "label": "Luckiest Guy", "note": "komik, main-main"},
+    {"family": "Bungee", "file": "Bungee-Regular.ttf", "weight": 400,
+     "label": "Bungee", "note": "papan reklame, sangat mencolok"},
+    {"family": "Rubik", "file": "Rubik-ExtraBold.ttf", "weight": 800,
+     "label": "Rubik", "note": "sudut membulat, modern"},
+    {"family": "Playfair Display", "file": "PlayfairDisplay-Black.ttf", "weight": 900,
+     "label": "Playfair Display", "note": "serif tebal, kesan mewah"},
+]
+
+FONT_FILES = {f["file"] for f in BUNDLED_FONTS}
+FONT_FAMILIES = {f["family"] for f in BUNDLED_FONTS}

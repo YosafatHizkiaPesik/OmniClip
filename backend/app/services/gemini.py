@@ -168,18 +168,36 @@ def refine_candidates(
         response_mime_type="application/json",
         response_schema=_build_schema(),
         temperature=0.4,
-        max_output_tokens=8192,
+        # Anggaran keluaran mengikuti jumlah klip yang diminta. Nilai tetap 8192
+        # cukup untuk delapan klip, tapi dengan sembilan belas — masing-masing
+        # membawa alasan, judul, dan tagar — JSON-nya terpotong di tengah dan
+        # json.loads gagal. Model membalas 200 OK, jadi kegagalannya terlihat
+        # seperti "model menolak" padahal ia kehabisan ruang menulis. Model seri
+        # 3 juga memakai anggaran yang sama untuk penalaran internalnya.
+        max_output_tokens=min(32768, 6144 + max_clips * 800),
         system_instruction=SYSTEM_ID,
     )
 
     last_error: Optional[Exception] = None
+    failures: list[str] = []
     for model_name in models:
         for attempt in range(2):
             try:
                 resp = client.models.generate_content(
                     model=model_name, contents=prompt, config=config
                 )
-                data = json.loads(resp.text)
+                text = resp.text or ""
+                try:
+                    data = json.loads(text)
+                except json.JSONDecodeError as e:
+                    # Alasan berhenti dan panjang teks membedakan "model salah
+                    # format" dari "model kehabisan token" — dua kegagalan yang
+                    # tanpa ini terlihat sama persis di log.
+                    reason = getattr(
+                        (resp.candidates or [None])[0], "finish_reason", None)
+                    raise ValueError(
+                        f"JSON tidak lengkap ({len(text)} karakter, "
+                        f"finish_reason={reason}): {e}") from e
                 refined = _apply_selections(data, pool, sentences, max_clips,
                                             max_seconds=max_seconds)
                 if refined:
@@ -188,6 +206,9 @@ def refine_candidates(
                 raise ValueError("Gemini tidak mengembalikan satupun kandidat yang dikenal")
             except Exception as e:
                 last_error = e
+                failures.append(f"{model_name}: {str(e)[:160]}")
+                log.warning("Gemini %s gagal (percobaan %d): %s",
+                            model_name, attempt + 1, str(e)[:200])
                 msg = str(e)
                 if "429" in msg or "RESOURCE_EXHAUSTED" in msg:
                     if attempt == 0:
@@ -201,7 +222,11 @@ def refine_candidates(
                     continue
                 break
 
-    raise RuntimeError(f"Semua model Gemini gagal: {last_error}")
+    # Seluruh riwayat kegagalan dilaporkan, bukan hanya yang terakhir. Model
+    # terakhir dalam rantai biasanya yang paling tidak menarik penyebabnya —
+    # kegagalan model PERTAMA-lah yang menjelaskan apa yang sebenarnya salah.
+    raise RuntimeError("Semua model Gemini gagal — " + " | ".join(failures)
+                       or f"Semua model Gemini gagal: {last_error}")
 
 
 def _apply_selections(data: dict, pool: list[Candidate],

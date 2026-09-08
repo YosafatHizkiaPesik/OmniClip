@@ -39,6 +39,16 @@ async def get_project(video_id: str):
         raise NotFound("Belum ada analisis untuk video ini.")
 
     result = cached["result"]
+
+    # Penanda non-ucapan ("[Musik]", "[Tertawa]") dibersihkan saat dibaca, bukan
+    # hanya saat analisis baru dibuat, supaya project yang sudah tersimpan ikut
+    # membaik tanpa perlu dianalisis ulang.
+    from ..services.clipmodel import sanitize_caption_lines
+    result = {**result, "clips": [
+        {**c, "subtitles": sanitize_caption_lines(c.get("subtitles") or [])}
+        for c in (result.get("clips") or [])
+    ]}
+
     local = find_local_video(vid)
     return {
         "video_id": vid,

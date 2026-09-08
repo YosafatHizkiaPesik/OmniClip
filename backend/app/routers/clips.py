@@ -22,7 +22,9 @@ class AutoClipRequest(BaseModel):
     video_id: str = Field(..., description="ID atau URL YouTube")
     quality: str = "720p"
     whisper_model: str = "base"
-    max_clips: int = 8
+    # 0 = biarkan sistem menghitungnya dari durasi video. Angka tetap 8 dulu
+    # memperlakukan podcast dua jam sama dengan video sepuluh menit.
+    max_clips: int = 0
     # short / medium / long — menentukan rentang durasi klip yang dicari.
     clip_length: str = "medium"
     # Perkiraan penutur dari warna suara. Menambah ~15 detik pada video panjang.
@@ -48,6 +50,10 @@ class CaptionStyleModel(BaseModel):
     uppercase: Optional[bool] = None
     animation: Optional[str] = None
     font: Optional[str] = None
+    # Jarak teks dari tepi yang dijadikan jangkar, dalam piksel pada kanvas
+    # setinggi 1920. Diisi saat pengguna menyeret subtitle di pratinjau.
+    margin_v: Optional[int] = None
+    outline_px: Optional[int] = None
     # Warna untuk penutur ke-2 dan seterusnya (penutur pertama pakai `primary`).
     speaker_colors: Optional[List[str]] = None
 
@@ -96,13 +102,20 @@ async def start_auto_clip(req: AutoClipRequest):
 
     if not req.force:
         cached = analyses_repo.latest_for_video(video_id)
-        # Hasil tersimpan hanya dipakai bila jumlah klipnya memang mencukupi
-        # permintaan; kalau tidak, analisis diulang. Tanpa syarat ini, meminta
-        # 8 klip akan diam-diam mengembalikan 3 klip dari analisis sebelumnya.
-        if cached and len(cached["result"].get("clips") or []) >= req.max_clips:
-            return {"job_id": None, "cached": True, "result": cached["result"]}
-        if cached and cached["result"].get("has_transcript") is False:
-            return {"job_id": None, "cached": True, "result": cached["result"]}
+        if cached:
+            if cached["result"].get("has_transcript") is False:
+                return {"job_id": None, "cached": True, "result": cached["result"]}
+            # Hasil tersimpan hanya dipakai bila jumlah klipnya memang mencukupi
+            # permintaan; kalau tidak, analisis diulang. Tanpa syarat ini,
+            # meminta 8 klip akan diam-diam mengembalikan 3 klip dari analisis
+            # sebelumnya. Untuk permintaan otomatis, targetnya dihitung dari
+            # durasi yang tercatat di analisis itu sendiri — sehingga analisis
+            # lama yang dipatok 8 klip ikut diperbarui pada video panjang.
+            from ..services.heuristics import auto_clip_count
+            want = req.max_clips or auto_clip_count(
+                float(cached["result"].get("duration") or 0))
+            if len(cached["result"].get("clips") or []) >= want:
+                return {"job_id": None, "cached": True, "result": cached["result"]}
 
     job_id, created = queue.enqueue(
         "auto_clip",

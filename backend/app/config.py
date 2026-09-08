@@ -51,17 +51,19 @@ CAPTION_LANGS = ("id", "id-ID", "en", "en-US")
 
 
 # --- Gemini -------------------------------------------------------------------
-# Alias bergerak seperti "gemini-flash-latest" dihindari: kualitas bisa berubah
-# tanpa perubahan kode. Model di-pin dan bisa diganti lewat .env.
-# Model di-pin, bukan alias bergerak seperti "gemini-flash-latest": kualitas
-# alias bisa berubah semalam tanpa perubahan kode. Rantainya diperiksa dari kiri;
-# model yang sudah dipensiunkan menjawab 404 dan pemanggil lanjut ke berikutnya.
-# gemini-2.0-flash dihapus di sini — API menjawab "no longer available", dan
-# karena itulah seluruh penajaman Gemini diam-diam jatuh ke heuristik.
+# Dua model pertama di-pin, bukan alias bergerak: kualitas alias bisa berubah
+# semalam tanpa perubahan kode. Rantainya diperiksa dari kiri; model yang sudah
+# dipensiunkan menjawab 404 dan pemanggil lanjut ke berikutnya.
+#
+# gemini-2.0-flash dan gemini-2.5-flash dihapus dari rantai: keduanya menjawab
+# "no longer available to new users", jadi keduanya hanya menambah satu bulatan
+# gagal sebelum sistem menyerah ke heuristik. Penutup rantai sekarang
+# gemini-flash-latest — alias memang bisa berubah diam-diam, tapi sebagai
+# cadangan TERAKHIR ia selalu lebih baik daripada model yang sudah pasti mati.
 GEMINI_MODELS = [
     m.strip() for m in
     os.getenv("OMNICLIP_GEMINI_MODELS",
-              "gemini-3.6-flash,gemini-3.5-flash,gemini-2.5-flash").split(",")
+              "gemini-3.6-flash,gemini-3.5-flash,gemini-flash-latest").split(",")
     if m.strip()
 ]
 MAX_TRANSCRIPT_CHARS = int(os.getenv("OMNICLIP_MAX_TRANSCRIPT_CHARS", "350000"))

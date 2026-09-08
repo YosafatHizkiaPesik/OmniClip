@@ -8,6 +8,7 @@ menyambungnya. Klip hasil AI hampir selalu punya satu segmen; segmen kedua dan
 seterusnya muncul saat pengguna mengedit.
 """
 
+import re
 import uuid
 from typing import Any, Optional
 
@@ -18,6 +19,82 @@ from .transcript import Sentence
 
 def new_clip_id() -> str:
     return uuid.uuid4().hex[:12]
+
+
+# --- Penanda non-ucapan --------------------------------------------------------
+# Caption otomatis YouTube dan Whisper sama-sama menyisipkan penanda suara yang
+# BUKAN ucapan: "[Musik]", "[Tertawa]", "[Tepuk tangan]", "(applause)", "♪".
+# Penanda itu berguna untuk pembaca tunarungu di pemutar YouTube, tapi pada klip
+# vertikal ia muncul sebagai baris subtitle utuh yang tidak ada yang
+# mengucapkannya — dan ikut memakan jatah baris di layar.
+_BRACKETED = re.compile(r"[\[\(（【][^\]\)）】]*[\]\)）】]")
+_OPENERS = "[(（【"
+_CLOSERS = "])）】"
+# Tanda musik dan penanda ganti pembicara gaya broadcast ('>>').
+_STRIP_CHARS = " \t♪♫♬>-–—"
+
+
+def strip_non_speech(words: list[Word]) -> list[Word]:
+    """
+    Membuang penanda non-ucapan dari deretan kata.
+
+    Penanda bisa datang sebagai satu token ("[Tertawa]") atau terpecah menjadi
+    beberapa token ("[Tepuk", "tangan]"), tergantung sumber transkripnya. Karena
+    itu kurung dihitung sebagai keadaan yang berjalan, bukan dicocokkan per
+    token: begitu sebuah kurung terbuka, semua kata dibuang sampai ia tertutup.
+    """
+    out: list[Word] = []
+    depth = 0
+
+    for w in words:
+        token = (w.get("w") or "").strip()
+        if not token:
+            continue
+
+        if depth > 0:
+            depth += sum(token.count(c) for c in _OPENERS)
+            depth -= sum(token.count(c) for c in _CLOSERS)
+            depth = max(0, depth)
+            continue
+
+        core = _BRACKETED.sub("", token)
+        opens = sum(core.count(c) for c in _OPENERS)
+        closes = sum(core.count(c) for c in _CLOSERS)
+        if opens > closes:
+            depth = opens - closes
+            continue
+
+        core = core.strip(_STRIP_CHARS)
+        if not core:
+            continue
+        out.append({**w, "w": core})
+
+    return out
+
+
+def sanitize_caption_lines(lines: list[dict]) -> list[dict]:
+    """
+    Membersihkan baris subtitle yang SUDAH tersimpan.
+
+    Analisis yang dijalankan sebelum penyaringan ini ada tetap menyimpan
+    "[Musik]" di dalam hasilnya. Membersihkannya saat dibaca berarti project
+    lama ikut membaik tanpa perlu dianalisis ulang.
+    """
+    out: list[dict] = []
+    for line in lines:
+        words = line.get("words") or []
+        if words:
+            kept = strip_non_speech(words)
+            if not kept:
+                continue
+            out.append({**line, "words": kept,
+                        "text": " ".join(w["w"] for w in kept).strip(),
+                        "start": kept[0]["s"], "end": kept[-1]["e"]})
+            continue
+        text = _BRACKETED.sub("", line.get("text") or "").strip(_STRIP_CHARS)
+        if text:
+            out.append({**line, "text": text})
+    return out
 
 
 def slice_words(words: list[Word], start: float, end: float) -> list[Word]:
@@ -33,6 +110,7 @@ def words_to_caption_lines(words: list[Word], *, max_words: int = 5,
     Baris dipecah pada: batas jumlah kata, batas karakter, jeda bicara, atau
     tanda baca akhir kalimat.
     """
+    words = strip_non_speech(words)
     lines: list[dict] = []
     buf: list[Word] = []
 

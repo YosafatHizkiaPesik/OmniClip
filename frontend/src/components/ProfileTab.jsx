@@ -47,6 +47,8 @@ export default function ProfileTab() {
   // jarang diubah.
   const [clipLength, setClipLength] = useState(
     () => localStorage.getItem('omniclip_clip_length') || 'medium');
+  const [maxClips, setMaxClips] = useState(
+    () => Number(localStorage.getItem('omniclip_max_clips') || 0));
   const [whisperModel, setWhisperModel] = useState(
     () => localStorage.getItem('omniclip_whisper_model') || 'base');
 
@@ -76,6 +78,11 @@ export default function ProfileTab() {
   const chooseClipLength = (v) => {
     setClipLength(v);
     localStorage.setItem('omniclip_clip_length', v);
+  };
+
+  const chooseMaxClips = (v) => {
+    setMaxClips(v);
+    localStorage.setItem('omniclip_max_clips', String(v));
   };
 
   const chooseWhisper = (v) => {
@@ -161,6 +168,45 @@ export default function ProfileTab() {
             </button>
           ))}
         </div>
+      </div>
+
+      {/* --- Jumlah klip --- */}
+      <div style={card}>
+        <div style={sectionTitle}>
+          <Scissors size={18} style={{ color: 'var(--accent-cyan)' }} />
+          Jumlah klip per video
+        </div>
+        <p style={helpText}>
+          Berapa banyak momen yang ditawarkan dari satu video. Pada mode otomatis
+          jatahnya tumbuh mengikuti durasi — kira-kira satu klip tiap empat menit —
+          sehingga podcast dua jam tidak lagi diperlakukan sama dengan video
+          sepuluh menit.
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', marginTop: '13px' }}>
+          {[
+            [0, 'Otomatis', 'ikut durasi'],
+            [8, '8 klip', 'ringkas'],
+            [16, '16 klip', 'banyak'],
+            [30, '30 klip', 'maksimal'],
+          ].map(([v, title, hint]) => (
+            <button key={v} onClick={() => chooseMaxClips(v)} style={{
+              textAlign: 'center', padding: '11px 6px', cursor: 'pointer',
+              borderRadius: 'var(--radius-md)',
+              border: maxClips === v ? '2px solid var(--accent-cyan)' : '1px solid var(--border-color)',
+              background: maxClips === v ? 'rgba(0,242,254,0.08)' : 'transparent',
+            }}>
+              <div style={{
+                fontSize: '0.84rem', fontWeight: 800, marginBottom: '2px',
+                color: maxClips === v ? 'var(--accent-cyan)' : 'var(--text-primary)',
+              }}>{title}</div>
+              <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{hint}</div>
+            </button>
+          ))}
+        </div>
+        <p style={{ ...helpText, marginTop: '11px' }}>
+          Video yang sudah pernah dianalisis dengan jatah lebih kecil akan
+          dianalisis ulang saat jatahnya dinaikkan.
+        </p>
       </div>
 
       {/* --- Preferensi klip --- */}

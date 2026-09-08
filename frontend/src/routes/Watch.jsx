@@ -79,7 +79,9 @@ export default function Watch() {
     try {
       const res = await apiPost('/auto-clip', {
         video_id: videoId,
-        max_clips: 8,
+        // 0 = biarkan server menghitungnya dari durasi video. Angka tetap 8
+        // memperlakukan podcast dua jam sama dengan video sepuluh menit.
+        max_clips: Number(localStorage.getItem('omniclip_max_clips') || 0),
         // Preferensi tersimpan di Settings. Halaman ini tidak menanyakannya lagi.
         clip_length: localStorage.getItem('omniclip_clip_length') || 'medium',
         whisper_model: localStorage.getItem('omniclip_whisper_model') || 'base',

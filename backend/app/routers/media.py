@@ -5,9 +5,38 @@ import mimetypes
 from fastapi import APIRouter
 from fastapi.responses import FileResponse
 
+from ..config import FONTS_DIR
+from ..errors import NotFound
 from ..services.paths import safe_media_path
+from ..services.subtitles import BUNDLED_FONTS, FONT_FILES
 
 router = APIRouter(prefix="/api", tags=["media"])
+
+
+@router.get("/fonts")
+async def list_fonts():
+    """
+    Font display yang dibundel bersama aplikasi.
+
+    Dipakai frontend untuk memasang @font-face, sehingga pratinjau memakai font
+    yang PERSIS sama dengan yang dibakar libass ke dalam video. Tanpa ini,
+    mengganti font tidak mengubah apa pun di layar sampai render selesai.
+    """
+    return {"fonts": [{**f, "url": f"/api/fonts/{f['file']}"}
+                      for f in BUNDLED_FONTS
+                      if (FONTS_DIR / f["file"]).is_file()]}
+
+
+@router.get("/fonts/{filename}")
+async def get_font(filename: str):
+    """Berkas font. Hanya nama yang ada di daftar bundel yang dilayani."""
+    if filename not in FONT_FILES:
+        raise NotFound("Font tidak dikenali.")
+    path = FONTS_DIR / filename
+    if not path.is_file():
+        raise NotFound("Berkas font tidak ada.")
+    return FileResponse(path=path, media_type="font/ttf",
+                        headers={"Cache-Control": "public, max-age=604800"})
 
 
 @router.get("/media/{category}/{filename}")

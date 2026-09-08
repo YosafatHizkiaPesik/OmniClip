@@ -385,6 +385,21 @@ LENGTH_PRESETS = {
 }
 
 
+def auto_clip_count(duration: float) -> int:
+    """
+    Berapa klip yang masuk akal diambil dari video sepanjang ini.
+
+    Batas 8 yang dulu dipatok membuat podcast dua jam diperlakukan sama dengan
+    video sepuluh menit: dari 120 menit bahan, tujuh per delapan-nya tidak
+    pernah ditawarkan. Sekarang jatahnya tumbuh bersama durasi — kira-kira satu
+    klip tiap empat menit — dengan lantai 4 supaya video pendek tetap dapat
+    beberapa pilihan, dan plafon 40 supaya daftarnya masih bisa ditinjau manusia.
+    """
+    if duration <= 0:
+        return 8
+    return int(max(4, min(40, round(duration / 60.0 / 4.0) + 2)))
+
+
 def validate_and_snap(candidates: list[Candidate], sentences: list[Sentence],
                       duration: float, *, max_duration: float = 90.0) -> list[Candidate]:
     """

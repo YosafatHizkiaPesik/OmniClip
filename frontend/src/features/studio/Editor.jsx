@@ -4,6 +4,7 @@ import {
   AlertTriangle, Crop, Plus, Trash2, Film,
 } from 'lucide-react';
 import { apiGet, apiPost, downloadToDisk } from '../../lib/api';
+import { loadFonts } from '../../lib/fonts';
 import { formatTime } from '../../utils/timeFormat';
 import { useClipEditor } from './useClipEditor';
 import ClipPreview from './ClipPreview';
@@ -13,8 +14,27 @@ import { TrimPanel, SubtitlePanel, StylePanel } from './EditorPanels';
 const DEFAULT_STYLE = {
   size: 96, primary: '#FFFFFF', highlight: '#FFE500',
   speaker_colors: ['#7CFFB2', '#FFB3C7', '#B39DFF'],
-  position: 'bottom', uppercase: true, animation: 'karaoke_pop', font: 'Montserrat',
+  position: 'bottom', margin_v: 300, outline_px: 7,
+  uppercase: true, animation: 'karaoke_pop', font: 'Montserrat',
 };
+
+const STYLE_KEY = 'omniclip_caption_style';
+
+/**
+ * Gaya teks bertahan antar sesi.
+ *
+ * Menyetel font, warna, dan ukuran adalah pekerjaan sekali untuk sebuah kanal,
+ * bukan sekali per klip. Tanpa ini, tiap kali editor dibuka semuanya kembali ke
+ * bawaan dan seluruh penyetelan harus diulang.
+ */
+function loadStoredStyle() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(STYLE_KEY) || 'null');
+    return raw && typeof raw === 'object' ? { ...DEFAULT_STYLE, ...raw } : DEFAULT_STYLE;
+  } catch {
+    return DEFAULT_STYLE;
+  }
+}
 
 const TABS = [
   { id: 'trim', label: 'Batas', Icon: Scissors },
@@ -46,7 +66,8 @@ export default function Editor({ project, onBack }) {
   const [error, setError] = useState(null);
   const [peaks, setPeaks] = useState([]);
   const [tab, setTab] = useState('trim');
-  const [style, setStyle] = useState(DEFAULT_STYLE);
+  const [style, setStyle] = useState(loadStoredStyle);
+  const patchStyle = useCallback((patch) => setStyle((prev) => ({ ...prev, ...patch })), []);
   const [aspectRatio, setAspectRatio] = useState('9:16');
   const [frameMode, setFrameMode] = useState('smart');
   const [constrained, setConstrained] = useState(true);
@@ -60,6 +81,19 @@ export default function Editor({ project, onBack }) {
   const [reframeLoading, setReframeLoading] = useState(false);
 
   const { clips, selected, checked } = editor;
+
+  useEffect(() => { loadFonts(); }, []);
+
+  // Penyimpanan ditunda: menyeret subtitle memanggil patchStyle tiap frame, dan
+  // menulis ke localStorage 60 kali per detik akan tersendat di perangkat lambat.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      try {
+        localStorage.setItem(STYLE_KEY, JSON.stringify(style));
+      } catch { /* mode privat: gaya tetap berlaku, hanya tidak diingat */ }
+    }, 400);
+    return () => clearTimeout(t);
+  }, [style]);
 
   // Muat analisis tersimpan. Halaman ini hanya dibuka untuk project yang sudah
   // selesai, jadi tidak ada pekerjaan berat yang dimulai di sini.
@@ -354,7 +388,8 @@ export default function Editor({ project, onBack }) {
           <ClipPreview src={data.local_url} clip={selected} aspectRatio={aspectRatio}
                        style={{ ...style, showHook }} videoRef={videoRef}
                        constrained={constrained} frameMode={frameMode}
-                       reframe={reframe} reframeLoading={reframeLoading} />
+                       reframe={reframe} reframeLoading={reframeLoading}
+                       onStyleChange={patchStyle} />
           <div style={{ display: 'flex', gap: '7px', flexWrap: 'wrap', justifyContent: 'center' }}>
             <button className="btn-secondary" style={{ fontSize: '0.74rem', padding: '5px 10px' }}
                     onClick={addSegmentAtPlayhead} disabled={!selected || editor.busy}
@@ -375,8 +410,17 @@ export default function Editor({ project, onBack }) {
           background: 'var(--bg-card)', border: '1px solid var(--border-color)',
           borderRadius: 'var(--radius-md)', padding: '13px',
           display: 'flex', flexDirection: 'column', gap: '12px',
+          // Panel ini bisa sangat panjang (daftar font, daftar subtitle, palet
+          // warna). Dibatasi dan digulirkan sendiri supaya kolom pratinjau di
+          // sebelahnya tidak ikut terdorong dan meninggalkan ruang kosong.
+          position: 'sticky', top: '14px',
+          maxHeight: 'calc(100vh - 150px)', overflowY: 'auto',
         }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '5px' }}>
+          <div style={{
+            display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '5px',
+            position: 'sticky', top: 0, zIndex: 2,
+            background: 'var(--bg-card)', paddingBottom: '8px',
+          }}>
             {TABS.map(({ id, label, Icon }) => (
               <button key={id} onClick={() => setTab(id)} style={{
                 display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px',
@@ -405,6 +449,7 @@ export default function Editor({ project, onBack }) {
           )}
           {tab === 'style' && (
             <StylePanel style={style} onChange={setStyle}
+                        speakerCount={data.speaker_count || 2}
                         aspectRatio={aspectRatio} onAspectChange={setAspectRatio}
                         showHook={showHook} onShowHookChange={setShowHook}
                         hookText={selected?.hook_text ?? ''}

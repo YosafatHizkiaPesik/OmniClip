@@ -14,6 +14,42 @@ import { apiPost } from '../../lib/api';
  * Sekarang tidak ada state cermin: setiap panel membaca dari `clips` dan menulis
  * lewat `updateClip`.
  */
+
+const round3 = (v) => Math.round(v * 1000) / 1000;
+
+/**
+ * Menyusun ulang waktu per kata setelah teks sebuah baris disunting.
+ *
+ * Bila jumlah katanya tidak berubah — kasus yang paling sering, karena koreksi
+ * biasanya menukar satu kata salah dengar — waktu aslinya dipertahankan supaya
+ * sorotan karaoke tetap jatuh tepat pada ucapannya. Bila jumlahnya berubah,
+ * rentang baris dibagi menurut panjang tiap kata: itu tebakan, tapi tebakan
+ * yang bergerak searah dengan ucapan, dan jauh lebih baik daripada baris yang
+ * suntingannya tidak muncul sama sekali.
+ */
+function retimeWords(line, text) {
+  const tokens = String(text).trim().split(/\s+/).filter(Boolean);
+  if (!tokens.length) return [];
+
+  const old = line.words ?? [];
+  if (old.length === tokens.length) {
+    return tokens.map((w, i) => ({ ...old[i], w }));
+  }
+
+  const start = Number(line.start) || 0;
+  const end = Math.max(Number(line.end) || start, start + 0.25);
+  const weights = tokens.map((t) => t.length + 1);
+  const total = weights.reduce((a, b) => a + b, 0);
+
+  let cursor = start;
+  return tokens.map((w, i) => {
+    const dur = (end - start) * (weights[i] / total);
+    const word = { w, s: round3(cursor), e: round3(cursor + dur) };
+    cursor += dur;
+    return word;
+  });
+}
+
 export function useClipEditor() {
   const [clips, setClips] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
@@ -119,7 +155,19 @@ export function useClipEditor() {
   const updateSubtitle = useCallback((id, lineIndex, patch) => {
     const clip = clips.find((c) => c.clip_id === id);
     if (!clip) return;
-    const subtitles = clip.subtitles.map((l, i) => (i === lineIndex ? { ...l, ...patch } : l));
+    const subtitles = clip.subtitles.map((l, i) => {
+      if (i !== lineIndex) return l;
+      const next = { ...l, ...patch };
+      // Baris yang teksnya diubah HARUS ikut memperbarui daftar katanya.
+      // Sorotan karaoke — di pratinjau maupun di file ASS — dibangun dari
+      // `words`, bukan dari `text`; selama daftar kata tidak ikut berubah,
+      // setiap koreksi salah dengar hanya terlihat di kotak isian dan hilang
+      // tanpa jejak begitu videonya diputar atau dirender.
+      if (patch.text !== undefined && patch.text !== l.text) {
+        next.words = retimeWords(l, patch.text);
+      }
+      return next;
+    });
     updateClip(id, { subtitles });
   }, [clips, updateClip]);
 

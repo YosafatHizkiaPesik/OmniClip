@@ -89,7 +89,7 @@ def run_render(ctx: JobContext) -> dict:
     """
     from .clipmodel import rebuild_subtitles_for_segments
     from .render import render_clip
-    from .subtitles import CaptionStyle
+    from .subtitles import FONT_FAMILIES, CaptionStyle
 
     video_id = ctx.payload["video_id"]
     source = find_local_video(video_id)
@@ -116,7 +116,13 @@ def run_render(ctx: JobContext) -> dict:
         position=style_in.get("position", ctx.payload.get("position", "bottom")),
         uppercase=bool(style_in.get("uppercase", True)),
         animation=style_in.get("animation", "karaoke_pop"),
-        font=style_in.get("font", "Montserrat"),
+        # Hanya font yang benar-benar ikut dibundel yang diteruskan. Nama lain
+        # akan membuat libass jatuh diam-diam ke DejaVu Sans, dan hasilnya
+        # terlihat seperti berkas subtitle, bukan seperti klip.
+        font=(style_in.get("font") if style_in.get("font") in FONT_FAMILIES
+              else "Montserrat"),
+        margin_v=max(24, min(1400, int(style_in.get("margin_v") or 300))),
+        outline_px=max(0, min(16, int(style_in.get("outline_px") or 7))),
         speaker_colors=tuple(style_in.get("speaker_colors")
                              or ("#7CFFB2", "#FFB3C7", "#B39DFF")),
     )
@@ -210,7 +216,8 @@ def run_auto_clip(ctx: JobContext) -> dict:
     video_id = ctx.payload["video_id"]
     quality = ctx.payload.get("quality", "720p")
     whisper_model = ctx.payload.get("whisper_model", "base")
-    max_clips = int(ctx.payload.get("max_clips", 8))
+    # 0 = biarkan sistem yang menentukan dari durasi video.
+    requested_clips = int(ctx.payload.get("max_clips") or 0)
     use_gemini = bool(ctx.payload.get("use_gemini", True))
 
     # --- 1. Metadata ---------------------------------------------------------
@@ -222,6 +229,8 @@ def run_auto_clip(ctx: JobContext) -> dict:
     media_repo.upsert_video(info)
     title = info.get("title") or video_id
     duration = float(info.get("duration") or 0)
+    from .heuristics import auto_clip_count
+    max_clips = requested_clips or auto_clip_count(duration)
     ctx.check_cancelled()
 
     # --- 2. Pastikan video ada di lokal --------------------------------------
@@ -301,7 +310,12 @@ def run_auto_clip(ctx: JobContext) -> dict:
             ctx.progress(1.0, stage="done", message="Selesai tanpa transkrip.")
             return payload
 
-        words = transcript["words"]
+        # Penanda non-ucapan dibuang SEBELUM kalimat disusun, bukan hanya saat
+        # subtitle dibentuk. Kalau tidak, "[Tertawa]" tetap ikut masuk ke teks
+        # kalimat — dan dari sana menular ke judul otomatis klip, ke kutipan
+        # yang dikirim ke Gemini, dan ke ringkasan transkrip yang tersimpan.
+        from .clipmodel import strip_non_speech
+        words = strip_non_speech(transcript["words"])
         sentences = words_to_sentences(words)
         tx_repo.save(video_id=video_id, source=transcript["source"],
                      model=whisper_model if transcript["source"] == "whisper" else transcript["language"],
@@ -342,12 +356,17 @@ def run_auto_clip(ctx: JobContext) -> dict:
         from .heuristics import LENGTH_PRESETS
         preset = LENGTH_PRESETS.get(ctx.payload.get("clip_length") or "medium",
                                     LENGTH_PRESETS["medium"])
+        # Kandidat dibuat lebih banyak daripada jatah akhirnya. Kelebihan itu
+        # dipakai dua kali: sebagai bahan pilihan yang lebih luas untuk Gemini,
+        # dan sebagai cadangan bila model mengembalikan lebih sedikit dari yang
+        # diminta.
         candidates = validate_and_snap(
             generate_candidates(sentences, words, energy, duration=duration,
                                 target=preset["target"], ideal=preset["ideal"],
-                                max_out=max_clips),
+                                max_out=max_clips + 8),
             sentences, duration, max_duration=preset["max"],
         )
+        heuristic_pool = list(candidates)
         engine = "heuristic"
         model_used = None
         ctx.check_cancelled()
@@ -373,6 +392,38 @@ def run_auto_clip(ctx: JobContext) -> dict:
                 # heuristik tetap valid dan tetap jujur.
                 log.warning("Gemini gagal, memakai hasil heuristik: %s", str(e)[:200])
                 _stage_progress(ctx, "gemini", 1.0, "Gemini tidak tersedia — memakai mesin lokal.")
+
+        # Gemini sering mengembalikan lebih sedikit dari yang diminta — pada
+        # video ini 11 dari 19. Sisa jatahnya diisi dari kandidat heuristik
+        # terbaik yang belum terpakai, bukan dibiarkan kosong: pada podcast
+        # sepanjang satu jam, bahan yang layak masih jauh lebih banyak daripada
+        # yang sempat dipilih model. Klip tambahan tetap membawa
+        # source "heuristic", jadi asalnya tetap terlihat di UI.
+        if len(candidates) < max_clips:
+            from .heuristics import _iou
+            spare = sorted(heuristic_pool, key=lambda c: c.score, reverse=True)
+            for cand in spare:
+                if len(candidates) >= max_clips:
+                    break
+                if all(_iou(cand, k) <= 0.15 for k in candidates):
+                    candidates.append(cand)
+
+        # Jatah akhir ditegakkan di satu tempat: tanpa ini, jalur tanpa Gemini
+        # akan mengembalikan seluruh kolam kandidat yang sengaja dibuat berlebih.
+        #
+        # Sekalian tumpang tindih dirapatkan. NMS di dalam generate_candidates
+        # membolehkan IoU sampai 0.30 supaya kolamnya beragam; dengan jatah
+        # sebelas klip itu jarang terlihat, tapi dengan sembilan belas dua klip
+        # bisa berbagi tiga belas detik yang sama dan pengguna melihat dua kartu
+        # berisi potongan yang nyaris identik.
+        from .heuristics import _iou as _overlap
+        final: list = []
+        for cand in sorted(candidates, key=lambda c: c.score, reverse=True):
+            if len(final) >= max_clips:
+                break
+            if all(_overlap(cand, k) <= 0.15 for k in final):
+                final.append(cand)
+        candidates = sorted(final, key=lambda c: c.start)
 
         # --- 6. Simpan --------------------------------------------------------
         _stage_progress(ctx, "persist", 0.4, "Menyusun hasil…")
@@ -401,7 +452,9 @@ def run_auto_clip(ctx: JobContext) -> dict:
         analyses_repo.save(video_id=video_id,
                            transcript_id=stored["id"] if stored else None,
                            engine=engine, model=model_used,
-                           params={"max_clips": max_clips, "quality": quality},
+                           params={"max_clips": max_clips,
+                                   "max_clips_requested": requested_clips,
+                                   "quality": quality},
                            result=payload)
 
         ctx.progress(1.0, stage="done", message=f"{len(clips)} klip siap ditinjau.")
