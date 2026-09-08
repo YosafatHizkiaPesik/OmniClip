@@ -11,8 +11,9 @@ import Timeline from './timeline/Timeline';
 import { TrimPanel, SubtitlePanel, StylePanel } from './EditorPanels';
 
 const DEFAULT_STYLE = {
-  size: 96, primary: '#FFFFFF', highlight: '#FFE500', speaker2: '#7CFFB2',
-  position: 'bottom', uppercase: true, animation: 'karaoke_pop', font: 'DejaVu Sans',
+  size: 96, primary: '#FFFFFF', highlight: '#FFE500',
+  speaker_colors: ['#7CFFB2', '#FFB3C7', '#B39DFF'],
+  position: 'bottom', uppercase: true, animation: 'karaoke_pop', font: 'Montserrat',
 };
 
 const TABS = [
@@ -228,6 +229,10 @@ export default function Editor({ project, onBack }) {
           </h1>
           <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)' }}>
             {clips.length} klip · {formatTime(duration)} ·{' '}
+            {data.speaker_count > 1 && (
+              <>{data.speaker_confident ? `± ${data.speaker_count} narasumber`
+                : 'narasumber sulit dipisahkan'} · </>
+            )}
             {data.transcript_source === 'whisper' ? 'transkrip Whisper lokal'
               : data.transcript_source === 'youtube_manual' ? 'transkrip resmi kanal'
                 : 'transkrip otomatis YouTube'}
@@ -246,6 +251,18 @@ export default function Editor({ project, onBack }) {
           Render &amp; simpan
         </button>
       </header>
+
+      {data.model_requested && data.model && data.model_requested !== data.model && (
+        <div style={{
+          marginBottom: '14px', padding: '10px 13px', fontSize: '0.79rem',
+          borderRadius: 'var(--radius-md)', lineHeight: 1.55,
+          background: 'rgba(255,159,28,0.1)', border: '1px solid rgba(255,159,28,0.32)',
+        }}>
+          Model <strong>{data.model_requested}</strong> tidak bisa dipakai saat analisis
+          ini berjalan — biasanya karena kuota harian model itu habis. Sistem memakai{' '}
+          <strong>{data.model}</strong> sebagai cadangan.
+        </div>
+      )}
 
       {exportLog.length > 0 && (
         <div style={{
@@ -381,7 +398,9 @@ export default function Editor({ project, onBack }) {
           {tab === 'subtitle' && (
             <SubtitlePanel clip={selected} onUpdate={editor.updateSubtitle}
                            onRemove={editor.removeSubtitle} style={style}
-                           onAutoSpeakers={editor.autoSpeakers} />
+                           onAutoSpeakers={editor.autoSpeakers}
+                           speakerCount={data.speaker_count || 2}
+                           speakerConfident={data.speaker_confident ?? null} />
           )}
           {tab === 'style' && (
             <StylePanel style={style} onChange={setStyle}

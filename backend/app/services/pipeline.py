@@ -116,8 +116,9 @@ def run_render(ctx: JobContext) -> dict:
         position=style_in.get("position", ctx.payload.get("position", "bottom")),
         uppercase=bool(style_in.get("uppercase", True)),
         animation=style_in.get("animation", "karaoke_pop"),
-        font=style_in.get("font", "DejaVu Sans"),
-        speaker2=style_in.get("speaker2", "#7CFFB2"),
+        font=style_in.get("font", "Montserrat"),
+        speaker_colors=tuple(style_in.get("speaker_colors")
+                             or ("#7CFFB2", "#FFB3C7", "#B39DFF")),
     )
 
     total = sum(float(s["end"]) - float(s["start"]) for s in segments)
@@ -310,6 +311,33 @@ def run_auto_clip(ctx: JobContext) -> dict:
         _stage_progress(ctx, "analyze", 0.15, "Mengukur energi bicara…")
         energy = zscore(energy_track(source, duration=duration or 600))
 
+        # --- Perkiraan penutur ------------------------------------------------
+        # Hasilnya menempel di tiap kata sebagai "sp", sehingga setiap baris
+        # subtitle nanti bisa diwarnai per orang. Ini PERKIRAAN dari warna suara,
+        # bukan pengenalan suara terlatih; `speaker_confident` menyatakan apakah
+        # pemisahannya cukup meyakinkan untuk dipercaya.
+        speaker_count, speaker_conf, speaker_score = 0, False, None
+        if ctx.payload.get("diarize", True) and sentences:
+            try:
+                _stage_progress(ctx, "analyze", 0.3, "Memperkirakan jumlah narasumber…")
+                from .diarize import analyze_speakers
+                wav = need_audio()
+                dia = analyze_speakers(
+                    wav, [(x["s"], x["e"]) for x in sentences],
+                    speakers=ctx.payload.get("speakers") or None,
+                )
+                speaker_count = dia.speaker_count
+                speaker_conf = dia.confident
+                speaker_score = dia.silhouette
+                if dia.speaker_count > 1:
+                    for sent, label in zip(sentences, dia.labels):
+                        a, b = sent["wi"]
+                        for w in words[a:b]:
+                            w["sp"] = int(max(0, label))
+            except Exception as e:
+                # Perkiraan penutur tidak pernah boleh menjatuhkan pipeline.
+                log.warning("Perkiraan penutur gagal: %s", str(e)[:200])
+
         _stage_progress(ctx, "analyze", 0.5, "Mencari momen paling menarik…")
         from .heuristics import LENGTH_PRESETS
         preset = LENGTH_PRESETS.get(ctx.payload.get("clip_length") or "medium",
@@ -335,6 +363,7 @@ def run_auto_clip(ctx: JobContext) -> dict:
                     api_key=api_key, models=GEMINI_MODELS, max_clips=max_clips,
                     max_chars=MAX_TRANSCRIPT_CHARS,
                     max_seconds=preset["max"],
+                    model_override=ctx.payload.get("gemini_model") or None,
                 )
                 candidates = validate_and_snap(candidates, sentences, duration,
                                                max_duration=preset["max"])
@@ -359,6 +388,13 @@ def run_auto_clip(ctx: JobContext) -> dict:
             "transcript_words": len(words),
             "engine": engine,
             "model": model_used,
+            # Model yang DIMINTA pengguna. Bila berbeda dari `model`, artinya
+            # pilihannya gagal (biasanya 429 kuota habis pada model pro) dan
+            # sistem memakai cadangan — itu harus terlihat, bukan disembunyikan.
+            "model_requested": ctx.payload.get("gemini_model") or None,
+            "speaker_count": speaker_count,
+            "speaker_confident": speaker_conf,
+            "speaker_score": speaker_score,
             "clips": clips,
             "local_url": f"/api/media/local_downloads/{source.name}",
         }

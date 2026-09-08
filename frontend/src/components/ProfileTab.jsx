@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   KeyRound, Loader2, Sun, Moon, Settings, Eye, EyeOff, Info,
-  CheckCircle2, AlertTriangle, Cookie,
+  CheckCircle2, AlertTriangle, Cookie, Sparkles,
 } from 'lucide-react';
 import { apiGet, apiPost } from '../lib/api';
 
@@ -37,6 +37,11 @@ export default function ProfileTab() {
   const [feedback, setFeedback] = useState(null); // {kind:'ok'|'error', text}
   const [settings, setSettings] = useState(null);
   const [settingsError, setSettingsError] = useState(null);
+  // Model AI yang dipakai untuk memilih klip. Disimpan di browser dan dikirim
+  // bersama setiap permintaan auto-clip.
+  const [models, setModels] = useState(null);
+  const [model, setModel] = useState(() => localStorage.getItem('omniclip_gemini_model') || '');
+  const [modelsError, setModelsError] = useState(null);
 
   const loadSettings = async () => {
     try {
@@ -48,6 +53,24 @@ export default function ProfileTab() {
   };
 
   useEffect(() => { loadSettings(); }, []);
+
+  // Daftar model diambil dari API, bukan dari daftar tetap: model dipensiunkan
+  // tanpa pemberitahuan, dan itu persis yang membuat penajaman AI diam-diam
+  // gagal selama berminggu-minggu.
+  useEffect(() => {
+    apiGet('/settings/models')
+      .then((res) => {
+        setModels(res.available || []);
+        if (res.error) setModelsError(res.error);
+      })
+      .catch((err) => setModelsError(err.message));
+  }, []);
+
+  const chooseModel = (value) => {
+    setModel(value);
+    if (value) localStorage.setItem('omniclip_gemini_model', value);
+    else localStorage.removeItem('omniclip_gemini_model');
+  };
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -121,6 +144,46 @@ export default function ProfileTab() {
             </button>
           ))}
         </div>
+      </div>
+
+      {/* --- Model AI --- */}
+      <div style={card}>
+        <div style={sectionTitle}>
+          <Sparkles size={18} style={{ color: 'var(--accent-cyan)' }} />
+          Model AI pemilih klip
+        </div>
+        <p style={helpText}>
+          Model yang membaca transkrip lalu memutuskan bagian mana yang layak jadi
+          klip. Model yang lebih besar biasanya lebih paham konteks pembahasan,
+          tapi lebih lambat dan memakai lebih banyak kuota.
+        </p>
+        {models === null && !modelsError && (
+          <p style={{ ...helpText, marginTop: '10px' }}>Memuat daftar model…</p>
+        )}
+        {modelsError && (
+          <p style={{ ...helpText, marginTop: '10px', color: 'var(--accent-red, #ff4d6d)' }}>
+            Tidak bisa mengambil daftar model: {modelsError}
+          </p>
+        )}
+        {models?.length > 0 && (
+          <>
+            <select value={model} onChange={(e) => chooseModel(e.target.value)}
+                    style={{
+                      width: '100%', marginTop: '12px', padding: '11px 12px',
+                      borderRadius: 'var(--radius-md)', fontSize: '0.86rem',
+                      border: '1px solid var(--border-color)',
+                      background: 'var(--bg-glass)', color: 'var(--text-primary)',
+                    }}>
+              <option value="">Otomatis (coba berurutan dari yang tercepat)</option>
+              {models.map((m) => <option key={m} value={m}>{m}</option>)}
+            </select>
+            <p style={{ ...helpText, marginTop: '10px' }}>
+              {models.length} model tersedia untuk API key ini. Untuk podcast panjang
+              yang pembahasannya berlapis, model <strong>pro</strong> memberi
+              pemilihan yang jauh lebih nyambung daripada <strong>flash</strong>.
+            </p>
+          </>
+        )}
       </div>
 
       {/* --- Gemini API Key --- */}

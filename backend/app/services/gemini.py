@@ -46,11 +46,17 @@ Tolak kandidat yang intinya tidak selesai dan tidak bisa diselesaikan dalam
 batas durasi. Lebih baik mengembalikan 4 potongan utuh daripada 8 potongan
 yang menggantung.
 
+Anda TIDAK terikat pada daftar kandidat. Bila membaca transkrip menunjukkan ada
+bagian menarik yang tidak terdaftar, ambil saja: isi candidate_id dengan -1 lalu
+tentukan start_sentence dan end_sentence sendiri. Kandidat sistem hanya titik
+awal — Andalah yang membaca isinya.
+
 Aturan lain:
-- Hanya boleh memakai candidate_id yang ada di daftar.
-- Menggeser batas hanya lewat start_sentence/end_sentence (indeks kalimat).
-  start_sentence boleh mundur sedikit untuk menangkap konteks pembuka;
-  end_sentence boleh maju jauh untuk menangkap penutup gagasan.
+- Rentang ditentukan lewat start_sentence/end_sentence, yaitu NOMOR KALIMAT
+  yang ada di transkrip di atas. Jangan pernah menulis angka detik.
+- Untuk kandidat dari daftar: start_sentence boleh mundur sedikit untuk
+  menangkap konteks pembuka; end_sentence boleh maju jauh untuk menangkap
+  penutup gagasan.
 - hook_text harus SETIA pada isi klip. Dilarang menjanjikan sesuatu yang tidak
   ada di dalam potongan tersebut.
 - reason maksimal 20 kata, bahasa Indonesia, sebutkan gagasan apa yang dibahas.
@@ -69,7 +75,8 @@ def _build_schema():
                 type=types.Type.ARRAY,
                 items=types.Schema(
                     type=types.Type.OBJECT,
-                    required=["candidate_id", "score", "reason", "hook_text", "suggested_title"],
+                    required=["candidate_id", "start_sentence", "end_sentence",
+                              "score", "reason", "hook_text", "suggested_title"],
                     properties={
                         "candidate_id": types.Schema(type=types.Type.INTEGER),
                         "start_sentence": types.Schema(type=types.Type.INTEGER),
@@ -129,6 +136,7 @@ def refine_candidates(
     max_chars: int = 350000,
     shortlist: int = 25,
     max_seconds: float = 80.0,
+    model_override: Optional[str] = None,
 ) -> tuple[list[Candidate], Optional[str]]:
     """
     Meminta Gemini memilih dan merapikan kandidat.
@@ -141,6 +149,10 @@ def refine_candidates(
 
     pool = candidates[:shortlist]
     client = genai.Client(api_key=api_key)
+    if model_override:
+        # Model pilihan pengguna dicoba lebih dulu; sisanya tetap jadi cadangan
+        # bila model itu kebetulan sedang penuh atau sudah dipensiunkan.
+        models = [model_override] + [m for m in models if m != model_override]
 
     prompt = (
         f"Judul video: {video_title}\n\n"
@@ -204,21 +216,50 @@ def _apply_selections(data: dict, pool: list[Candidate],
     """
     out: list[Candidate] = []
     seen: set[int] = set()
+    seen_free: set[tuple] = set()
 
     for sel in (data.get("selections") or [])[: max_clips * 2]:
         try:
             cid = int(sel.get("candidate_id"))
         except (TypeError, ValueError):
             continue
-        if cid < 0 or cid >= len(pool) or cid in seen:
+        if cid >= len(pool) or cid < -1:
             continue
-        seen.add(cid)
+        if cid >= 0:
+            if cid in seen:
+                continue
+            seen.add(cid)
 
-        base = pool[cid]
+        free = cid == -1
+        if free:
+            si_raw, sj_raw = sel.get("start_sentence"), sel.get("end_sentence")
+            if not (isinstance(si_raw, int) and isinstance(sj_raw, int)):
+                continue
+            if not (0 <= si_raw < sj_raw <= len(sentences)):
+                continue
+            span_start = sentences[si_raw]["s"]
+            span_end = sentences[sj_raw - 1]["e"]
+            if not (8.0 <= span_end - span_start <= max_seconds):
+                continue
+            # Rentang bebas tetap tidak bisa berhalusinasi: indeksnya divalidasi
+            # terhadap daftar kalimat nyata, dan waktunya diambil dari kalimat
+            # itu — bukan dari angka yang ditulis model.
+            base = Candidate(
+                start=span_start, end=span_end, score=0.5,
+                breakdown={"gemini_free": 1.0}, sentence_span=(si_raw, sj_raw),
+                reason_keys=[], text=" ".join(s["text"] for s in sentences[si_raw:sj_raw]),
+            )
+            pool_key = ("free", si_raw, sj_raw)
+            if pool_key in seen_free:
+                continue
+            seen_free.add(pool_key)
+        else:
+            base = pool[cid]
         i, j = base.sentence_span
 
         si, sj = sel.get("start_sentence"), sel.get("end_sentence")
-        if isinstance(si, int) and isinstance(sj, int) and 0 <= si < sj <= len(sentences):
+        if (not free and isinstance(si, int) and isinstance(sj, int)
+                and 0 <= si < sj <= len(sentences)):
             # Awal boleh bergeser sedikit saja — menggeser awal jauh berarti
             # klip lain yang dipilih, bukan kandidat ini. Akhir boleh maju jauh,
             # karena justru di situlah penutup gagasan biasanya berada; yang

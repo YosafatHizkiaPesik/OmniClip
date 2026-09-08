@@ -30,7 +30,7 @@ MODEL_PATH = MODELS_DIR / "face_detection_yunet_2023mar.onnx"
 
 # Laju sampling deteksi. 6 Hz memberi sinyal yang cukup rapat untuk difilter
 # tanpa membuat perencanaan terasa lama (klip 45 detik ~ 270 frame, ~3 detik).
-SAMPLE_FPS = 6.0
+SAMPLE_FPS = 8.0
 SAMPLE_WIDTH = 480
 
 # Laju perintah yang ditulis ke sendcmd. 25 Hz melampaui laju frame video,
@@ -48,10 +48,11 @@ DETECT_NMS = 0.3
 
 # Konstanta penghalusan, semuanya relatif terhadap lebar sumber.
 DEADZONE_RATIO = 0.055     # abaikan goyangan di bawah 5,5% lebar
-EMA_ALPHA = 0.12           # per sampel pada 6 Hz; dijalankan dua arah
+EMA_ALPHA = 0.12           # per sampel pada 8 Hz; dijalankan dua arah, dua kali
+EMA_PASSES = 2             # dua lintasan = filter orde-4, riak sisa jauh lebih kecil
 MAX_SPEED_RATIO = 0.10     # plafon kecepatan pan, lebar-per-detik
 SCENE_CUT_DISTANCE = 0.5   # jarak Bhattacharyya histogram HSV
-MEDIAN_WINDOW = 5          # buang deteksi meleset sesaat sebelum difilter
+MEDIAN_WINDOW = 7          # buang deteksi meleset sesaat sebelum difilter
 
 
 @dataclass
@@ -283,7 +284,12 @@ def _smooth(centers: list[Optional[float]], cuts: list[bool], *,
         chunk = [min(max(v, lo), hi) for v in chunk]
         chunk = _median(chunk, MEDIAN_WINDOW)
         chunk = _apply_deadzone(chunk, deadzone)
-        chunk = _ema_zero_phase(chunk, EMA_ALPHA)
+        # Dua lintasan maju-mundur. Satu lintasan masih menyisakan riak halus
+        # yang terlihat sebagai getar pelan saat kamera berpindah; melipatgandakan
+        # orde filter menekannya tanpa menambah keterlambatan, karena tiap
+        # lintasan tetap nol fase.
+        for _ in range(EMA_PASSES):
+            chunk = _ema_zero_phase(chunk, EMA_ALPHA)
 
         # Plafon kecepatan terakhir, supaya perpindahan besar tetap terbaca
         # sebagai gerakan kamera dan bukan lompatan.

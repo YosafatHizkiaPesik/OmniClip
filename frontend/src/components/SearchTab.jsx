@@ -271,6 +271,8 @@ export default function SearchTab({ onOpenStudio }) {
       const res = await apiPost('/auto-clip', {
         video_id: video.id, max_clips: 8,
         whisper_model: whisperModel, clip_length: clipLength,
+        // Model dipilih di Settings; kosong berarti biarkan server memutuskan.
+        gemini_model: localStorage.getItem('omniclip_gemini_model') || null,
       });
       setClipNotice({
         kind: res.cached ? 'cached' : 'queued',

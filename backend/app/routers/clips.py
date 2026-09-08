@@ -25,7 +25,12 @@ class AutoClipRequest(BaseModel):
     max_clips: int = 8
     # short / medium / long — menentukan rentang durasi klip yang dicari.
     clip_length: str = "medium"
+    # Perkiraan penutur dari warna suara. Menambah ~15 detik pada video panjang.
+    diarize: bool = True
+    speakers: Optional[int] = None      # None = tebak sendiri
     use_gemini: bool = True
+    # Nama model Gemini pilihan pengguna; kosong = pakai urutan bawaan.
+    gemini_model: Optional[str] = None
     force: bool = False  # abaikan hasil analisis yang sudah tersimpan
 
 
@@ -43,8 +48,8 @@ class CaptionStyleModel(BaseModel):
     uppercase: Optional[bool] = None
     animation: Optional[str] = None
     font: Optional[str] = None
-    # Warna untuk baris yang ditandai sebagai pembicara kedua.
-    speaker2: Optional[str] = None
+    # Warna untuk penutur ke-2 dan seterusnya (penutur pertama pakai `primary`).
+    speaker_colors: Optional[List[str]] = None
 
 
 class RenderClipRequest(BaseModel):
@@ -107,12 +112,15 @@ async def start_auto_clip(req: AutoClipRequest):
             "whisper_model": req.whisper_model,
             "max_clips": req.max_clips,
             "clip_length": req.clip_length,
+            "diarize": req.diarize,
+            "speakers": req.speakers,
             "use_gemini": req.use_gemini,
+            "gemini_model": req.gemini_model,
         },
         video_id=video_id,
         # Panjang klip ikut ke dalam kunci: meminta klip panjang untuk video
         # yang analisis pendeknya sedang berjalan adalah permintaan berbeda.
-        dedupe_key=f"auto_clip:{video_id}:{req.clip_length}",
+        dedupe_key=f"auto_clip:{video_id}:{req.clip_length}:{req.gemini_model or 'auto'}",
     )
     return {"job_id": job_id, "created": created, "cached": False, "video_id": video_id}
 

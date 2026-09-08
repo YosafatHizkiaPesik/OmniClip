@@ -22,7 +22,10 @@ Position = Literal["top", "middle", "bottom"]
 
 @dataclass
 class CaptionStyle:
-    font: str = "DejaVu Sans"
+    # Montserrat ExtraBold dibundel di app/assets/fonts (SIL OFL). Tanpa font
+    # display sendiri, libass jatuh ke DejaVu Sans lewat fontconfig — font teks
+    # badan, bukan font judul, dan itulah kenapa hasilnya terlihat murah.
+    font: str = "Montserrat"
     size: int = 96
     primary: str = "#FFFFFF"
     highlight: str = "#FFE500"
@@ -39,9 +42,10 @@ class CaptionStyle:
     # block/none   : tanpa animasi apa pun
     animation: Literal["karaoke_pop", "karaoke_wipe", "fade",
                        "slide_up", "pop_in", "block", "none"] = "karaoke_pop"
-    # Warna untuk baris yang ditandai sebagai pembicara kedua. Percakapan dua
-    # orang jadi bisa dibedakan sekilas tanpa membaca isinya.
-    speaker2: str = "#7CFFB2"
+    # Warna per penutur. Indeks 0 tidak dipakai — penutur pertama memakai
+    # `primary`, sehingga video satu narasumber terlihat persis seperti sebelum
+    # fitur ini ada. Percakapan jadi bisa dibedakan sekilas tanpa membaca isinya.
+    speaker_colors: tuple[str, ...] = ("#7CFFB2", "#FFB3C7", "#B39DFF")
     max_words_per_line: int = 5
     max_chars_per_line: int = 22
 
@@ -164,7 +168,7 @@ def build_ass(
 
     primary = hex_to_ass(st.primary)
     highlight = hex_to_ass(st.highlight)
-    speaker2 = hex_to_ass(st.speaker2)
+    speaker_ass = [hex_to_ass(c) for c in st.speaker_colors]
     hook_color = hex_to_ass(hook.color) if hook else "&H0000E5FF&"
     align = ALIGNMENT.get(st.position, 2)
 
@@ -211,7 +215,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
         # Warna dasar baris ini. Baris yang ditandai pembicara kedua memakai
         # warnanya sendiri; kata yang sedang diucapkan tetap memakai highlight.
-        base = speaker2 if int(line.get("speaker") or 0) == 1 else primary
+        sp = int(line.get("speaker") or 0)
+        base = (speaker_ass[sp - 1]
+                if 1 <= sp <= len(speaker_ass) else primary)
         base_tag = "" if base == primary else f"{{\\c{base}}}"
 
         if st.animation in KARAOKE and words:

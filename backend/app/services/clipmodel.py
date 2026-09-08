@@ -40,10 +40,16 @@ def words_to_caption_lines(words: list[Word], *, max_words: int = 5,
         nonlocal buf
         if not buf:
             return
+        # Satu baris bisa memuat kata dari dua penutur bila giliran berganti di
+        # tengah baris; yang dipakai adalah yang terbanyak, karena satu baris
+        # hanya punya satu warna.
+        labels = [w["sp"] for w in buf if "sp" in w]
+        speaker = max(set(labels), key=labels.count) if labels else 0
         lines.append({
             "start": buf[0]["s"],
             "end": buf[-1]["e"],
             "text": " ".join(w["w"] for w in buf).strip(),
+            "speaker": speaker,
             "words": [{"w": w["w"], "s": w["s"], "e": w["e"]} for w in buf],
         })
         buf = []
@@ -141,7 +147,11 @@ def rebuild_subtitles_for_segments(
         shifted: list[Word] = [
             {"w": w["w"],
              "s": round(max(0.0, w["s"] + shift), 3),
-             "e": round(max(0.0, w["e"] + shift), 3)}
+             "e": round(max(0.0, w["e"] + shift), 3),
+             # Label penutur ikut berpindah bersama katanya, supaya warna per
+             # orang tetap benar setelah batas klip digeser atau potongan dari
+             # menit lain disambungkan.
+             **({"sp": w["sp"]} if "sp" in w else {})}
             for w in seg_words
         ]
         all_words.extend(shifted)

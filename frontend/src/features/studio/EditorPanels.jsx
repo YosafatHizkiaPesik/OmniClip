@@ -60,6 +60,9 @@ function TimeInput({ value, onCommit, disabled }) {
 }
 
 /** Panel batas klip dan penggabungan potongan. */
+const SPEAKER_PALETTE = ['#7CFFB2', '#FFB3C7', '#B39DFF', '#FFD166', '#5BC8FF', '#FF9F1C'];
+const DEFAULT_SPEAKER_COLORS = ['#7CFFB2', '#FFB3C7', '#B39DFF'];
+
 export function TrimPanel({ clip, videoDuration, busy, onNudge, onSetBounds, onAddSegment, onRemoveSegment }) {
   if (!clip) return null;
 
@@ -141,7 +144,8 @@ export function TrimPanel({ clip, videoDuration, busy, onNudge, onSetBounds, onA
 }
 
 /** Panel penyuntingan subtitle per baris. */
-export function SubtitlePanel({ clip, onUpdate, onRemove, style, onAutoSpeakers }) {
+export function SubtitlePanel({ clip, onUpdate, onRemove, style, onAutoSpeakers,
+                               speakerCount = 2, speakerConfident = null }) {
   if (!clip) return null;
   const lines = clip.subtitles ?? [];
 
@@ -155,9 +159,10 @@ export function SubtitlePanel({ clip, onUpdate, onRemove, style, onAutoSpeakers 
     );
   }
 
-  const color2 = style?.speaker2 ?? '#7CFFB2';
-  const color1 = style?.primary ?? '#FFFFFF';
-  const marked = lines.filter((l) => (l.speaker || 0) === 1).length;
+  const palette = style?.speaker_colors ?? DEFAULT_SPEAKER_COLORS;
+  const colorOf = (i) => (i === 0 ? (style?.primary ?? '#FFFFFF') : palette[i - 1] ?? '#FFFFFF');
+  const total = Math.max(2, Math.min(4, speakerCount || 2));
+  const used = new Set(lines.map((l) => l.speaker || 0));
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -166,14 +171,30 @@ export function SubtitlePanel({ clip, onUpdate, onRemove, style, onAutoSpeakers 
         tekan lingkaran warna untuk menandai siapa yang bicara.
       </p>
 
-      <button className="btn-secondary" onClick={() => onAutoSpeakers?.(clip.clip_id)}
-              style={{ fontSize: '0.76rem', padding: '7px 10px', justifyContent: 'center' }}>
-        Tandai otomatis dari jeda bicara
-      </button>
-      <p style={{ fontSize: '0.67rem', color: 'var(--text-muted)', margin: '-4px 0 0', lineHeight: 1.5 }}>
-        Ini tebakan dari panjang jeda, bukan pengenalan suara — sistem tidak
-        mendengar siapa yang bicara. Periksa dan perbaiki manual bila meleset.
-        {marked > 0 && ` Saat ini ${marked} baris ditandai orang kedua.`}
+      <div style={{
+        padding: '9px 11px', borderRadius: 'var(--radius-sm)',
+        background: 'var(--bg-glass)', border: '1px solid var(--border-color)',
+      }}>
+        <div style={{ fontSize: '0.75rem', fontWeight: 700, marginBottom: '4px' }}>
+          {speakerConfident === null ? 'Penanda penutur'
+            : speakerConfident
+              ? `Perkiraan ${speakerCount} narasumber`
+              : 'Suara sulit dipisahkan'}
+        </div>
+        <p style={{ fontSize: '0.68rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.55 }}>
+          {speakerConfident === false
+            ? 'Suara narasumbernya terlalu mirip untuk dipisahkan otomatis, jadi '
+              + 'semua baris ditandai orang pertama. Tandai manual di bawah.'
+            : 'Ditebak dari warna suara, bukan pengenalan suara terlatih. '
+              + 'Sering meleset di kalimat pendek — periksa dan betulkan di bawah.'}
+        </p>
+        <button className="btn-secondary" onClick={() => onAutoSpeakers?.(clip.clip_id)}
+                style={{ fontSize: '0.73rem', padding: '6px 9px', marginTop: '8px' }}>
+          Tandai ulang dari jeda bicara
+        </button>
+      </div>
+      <p style={{ fontSize: '0.67rem', color: 'var(--text-muted)', margin: '-2px 0 0' }}>
+        Terpakai di klip ini: {[...used].sort().map((i) => `orang ${i + 1}`).join(', ')}
       </p>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '380px', overflowY: 'auto' }}>
@@ -188,15 +209,15 @@ export function SubtitlePanel({ clip, onUpdate, onRemove, style, onAutoSpeakers 
                 {line.start.toFixed(1)}s
               </span>
               <button
-                onClick={() => onUpdate(clip.clip_id, i, { speaker: speaker === 1 ? 0 : 1 })}
-                title={speaker === 1 ? 'Orang kedua — klik untuk kembalikan' : 'Orang pertama — klik untuk tandai orang kedua'}
+                onClick={() => onUpdate(clip.clip_id, i, { speaker: (speaker + 1) % total })}
+                title={`Orang ${speaker + 1} — klik untuk ganti`}
                 aria-label="Ganti penanda pembicara"
                 style={{
                   width: '20px', height: '20px', borderRadius: '50%', cursor: 'pointer',
-                  background: speaker === 1 ? color2 : color1,
-                  border: '2px solid var(--border-color)', padding: 0,
+                  background: colorOf(speaker), border: '2px solid var(--border-color)',
+                  padding: 0, fontSize: '0.6rem', fontWeight: 900, color: '#00121a',
                 }}
-              />
+              >{speaker + 1}</button>
               <input
                 value={line.text}
                 onChange={(e) => onUpdate(clip.clip_id, i, { text: e.target.value })}
@@ -214,9 +235,18 @@ export function SubtitlePanel({ clip, onUpdate, onRemove, style, onAutoSpeakers 
   );
 }
 
-const FONT_CHOICES = ['DejaVu Sans', 'Liberation Sans', 'Noto Sans', 'Ubuntu'];
+// Font display yang ikut dibundel di backend/app/assets/fonts (semuanya SIL OFL)
+// dan diteruskan ke libass lewat `fontsdir`. Font sistem sengaja tidak
+// ditawarkan: DejaVu dan Liberation adalah font teks badan, dan pada ukuran
+// judul hasilnya terlihat seperti berkas subtitle, bukan konten.
+const FONT_CHOICES = [
+  ['Montserrat', 'Montserrat — tebal & bulat, gaya Opus/CapCut'],
+  ['Anton', 'Anton — sangat tebal dan rapat'],
+  ['Bebas Neue', 'Bebas Neue — tinggi ramping, huruf besar'],
+  ['Oswald', 'Oswald — rapat, mudah dibaca'],
+  ['Poppins', 'Poppins — geometris, bersih'],
+];
 const HIGHLIGHTS = ['#FFE500', '#00E5FF', '#FF4D6D', '#7CFF6B', '#FF9F1C', '#FFFFFF'];
-const SPEAKER2_COLORS = ['#7CFFB2', '#FFB3C7', '#B39DFF', '#FFD166', '#FFFFFF'];
 
 // Preset gaya. Bukan sekadar warna: tiap preset menyetel ukuran, animasi, dan
 // posisi sekaligus, karena kombinasi itulah yang membuat sebuah gaya terbaca
@@ -280,14 +310,14 @@ function Segmented({ options, value, onChange, columns = 3, size = '0.76rem' }) 
   );
 }
 
-function Swatches({ colors, value, onChange }) {
+function Swatches({ colors, value, onChange, size = 32 }) {
   return (
-    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+    <div style={{ display: 'flex', gap: '7px', flexWrap: 'wrap' }}>
       {colors.map((c) => (
         <button key={c} onClick={() => onChange(c)} aria-label={`Warna ${c}`}
                 style={{
-                  width: '32px', height: '32px', borderRadius: '50%', cursor: 'pointer',
-                  background: c,
+                  width: `${size}px`, height: `${size}px`, borderRadius: '50%',
+                  cursor: 'pointer', background: c, padding: 0,
                   border: value === c ? '3px solid var(--accent-cyan)' : '1px solid var(--border-color)',
                 }} />
       ))}
@@ -383,12 +413,41 @@ export function StylePanel({
       </div>
 
       <div>
-        <div style={{ ...label, marginBottom: '8px' }}>Warna narasumber kedua</div>
-        <Swatches colors={SPEAKER2_COLORS} value={style.speaker2 ?? '#7CFFB2'}
-                  onChange={(c) => set({ speaker2: c })} />
-        <p style={{ fontSize: '0.68rem', color: 'var(--text-muted)', margin: '7px 0 0', lineHeight: 1.5 }}>
-          Dipakai untuk baris yang Anda tandai sebagai orang kedua di tab
-          Subtitle, supaya percakapan dua orang bisa dibedakan sekilas.
+        <div style={{ ...label, marginBottom: '8px' }}>Warna per narasumber</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '9px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
+            <span style={{ fontSize: '0.74rem', width: '72px', color: 'var(--text-secondary)' }}>
+              Orang 1
+            </span>
+            <span style={{
+              width: '22px', height: '22px', borderRadius: '50%',
+              background: style.primary ?? '#FFFFFF', border: '1px solid var(--border-color)',
+            }} />
+            <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+              memakai warna teks utama
+            </span>
+          </div>
+          {[0, 1, 2].map((i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
+              <span style={{ fontSize: '0.74rem', width: '72px', color: 'var(--text-secondary)' }}>
+                Orang {i + 2}
+              </span>
+              <Swatches
+                colors={SPEAKER_PALETTE}
+                value={(style.speaker_colors ?? DEFAULT_SPEAKER_COLORS)[i]}
+                onChange={(c) => {
+                  const next = [...(style.speaker_colors ?? DEFAULT_SPEAKER_COLORS)];
+                  next[i] = c;
+                  set({ speaker_colors: next });
+                }}
+                size={22}
+              />
+            </div>
+          ))}
+        </div>
+        <p style={{ fontSize: '0.68rem', color: 'var(--text-muted)', margin: '9px 0 0', lineHeight: 1.5 }}>
+          Dipakai untuk baris yang ditandai di tab Subtitle. Sistem mengisi
+          tandanya lebih dulu dari perkiraan suara — periksa dan betulkan di sana.
         </p>
       </div>
 
@@ -401,7 +460,7 @@ export function StylePanel({
       <div>
         <div style={{ ...label, marginBottom: '8px' }}>Font</div>
         <select value={style.font} onChange={(e) => set({ font: e.target.value })} style={field}>
-          {FONT_CHOICES.map((f) => <option key={f} value={f}>{f}</option>)}
+          {FONT_CHOICES.map(([f, desc]) => <option key={f} value={f}>{desc}</option>)}
         </select>
       </div>
 

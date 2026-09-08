@@ -29,5 +29,11 @@ opencv-python-headless==4.11.0.86
 # Tanpa API key, pemilihan klip tetap berjalan memakai mesin heuristik lokal.
 google-genai>=0.1.1
 
+# --- Font subtitle ---
+# Font display dibundel di app/assets/fonts (semuanya SIL OFL) dan diteruskan ke
+# libass lewat `fontsdir`. Tanpa itu libass jatuh ke DejaVu Sans lewat
+# fontconfig — font teks badan, dan pada ukuran judul hasilnya terlihat seperti
+# berkas subtitle, bukan konten.
+
 # Prasyarat sistem (bukan paket pip): ffmpeg dan ffprobe harus ada di PATH.
 #   Ubuntu/Debian: sudo apt install ffmpeg

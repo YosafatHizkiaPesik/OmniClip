@@ -308,10 +308,12 @@ function CaptionOverlay({ line, activeWordIndex, style, clipTime }) {
   const anim = style?.animation ?? 'karaoke_pop';
   const uppercase = style?.uppercase !== false;
 
-  // Warna per pembicara: baris yang ditandai pembicara kedua memakai warna
-  // sendiri, sehingga percakapan dua orang bisa dibedakan sekilas.
-  const speakerColor = line.speaker === 1
-    ? (style?.speaker2 ?? '#7CFFB2')
+  // Warna per penutur. Penutur pertama memakai warna teks utama, sehingga video
+  // satu narasumber tampil persis seperti sebelum fitur ini ada.
+  const palette = style?.speaker_colors ?? ['#7CFFB2', '#FFB3C7', '#B39DFF'];
+  const sp = line.speaker || 0;
+  const speakerColor = sp >= 1 && sp <= palette.length
+    ? palette[sp - 1]
     : (style?.primary ?? '#FFFFFF');
 
   const age = clipTime - line.start;
