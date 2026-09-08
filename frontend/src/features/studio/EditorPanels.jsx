@@ -141,7 +141,7 @@ export function TrimPanel({ clip, videoDuration, busy, onNudge, onSetBounds, onA
 }
 
 /** Panel penyuntingan subtitle per baris. */
-export function SubtitlePanel({ clip, onUpdate, onRemove }) {
+export function SubtitlePanel({ clip, onUpdate, onRemove, style, onAutoSpeakers }) {
   if (!clip) return null;
   const lines = clip.subtitles ?? [];
 
@@ -155,59 +155,218 @@ export function SubtitlePanel({ clip, onUpdate, onRemove }) {
     );
   }
 
+  const color2 = style?.speaker2 ?? '#7CFFB2';
+  const color1 = style?.primary ?? '#FFFFFF';
+  const marked = lines.filter((l) => (l.speaker || 0) === 1).length;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-      <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', margin: 0 }}>
-        {lines.length} baris. Perbaiki kata yang salah dengar langsung di sini.
+      <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
+        {lines.length} baris. Perbaiki kata yang salah dengar langsung di sini, dan
+        tekan lingkaran warna untuk menandai siapa yang bicara.
       </p>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '420px', overflowY: 'auto' }}>
-        {lines.map((line, i) => (
-          <div key={i} style={{
-            display: 'grid', gridTemplateColumns: '58px 1fr 28px', gap: '8px',
-            alignItems: 'center',
-          }}>
-            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>
-              {line.start.toFixed(1)}s
-            </span>
-            <input
-              value={line.text}
-              onChange={(e) => onUpdate(clip.clip_id, i, { text: e.target.value })}
-              style={{ ...field, fontSize: '0.8rem', padding: '7px 9px' }}
-            />
-            <button onClick={() => onRemove(clip.clip_id, i)} aria-label="Hapus baris"
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}>
-              <Trash2 size={14} />
-            </button>
-          </div>
-        ))}
+
+      <button className="btn-secondary" onClick={() => onAutoSpeakers?.(clip.clip_id)}
+              style={{ fontSize: '0.76rem', padding: '7px 10px', justifyContent: 'center' }}>
+        Tandai otomatis dari jeda bicara
+      </button>
+      <p style={{ fontSize: '0.67rem', color: 'var(--text-muted)', margin: '-4px 0 0', lineHeight: 1.5 }}>
+        Ini tebakan dari panjang jeda, bukan pengenalan suara — sistem tidak
+        mendengar siapa yang bicara. Periksa dan perbaiki manual bila meleset.
+        {marked > 0 && ` Saat ini ${marked} baris ditandai orang kedua.`}
+      </p>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '380px', overflowY: 'auto' }}>
+        {lines.map((line, i) => {
+          const speaker = line.speaker || 0;
+          return (
+            <div key={i} style={{
+              display: 'grid', gridTemplateColumns: '52px 22px 1fr 26px', gap: '7px',
+              alignItems: 'center',
+            }}>
+              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>
+                {line.start.toFixed(1)}s
+              </span>
+              <button
+                onClick={() => onUpdate(clip.clip_id, i, { speaker: speaker === 1 ? 0 : 1 })}
+                title={speaker === 1 ? 'Orang kedua — klik untuk kembalikan' : 'Orang pertama — klik untuk tandai orang kedua'}
+                aria-label="Ganti penanda pembicara"
+                style={{
+                  width: '20px', height: '20px', borderRadius: '50%', cursor: 'pointer',
+                  background: speaker === 1 ? color2 : color1,
+                  border: '2px solid var(--border-color)', padding: 0,
+                }}
+              />
+              <input
+                value={line.text}
+                onChange={(e) => onUpdate(clip.clip_id, i, { text: e.target.value })}
+                style={{ ...field, fontSize: '0.8rem', padding: '7px 9px' }}
+              />
+              <button onClick={() => onRemove(clip.clip_id, i)} aria-label="Hapus baris"
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}>
+                <Trash2 size={14} />
+              </button>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
 }
 
 const FONT_CHOICES = ['DejaVu Sans', 'Liberation Sans', 'Noto Sans', 'Ubuntu'];
-const HIGHLIGHTS = ['#FFE500', '#00E5FF', '#FF4D6D', '#7CFF6B', '#FFFFFF'];
+const HIGHLIGHTS = ['#FFE500', '#00E5FF', '#FF4D6D', '#7CFF6B', '#FF9F1C', '#FFFFFF'];
+const SPEAKER2_COLORS = ['#7CFFB2', '#FFB3C7', '#B39DFF', '#FFD166', '#FFFFFF'];
+
+// Preset gaya. Bukan sekadar warna: tiap preset menyetel ukuran, animasi, dan
+// posisi sekaligus, karena kombinasi itulah yang membuat sebuah gaya terbaca
+// utuh — mengganti warna saja tidak mengubah kesannya.
+const STYLE_PRESETS = [
+  {
+    id: 'tebal', label: 'Tebal', hint: 'Putih tebal, kata aktif kuning',
+    patch: { size: 96, primary: '#FFFFFF', highlight: '#FFE500',
+             uppercase: true, animation: 'karaoke_pop', position: 'bottom' },
+  },
+  {
+    id: 'neon', label: 'Neon', hint: 'Besar, sorot biru elektrik',
+    patch: { size: 110, primary: '#FFFFFF', highlight: '#00E5FF',
+             uppercase: true, animation: 'karaoke_pop', position: 'bottom' },
+  },
+  {
+    id: 'lembut', label: 'Lembut', hint: 'Huruf biasa, masuk memudar',
+    patch: { size: 84, primary: '#FFFFFF', highlight: '#FFD166',
+             uppercase: false, animation: 'fade', position: 'bottom' },
+  },
+  {
+    id: 'naik', label: 'Naik', hint: 'Baris naik dari bawah',
+    patch: { size: 92, primary: '#FFFFFF', highlight: '#7CFF6B',
+             uppercase: true, animation: 'slide_up', position: 'bottom' },
+  },
+  {
+    id: 'pop', label: 'Pop', hint: 'Baris membesar saat muncul',
+    patch: { size: 100, primary: '#FFFFFF', highlight: '#FF4D6D',
+             uppercase: true, animation: 'pop_in', position: 'bottom' },
+  },
+  {
+    id: 'bersih', label: 'Bersih', hint: 'Tanpa animasi, tengah bawah',
+    patch: { size: 88, primary: '#FFFFFF', highlight: '#FFFFFF',
+             uppercase: false, animation: 'none', position: 'bottom' },
+  },
+];
+
+const ANIMATIONS = [
+  ['karaoke_pop', 'Karaoke pantul'],
+  ['karaoke_wipe', 'Karaoke warna'],
+  ['fade', 'Memudar'],
+  ['slide_up', 'Naik'],
+  ['pop_in', 'Membesar'],
+  ['none', 'Tanpa animasi'],
+];
+
+function Segmented({ options, value, onChange, columns = 3, size = '0.76rem' }) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${columns}, 1fr)`, gap: '6px' }}>
+      {options.map(([v, t]) => (
+        <button key={v} onClick={() => onChange(v)}
+                style={{
+                  padding: '9px 2px', fontSize: size, fontWeight: 700, cursor: 'pointer',
+                  borderRadius: 'var(--radius-sm)',
+                  border: value === v ? '2px solid var(--accent-cyan)' : '1px solid var(--border-color)',
+                  background: value === v ? 'rgba(0,242,254,0.12)' : 'transparent',
+                  color: value === v ? 'var(--accent-cyan)' : 'var(--text-secondary)',
+                }}>{t}</button>
+      ))}
+    </div>
+  );
+}
+
+function Swatches({ colors, value, onChange }) {
+  return (
+    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+      {colors.map((c) => (
+        <button key={c} onClick={() => onChange(c)} aria-label={`Warna ${c}`}
+                style={{
+                  width: '32px', height: '32px', borderRadius: '50%', cursor: 'pointer',
+                  background: c,
+                  border: value === c ? '3px solid var(--accent-cyan)' : '1px solid var(--border-color)',
+                }} />
+      ))}
+    </div>
+  );
+}
 
 /** Panel gaya teks — semua nilai di sini benar-benar sampai ke ffmpeg. */
-export function StylePanel({ style, onChange, aspectRatio, onAspectChange }) {
+export function StylePanel({
+  style, onChange, aspectRatio, onAspectChange,
+  showHook, onShowHookChange, hookText, onHookTextChange,
+}) {
   const set = (patch) => onChange({ ...style, ...patch });
+  const activePreset = STYLE_PRESETS.find(
+    (p) => Object.entries(p.patch).every(([k, v]) => style[k] === v),
+  );
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
       <div>
-        <div style={{ ...label, marginBottom: '8px' }}>Rasio video</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px' }}>
-          {['9:16', '1:1', '4:5', '16:9'].map((r) => (
-            <button key={r} onClick={() => onAspectChange(r)}
-                    style={{
-                      padding: '9px 0', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer',
-                      borderRadius: 'var(--radius-sm)',
-                      border: aspectRatio === r ? '2px solid var(--accent-cyan)' : '1px solid var(--border-color)',
-                      background: aspectRatio === r ? 'rgba(0,242,254,0.12)' : 'transparent',
-                      color: aspectRatio === r ? 'var(--accent-cyan)' : 'var(--text-secondary)',
-                    }}>{r}</button>
-          ))}
+        <div style={{ ...label, marginBottom: '8px' }}>Gaya siap pakai</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+          {STYLE_PRESETS.map((p) => {
+            const on = activePreset?.id === p.id;
+            return (
+              <button key={p.id} onClick={() => set(p.patch)} title={p.hint}
+                      style={{
+                        padding: '8px 9px', textAlign: 'left', cursor: 'pointer',
+                        borderRadius: 'var(--radius-sm)',
+                        border: on ? '2px solid var(--accent-cyan)' : '1px solid var(--border-color)',
+                        background: on ? 'rgba(0,242,254,0.1)' : 'transparent',
+                      }}>
+                <div style={{
+                  fontSize: '0.79rem', fontWeight: 800,
+                  color: on ? 'var(--accent-cyan)' : 'var(--text-primary)',
+                }}>{p.label}</div>
+                <div style={{ fontSize: '0.66rem', color: 'var(--text-muted)', lineHeight: 1.35 }}>
+                  {p.hint}
+                </div>
+              </button>
+            );
+          })}
         </div>
+      </div>
+
+      <div>
+        <div style={{ ...label, marginBottom: '8px' }}>Rasio video</div>
+        <Segmented columns={4} options={[['9:16', '9:16'], ['1:1', '1:1'], ['4:5', '4:5'], ['16:9', '16:9']]}
+                   value={aspectRatio} onChange={onAspectChange} />
+      </div>
+
+      {/* Judul */}
+      <div>
+        <label style={{
+          display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer',
+          fontSize: '0.84rem', marginBottom: showHook ? '8px' : 0,
+        }}>
+          <input type="checkbox" checked={showHook}
+                 onChange={(e) => onShowHookChange(e.target.checked)}
+                 style={{ accentColor: 'var(--accent-cyan)', width: '16px', height: '16px' }} />
+          Tampilkan judul di atas video
+        </label>
+        {showHook ? (
+          <>
+            <textarea value={hookText} rows={2}
+                      onChange={(e) => onHookTextChange(e.target.value)}
+                      placeholder="Ketik judul, atau biarkan kutipan otomatis"
+                      style={{ ...field, resize: 'vertical', lineHeight: 1.4 }} />
+            <p style={{ fontSize: '0.68rem', color: 'var(--text-muted)', margin: '6px 0 0', lineHeight: 1.5 }}>
+              Judul bawaan diambil dari kalimat pembuka klip, jadi isinya selalu
+              benar-benar diucapkan. Anda bisa menggantinya dengan teks sendiri.
+            </p>
+          </>
+        ) : (
+          <p style={{ fontSize: '0.68rem', color: 'var(--text-muted)', margin: '6px 0 0', lineHeight: 1.5 }}>
+            Mati secara bawaan — hasilnya lebih bersih. Nyalakan bila klipnya
+            butuh konteks pembuka.
+          </p>
+        )}
       </div>
 
       <div>
@@ -219,16 +378,24 @@ export function StylePanel({ style, onChange, aspectRatio, onAspectChange }) {
 
       <div>
         <div style={{ ...label, marginBottom: '8px' }}>Warna kata aktif</div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          {HIGHLIGHTS.map((c) => (
-            <button key={c} onClick={() => set({ highlight: c })} aria-label={`Warna ${c}`}
-                    style={{
-                      width: '34px', height: '34px', borderRadius: '50%', cursor: 'pointer',
-                      background: c,
-                      border: style.highlight === c ? '3px solid var(--accent-cyan)' : '1px solid var(--border-color)',
-                    }} />
-          ))}
-        </div>
+        <Swatches colors={HIGHLIGHTS} value={style.highlight}
+                  onChange={(c) => set({ highlight: c })} />
+      </div>
+
+      <div>
+        <div style={{ ...label, marginBottom: '8px' }}>Warna narasumber kedua</div>
+        <Swatches colors={SPEAKER2_COLORS} value={style.speaker2 ?? '#7CFFB2'}
+                  onChange={(c) => set({ speaker2: c })} />
+        <p style={{ fontSize: '0.68rem', color: 'var(--text-muted)', margin: '7px 0 0', lineHeight: 1.5 }}>
+          Dipakai untuk baris yang Anda tandai sebagai orang kedua di tab
+          Subtitle, supaya percakapan dua orang bisa dibedakan sekilas.
+        </p>
+      </div>
+
+      <div>
+        <div style={{ ...label, marginBottom: '8px' }}>Animasi</div>
+        <Segmented columns={2} options={ANIMATIONS} value={style.animation}
+                   onChange={(v) => set({ animation: v })} />
       </div>
 
       <div>
@@ -240,18 +407,8 @@ export function StylePanel({ style, onChange, aspectRatio, onAspectChange }) {
 
       <div>
         <div style={{ ...label, marginBottom: '8px' }}>Posisi teks</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
-          {[['top', 'Atas'], ['middle', 'Tengah'], ['bottom', 'Bawah']].map(([v, t]) => (
-            <button key={v} onClick={() => set({ position: v })}
-                    style={{
-                      padding: '9px 0', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer',
-                      borderRadius: 'var(--radius-sm)',
-                      border: style.position === v ? '2px solid var(--accent-cyan)' : '1px solid var(--border-color)',
-                      background: style.position === v ? 'rgba(0,242,254,0.12)' : 'transparent',
-                      color: style.position === v ? 'var(--accent-cyan)' : 'var(--text-secondary)',
-                    }}>{t}</button>
-          ))}
-        </div>
+        <Segmented columns={3} options={[['top', 'Atas'], ['middle', 'Tengah'], ['bottom', 'Bawah']]}
+                   value={style.position} onChange={(v) => set({ position: v })} />
       </div>
 
       <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontSize: '0.84rem' }}>
@@ -260,22 +417,6 @@ export function StylePanel({ style, onChange, aspectRatio, onAspectChange }) {
                style={{ accentColor: 'var(--accent-cyan)', width: '16px', height: '16px' }} />
         Huruf kapital semua
       </label>
-
-      <div>
-        <div style={{ ...label, marginBottom: '8px' }}>Animasi</div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
-          {[['karaoke_pop', 'Karaoke per kata'], ['block', 'Per baris']].map(([v, t]) => (
-            <button key={v} onClick={() => set({ animation: v })}
-                    style={{
-                      padding: '9px 0', fontSize: '0.76rem', fontWeight: 700, cursor: 'pointer',
-                      borderRadius: 'var(--radius-sm)',
-                      border: style.animation === v ? '2px solid var(--accent-cyan)' : '1px solid var(--border-color)',
-                      background: style.animation === v ? 'rgba(0,242,254,0.12)' : 'transparent',
-                      color: style.animation === v ? 'var(--accent-cyan)' : 'var(--text-secondary)',
-                    }}>{t}</button>
-          ))}
-        </div>
-      </div>
     </div>
   );
 }

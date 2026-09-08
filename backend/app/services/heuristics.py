@@ -375,8 +375,18 @@ def generate_candidates(
     return kept
 
 
+# Preset panjang klip. Batas atas lamalah yang membuat klip hanya menangkap
+# pembukaan sebuah pembahasan: pertanyaan masuk, jawabannya tidak. "panjang"
+# memberi ruang untuk satu gagasan utuh — setup sekaligus penutupnya.
+LENGTH_PRESETS = {
+    "short":  {"target": (15.0, 40.0),  "ideal": 28.0, "max": 55.0},
+    "medium": {"target": (20.0, 60.0),  "ideal": 35.0, "max": 80.0},
+    "long":   {"target": (35.0, 110.0), "ideal": 65.0, "max": 135.0},
+}
+
+
 def validate_and_snap(candidates: list[Candidate], sentences: list[Sentence],
-                      duration: float) -> list[Candidate]:
+                      duration: float, *, max_duration: float = 90.0) -> list[Candidate]:
     """
     Penjaga terakhir yang dilewati SEMUA mesin (heuristik maupun Gemini).
 
@@ -387,7 +397,7 @@ def validate_and_snap(candidates: list[Candidate], sentences: list[Sentence],
     for c in candidates:
         c.start = max(0.0, min(c.start, duration))
         c.end = max(0.0, min(c.end, duration))
-        if c.end - c.start < 8.0 or c.end - c.start > 90.0:
+        if c.end - c.start < 8.0 or c.end - c.start > max_duration:
             continue
 
         # Tarik ke batas kalimat terdekat dalam 1,5 detik.

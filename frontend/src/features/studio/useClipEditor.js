@@ -123,6 +123,29 @@ export function useClipEditor() {
     updateClip(id, { subtitles });
   }, [clips, updateClip]);
 
+  /**
+   * Menebak pergantian pembicara dari panjang jeda antar baris.
+   *
+   * Ini BUKAN pengenalan suara: sistem tidak mendengar siapa yang bicara, ia
+   * hanya berasumsi jeda panjang menandai giliran berganti. Diarisasi sungguhan
+   * butuh model embedding suara yang tidak muat di anggaran memori mesin ini.
+   * Hasilnya sengaja bisa disunting satu per satu karena memang akan meleset —
+   * misalnya saat satu orang berhenti untuk berpikir.
+   */
+  const autoSpeakers = useCallback((id, gapSeconds = 1.2) => {
+    const clip = clips.find((c) => c.clip_id === id);
+    if (!clip?.subtitles?.length) return;
+    let current = 0;
+    const subtitles = clip.subtitles.map((line, i) => {
+      if (i > 0) {
+        const gap = line.start - clip.subtitles[i - 1].end;
+        if (gap >= gapSeconds) current = current === 0 ? 1 : 0;
+      }
+      return { ...line, speaker: current };
+    });
+    updateClip(id, { subtitles });
+  }, [clips, updateClip]);
+
   const removeSubtitle = useCallback((id, lineIndex) => {
     const clip = clips.find((c) => c.clip_id === id);
     if (!clip) return;
@@ -159,7 +182,7 @@ export function useClipEditor() {
     clips, selected, selectedId, checked, dirty, busy,
     load, setSelectedId, updateClip,
     nudgeSegment, setSegmentBounds, addSegment, removeSegment, recomputeSubtitles,
-    updateSubtitle, removeSubtitle,
+    updateSubtitle, removeSubtitle, autoSpeakers,
     toggleChecked, setAllChecked, removeClip,
   };
 }

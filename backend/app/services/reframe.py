@@ -28,15 +28,15 @@ log = logging.getLogger("omniclip.reframe")
 
 MODEL_PATH = MODELS_DIR / "face_detection_yunet_2023mar.onnx"
 
-# Laju sampling deteksi. 4 Hz cukup: kepala manusia tidak berpindah posisi
-# horizontal secara berarti dalam 250 ms, dan ini menjaga klip 45 detik tetap
-# di bawah 2 detik pemrosesan.
-SAMPLE_FPS = 4.0
+# Laju sampling deteksi. 6 Hz memberi sinyal yang cukup rapat untuk difilter
+# tanpa membuat perencanaan terasa lama (klip 45 detik ~ 270 frame, ~3 detik).
+SAMPLE_FPS = 6.0
 SAMPLE_WIDTH = 480
 
-# Laju perintah yang ditulis ke sendcmd. Lebih rapat dari sampling supaya
-# gerakan crop terbaca mulus, bukan meloncat tiap 250 ms.
-COMMAND_HZ = 10.0
+# Laju perintah yang ditulis ke sendcmd. 25 Hz melampaui laju frame video,
+# sehingga crop tidak pernah "menunggu" perintah berikutnya. Pada 10 Hz,
+# perubahan posisi datang tiap 3 frame dan itu terlihat sebagai getar halus.
+COMMAND_HZ = 25.0
 
 # Ambang di bawah ini artinya rekaman bukan wajah bicara (gameplay, screencast,
 # slide). Memaksa face-tracking di situ menghasilkan crop yang meloncat-loncat;
@@ -48,9 +48,10 @@ DETECT_NMS = 0.3
 
 # Konstanta penghalusan, semuanya relatif terhadap lebar sumber.
 DEADZONE_RATIO = 0.055     # abaikan goyangan di bawah 5,5% lebar
-EMA_ALPHA = 0.15           # pada 4 Hz setara konstanta waktu ~1 detik
-MAX_SPEED_RATIO = 0.09     # plafon kecepatan pan, lebar-per-detik
+EMA_ALPHA = 0.12           # per sampel pada 6 Hz; dijalankan dua arah
+MAX_SPEED_RATIO = 0.10     # plafon kecepatan pan, lebar-per-detik
 SCENE_CUT_DISTANCE = 0.5   # jarak Bhattacharyya histogram HSV
+MEDIAN_WINDOW = 5          # buang deteksi meleset sesaat sebelum difilter
 
 
 @dataclass
@@ -180,39 +181,119 @@ def _detect_centers(src: Path, segments: list[dict],
     return centers, cuts
 
 
+def _median(values: list[float], window: int) -> list[float]:
+    """Median bergerak — membuang deteksi yang meleset satu-dua frame."""
+    if window < 3 or len(values) < window:
+        return list(values)
+    half = window // 2
+    out = []
+    for i in range(len(values)):
+        lo = max(0, i - half)
+        hi = min(len(values), i + half + 1)
+        chunk = sorted(values[lo:hi])
+        out.append(chunk[len(chunk) // 2])
+    return out
+
+
+def _ema_zero_phase(values: list[float], alpha: float) -> list[float]:
+    """
+    EMA maju lalu mundur.
+
+    EMA satu arah selalu tertinggal di belakang sinyalnya, dan pada gerakan
+    kamera itu terlihat sebagai crop yang "mengejar" kepala pembicara. Menjalankan
+    filter yang sama ke arah sebaliknya membatalkan pergeseran fasa itu: hasilnya
+    halus TAPI tetap sejajar waktu dengan gerakan aslinya.
+    """
+    if not values:
+        return []
+    forward = []
+    acc = values[0]
+    for v in values:
+        acc += alpha * (v - acc)
+        forward.append(acc)
+    backward = [0.0] * len(forward)
+    acc = forward[-1]
+    for i in range(len(forward) - 1, -1, -1):
+        acc += alpha * (forward[i] - acc)
+        backward[i] = acc
+    return backward
+
+
+def _apply_deadzone(values: list[float], deadzone: float) -> list[float]:
+    """
+    Menahan target selama pembicara hanya bergoyang kecil.
+
+    Dijalankan SEBELUM penghalusan, bukan sesudah: kalau sesudah, hasilnya
+    berupa tangga yang justru harus dihaluskan lagi. Di sini deadzone hanya
+    membentuk sinyal niat — filter berikutnya yang membuat perpindahannya mulus.
+    """
+    if not values:
+        return []
+    out = [values[0]]
+    held = values[0]
+    for v in values[1:]:
+        if abs(v - held) > deadzone:
+            held = v
+        out.append(held)
+    return out
+
+
 def _smooth(centers: list[Optional[float]], cuts: list[bool], *,
             source_w: int, crop_w: int) -> list[float]:
     """
-    Menghaluskan jejak wajah menjadi gerakan kamera yang terbaca terkunci.
+    Mengubah jejak wajah mentah menjadi gerakan kamera yang enak dilihat.
 
-    Urutan deadzone-lalu-EMA adalah kuncinya: EMA murni terus merayap ke arah
-    target dan terbaca sebagai kamera yang hanyut. Deadzone membuat crop DIAM
-    selama pembicara hanya bergoyang sedikit — itulah yang membedakan hasil yang
-    terlihat sengaja dari yang terlihat gemetar.
+    Rantainya: tahan-saat-hilang -> median -> deadzone -> EMA dua arah ->
+    plafon kecepatan. Tiap potongan adegan difilter SENDIRI-SENDIRI, karena
+    menghaluskan melewati potongan adegan berarti kamera akan mem-pan
+    menyeberangi pergantian kamera — persis yang membuat hasilnya terlihat
+    seperti melayang, bukan berpindah.
     """
-    deadzone = DEADZONE_RATIO * source_w
-    max_step = (MAX_SPEED_RATIO * source_w) / SAMPLE_FPS
+    if not centers:
+        return []
+
     half = crop_w / 2.0
     lo, hi = half, source_w - half
+    deadzone = DEADZONE_RATIO * source_w
+    max_step = (MAX_SPEED_RATIO * source_w) / SAMPLE_FPS
 
-    # Titik netral bila wajah belum pernah terlihat.
-    current = source_w / 2.0
-    last_seen = next((c for c in centers if c is not None), None)
-    if last_seen is not None:
-        current = min(max(last_seen, lo), hi)
+    # Isi sampel tanpa wajah dengan nilai terakhir yang diketahui, lalu mundur
+    # untuk sampel awal yang belum pernah melihat wajah.
+    filled: list[float] = []
+    last = next((c for c in centers if c is not None), source_w / 2.0)
+    for c in centers:
+        if c is not None:
+            last = c
+        filled.append(last)
+
+    # Pecah menjadi rentang antar potongan adegan.
+    bounds = [i for i, is_cut in enumerate(cuts) if is_cut and i > 0]
+    runs: list[tuple[int, int]] = []
+    prev = 0
+    for b in bounds:
+        runs.append((prev, b))
+        prev = b
+    runs.append((prev, len(filled)))
 
     out: list[float] = []
-    for center, is_cut in zip(centers, cuts):
-        if center is None:
-            out.append(current)   # wajah hilang sesaat: tahan posisi
+    for a, b in runs:
+        chunk = filled[a:b]
+        if not chunk:
             continue
-        target = min(max(center, lo), hi)
-        if is_cut:
-            current = target      # snap: jangan mem-pan menyeberangi potongan adegan
-        elif abs(target - current) > deadzone:
-            step = EMA_ALPHA * (target - current)
-            current += max(-max_step, min(max_step, step))
-        out.append(current)
+        chunk = [min(max(v, lo), hi) for v in chunk]
+        chunk = _median(chunk, MEDIAN_WINDOW)
+        chunk = _apply_deadzone(chunk, deadzone)
+        chunk = _ema_zero_phase(chunk, EMA_ALPHA)
+
+        # Plafon kecepatan terakhir, supaya perpindahan besar tetap terbaca
+        # sebagai gerakan kamera dan bukan lompatan.
+        limited = [chunk[0]]
+        for v in chunk[1:]:
+            prev_v = limited[-1]
+            step = max(-max_step, min(max_step, v - prev_v))
+            limited.append(prev_v + step)
+        out.extend(min(max(v, lo), hi) for v in limited)
+
     return out
 
 
@@ -274,21 +355,34 @@ def plan_reframe(source_video_path: str, segments: list[dict], *,
         log.info("Wajah hanya terlihat di %.0f%% frame — memakai blur-pad", coverage * 100)
         return plan  # usable == False; pemanggil membaca face_coverage untuk log
 
-    # Interpolasi dari laju sampling ke laju perintah supaya gerakannya mulus.
+    # Naikkan dari laju sampling ke laju perintah memakai spline Catmull-Rom.
+    # Interpolasi linear melewati titik kontrol dengan pergantian arah mendadak,
+    # dan pada gerakan kamera patahan itu terlihat sebagai sentakan kecil tiap
+    # kali sampel baru datang. Catmull-Rom melewati setiap titik dengan tangen
+    # yang bersambung, jadi kecepatannya ikut mulus — bukan hanya posisinya.
     half = crop_w / 2.0
     max_x = source_w - crop_w
     step = 1.0 / COMMAND_HZ
-    total = len(smoothed) / SAMPLE_FPS
+    total = (len(smoothed) - 1) / SAMPLE_FPS
+    n = len(smoothed)
+
+    def at(idx: int) -> float:
+        return smoothed[min(max(idx, 0), n - 1)]
+
     keyframes: list[tuple[float, int]] = []
     last_x = None
     t = 0.0
-    while t <= total:
+    while t <= total + 1e-9:
         pos = t * SAMPLE_FPS
         i = int(math.floor(pos))
-        frac = pos - i
-        a = smoothed[min(i, len(smoothed) - 1)]
-        b = smoothed[min(i + 1, len(smoothed) - 1)]
-        cx = a + (b - a) * frac
+        u = pos - i
+        p0, p1, p2, p3 = at(i - 1), at(i), at(i + 1), at(i + 2)
+        cx = 0.5 * (
+            (2 * p1)
+            + (-p0 + p2) * u
+            + (2 * p0 - 5 * p1 + 4 * p2 - p3) * u * u
+            + (-p0 + 3 * p1 - 3 * p2 + p3) * u * u * u
+        )
         x = int(round(min(max(cx - half, 0.0), max_x)))
         # Hanya tulis perintah bila nilainya berubah: file jadi jauh lebih kecil
         # dan ffmpeg tidak memproses ribuan perintah tak berguna.

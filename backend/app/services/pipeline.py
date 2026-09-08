@@ -117,6 +117,7 @@ def run_render(ctx: JobContext) -> dict:
         uppercase=bool(style_in.get("uppercase", True)),
         animation=style_in.get("animation", "karaoke_pop"),
         font=style_in.get("font", "DejaVu Sans"),
+        speaker2=style_in.get("speaker2", "#7CFFB2"),
     )
 
     total = sum(float(s["end"]) - float(s["start"]) for s in segments)
@@ -310,10 +311,14 @@ def run_auto_clip(ctx: JobContext) -> dict:
         energy = zscore(energy_track(source, duration=duration or 600))
 
         _stage_progress(ctx, "analyze", 0.5, "Mencari momen paling menarik…")
+        from .heuristics import LENGTH_PRESETS
+        preset = LENGTH_PRESETS.get(ctx.payload.get("clip_length") or "medium",
+                                    LENGTH_PRESETS["medium"])
         candidates = validate_and_snap(
             generate_candidates(sentences, words, energy, duration=duration,
+                                target=preset["target"], ideal=preset["ideal"],
                                 max_out=max_clips),
-            sentences, duration,
+            sentences, duration, max_duration=preset["max"],
         )
         engine = "heuristic"
         model_used = None
@@ -329,8 +334,10 @@ def run_auto_clip(ctx: JobContext) -> dict:
                     sentences=sentences, candidates=candidates, video_title=title,
                     api_key=api_key, models=GEMINI_MODELS, max_clips=max_clips,
                     max_chars=MAX_TRANSCRIPT_CHARS,
+                    max_seconds=preset["max"],
                 )
-                candidates = validate_and_snap(candidates, sentences, duration)
+                candidates = validate_and_snap(candidates, sentences, duration,
+                                               max_duration=preset["max"])
                 engine = "gemini"
             except Exception as e:
                 # Kegagalan Gemini TIDAK boleh menjatuhkan pipeline: hasil

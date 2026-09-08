@@ -181,6 +181,9 @@ export default function SearchTab({ onOpenStudio }) {
   // Model transkripsi. 'base' cepat tapi sering salah pada percakapan Indonesia
   // yang cepat; 'small' jauh lebih akurat dengan biaya ~5x waktu proses.
   const [whisperModel, setWhisperModel] = useState('base');
+  // Panjang klip yang dicari. Batas atas inilah yang menentukan apakah sebuah
+  // pembahasan tertangkap utuh atau hanya pembukaannya.
+  const [clipLength, setClipLength] = useState('medium');
 
   // Load trending on mount (YouTube homepage style)
   useEffect(() => {
@@ -266,7 +269,8 @@ export default function SearchTab({ onOpenStudio }) {
     setAnalyzingClip(true);
     try {
       const res = await apiPost('/auto-clip', {
-        video_id: video.id, max_clips: 8, whisper_model: whisperModel,
+        video_id: video.id, max_clips: 8,
+        whisper_model: whisperModel, clip_length: clipLength,
       });
       setClipNotice({
         kind: res.cached ? 'cached' : 'queued',
@@ -359,7 +363,28 @@ export default function SearchTab({ onOpenStudio }) {
               </div>
 
               {/* Action Buttons */}
-              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700 }}>
+                    Panjang klip
+                  </span>
+                  <div style={{ display: 'flex', gap: '3px' }}>
+                    {[
+                      ['short', 'Pendek', '15–40 detik'],
+                      ['medium', 'Sedang', '20–60 detik'],
+                      ['long', 'Panjang', '35–110 detik, pembahasan utuh'],
+                    ].map(([v, t, hint]) => (
+                      <button key={v} onClick={() => setClipLength(v)} title={hint}
+                              style={{
+                                padding: '5px 10px', fontSize: '0.73rem', fontWeight: 700,
+                                cursor: 'pointer', borderRadius: 'var(--radius-sm)',
+                                border: clipLength === v ? '2px solid var(--accent-cyan)' : '1px solid var(--border-color)',
+                                background: clipLength === v ? 'rgba(0,242,254,0.12)' : 'transparent',
+                                color: clipLength === v ? 'var(--accent-cyan)' : 'var(--text-secondary)',
+                              }}>{t}</button>
+                    ))}
+                  </div>
+                </div>
                 <button
                   onClick={() => { downloadJob.reset(); setShowDownloadModal(true); }}
                   className="btn-secondary"

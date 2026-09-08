@@ -33,14 +33,27 @@ Anda diberi transkrip lengkap sebuah video beserta daftar KANDIDAT potongan yang
 sudah dihitung sistem. Tugas Anda memilih dan merapikan kandidat itu — BUKAN
 membuat potongan baru.
 
-Aturan yang wajib dipatuhi:
+YANG PALING PENTING: setiap potongan harus berisi SATU GAGASAN UTUH.
+
+Kandidat yang diberikan sistem dihitung dari panjang dan energi bicara, bukan
+dari isi. Akibatnya kandidat sering berhenti tepat setelah pertanyaan diajukan
+atau tepat sebelum inti jawabannya keluar. Tugas Anda memperbaiki itu: baca
+transkrip di sekitar kandidat, lalu PERLUAS end_sentence sampai gagasannya
+selesai — pertanyaan beserta jawabannya, cerita beserta penutupnya, klaim
+beserta alasannya.
+
+Tolak kandidat yang intinya tidak selesai dan tidak bisa diselesaikan dalam
+batas durasi. Lebih baik mengembalikan 4 potongan utuh daripada 8 potongan
+yang menggantung.
+
+Aturan lain:
 - Hanya boleh memakai candidate_id yang ada di daftar.
-- Geser batas hanya lewat start_sentence/end_sentence (indeks kalimat), dan
-  hanya bila benar-benar memperbaiki keutuhan kalimat.
+- Menggeser batas hanya lewat start_sentence/end_sentence (indeks kalimat).
+  start_sentence boleh mundur sedikit untuk menangkap konteks pembuka;
+  end_sentence boleh maju jauh untuk menangkap penutup gagasan.
 - hook_text harus SETIA pada isi klip. Dilarang menjanjikan sesuatu yang tidak
   ada di dalam potongan tersebut.
-- reason maksimal 20 kata, bahasa Indonesia, menjelaskan kenapa potongan ini
-  menarik untuk ditonton.
+- reason maksimal 20 kata, bahasa Indonesia, sebutkan gagasan apa yang dibahas.
 - score adalah 0-100 dan harus mencerminkan penilaian jujur; potongan biasa
   memang pantas mendapat nilai sedang."""
 
@@ -115,6 +128,7 @@ def refine_candidates(
     max_clips: int = 8,
     max_chars: int = 350000,
     shortlist: int = 25,
+    max_seconds: float = 80.0,
 ) -> tuple[list[Candidate], Optional[str]]:
     """
     Meminta Gemini memilih dan merapikan kandidat.
@@ -133,7 +147,9 @@ def refine_candidates(
         f"=== TRANSKRIP ({len(sentences)} kalimat) ===\n"
         f"{_format_transcript(sentences, max_chars)}\n\n"
         f"=== KANDIDAT POTONGAN ===\n{_format_candidates(pool, sentences)}\n\n"
-        f"Pilih maksimal {max_clips} potongan terbaik dan urutkan dari yang paling kuat."
+        f"Pilih maksimal {max_clips} potongan terbaik dan urutkan dari yang paling kuat.\n"
+        f"Batas durasi satu potongan: {max_seconds:.0f} detik. Perluas end_sentence "
+        f"sampai gagasannya utuh selama masih di dalam batas itu."
     )
 
     config = types.GenerateContentConfig(
@@ -152,7 +168,8 @@ def refine_candidates(
                     model=model_name, contents=prompt, config=config
                 )
                 data = json.loads(resp.text)
-                refined = _apply_selections(data, pool, sentences, max_clips)
+                refined = _apply_selections(data, pool, sentences, max_clips,
+                                            max_seconds=max_seconds)
                 if refined:
                     log.info("Gemini %s memilih %d klip", model_name, len(refined))
                     return refined, model_name
@@ -176,7 +193,8 @@ def refine_candidates(
 
 
 def _apply_selections(data: dict, pool: list[Candidate],
-                      sentences: list[Sentence], max_clips: int) -> list[Candidate]:
+                      sentences: list[Sentence], max_clips: int,
+                      *, max_seconds: float = 80.0) -> list[Candidate]:
     """
     Menerapkan pilihan model ke kandidat nyata.
 
@@ -201,13 +219,19 @@ def _apply_selections(data: dict, pool: list[Candidate],
 
         si, sj = sel.get("start_sentence"), sel.get("end_sentence")
         if isinstance(si, int) and isinstance(sj, int) and 0 <= si < sj <= len(sentences):
-            # Terima geseran hanya bila masih dekat kandidat aslinya.
-            if abs(si - i) <= 6 and abs(sj - j) <= 6:
-                i, j = si, sj
+            # Awal boleh bergeser sedikit saja — menggeser awal jauh berarti
+            # klip lain yang dipilih, bukan kandidat ini. Akhir boleh maju jauh,
+            # karena justru di situlah penutup gagasan biasanya berada; yang
+            # membatasinya adalah durasi, bukan jumlah kalimat.
+            if abs(si - i) <= 8 and sj > si and (sj - j) <= 60 and (j - sj) <= 8:
+                cand_start = sentences[si]["s"]
+                cand_end = sentences[sj - 1]["e"]
+                if cand_end - cand_start <= max_seconds:
+                    i, j = si, sj
 
         start = sentences[i]["s"]
         end = sentences[j - 1]["e"]
-        if end - start < 8.0:
+        if end - start < 8.0 or end - start > max_seconds:
             continue
 
         score = sel.get("score")

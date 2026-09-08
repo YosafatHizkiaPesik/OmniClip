@@ -23,6 +23,8 @@ class AutoClipRequest(BaseModel):
     quality: str = "720p"
     whisper_model: str = "base"
     max_clips: int = 8
+    # short / medium / long — menentukan rentang durasi klip yang dicari.
+    clip_length: str = "medium"
     use_gemini: bool = True
     force: bool = False  # abaikan hasil analisis yang sudah tersimpan
 
@@ -41,6 +43,8 @@ class CaptionStyleModel(BaseModel):
     uppercase: Optional[bool] = None
     animation: Optional[str] = None
     font: Optional[str] = None
+    # Warna untuk baris yang ditandai sebagai pembicara kedua.
+    speaker2: Optional[str] = None
 
 
 class RenderClipRequest(BaseModel):
@@ -58,6 +62,9 @@ class RenderClipRequest(BaseModel):
     font_size: int = 24
     position: str = "bottom"
     hook_text: str = ""
+    # Judul di atas video mati secara bawaan: hasilnya lebih bersih, dan hook
+    # yang dihasilkan otomatis sering kalah bagus dari klipnya sendiri.
+    show_hook: bool = False
     watermark: str = ""
     video_filter: str = "normal"
     # smart = ikuti wajah pembicara, blur = bilah kabur, center = crop tengah.
@@ -99,10 +106,13 @@ async def start_auto_clip(req: AutoClipRequest):
             "quality": req.quality,
             "whisper_model": req.whisper_model,
             "max_clips": req.max_clips,
+            "clip_length": req.clip_length,
             "use_gemini": req.use_gemini,
         },
         video_id=video_id,
-        dedupe_key=f"auto_clip:{video_id}",
+        # Panjang klip ikut ke dalam kunci: meminta klip panjang untuk video
+        # yang analisis pendeknya sedang berjalan adalah permintaan berbeda.
+        dedupe_key=f"auto_clip:{video_id}:{req.clip_length}",
     )
     return {"job_id": job_id, "created": created, "cached": False, "video_id": video_id}
 
@@ -118,6 +128,68 @@ async def get_analysis(video_id: str):
 class ClipPreviewRequest(BaseModel):
     video_id: str
     segments: List[SegmentModel]
+
+
+class ReframePlanRequest(BaseModel):
+    video_id: str
+    segments: List[SegmentModel]
+    aspect_ratio: str = "9:16"
+
+
+# Perencanaan reframe memakan beberapa detik per klip, sementara editor
+# memintanya setiap kali pengguna berpindah klip. Hasilnya disimpan sebentar
+# di memori, dikunci oleh susunan segmen yang persis.
+_REFRAME_CACHE: dict[tuple, dict] = {}
+_REFRAME_CACHE_MAX = 48
+
+
+@router.post("/clip-reframe")
+async def clip_reframe(req: ReframePlanRequest):
+    """
+    Rencana crop yang mengikuti wajah, untuk digambar di pratinjau editor.
+
+    Tanpa ini pratinjau menampilkan frame 16:9 apa adanya, sehingga pengguna
+    tidak punya cara melihat bagaimana hasil 9:16-nya nanti membingkai
+    pembicara — satu-satunya cara mengetahuinya adalah dengan merender.
+    """
+    import asyncio
+
+    video_id = _resolve_video_id(req.video_id)
+    segments = [{"start": round(s.start, 3), "end": round(s.end, 3)}
+                for s in req.segments if s.end - s.start > 0.2]
+    if not segments:
+        raise NotFound("Rentang klip tidak valid.")
+
+    key = (video_id, req.aspect_ratio,
+           tuple((s["start"], s["end"]) for s in segments))
+    if key in _REFRAME_CACHE:
+        return _REFRAME_CACHE[key]
+
+    from ..services.paths import find_local_video
+    from ..services.reframe import plan_reframe
+
+    source = find_local_video(video_id)
+    if source is None:
+        raise NotFound("Video sumber belum diunduh.")
+
+    plan = await asyncio.to_thread(plan_reframe, str(source), segments,
+                                   aspect_ratio=req.aspect_ratio)
+    if plan is None:
+        payload = {"available": False, "reason": "unsupported"}
+    else:
+        payload = {
+            "available": plan.usable,
+            "reason": None if plan.usable else "low_face_coverage",
+            "crop_w": plan.crop_w, "crop_h": plan.crop_h,
+            "source_w": plan.source_w, "source_h": plan.source_h,
+            "face_coverage": plan.face_coverage,
+            "keyframes": plan.keyframes,
+        }
+
+    if len(_REFRAME_CACHE) >= _REFRAME_CACHE_MAX:
+        _REFRAME_CACHE.clear()
+    _REFRAME_CACHE[key] = payload
+    return payload
 
 
 @router.post("/clip-preview")
@@ -175,7 +247,7 @@ async def render_clip(req: RenderClipRequest):
             "font_color": req.font_color,
             "font_size": req.font_size,
             "position": req.position,
-            "hook_text": req.hook_text,
+            "hook_text": req.hook_text if req.show_hook else "",
             "watermark": req.watermark,
             "video_filter": req.video_filter,
             "frame_mode": req.frame_mode,

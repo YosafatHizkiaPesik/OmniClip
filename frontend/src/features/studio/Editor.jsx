@@ -11,7 +11,7 @@ import Timeline from './timeline/Timeline';
 import { TrimPanel, SubtitlePanel, StylePanel } from './EditorPanels';
 
 const DEFAULT_STYLE = {
-  size: 96, primary: '#FFFFFF', highlight: '#FFE500',
+  size: 96, primary: '#FFFFFF', highlight: '#FFE500', speaker2: '#7CFFB2',
   position: 'bottom', uppercase: true, animation: 'karaoke_pop', font: 'DejaVu Sans',
 };
 
@@ -48,8 +48,14 @@ export default function Editor({ project, onBack }) {
   const [aspectRatio, setAspectRatio] = useState('9:16');
   const [frameMode, setFrameMode] = useState('smart');
   const [constrained, setConstrained] = useState(true);
+  // Judul mati secara bawaan: hasilnya lebih bersih, dan hook otomatis sering
+  // kalah bagus dari klipnya sendiri.
+  const [showHook, setShowHook] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportLog, setExportLog] = useState([]);
+  // Rencana crop untuk pratinjau — sama persis dengan yang dipakai render.
+  const [reframe, setReframe] = useState(null);
+  const [reframeLoading, setReframeLoading] = useState(false);
 
   const { clips, selected, checked } = editor;
 
@@ -85,6 +91,30 @@ export default function Editor({ project, onBack }) {
 
   const duration = data?.duration || project?.duration || 0;
 
+  // Ambil rencana reframe setiap kali klip, rasio, atau mode bingkai berubah.
+  // Dikunci pada susunan segmen, jadi menggeser batas ikut memperbarui bingkai.
+  const segmentKey = selected
+    ? selected.segments.map((s) => `${s.start.toFixed(2)}-${s.end.toFixed(2)}`).join(',')
+    : '';
+  useEffect(() => {
+    let cancelled = false;
+    if (!videoId || !selected || frameMode !== 'smart' || aspectRatio === '16:9') {
+      setReframe(null);
+      return undefined;
+    }
+    setReframeLoading(true);
+    apiPost('/clip-reframe', {
+      video_id: videoId,
+      segments: selected.segments,
+      aspect_ratio: aspectRatio,
+    })
+      .then((res) => { if (!cancelled) setReframe(res); })
+      .catch(() => { if (!cancelled) setReframe(null); })
+      .finally(() => { if (!cancelled) setReframeLoading(false); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [videoId, segmentKey, frameMode, aspectRatio]);
+
   const seekSource = useCallback((time) => {
     const v = videoRef.current;
     if (!v) return;
@@ -118,10 +148,11 @@ export default function Editor({ project, onBack }) {
     segments: clip.segments,
     subtitles: clip.subtitles,
     hook_text: clip.hook_text,
+    show_hook: showHook,
     aspect_ratio: aspectRatio,
     frame_mode: frameMode,
     caption_style: style,
-  }), [videoId, aspectRatio, frameMode, style]);
+  }), [videoId, aspectRatio, frameMode, style, showHook]);
 
   const handleExportSelected = async () => {
     const targets = clips.filter((c) => checked.has(c.clip_id));
@@ -303,7 +334,9 @@ export default function Editor({ project, onBack }) {
           display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center',
         }}>
           <ClipPreview src={data.local_url} clip={selected} aspectRatio={aspectRatio}
-                       style={style} videoRef={videoRef} constrained={constrained} />
+                       style={{ ...style, showHook }} videoRef={videoRef}
+                       constrained={constrained} frameMode={frameMode}
+                       reframe={reframe} reframeLoading={reframeLoading} />
           <div style={{ display: 'flex', gap: '7px', flexWrap: 'wrap', justifyContent: 'center' }}>
             <button className="btn-secondary" style={{ fontSize: '0.74rem', padding: '5px 10px' }}
                     onClick={addSegmentAtPlayhead} disabled={!selected || editor.busy}
@@ -347,11 +380,16 @@ export default function Editor({ project, onBack }) {
           )}
           {tab === 'subtitle' && (
             <SubtitlePanel clip={selected} onUpdate={editor.updateSubtitle}
-                           onRemove={editor.removeSubtitle} />
+                           onRemove={editor.removeSubtitle} style={style}
+                           onAutoSpeakers={editor.autoSpeakers} />
           )}
           {tab === 'style' && (
             <StylePanel style={style} onChange={setStyle}
-                        aspectRatio={aspectRatio} onAspectChange={setAspectRatio} />
+                        aspectRatio={aspectRatio} onAspectChange={setAspectRatio}
+                        showHook={showHook} onShowHookChange={setShowHook}
+                        hookText={selected?.hook_text ?? ''}
+                        onHookTextChange={(t) => selected
+                          && editor.updateClip(selected.clip_id, { hook_text: t })} />
           )}
           {tab === 'frame' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
