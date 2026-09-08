@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import ErrorBoundary from './components/ErrorBoundary';
 import { Search, Download, Scissors, User, Sparkles, Film } from 'lucide-react';
 import { apiGet } from './lib/api';
 
@@ -22,6 +23,9 @@ const NAV = [
 export default function App() {
   const [engine, setEngine] = useState(null);
   const navigate = useNavigate();
+  // Kunci penahan galat: berpindah halaman harus menghapus galat sebelumnya,
+  // bukan menyisakan pesan rusak dari rute yang sudah ditinggalkan.
+  const location = useLocation();
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('omniclip_theme') || 'dark';
@@ -58,7 +62,7 @@ export default function App() {
       </header>
 
       <main className="main-content">
-        <Outlet />
+        <ErrorBoundary key={location.pathname}><Outlet /></ErrorBoundary>
       </main>
 
       <nav className="bottom-nav">

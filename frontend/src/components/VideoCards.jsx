@@ -1,6 +1,6 @@
 import React from 'react';
-import { Eye, Clock, Play, Video } from 'lucide-react';
-import { formatDurationHuman } from '../utils/timeFormat';
+import { Play } from 'lucide-react';
+import { formatDurationHuman, formatTime } from '../utils/timeFormat';
 
 /**
  * Kartu video yang dipakai bersama oleh feed dan daftar rekomendasi.
