@@ -1,0 +1,189 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-09T00:00:00Z",
+  "title": "Design System: OmniClip",
+  "extensions": {
+    "colorMeta": {
+      "stage": { "role": "neutral", "displayName": "Panggung", "canonical": "#0B0E14", "tonalRamp": ["#04060A", "#080B11", "#0B0E14", "#151A24", "#232B3A", "#3A4557", "#6B7789", "#AAB4C2"] },
+      "stage-2": { "role": "neutral", "displayName": "Panggung Dalam", "canonical": "#151A24", "tonalRamp": ["#070A0E", "#0D1118", "#151A24", "#202836", "#2E3849", "#495468", "#78849A", "#B2BBCA"] },
+      "ground": { "role": "neutral", "displayName": "Meja", "canonical": "#DDE4EC", "tonalRamp": ["#1B2129", "#2C3540", "#414C5B", "#5C6878", "#7C8898", "#9EA9B8", "#C0C9D5", "#DDE4EC"] },
+      "plate": { "role": "neutral", "displayName": "Pelat Kertas", "canonical": "#EDF1F6", "tonalRamp": ["#1E242C", "#303843", "#46505E", "#606C7C", "#828E9D", "#A6B1BF", "#CBD4DF", "#EDF1F6"] },
+      "plate-2": { "role": "neutral", "displayName": "Pelat Tenggelam", "canonical": "#E3E9F1", "tonalRamp": ["#1B222B", "#2C3542", "#424D5D", "#5C687B", "#7E8B9C", "#A2AEBE", "#C6D0DD", "#E3E9F1"] },
+      "plate-3": { "role": "neutral", "displayName": "Pelat Terangkat", "canonical": "#F6F8FB", "tonalRamp": ["#20252C", "#333944", "#49515F", "#636D7D", "#858F9E", "#A9B2C0", "#CED5DF", "#F6F8FB"] },
+      "ink": { "role": "neutral", "displayName": "Tinta Cetak Musik", "canonical": "#0E1420", "tonalRamp": ["#050810", "#0E1420", "#1B2434", "#2C384C", "#465468", "#6A7689", "#9BA5B4", "#CDD4DD"] },
+      "ink-2": { "role": "neutral", "displayName": "Grafit Keterangan", "canonical": "#46536A", "tonalRamp": ["#0C111A", "#18202E", "#252F42", "#333F56", "#46536A", "#697490", "#98A1B4", "#C8CDD9"] },
+      "ink-3": { "role": "neutral", "displayName": "Grafit Metadata", "canonical": "#6A7689", "tonalRamp": ["#12161C", "#1F2530", "#2F3846", "#434E60", "#59657A", "#6A7689", "#9BA4B2", "#CBD1D9"] },
+      "rule": { "role": "neutral", "displayName": "Garis Balok", "canonical": "#B9C4D3", "tonalRamp": ["#171C23", "#262E39", "#384252", "#4E5A6D", "#6E7B8E", "#94A0B1", "#B9C4D3", "#DDE3EB"] },
+      "rule-2": { "role": "neutral", "displayName": "Garis Pinggir", "canonical": "#CED7E3", "tonalRamp": ["#191E25", "#28303B", "#3B4554", "#525E70", "#737F92", "#9AA5B6", "#CED7E3", "#E7EBF1"] },
+      "reh": { "role": "primary", "displayName": "Merah Latihan", "canonical": "#C81B32", "tonalRamp": ["#2A050B", "#470912", "#68101D", "#8D1526", "#C81B32", "#E24358", "#F08496", "#FAC6CE"] },
+      "reh-ink": { "role": "primary", "displayName": "Tinta Huruf Latihan", "canonical": "#FFFFFF", "tonalRamp": ["#262626", "#404040", "#5C5C5C", "#7A7A7A", "#9C9C9C", "#C2C2C2", "#E4E4E4", "#FFFFFF"] },
+      "cue": { "role": "secondary", "displayName": "Biru Isyarat", "canonical": "#0F52B8", "tonalRamp": ["#040F26", "#071B42", "#0A2A66", "#0D3D8D", "#0F52B8", "#3B7BDC", "#7BA8EC", "#C0D4F7"] },
+      "entry": { "role": "secondary", "displayName": "Hijau Masuk", "canonical": "#07683B", "tonalRamp": ["#02160D", "#032718", "#043A25", "#054F31", "#07683B", "#199A5F", "#4EC48F", "#AFE6CB"] },
+      "hl": { "role": "primary", "displayName": "Stabilo", "canonical": "#F5C400", "tonalRamp": ["#2B2200", "#463800", "#664F00", "#8C6D00", "#B78E00", "#F5C400", "#FFD94D", "#FFEEAF"] },
+      "hl-wash": { "role": "primary", "displayName": "Cucian Stabilo", "canonical": "#F5C40033", "tonalRamp": ["#F5C4000D", "#F5C4001A", "#F5C40026", "#F5C40033", "#F5C40047", "#F5C4005C", "#F5C40080", "#F5C400B3"] },
+      "warn": { "role": "tertiary", "displayName": "Peringatan", "canonical": "#B2560A", "tonalRamp": ["#2A1402", "#452004", "#663006", "#8C4308", "#B2560A", "#DC7C24", "#EDA96C", "#F8D8B7"] },
+      "danger": { "role": "tertiary", "displayName": "Bahaya", "canonical": "#B3182C", "tonalRamp": ["#26050A", "#400810", "#5E0D19", "#831222", "#B3182C", "#D94055", "#EC8294", "#F8C5CD"] }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Judul Karya", "purpose": "Archivo Black. Judul karya di blok judul; satu per layar." },
+      "headline": { "displayName": "Kepala", "purpose": "Judul pilihan dan kepala baris di panel editor." },
+      "body": { "displayName": "Badan", "purpose": "Teks berjalan dan isian. Membawa angka tabular untuk seluruh aplikasi." },
+      "label": { "displayName": "Tanda Pensil", "purpose": "Label .mark: huruf besar, lebar 80%, spasi lebar. Menamai pelat dan tepi partitur." },
+      "caption": { "displayName": "Nama Balok", "purpose": "Nama instrumen di kolom kiri tiap balok." },
+      "rehearsal": { "displayName": "Huruf Latihan", "purpose": "Archivo Black di dalam kotak tinta pekat; A–Z lalu AA–ZZ." }
+    },
+    "shadows": [
+      { "name": "shadow-plate", "value": "0 1px 2px rgba(14,20,32,.10), 0 8px 24px -12px rgba(14,20,32,.35)", "purpose": "Tiap lembar kertas di atas meja. Tetap saat rehat; tidak berubah saat hover." },
+      { "name": "shadow-lift", "value": "0 2px 4px rgba(14,20,32,.12), 0 14px 34px -14px rgba(14,20,32,.45)", "purpose": "Hanya untuk yang melayang: lubang orkestra dan kotak modal." },
+      { "name": "pit-well", "value": "inset 0 0 0 1px #ffffff12", "purpose": "Garis dalam setipis rambut yang membuat bingkai gelap terbaca sebagai sumur." },
+      { "name": "thumb-bar", "value": "0 -8px 20px -12px rgba(0,0,0,.7)", "purpose": "Bilah jempol di bawah 900px, memisahkannya dari isi yang lewat di belakangnya." },
+      { "name": "shadow-glow", "value": "none", "purpose": "Sengaja dinolkan: dunia ini tidak memakai cahaya berwarna." }
+    ],
+    "motion": [
+      { "name": "band-glide", "value": "transform .42s cubic-bezier(.16, 1, .3, 1)", "purpose": "Satu-satunya momen gerak yang dikoreografi: pita stabilo meluncur ke frasa terpilih lewat translateX + scaleX, di dalam satu loop rAF bersama garis main." },
+      { "name": "state-shift", "value": "background .12s ease, border-color .12s ease, color .12s ease", "purpose": "Semua perubahan keadaan lain: tombol, chip, tautan navigasi, tab." },
+      { "name": "letter-pop", "value": "transform .18s cubic-bezier(.16,1,.3,1)", "purpose": "Huruf latihan terpilih membesar scale(1.14)." },
+      { "name": "spin", "value": "spin .9s linear infinite", "purpose": "Satu-satunya animasi berulang: pemuat." },
+      { "name": "reduced-motion", "value": "@media (prefers-reduced-motion: reduce) { transition-duration: .01ms !important }", "purpose": "Semua gerak dimatikan bila pengguna memintanya." }
+    ],
+    "breakpoints": [
+      { "name": "editor-two-col", "value": "1180px" },
+      { "name": "stave-one-system", "value": "1100px" },
+      { "name": "shell-thumb-bar", "value": "900px" },
+      { "name": "editor-stack", "value": "760px" },
+      { "name": "stave-split-15min", "value": "720px" }
+    ],
+    "notCanonized": [
+      "Pelat masih rata; bahan 'kertas disorot lampu meja' (serat, tepi pelat, luruh cahaya) belum diterapkan.",
+      "Barline dan nomor birama belum digambar; baris waktu masih jam biasa.",
+      "Balok bergaris baru dipakai di dalam editor; Studio, Klip jadi, Unduhan masih wadah generik.",
+      "Watch menyisakan ~740px pelat kosong di bawah baris metanya.",
+      "Dua string Inggris tersisa di Watch ('Download', 'Clip Video')."
+    ]
+  },
+  "components": [
+    {
+      "name": "Tombol Utama",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Aksi utama sebuah layar, satu per blok judul. Merah latihan penuh.",
+      "html": "<button class=\"ds-btn-primary\">Render &amp; simpan</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 7px; font-family: 'Archivo', ui-sans-serif, system-ui, sans-serif; font-weight: 620; font-size: .82rem; padding: 8px 14px; min-height: 36px; border-radius: var(--r-sm, 2px); cursor: pointer; background: var(--reh, #C81B32); border: 1px solid var(--reh, #C81B32); color: var(--reh-ink, #fff); transition: background .12s ease, border-color .12s ease, color .12s ease; } .ds-btn-primary:hover { background: color-mix(in srgb, var(--reh, #C81B32) 86%, #000); } .ds-btn-primary:focus-visible { outline: 2px solid var(--reh, #C81B32); outline-offset: 2px; } .ds-btn-primary:disabled { opacity: .45; cursor: default; background: var(--plate-2, #E3E9F1); border-color: var(--rule-2, #CED7E3); color: var(--ink-3, #6A7689); }"
+    },
+    {
+      "name": "Tombol Sekunder",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Kendali harian di kepala pelat dan panel editor.",
+      "html": "<button class=\"ds-btn-secondary\">Muat ulang</button>",
+      "css": ".ds-btn-secondary { display: inline-flex; align-items: center; justify-content: center; gap: 7px; font-family: 'Archivo', ui-sans-serif, system-ui, sans-serif; font-weight: 620; font-size: .82rem; padding: 8px 14px; min-height: 36px; border-radius: var(--r-sm, 2px); cursor: pointer; background: var(--plate-3, #F6F8FB); border: 1px solid var(--rule, #B9C4D3); color: var(--ink, #0E1420); transition: background .12s ease, border-color .12s ease, color .12s ease; } .ds-btn-secondary:hover { background: var(--plate-2, #E3E9F1); border-color: var(--ink-3, #6A7689); } .ds-btn-secondary:focus-visible { outline: 2px solid var(--reh, #C81B32); outline-offset: 2px; }"
+    },
+    {
+      "name": "Isian",
+      "kind": "input",
+      "refersTo": "field",
+      "description": "Isian teks di panel editor. Pelat terangkat dengan garis rambut; fokus memerahkan batasnya.",
+      "html": "<input class=\"ds-field\" placeholder=\"Judul klip\" />",
+      "css": ".ds-field { width: 100%; font-family: 'Archivo', ui-sans-serif, system-ui, sans-serif; font-size: .9rem; padding: 9px 11px; background: var(--plate-3, #F6F8FB); color: var(--ink, #0E1420); border: 1px solid var(--rule, #B9C4D3); border-radius: var(--r-sm, 2px); } .ds-field::placeholder { color: var(--ink-3, #6A7689); } .ds-field:focus { border-color: var(--reh, #C81B32); outline: none; } .ds-field:focus-visible { outline: 2px solid var(--reh, #C81B32); outline-offset: 2px; }"
+    },
+    {
+      "name": "Chip Kategori",
+      "kind": "chip",
+      "refersTo": "chip",
+      "description": "Penanda pensil di tepi partitur, bukan pil berwarna. Terpilih = tinta merah + cucian stabilo.",
+      "html": "<button class=\"ds-chip\">Podcast</button><button class=\"ds-chip ds-chip-on\">Wawancara</button>",
+      "css": ".ds-chip { flex: none; white-space: nowrap; cursor: pointer; font-family: 'Archivo', sans-serif; font-size: .8rem; font-weight: 620; padding: 7px 13px; min-height: 34px; color: var(--ink-2, #46536A); background: var(--plate, #EDF1F6); border: 1px solid var(--rule, #B9C4D3); border-radius: var(--r-sm, 2px); } .ds-chip:hover { color: var(--ink, #0E1420); border-color: var(--ink-3, #6A7689); } .ds-chip:focus-visible { outline: 2px solid var(--reh, #C81B32); outline-offset: 2px; } .ds-chip-on { color: var(--reh, #C81B32); border-color: var(--reh, #C81B32); background: var(--hl-wash, #F5C40033); font-weight: 720; }"
+    },
+    {
+      "name": "Pelat",
+      "kind": "card",
+      "refersTo": "plate",
+      "description": "Satu-satunya wadah di dunia ini: kertas di atas meja, dinamai lewat kepala pelat dan sebuah tanda pensil.",
+      "html": "<section class=\"ds-plate\"><div class=\"ds-plate-head\"><span class=\"ds-mark\">Huruf latihan</span><span class=\"ds-mark ds-mark-end\">12 klip</span></div><div class=\"ds-plate-body\">Isi pelat.</div></section>",
+      "css": ".ds-plate { background: var(--plate, #EDF1F6); border: 1px solid var(--rule-2, #CED7E3); border-radius: var(--r-md, 3px); box-shadow: 0 1px 2px rgba(14,20,32,.10), 0 8px 24px -12px rgba(14,20,32,.35); color: var(--ink, #0E1420); font-family: 'Archivo', ui-sans-serif, system-ui, sans-serif; } .ds-plate-head { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--rule-2, #CED7E3); } .ds-plate-body { padding: 14px; font-size: 15px; line-height: 1.5; } .ds-mark { font-family: 'Archivo', sans-serif; font-weight: 700; font-stretch: 80%; text-transform: uppercase; letter-spacing: .1em; font-size: .68rem; color: var(--ink-3, #6A7689); } .ds-mark-end { margin-left: auto; }"
+    },
+    {
+      "name": "Lubang Orkestra",
+      "kind": "card",
+      "refersTo": "pit",
+      "description": "Satu-satunya permukaan gelap untuk isi. Semua gambar bergerak hidup di dalamnya.",
+      "html": "<div class=\"ds-pit\"><div class=\"ds-pit-frame\"><div class=\"ds-pit-well\"></div></div><span class=\"ds-pit-mark\">Pratinjau 9:16</span></div>",
+      "css": ".ds-pit { background: var(--stage, #0B0E14); border: 1px solid var(--stage-2, #151A24); border-radius: var(--r-md, 3px); color: #DCE4EE; box-shadow: 0 2px 4px rgba(14,20,32,.12), 0 14px 34px -14px rgba(14,20,32,.45); padding: 10px; font-family: 'Archivo', sans-serif; } .ds-pit-frame { background: var(--stage, #0B0E14); border-radius: var(--r-sm, 2px); padding: 6px; box-shadow: inset 0 0 0 1px #ffffff12; } .ds-pit-well { position: relative; width: 100%; padding-top: 56.25%; overflow: hidden; border-radius: 1px; background: #10141C; } .ds-pit-mark { display: block; margin-top: 8px; font-weight: 700; font-stretch: 80%; text-transform: uppercase; letter-spacing: .1em; font-size: .68rem; color: #8493A8; }"
+    },
+    {
+      "name": "Huruf Latihan",
+      "kind": "custom",
+      "refersTo": "rehearsal-letter",
+      "description": "Kotak tinta pekat A–Z lalu AA–ZZ yang menandai tiap klip. Varian biru = klip buatan tangan; varian hantu = usulan yang belum diambil.",
+      "html": "<span class=\"ds-reh\">A</span> <span class=\"ds-reh ds-reh-manual\">B</span> <span class=\"ds-reh ds-reh-ghost\">C</span>",
+      "css": ".ds-reh { display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 20px; padding: 0 5px; background: var(--reh, #C81B32); color: var(--reh-ink, #fff); font-family: 'Archivo Black', sans-serif; font-size: .72rem; letter-spacing: .02em; border-radius: 1px; transition: transform .18s cubic-bezier(.16,1,.3,1); } .ds-reh:hover { transform: scale(1.14); } .ds-reh-manual { background: var(--cue, #0F52B8); } .ds-reh-ghost { background: transparent; color: var(--reh, #C81B32); box-shadow: inset 0 0 0 1.5px var(--reh, #C81B32); }"
+    },
+    {
+      "name": "Baris Balok",
+      "kind": "custom",
+      "refersTo": "plate",
+      "description": "Satu baris sistem balok: nama instrumen + titik pensil di kiri, balok bergaris dengan frasa klip dan pita stabilo di kanan.",
+      "html": "<div class=\"ds-stave-row\"><div class=\"ds-stave-name\"><span class=\"ds-voice-dot\"></span><span>Orang 1</span></div><div class=\"ds-stave\"><div class=\"ds-stave-lines\"></div><div class=\"ds-stave-phrase\"><span class=\"ds-reh2\">A</span></div><div class=\"ds-stave-band\"></div><div class=\"ds-playline\"></div></div></div>",
+      "css": ".ds-stave-row { display: grid; grid-template-columns: 118px minmax(0, 1fr); background: var(--plate, #EDF1F6); font-family: 'Archivo', sans-serif; } .ds-stave-name { display: flex; align-items: center; gap: 6px; padding: 0 10px; border-right: 2px solid var(--ink, #0E1420); font-weight: 700; font-stretch: 80%; text-transform: uppercase; letter-spacing: .08em; font-size: .62rem; color: var(--ink, #0E1420); } .ds-voice-dot { width: 11px; height: 11px; border-radius: 50%; border: 1px solid rgba(0,0,0,.25); flex: none; background: var(--entry, #07683B); } .ds-stave { position: relative; height: 58px; } .ds-stave-lines { position: absolute; left: 0; right: 14px; top: 12px; height: 34px; opacity: .8; background-image: repeating-linear-gradient(to bottom, var(--rule, #B9C4D3) 0 1px, transparent 1px 9px); } .ds-stave-phrase { position: absolute; top: 8px; bottom: 8px; left: 18%; width: 34%; border-left: 1px solid var(--entry, #07683B); border-radius: 1px; cursor: pointer; background: color-mix(in srgb, var(--entry, #07683B) 24%, transparent); } .ds-stave-phrase:hover { filter: brightness(.94); } .ds-reh2 { position: absolute; top: -11px; left: 0; display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 20px; padding: 0 5px; background: var(--reh, #C81B32); color: #fff; font-family: 'Archivo Black', sans-serif; font-size: .72rem; border-radius: 1px; } .ds-stave-band { position: absolute; top: 2px; bottom: 2px; left: 18%; width: 34%; background: var(--hl-wash, #F5C40033); border-top: 2px solid var(--hl, #F5C400); border-bottom: 2px solid var(--hl, #F5C400); pointer-events: none; transition: transform .42s cubic-bezier(.16,1,.3,1), opacity .2s ease; } .ds-playline { position: absolute; top: -3px; bottom: -3px; left: 44%; width: 2px; background: var(--reh, #C81B32); pointer-events: none; }"
+    },
+    {
+      "name": "Rel Instrumen",
+      "kind": "nav",
+      "refersTo": "nav-item",
+      "description": "Navigasi di kolom kiri, tempat partitur menuliskan nama instrumen. Aktif ditandai garis kiri 3px merah latihan, bukan latar berwarna.",
+      "html": "<nav class=\"ds-rail\"><a class=\"ds-nav-item ds-nav-active\" href=\"#\"><svg width=\"17\" height=\"17\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.9\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"11\" cy=\"11\" r=\"8\"/><path d=\"m21 21-4.3-4.3\"/></svg><span>Cari video</span></a><a class=\"ds-nav-item\" href=\"#\"><svg width=\"17\" height=\"17\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.9\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"18\" r=\"4\"/><path d=\"M16 18V2l4 4\"/></svg><span>Partitur</span></a></nav>",
+      "css": ".ds-rail { width: 188px; background: var(--stage, #0B0E14); border-right: 1px solid var(--stage-2, #151A24); display: flex; flex-direction: column; padding: 14px 0; font-family: 'Archivo', sans-serif; } .ds-nav-item { display: flex; align-items: center; gap: 11px; padding: 11px 18px; text-decoration: none; color: #93A2B8; font-size: .86rem; font-weight: 560; border-left: 3px solid transparent; transition: color .12s ease, background .12s ease; } .ds-nav-item:hover { color: #E7EDF5; background: #FFFFFF08; } .ds-nav-item:focus-visible { outline: 2px solid var(--reh, #C81B32); outline-offset: -2px; } .ds-nav-active { color: #fff; background: #FFFFFF0D; border-left-color: var(--reh, #C81B32); font-weight: 680; }"
+    },
+    {
+      "name": "Tab Panel Editor",
+      "kind": "nav",
+      "refersTo": "tab-btn",
+      "description": "Tab di kepala panel editor; aktif ditandai garis bawah 2px merah dan berat 720.",
+      "html": "<div class=\"ds-tabs\"><button class=\"ds-tab ds-tab-on\">Lirik</button><button class=\"ds-tab\">Penutur</button><button class=\"ds-tab\">Bingkai</button></div>",
+      "css": ".ds-tabs { display: flex; background: var(--plate, #EDF1F6); border-bottom: 1px solid var(--rule-2, #CED7E3); } .ds-tab { flex: 1; display: flex; align-items: center; justify-content: center; gap: 5px; padding: 10px 4px; cursor: pointer; font-family: 'Archivo', sans-serif; font-size: .72rem; font-weight: 640; background: transparent; border: 0; color: var(--ink-3, #6A7689); border-right: 1px solid var(--rule-2, #CED7E3); border-bottom: 2px solid transparent; } .ds-tab:last-child { border-right: 0; } .ds-tab:hover { color: var(--ink, #0E1420); background: var(--plate-3, #F6F8FB); } .ds-tab:focus-visible { outline: 2px solid var(--reh, #C81B32); outline-offset: -2px; } .ds-tab-on { color: var(--ink, #0E1420); border-bottom-color: var(--reh, #C81B32); font-weight: 720; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "Partitur Bertanda Pensil Konduktor",
+    "overview": "Aplikasi ini membaca satu jam rekaman seperti seorang konduktor membaca partitur: satu balok not per narasumber, satu huruf latihan per klip, satu balok dinamika di bawahnya. Yang terbangun bukan papan editor gelap dengan kartu kaca dan gelombang neon — itu susunan bawaan kategori dan ditolak secara sadar. Yang terbangun adalah pelat kertas terang yang duduk di dalam panggung gelap: --stage (#0B0E14) memagari layar dari tepi, --ground (#DDE4EC) adalah meja kerjanya, dan --plate (#EDF1F6) adalah kertas partiturnya. Cangkangnya gelap; pekerjaannya terang.\n\nEmpat pensil konduktor bekerja sebagai peran fungsional, bukan hiasan. Merah latihan menandai klip dan hanya klip. Biru isyarat dan hijau masuk menandai penutur. Stabilo kuning menandai satu-satunya hal yang sedang aktif. Tidak ada warna kelima yang \"berarti sesuatu\"; sisanya grafit (--ink-2, --ink-3). Karena maknanya melekat pada perannya, warna tidak pernah dipakai untuk membuat sebuah kotak tampak menarik.\n\nKepadatannya tinggi dan sadar diri: jari-jari 2–4px karena kertas tidak melengkung, garis 1px, angka tabular di seluruh badan, dan tepat satu momen gerak yang dikoreografi. Video bergerak hanya di dalam lubang orkestra — satu-satunya permukaan gelap yang dipakai untuk isi, bukan untuk cangkang.",
+    "keyCharacteristics": [
+      "Pelat terang di dalam panggung gelap; pelat tidak pernah lebih gelap dari tanahnya, di tema terang maupun gelap.",
+      "Empat pensil berperan tetap: merah = klip, biru/hijau = penutur, stabilo = yang aktif.",
+      "Jari-jari nyaris nol (2/3/4px); bentuknya lembar kertas, bukan pil.",
+      "Angka tabular di seluruh aplikasi (font-variant-numeric: tabular-nums di body).",
+      "Satu momen gerak diarang; sisanya perubahan warna ~120ms.",
+      "Permukaan bawaan peramban (seleksi, karet, scrollbar, cincin fokus) ikut diwarnai dunia ini."
+    ],
+    "rules": [
+      { "name": "Aturan Pelat Lebih Terang", "body": "Di tema mana pun, pelat lebih terang dari tanah di belakangnya. Tema gelap meredupkan pelatnya (#141A24 di atas #070A0F); ia tidak pernah membalik hubungan itu. Uji: ambil --plate dan --ground, luminansi pelat harus lebih besar.", "section": "colors" },
+      { "name": "Aturan Merah Bukan Suara", "body": "Merah latihan tidak pernah dipakai untuk mengidentifikasi seorang penutur. Tangga suara berisi tepat empat pensil, berputar: hijau masuk, biru isyarat, keterangan, metadata. Memberikan merah kepada sebuah suara membuat frasa dan huruf latihannya berwarna sama di balok yang sama, dan tandanya hilang. --warn juga bukan pensil suara.", "section": "colors" },
+      { "name": "Aturan Ambang Kontras", "body": "Warna produk (warna subtitle seorang penutur) baru boleh jadi tinta antarmuka bila ia lolos ambang WCAG terhadap pelat: 4.5:1 untuk teks (inkSafe) dan 3:1 untuk isian dan titik di balok. Di bawah ambang, aplikasi jatuh ke --ink atau ke pensil partiturnya sendiri, dan identitas penutur pindah ke titik berwarna. Luminansi sendirian bukan ukurannya: pastel lolos uji luminansi lalu hilang di atas kertas.", "section": "colors" },
+      { "name": "Aturan Lapisan Nama Lama", "body": ":root memuat alias peninggalan dunia lama (--bg-card, --text-primary, --text-secondary, --text-muted, --border-color, --accent-cyan, --accent-blue, --accent-purple, --radius-md, --shadow-card, …) yang memetakan nama lama ke token baru supaya gaya sebaris yang belum ditulis ulang tetap benar. Itu lapisan kompatibilitas, bukan API. Kode baru memakai nama dunia ini (--plate, --ink, --reh, --r-md); alias lama hanya dibaca, tidak pernah ditambah.", "section": "colors" },
+      { "name": "Aturan Angka Tabular", "body": "font-variant-numeric: tabular-nums disetel di body, bukan per komponen. Semua kode waktu, durasi, dan skor sejajar secara vertikal secara bawaan. Jangan matikan.", "section": "typography" },
+      { "name": "Aturan Dua Wajah Saja", "body": "Hanya dua wajah dimuat sendiri: Archivo variabel dan Archivo Black. Tidak ada wajah tampilan sistem, tidak ada wajah ketiga, tidak ada monospace — kolom angka dijaga oleh angka tabular, bukan dengan mengganti keluarga huruf.", "section": "typography" },
+      { "name": "Aturan Bilah Jempol", "body": "Di bawah 900px, navigasi tidak jadi laci melainkan turun ke bawah layar sebagai bilah jempol dengan target sentuh minimal 54px, z-index: 30, padding-bottom: env(safe-area-inset-bottom), dan bayang ke atas. Ia menumpuk di atas isi, jadi tiap layar yang punya elemen berposisi absolut harus menyisakan ruang bawah sendiri.", "section": "layout" },
+      { "name": "Aturan Enam Belas Piksel", "body": "Di bawah 760px semua isian naik ke font-size: 16px dan semua tombol ke min-height: 42px. Angka 16 bukan pilihan estetika: di bawah itu iOS ikut men-zoom halaman saat isian difokus.", "section": "layout" },
+      { "name": "Aturan Kedalaman Nada", "body": "Kedalaman dinyatakan dengan mengganti tingkat pelat (plate-2 → plate → plate-3) dan dengan garis 1px, bukan dengan menambah bayang. Hover menaikkan nada permukaan; ia tidak pernah menaikkan bayang.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do bangun wadah baru dari .plate + .plate-head + sebuah label .mark, bukan dari div bergaya sebaris.",
+      "Do pakai empat pensil menurut perannya: merah = klip, biru/hijau = penutur, stabilo = yang sedang aktif.",
+      "Do lewatkan tiap warna produk melalui inkSafe (4.5:1) sebelum memakainya sebagai teks, dan melalui uji 3:1 sebelum memakainya sebagai isian atau titik di balok.",
+      "Do tandai keadaan aktif dengan garis 2–3px di satu sisi dan pergeseran berat huruf, bukan dengan mengisi latar berwarna.",
+      "Do pertahankan jari-jari di 1–4px; kertas tidak melengkung.",
+      "Do batasi gerak pada perubahan warna/batas ~120ms, kecuali satu pita stabilo yang meluncur.",
+      "Do bingkai tiap gambar bergerak dengan .pit-frame supaya video hanya hidup di dalam panggung.",
+      "Do biarkan body yang memasok angka tabular."
+    ],
+    "donts": [
+      "Don't pakai merah latihan untuk mengidentifikasi seorang penutur, dan jangan tambahkan pensil kelima ke tangga suara.",
+      "Don't buat pelat lebih gelap dari tanahnya, di tema mana pun; jangan balik hubungan panggung–pelat.",
+      "Don't tambahkan bayang baru. Dua yang ada sudah lengkap, dan bayang bukan penanda hover di sini.",
+      "Don't pakai alias token lama (--bg-card, --accent-cyan, --text-primary, --radius-md, …) di kode baru; itu lapisan peralihan yang hanya dibaca.",
+      "Don't animasikan properti tata letak (left, width, top, height). Pita stabilo dan garis main digerakkan lewat transform di dalam satu loop rAF.",
+      "Don't ganti sistem balok yang membungkus dengan satu garis yang dimampatkan, dan jangan ganti balok dinamika jadi gelombang amplitudo — keduanya adalah susunan yang ditolak layar ini.",
+      "Don't tambahkan wajah huruf ketiga atau wajah tampilan sistem.",
+      "Don't pakai gelap untuk cangkang isi; satu-satunya permukaan gelap adalah panggung, rel, kepala aplikasi, dan lubang orkestra."
+    ]
+  }
+}
