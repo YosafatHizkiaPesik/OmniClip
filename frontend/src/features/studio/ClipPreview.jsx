@@ -260,6 +260,10 @@ export default function ClipPreview({
 
     const y0 = e.clientY;
     const x0 = e.clientX;
+    // Kotak teks pada saat seretan dimulai. Diambil dari elemen induk gagang —
+    // yaitu kotak subtitle itu sendiri — karena tingginya bergantung pada
+    // berapa baris yang terbentuk, dan itu hanya diketahui setelah dirender.
+    const captionRect = e.currentTarget.parentElement?.getBoundingClientRect();
     const startMargin = style?.margin_v ?? 300;
     const startPosX = style?.pos_x ?? 50;
     const startSize = style?.size ?? 96;
@@ -310,7 +314,33 @@ export default function ClipPreview({
         return;
       }
 
-      // mode === 'size': ukuran huruf, menyeret ke atas memperbesar.
+      if (mode === 'scale' && captionRect) {
+        // Skala proporsional dari pojok kanan-bawah, dengan pojok kiri-atas
+        // ditahan diam — perilaku yang sama dengan menarik sudut kotak teks di
+        // Canva, Figma, atau editor mana pun.
+        //
+        // Faktornya diukur dari JARAK pointer ke jangkar, bukan dari selisih X
+        // atau Y sendiri-sendiri. Mengambil salah satu sumbu saja membuat
+        // gerakan diagonal terasa meleset, karena jari bergerak di dua sumbu
+        // sekaligus sementara kotaknya hanya menanggapi satu.
+        const ax = captionRect.left;
+        const ay = captionRect.top;
+        const d0 = Math.hypot(x0 - ax, y0 - ay);
+        const d1 = Math.hypot(ev.clientX - ax, ev.clientY - ay);
+        if (d0 < 8) return;
+        const factor = Math.max(0.3, Math.min(3.2, d1 / d0));
+
+        const width = Math.max(MIN_W, Math.min(100, startBoxW * factor));
+        const left = Math.max(0, Math.min(100 - width, left0));
+        onStyleChange({
+          box_w: Math.round(width * 10) / 10,
+          pos_x: Math.round((left + width / 2) * 10) / 10,
+          size: Math.round(Math.max(36, Math.min(220, startSize * factor))),
+        });
+        return;
+      }
+
+      // mode === 'size': ukuran huruf saja, menyeret ke atas memperbesar.
       onStyleChange({ size: Math.round(Math.max(36, Math.min(220, startSize - dy))) });
     };
     const onUp = () => {
@@ -446,9 +476,11 @@ export default function ClipPreview({
           }}>
             {dragging === 'move'
               ? `X ${Math.round(style?.pos_x ?? 50)}% · Y ${style?.margin_v ?? 300}`
-              : dragging === 'size'
-                ? `Ukuran teks ${style?.size ?? 96}`
-                : `Lebar kotak ${Math.round(style?.box_w ?? 84)}%`}
+              : dragging === 'scale'
+                ? `${Math.round(style?.box_w ?? 84)}% · teks ${style?.size ?? 96}`
+                : dragging === 'size'
+                  ? `Ukuran teks ${style?.size ?? 96}`
+                  : `Lebar kotak ${Math.round(style?.box_w ?? 84)}%`}
           </div>
         )}
 
@@ -489,6 +521,7 @@ export default function ClipPreview({
                           dragging={dragging}
                           onMoveStart={startDrag('move')}
                           onSizeStart={startDrag('size')}
+                          onScaleStart={startDrag('scale')}
                           onWidthLeftStart={startDrag('width-left')}
                           onWidthRightStart={startDrag('width-right')} />
         )}
@@ -520,9 +553,9 @@ export default function ClipPreview({
           fontSize: '0.68rem', color: 'var(--text-muted)', margin: 0,
           display: 'flex', alignItems: 'center', gap: '5px', textAlign: 'center',
         }}>
-          <Move size={11} /> Seret subtitle untuk memindahkannya, tarik batang
-          di kiri/kanan untuk melebar-sempitkan kotaknya, bulatan di sudut untuk
-          ukuran hurufnya.
+          <Move size={11} /> Seret subtitle untuk memindahkannya, batang
+          kiri/kanan untuk melebar-sempitkan kotaknya, bulatan di pojok
+          kanan-bawah untuk memperbesar seluruhnya sekaligus.
         </p>
       )}
     </div>
@@ -543,7 +576,7 @@ export default function ClipPreview({
  */
 export function CaptionOverlay({
   line, activeWordIndex, style, clipTime, boxH, ghost,
-  draggable, dragging, onMoveStart, onSizeStart,
+  draggable, dragging, onMoveStart, onSizeStart, onScaleStart,
   onWidthLeftStart, onWidthRightStart,
 }) {
   const [hover, setHover] = useState(false);
@@ -643,16 +676,19 @@ export function CaptionOverlay({
                   onPointerDown={onWidthLeftStart} />
           <Handle side="right" active={dragging === 'width-right'} visible={hover || !!dragging}
                   onPointerDown={onWidthRightStart} />
+          {/* Pojok kanan-bawah: menskalakan kotak DAN hurufnya bersama-sama,
+              dengan pojok kiri-atas ditahan diam. Gagang tepi mengubah satu
+              dimensi; gagang sudut mengubah keseluruhan proporsinya. */}
           <span
-            onPointerDown={onSizeStart}
-            title="Tarik ke atas/bawah untuk mengubah ukuran huruf"
+            onPointerDown={onScaleStart ?? onSizeStart}
+            title="Tarik menyerong untuk memperbesar/memperkecil kotak beserta hurufnya"
             style={{
-              position: 'absolute', right: '-14px', bottom: '-14px',
-              width: '18px', height: '18px', borderRadius: '50%',
+              position: 'absolute', right: '-15px', bottom: '-15px',
+              width: '19px', height: '19px', borderRadius: '50%',
               background: 'var(--accent-cyan, #00E5FF)', border: '2px solid #06121a',
-              cursor: 'ns-resize', boxShadow: '0 1px 5px rgba(0,0,0,0.6)',
+              cursor: 'nwse-resize', boxShadow: '0 1px 5px rgba(0,0,0,0.6)',
               WebkitTextStroke: '0',
-              opacity: dragging === 'size' ? 1 : (hover || dragging ? 0.9 : 0.55),
+              opacity: dragging === 'scale' ? 1 : (hover || dragging ? 0.9 : 0.55),
               transition: 'opacity 120ms',
             }}
           />
