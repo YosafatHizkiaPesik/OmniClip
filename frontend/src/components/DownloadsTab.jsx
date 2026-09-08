@@ -35,8 +35,8 @@ function VideoPlayerModal({ item, onClose }) {
           ? <audio src={src} controls autoPlay style={{ width: '100%', padding: '40px 20px 20px' }} />
           : <video src={src} controls autoPlay style={{ width: '100%', maxHeight: '70vh', display: 'block' }} />
         }
-        <div style={{ padding: '12px 16px', background: 'rgba(22,28,45,0.95)' }}>
-          <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#fff', wordBreak: 'break-all' }}>{item.file_name}</div>
+        <div style={{ padding: '12px 16px', background: 'var(--stage)' }}>
+          <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#E7EDF5', wordBreak: 'break-all' }}>{item.file_name}</div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
             {formatBytes(item.file_size)} • {item.type.toUpperCase()} • {formatDate(item.created_at)}
           </div>
@@ -146,10 +146,7 @@ export default function DownloadsTab() {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
-          <h2 style={{ fontSize: '1.4rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <Download size={24} style={{ color: 'var(--accent-cyan)' }} />
-            Downloads
-          </h2>
+          <h1 className="work-title" style={{ fontSize: '1.5rem' }}>Unduhan</h1>
           <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
             {downloads.length} file • Total: {formatBytes(totalSize)}
           </p>
@@ -167,7 +164,7 @@ export default function DownloadsTab() {
             </button>
           )}
           <button className="btn-secondary" onClick={fetchDownloads} style={{ fontSize: '0.82rem' }}>
-            <RefreshCw size={14} /> Refresh
+            <RefreshCw size={14} /> Muat ulang
           </button>
         </div>
       </div>
@@ -184,8 +181,8 @@ export default function DownloadsTab() {
             onChange={e => setSearchQuery(e.target.value)}
             style={{
               width: '100%', padding: '9px 12px 9px 36px',
-              background: 'rgba(30,41,59,0.6)', border: '1px solid var(--border-color)',
-              borderRadius: '10px', color: '#fff', outline: 'none', fontSize: '0.85rem',
+              background: 'var(--plate-3)', border: '1px solid var(--rule)',
+              borderRadius: 'var(--r-sm)', color: 'var(--ink)', outline: 'none', fontSize: '0.85rem',
             }}
           />
           {searchQuery && (
@@ -286,7 +283,7 @@ export default function DownloadsTab() {
               {/* Info */}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{
-                  fontWeight: 600, fontSize: '0.88rem', color: '#fff',
+                  fontWeight: 660, fontSize: '0.88rem', color: 'var(--ink)',
                   whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
                 }}>{item.file_name}</div>
                 <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '2px', display: 'flex', gap: '8px' }}>

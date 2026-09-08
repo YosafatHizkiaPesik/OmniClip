@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Plus, Trash2, Loader2, Star, ChevronRight, Users } from 'lucide-react';
 import { formatTime, parseTimeString } from '../../utils/timeFormat';
+import { inkSafe } from '../../lib/contrast';
 import { cachedFonts, fontStack, loadFonts } from '../../lib/fonts';
 import {
   COLOR_GROUPS, COLOR_PAIRS, normalizeHex, useFavoriteColors, useRecentColors,
@@ -260,10 +261,13 @@ export function SubtitlePanel({ clip, onUpdate, onRemove, style, onAutoSpeakers,
                 onChange={(e) => onUpdate(clip.clip_id, i, { text: e.target.value })}
                 style={{
                   ...field, fontSize: '0.8rem', padding: '7px 9px',
-                  // Warna penutur dipakai langsung di kotak isian: menandai satu
-                  // baris jadi terlihat hasilnya di detik itu juga, tanpa harus
-                  // menunggu playhead kebetulan lewat di baris tersebut.
-                  color: colorOf(speaker),
+                  // Warna penutur dipakai di kotak isian supaya menandai satu
+                  // baris terlihat hasilnya saat itu juga — tapi hanya bila ia
+                  // lolos kontras di atas pelat. Warna subtitle dipilih untuk
+                  // teks di ATAS video; pastel seperti #FFB3C7 tampil 1,3:1 di
+                  // atas kertas. Yang tidak lolos memakai tinta, dan titik di
+                  // sebelahnya yang membawa identitas penuturnya.
+                  color: inkSafe(colorOf(speaker)),
                   fontWeight: speaker ? 700 : 400,
                 }}
               />

@@ -150,7 +150,7 @@ export default function StudioHome({ onOpen, onFindVideos }) {
                 opacity: p.status === 'failed' ? 0.75 : 1,
               }}
             >
-              <div style={{ position: 'relative', aspectRatio: '16/9', background: '#000' }}>
+              <div className="pit-frame"><div className="pit-well" style={{ aspectRatio: '16/9' }}>
                 {p.thumbnail && (
                   <img src={p.thumbnail} alt="" loading="lazy"
                        style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -168,13 +168,13 @@ export default function StudioHome({ onOpen, onFindVideos }) {
                 {p.status === 'done' && p.clip_count > 0 && (
                   <span style={{
                     position: 'absolute', left: '7px', top: '7px', padding: '3px 8px',
-                    background: 'var(--hl-wash)', borderRadius: '99px',
-                    fontSize: '0.68rem', fontWeight: 800, color: '#00121a',
+                    background: 'var(--hl)', borderRadius: '99px',
+                    fontSize: '0.68rem', fontWeight: 800, color: '#1A1400',
                   }}>
                     {p.clip_count} klip
                   </span>
                 )}
-              </div>
+              </div></div>
 
               <div style={{ padding: '11px 13px', display: 'flex', flexDirection: 'column', gap: '7px', flex: 1 }}>
                 <div style={{

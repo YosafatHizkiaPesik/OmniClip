@@ -51,7 +51,8 @@ export function VideoCard({ video, isSelected, onClick }) {
       onMouseLeave={e => e.currentTarget.style.transform = 'none'}
     >
       {/* Thumbnail */}
-      <div style={{ position: 'relative', width: '100%', paddingTop: '56.25%', background: '#0d1b2e', borderRadius: '10px', overflow: 'hidden' }}>
+      <div className="pit-frame">
+        <div className="pit-well" style={{ paddingTop: '56.25%' }}>
         <img
           src={video.thumbnail}
           alt={video.title}
@@ -84,6 +85,7 @@ export function VideoCard({ video, isSelected, onClick }) {
             </div>
           </div>
         )}
+        </div>
       </div>
 
       {/* Info */}

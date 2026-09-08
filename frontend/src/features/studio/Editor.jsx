@@ -71,7 +71,9 @@ export default function Editor({ project, onBack }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [peaks, setPeaks] = useState([]);
-  const [tab, setTab] = useState('trim');
+  // Dibuka pada baris lirik: itulah isi bidang pandang pertama yang
+  // dijanjikan, dan itu pula pekerjaan yang paling sering dilakukan di sini.
+  const [tab, setTab] = useState('subtitle');
   const [style, setStyle] = useState(loadStoredStyle);
   const patchStyle = useCallback((patch) => setStyle((prev) => ({ ...prev, ...patch })), []);
   const [aspectRatio, setAspectRatio] = useState('9:16');
@@ -488,6 +490,7 @@ export default function Editor({ project, onBack }) {
         duration={duration} peaks={peaks} clips={clips}
         selectedId={editor.selectedId}
         speakerCount={data.speaker_count || 1}
+        speakerColors={style.speaker_colors ?? []}
         videoRef={videoRef}
         onSeek={seekSource} onSelectClip={selectClip}
       />

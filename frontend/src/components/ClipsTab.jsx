@@ -161,7 +161,7 @@ export default function ClipsTab() {
                 <div
                   onClick={() => setPlaying(clip)}
                   style={{
-                    position: 'relative', aspectRatio: '9 / 16', background: '#000',
+                    position: 'relative', aspectRatio: '9 / 16', background: 'var(--stage)',
                     cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
                   }}
                 >

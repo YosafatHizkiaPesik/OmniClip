@@ -5,12 +5,12 @@ import {
 } from 'lucide-react';
 import { apiGet, apiPost } from '../lib/api';
 
+// Bagian pada satu lembar bergaris, bukan kartu di atas kartu. Tumpukan kartu
+// ikon+judul+teks sebagai struktur halaman adalah wadah paling malas yang ada,
+// dan menaruh kartu pilihan DI DALAMNYA menggandakan kesalahannya.
 const card = {
-  background: 'var(--bg-card)',
-  border: '1px solid var(--border-color)',
-  borderRadius: 'var(--radius-lg)',
-  padding: '20px',
-  boxShadow: 'var(--shadow-card)',
+  padding: '18px 20px',
+  borderBottom: '1px solid var(--rule-2)',
 };
 
 const sectionTitle = {
@@ -30,7 +30,7 @@ const helpText = {
 };
 
 export default function ProfileTab() {
-  const [theme, setTheme] = useState(() => localStorage.getItem('omniclip_theme') || 'dark');
+  const [theme, setTheme] = useState(() => localStorage.getItem('omniclip_theme') || 'light');
   const [apiKey, setApiKey] = useState('');
   const [showApiKey, setShowApiKey] = useState(false);
   const [savingKey, setSavingKey] = useState(false);
@@ -118,15 +118,19 @@ export default function ProfileTab() {
   };
 
   return (
-    <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '18px', maxWidth: '760px', margin: '0 auto' }}>
-      <div style={{ ...sectionTitle, fontSize: '1.2rem', marginBottom: 0 }}>
-        <Settings size={22} style={{ color: 'var(--accent-cyan)' }} />
-        Pengaturan
+    <div className="page" style={{ maxWidth: '780px' }}>
+      <div className="work-block">
+        <div style={{ minWidth: 0 }}>
+          <h1 className="work-title">Catatan main</h1>
+          <div className="sub">Setelan yang berlaku untuk seluruh partitur.</div>
+        </div>
       </div>
+
+      <div className="plate" style={{ overflow: 'hidden' }}>
 
       {settingsError && (
         <div style={{ ...card, borderColor: 'var(--accent-red)', display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-          <AlertTriangle size={18} style={{ color: 'var(--accent-red)', flexShrink: 0, marginTop: '2px' }} />
+          <AlertTriangle size={18} style={{ color: 'var(--danger)', flexShrink: 0, marginTop: '2px' }} />
           <div>
             <div style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-primary)' }}>Backend tidak terhubung</div>
             <div style={helpText}>{settingsError}</div>
@@ -137,7 +141,7 @@ export default function ProfileTab() {
       {/* --- Tampilan --- */}
       <div style={card}>
         <div style={sectionTitle}>
-          {theme === 'dark' ? <Moon size={18} style={{ color: 'var(--accent-cyan)' }} /> : <Sun size={18} style={{ color: 'var(--accent-cyan)' }} />}
+          {theme === 'dark' ? <Moon size={18} style={{ color: 'var(--reh)' }} /> : <Sun size={18} style={{ color: 'var(--reh)' }} />}
           Tampilan
         </div>
         <p style={helpText}>Pilih tema terang atau gelap untuk seluruh aplikasi.</p>
@@ -173,7 +177,7 @@ export default function ProfileTab() {
       {/* --- Jumlah klip --- */}
       <div style={card}>
         <div style={sectionTitle}>
-          <Scissors size={18} style={{ color: 'var(--accent-cyan)' }} />
+          <Scissors size={18} style={{ color: 'var(--reh)' }} />
           Jumlah klip per video
         </div>
         <p style={helpText}>
@@ -212,7 +216,7 @@ export default function ProfileTab() {
       {/* --- Preferensi klip --- */}
       <div style={card}>
         <div style={sectionTitle}>
-          <Scissors size={18} style={{ color: 'var(--accent-cyan)' }} />
+          <Scissors size={18} style={{ color: 'var(--reh)' }} />
           Panjang klip
         </div>
         <p style={helpText}>
@@ -249,7 +253,7 @@ export default function ProfileTab() {
       {/* --- Ketelitian transkrip --- */}
       <div style={card}>
         <div style={sectionTitle}>
-          <Mic size={18} style={{ color: 'var(--accent-cyan)' }} />
+          <Mic size={18} style={{ color: 'var(--reh)' }} />
           Ketelitian transkrip
         </div>
         <p style={helpText}>
@@ -282,7 +286,7 @@ export default function ProfileTab() {
       {/* --- Model AI --- */}
       <div style={card}>
         <div style={sectionTitle}>
-          <Sparkles size={18} style={{ color: 'var(--accent-cyan)' }} />
+          <Sparkles size={18} style={{ color: 'var(--reh)' }} />
           Model AI pemilih klip
         </div>
         <p style={helpText}>
@@ -322,7 +326,7 @@ export default function ProfileTab() {
       {/* --- Gemini API Key --- */}
       <div style={card}>
         <div style={sectionTitle}>
-          <KeyRound size={18} style={{ color: 'var(--accent-cyan)' }} />
+          <KeyRound size={18} style={{ color: 'var(--reh)' }} />
           Gemini API Key
         </div>
         <p style={helpText}>
@@ -330,7 +334,7 @@ export default function ProfileTab() {
           lokal berbasis transkrip asli. Dengan API key, Gemini ikut menyusun ulang
           peringkat dan judul klip. Ambil kunci gratis di{' '}
           <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer"
-             style={{ color: 'var(--accent-cyan)' }}>
+             style={{ color: 'var(--reh)' }}>
             aistudio.google.com
           </a>.
         </p>
@@ -409,7 +413,7 @@ export default function ProfileTab() {
       {/* --- Cookies YouTube --- */}
       <div style={card}>
         <div style={sectionTitle}>
-          <Cookie size={18} style={{ color: 'var(--accent-cyan)' }} />
+          <Cookie size={18} style={{ color: 'var(--reh)' }} />
           Cookies YouTube
         </div>
         <p style={helpText}>
@@ -433,7 +437,7 @@ export default function ProfileTab() {
       {/* --- Info --- */}
       <div style={card}>
         <div style={sectionTitle}>
-          <Info size={18} style={{ color: 'var(--accent-cyan)' }} />
+          <Info size={18} style={{ color: 'var(--reh)' }} />
           Tentang
         </div>
         <div style={{ ...helpText, display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '6px 16px', marginTop: '8px' }}>
@@ -441,6 +445,7 @@ export default function ProfileTab() {
           <span style={{ color: 'var(--text-muted)' }}>Mode</span><span>Lokal — semua file dan riwayat disimpan di komputer ini</span>
           <span style={{ color: 'var(--text-muted)' }}>Penyimpanan</span><span><code>OmniClip_Storage/</code></span>
         </div>
+      </div>
       </div>
     </div>
   );

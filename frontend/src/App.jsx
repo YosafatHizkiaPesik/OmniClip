@@ -63,7 +63,6 @@ export default function App() {
       </header>
 
       <nav className="side-rail">
-        <div className="rail-label">Bagian</div>
         {NAV.map(({ to, label, Icon, end }) => (
           <NavLink key={to} to={to} end={end}
                    className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>

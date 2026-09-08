@@ -1,33 +1,42 @@
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { formatTime } from '../../utils/timeFormat';
+import { contrastRatio } from '../../lib/contrast';
 
 /**
- * Sistem balok: seluruh durasi video dibaca sekaligus.
+ * Sistem balok: seluruh durasi rekaman dibaca sekaligus.
  *
- * Satu balok per narasumber, satu balok energi bicara di bawahnya, dan tiap
- * klip duduk sebagai frasa bertanda huruf latihan pada balok penuturnya.
+ * Satu balok per narasumber, satu balok dinamika di bawahnya, dan tiap klip
+ * duduk sebagai frasa bertanda huruf latihan pada balok penuturnya.
  *
  * Inilah gagasan yang dimiliki layar ini: sekali pandang, bentuk seluruh
  * percakapan satu jam itu terbaca — siapa memegang giliran di menit ke berapa,
- * di mana klipnya jatuh, dan di mana energinya memuncak. Timeline gelombang
+ * di mana klipnya jatuh, di mana dinamikanya memuncak. Timeline gelombang
  * tunggal yang biasa dipakai kategori ini tidak bisa menjawab pertanyaan
  * pertama sama sekali.
  *
- * Playhead dan pita stabilo digerakkan lewat ref di dalam loop rAF, tidak
- * pernah lewat React state: `timeupdate` menyala ~4 Hz dan me-render ulang
- * pohon komponen tiap denyut adalah persis yang membuat editor terasa berat.
+ * Partitur MEMBUNGKUS: satu halaman memuat beberapa sistem bertumpuk, bukan
+ * satu garis yang dimampatkan sampai tak terbaca. Di layar sempit sistemnya
+ * dipecah per belasan menit — itu yang dilakukan partitur cetak, dan itu pula
+ * yang menyelamatkan huruf latihan dari saling bertumpuk.
+ *
+ * Garis main dan pita stabilo digerakkan lewat ref di dalam satu loop rAF,
+ * tidak pernah lewat React state: `timeupdate` menyala ~4 Hz dan me-render
+ * ulang pohon komponen tiap denyut adalah persis yang membuat editor berat.
  */
 
 const HUR = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 export const rehearsalLetter = (i) =>
   (i < 26 ? HUR[i] : HUR[Math.floor(i / 26) - 1] + HUR[i % 26]);
 
-/** Berapa tick waktu yang muat, dengan jarak enak dibaca. */
-const TICK_STEPS = [30, 60, 120, 300, 600, 900, 1800, 3600];
-function pickStep(duration, width) {
-  const want = Math.max(2, Math.floor(width / 110));
-  return TICK_STEPS.find((s) => duration / s <= want) ?? 3600;
+/** Berapa sistem yang muat, dari lebar yang benar-benar tersedia. */
+function systemCountFor(width, duration) {
+  if (!duration) return 1;
+  if (width >= 1100) return 1;
+  if (width >= 720) return Math.min(3, Math.ceil(duration / 2400));
+  return Math.max(1, Math.min(8, Math.ceil(duration / 900)));   // ~15 menit
 }
+
+const TICK_STEPS = [15, 30, 60, 120, 300, 600, 900, 1800];
 
 export default function StaveSystem({
   duration = 0,
@@ -40,35 +49,23 @@ export default function StaveSystem({
   onSeek,
   onSelectClip,
 }) {
-  const boardRef = useRef(null);
-  const playRef = useRef(null);
-  const bandRef = useRef(null);
-  const widthRef = useRef(900);
-
-  const pct = useCallback((t) => (duration > 0 ? (t / duration) * 100 : 0), [duration]);
+  const wrapRef = useRef(null);
+  const playRefs = useRef([]);
+  const bandRefs = useRef([]);
+  const [width, setWidth] = useState(1200);
 
   useEffect(() => {
-    const el = boardRef.current;
+    const el = wrapRef.current;
     if (!el) return undefined;
-    const ro = new ResizeObserver(([e]) => { widthRef.current = e.contentRect.width; });
+    const ro = new ResizeObserver(([e]) => setWidth(e.contentRect.width));
     ro.observe(el);
-    widthRef.current = el.getBoundingClientRect().width;
+    setWidth(el.getBoundingClientRect().width);
     return () => ro.disconnect();
   }, []);
 
-  // Garis main mengikuti video tiap frame, tanpa menyentuh state.
-  useEffect(() => {
-    let raf;
-    const tick = () => {
-      const v = videoRef?.current;
-      if (v && playRef.current && duration > 0) {
-        playRef.current.style.left = `${(v.currentTime / duration) * 100}%`;
-      }
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [videoRef, duration]);
+  const voices = Math.max(1, Math.min(8, speakerCount || 1));
+  const nSystems = systemCountFor(width, duration);
+  const span = duration > 0 ? duration / nSystems : 1;
 
   /** Penutur mana yang paling banyak bicara di sebuah klip. */
   const voiceOf = useCallback((clip) => {
@@ -82,144 +79,197 @@ export default function StaveSystem({
     return Number(Object.entries(tally).sort((a, b) => b[1] - a[1])[0][0]);
   }, []);
 
-  const voices = Math.max(1, Math.min(8, speakerCount || 1));
-  const rows = useMemo(() => {
-    const byVoice = Array.from({ length: voices }, () => []);
-    clips.forEach((clip, i) => {
-      const v = Math.min(voiceOf(clip), voices - 1);
-      byVoice[v].push({ clip, letter: rehearsalLetter(i) });
-    });
-    return byVoice;
-  }, [clips, voices, voiceOf]);
+  const lettered = useMemo(
+    () => clips.map((clip, i) => ({
+      clip,
+      letter: rehearsalLetter(i),
+      voice: Math.min(voiceOf(clip), voices - 1),
+      start: clip.segments[0].start,
+      end: clip.segments[clip.segments.length - 1].end,
+    })),
+    [clips, voices, voiceOf],
+  );
 
   const selected = clips.find((c) => c.clip_id === selectedId) ?? null;
 
-  // Pita stabilo meluncur ke frasa terpilih — satu momen gerak yang diarang,
-  // bukan efek yang ditaburkan ke setiap elemen.
+  // Pita stabilo meluncur ke frasa terpilih — satu momen gerak yang diarang.
+  // Digerakkan lewat transform, bukan left/width: menganimasikan geometri
+  // memaksa tata letak dihitung ulang tiap bingkai.
   useEffect(() => {
-    const band = bandRef.current;
-    if (!band) return;
-    if (!selected) { band.style.opacity = '0'; return; }
-    const s = selected.segments[0].start;
-    const e = selected.segments[selected.segments.length - 1].end;
-    band.style.opacity = '1';
-    band.style.left = `${pct(s)}%`;
-    band.style.width = `${Math.max(0.35, pct(e - s))}%`;
-  }, [selected, pct]);
+    bandRefs.current.forEach((band, i) => {
+      if (!band) return;
+      if (!selected || !duration) { band.style.opacity = '0'; return; }
+      const from = i * span;
+      const s = Math.max(selected.segments[0].start, from);
+      const e = Math.min(selected.segments[selected.segments.length - 1].end, from + span);
+      if (e <= s) { band.style.opacity = '0'; return; }
+      band.style.opacity = '1';
+      band.style.transform =
+        `translateX(${((s - from) / span) * 100}%) scaleX(${Math.max(0.004, (e - s) / span)})`;
+    });
+  }, [selected, span, duration, nSystems]);
 
-  const seekAt = (e) => {
-    const rect = boardRef.current?.getBoundingClientRect();
-    if (!rect || !duration) return;
-    onSeek?.(Math.max(0, Math.min(duration, ((e.clientX - rect.left) / rect.width) * duration)));
-  };
+  // Garis main hidup di sistem yang sedang dilewati; yang lain disembunyikan.
+  useEffect(() => {
+    let raf;
+    const tick = () => {
+      const v = videoRef?.current;
+      if (v && duration > 0) {
+        const active = Math.min(nSystems - 1, Math.floor(v.currentTime / span));
+        playRefs.current.forEach((line, i) => {
+          if (!line) return;
+          if (i !== active) { line.style.opacity = '0'; return; }
+          line.style.opacity = '1';
+          line.style.transform = `translateX(${((v.currentTime - i * span) / span) * 100}%)`;
+        });
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [videoRef, duration, span, nSystems]);
 
-  const step = pickStep(duration || 1, widthRef.current);
-  const ticks = [];
-  for (let t = 0; t <= duration; t += step) ticks.push(t);
-
-  // Balok energi digambar dari puncak gelombang yang sama dengan timeline lama,
-  // dipadatkan jadi batang tipis supaya terbaca sebagai dinamika, bukan lagu.
-  const energy = useMemo(() => {
+  /**
+   * Balok dinamika: simpangan dari rata-rata, digambar dari garis tengah.
+   *
+   * Bukan gelombang amplitudo — itu justru timeline gelombang tunggal yang
+   * ditolak layar ini, hanya dipindah ke baris bawah. Yang dibaca konduktor
+   * dari partitur adalah dinamika: di mana suaranya naik di atas kebiasaan,
+   * di mana ia turun. Itu z-skor, dan itulah yang dipakai mesin pemilih klip.
+   */
+  const dynamics = useMemo(() => {
     if (!peaks?.length) return [];
-    const N = 220;
+    const mean = peaks.reduce((a, b) => a + b, 0) / peaks.length;
+    const sd = Math.sqrt(peaks.reduce((a, b) => a + (b - mean) ** 2, 0) / peaks.length) || 1;
+    const N = 320;
     const out = [];
     const chunk = peaks.length / N;
     for (let i = 0; i < N; i += 1) {
-      let m = 0;
+      let sum = 0;
+      let n = 0;
       for (let j = Math.floor(i * chunk); j < Math.floor((i + 1) * chunk); j += 1) {
-        if (peaks[j] > m) m = peaks[j];
+        sum += peaks[j]; n += 1;
       }
-      out.push(m / 255);
+      out.push(Math.max(-1, Math.min(1, ((sum / (n || 1)) - mean) / (sd * 2))));
     }
     return out;
   }, [peaks]);
 
+  const seekAt = (e, sysIndex) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    if (!duration) return;
+    const t = sysIndex * span + ((e.clientX - rect.left) / rect.width) * span;
+    onSeek?.(Math.max(0, Math.min(duration, t)));
+  };
+
+  /**
+   * Pensil untuk sebuah suara.
+   *
+   * Warna subtitle dipakai lebih dulu supaya penutur yang sama terbaca sama di
+   * partitur dan di video. Tapi warna itu dipilih untuk teks di ATAS gambar —
+   * orang pertama bawaannya putih — dan putih di atas pelat kertas tidak
+   * terlihat sama sekali. Warna yang terlalu terang untuk kertas diganti pensil
+   * partitur sendiri; identitasnya tetap terbaca, hanya bahannya yang berganti.
+   */
+  const pencil = useCallback((v) => {
+    // Merah TIDAK ada di tangga ini: OWN-WORLD menyimpannya untuk menandai
+    // klip, dan memberikannya ke sebuah suara membuat frasa dan huruf
+    // latihannya berwarna sama di balok yang sama. Sisanya grafit, bukan
+    // pensil kelima yang tidak disebut dunia ini.
+    const own = ['var(--entry)', 'var(--cue)', 'var(--ink-2)', 'var(--ink-3)'][v % 4];
+    const c = speakerColors[v];
+    if (typeof c !== 'string' || !/^#[0-9a-f]{6}$/i.test(c)) return own;
+    // Diukur sebagai kontras terhadap pelat, bukan luminansi sendirian:
+    // pastel lolos penjagaan luminansi lalu hilang di atas kertas.
+    const ratio = contrastRatio(c, '#E3E9F1');
+    return ratio !== null && ratio >= 3 ? c : own;
+  }, [speakerColors]);
+
+  const step = TICK_STEPS.find((s) => span / s <= Math.max(2, Math.floor(width / 150))) ?? 1800;
+
   return (
-    <div className="plate" style={{ padding: '12px 0 8px', marginBottom: '16px' }}>
-      {/* nomor birama */}
-      <div style={{
-        display: 'flex', justifyContent: 'space-between',
-        padding: '0 14px 8px calc(var(--stave-name) + 12px)', color: 'var(--ink-3)', fontSize: '.68rem',
-      }} className="tc">
-        {ticks.map((t) => <span key={t}>{formatTime(t)}</span>)}
-      </div>
+    <div ref={wrapRef} className="plate stave-plate">
+      {Array.from({ length: nSystems }, (_, sys) => {
+        const from = sys * span;
+        const ticks = [];
+        for (let t = Math.ceil(from / step) * step; t < from + span; t += step) ticks.push(t);
 
-      <div ref={boardRef} onClick={seekAt}
-           style={{ position: 'relative', cursor: 'crosshair' }}>
-        {rows.map((phrases, v) => (
-          <div key={v} style={{ display: 'grid', gridTemplateColumns: 'var(--stave-name) minmax(0,1fr)' }}>
-            <div style={{
-              padding: '0 12px', borderRight: '2px solid var(--ink)',
-              display: 'flex', flexDirection: 'column', justifyContent: 'center',
-            }}>
-              <span className="mark" style={{ color: 'var(--ink)' }}>Orang {v + 1}</span>
-              <span className="tc" style={{ fontSize: '.66rem', color: 'var(--ink-3)' }}>
-                {phrases.length} huruf
-              </span>
+        return (
+          <div key={sys} className="stave-system">
+            <div className="stave-ticks tc">
+              {ticks.map((t) => (
+                <span key={t} style={{ left: `${((t - from) / span) * 100}%` }}>{formatTime(t)}</span>
+              ))}
             </div>
-            <div className="stave" style={{ position: 'relative' }}>
-              <div className="stave-lines" />
-              {phrases.map(({ clip, letter }) => {
-                const s = clip.segments[0].start;
-                const e = clip.segments[clip.segments.length - 1].end;
-                const on = clip.clip_id === selectedId;
-                return (
-                  <div key={clip.clip_id}
-                       className={`stave-phrase${v % 2 ? ' stave-phrase--cue' : ''}`}
-                       onClick={(ev) => { ev.stopPropagation(); onSelectClip?.(clip.clip_id); }}
-                       title={`${letter} · ${formatTime(s)} · ${Math.round(e - s)} dtk`}
-                       style={{ left: `${pct(s)}%`, width: `${Math.max(0.3, pct(e - s))}%` }}>
-                    {/* Huruf di ujung kanan digantung dari tepi kanan frasa,
-                        kalau tidak ia terpotong bingkai pada klip menit terakhir. */}
-                    <span className={`reh${clip.source === 'manual' ? ' reh--manual' : ''}`}
-                          style={{
-                            position: 'absolute', top: '-11px',
-                            ...(pct(s) > 90 ? { right: 0 } : { left: 0 }),
-                            transform: on ? 'scale(1.12)' : 'none',
-                            transformOrigin: pct(s) > 90 ? 'right bottom' : 'left bottom',
-                            transition: 'transform .18s cubic-bezier(.16,1,.3,1)',
-                          }}>{letter}</span>
+
+            <div className="stave-board" onClick={(e) => seekAt(e, sys)}>
+              {Array.from({ length: voices }, (_, v) => (
+                <div key={v} className="stave-row">
+                  <div className="stave-name" data-n={v + 1}>
+                    <span className="voice-dot" style={{ background: pencil(v) }} />
+                    <span className="voice-name">Orang {v + 1}</span>
                   </div>
-                );
-              })}
+                  <div className="stave">
+                    <div className="stave-lines" />
+                    {lettered
+                      .filter((x) => x.voice === v && x.end > from && x.start < from + span)
+                      .map(({ clip, letter, start, end }) => {
+                        const s = Math.max(start, from);
+                        const e = Math.min(end, from + span);
+                        const left = ((s - from) / span) * 100;
+                        const w = Math.max(0.6, ((e - s) / span) * 100);
+                        const nearEdge = left + w > 94;
+                        return (
+                          <div key={clip.clip_id} className="stave-phrase"
+                               onClick={(ev) => { ev.stopPropagation(); onSelectClip?.(clip.clip_id); }}
+                               title={`${letter} · ${formatTime(start)} · ${Math.round(end - start)} dtk`}
+                               style={{
+                                 left: `${left}%`, width: `${w}%`,
+                                 background: `color-mix(in srgb, ${pencil(v)} 24%, transparent)`,
+                                 borderLeftColor: pencil(v),
+                               }}>
+                            <span className={`reh${clip.source === 'manual' ? ' reh--manual' : ''}`}
+                                  style={{
+                                    position: 'absolute', top: '-11px',
+                                    ...(nearEdge ? { right: 0 } : { left: 0 }),
+                                    transformOrigin: nearEdge ? 'right bottom' : 'left bottom',
+                                    transform: clip.clip_id === selectedId ? 'scale(1.14)' : 'none',
+                                    transition: 'transform .18s cubic-bezier(.16,1,.3,1)',
+                                  }}>{letter}</span>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </div>
+              ))}
+
+              <div className="stave-row stave-row--dyn">
+                <div className="stave-name"><span>Dinamika</span></div>
+                <div className="dyn">
+                  <span className="dyn-rule" />
+                  {dynamics.length
+                    ? dynamics.map((z, i) => (
+                      <span key={i} className="dyn-mark" style={{
+                        left: `${(i / dynamics.length) * 100}%`,
+                        height: `${Math.abs(z) * 46}%`,
+                        top: z >= 0 ? `${50 - Math.abs(z) * 46}%` : '50%',
+                        background: z >= 0 ? 'var(--ink-2)' : 'var(--ink-3)',
+                      }} />
+                    ))
+                    : <span className="dyn-empty">Gelombang suara belum dihitung.</span>}
+                </div>
+              </div>
+
+              <div className="stave-overlay">
+                <div ref={(el) => { bandRefs.current[sys] = el; }}
+                     className="stave-band" style={{ opacity: 0 }} />
+                <div ref={(el) => { playRefs.current[sys] = el; }}
+                     className="playline" style={{ opacity: 0 }} />
+              </div>
             </div>
           </div>
-        ))}
-
-        {/* balok energi */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'var(--stave-name) minmax(0,1fr)' }}>
-          <div style={{
-            padding: '0 12px', borderRight: '2px solid var(--ink)',
-            display: 'flex', flexDirection: 'column', justifyContent: 'center',
-          }}>
-            <span className="mark" style={{ color: 'var(--ink)' }}>Energi</span>
-            <span className="tc" style={{ fontSize: '.66rem', color: 'var(--ink-3)' }}>
-              puncak RMS
-            </span>
-          </div>
-          <div style={{
-            height: '34px', display: 'flex', alignItems: 'flex-end', gap: '1px',
-            padding: '0 14px 6px 0',
-          }}>
-            {energy.length
-              ? energy.map((h, i) => (
-                <span key={i} style={{
-                  flex: 1, height: `${Math.max(6, h * 100)}%`,
-                  background: 'var(--ink-3)', opacity: .55, borderRadius: '.5px',
-                }} />
-              ))
-              : <span style={{ color: 'var(--ink-3)', fontSize: '.72rem', alignSelf: 'center' }}>
-                  Gelombang suara belum dihitung.
-                </span>}
-          </div>
-        </div>
-
-        {/* stabilo + garis main, keduanya di atas seluruh sistem */}
-        <div style={{ position: 'absolute', inset: '0 14px 0 var(--stave-name)', pointerEvents: 'none' }}>
-          <div ref={bandRef} className="stave-band" style={{ opacity: 0 }} />
-          <div ref={playRef} className="playline" style={{ left: 0 }} />
-        </div>
-      </div>
+        );
+      })}
     </div>
   );
 }

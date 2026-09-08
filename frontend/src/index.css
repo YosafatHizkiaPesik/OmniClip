@@ -230,38 +230,63 @@ a { color: var(--cue); text-underline-offset: 3px; text-decoration-thickness: 1p
 .field:focus { border-color: var(--reh); }
 
 /* ── Sistem balok ──────────────────────────────────────────────────────────── */
+.stave-plate { padding: 4px 0 6px; margin-bottom: 16px; }
+.stave-system { padding: 14px 0 6px; }
+.stave-system + .stave-system { border-top: 1px solid var(--rule-2); }
+
+.stave-ticks {
+  position: relative; height: 14px;
+  margin: 0 14px 6px var(--stave-name);
+  color: var(--ink-3); font-size: .66rem;
+}
+.stave-ticks span { position: absolute; top: 0; transform: translateX(-50%); }
+
+.stave-board { position: relative; cursor: crosshair; }
+.stave-row { display: grid; grid-template-columns: var(--stave-name) minmax(0, 1fr); }
+.stave-name {
+  display: flex; align-items: center; gap: 6px; padding: 0 10px;
+  border-right: 2px solid var(--ink);
+  font-family: 'Archivo', sans-serif; font-weight: 700; font-stretch: 80%;
+  text-transform: uppercase; letter-spacing: .08em; font-size: .62rem;
+  color: var(--ink);
+}
 .stave { position: relative; height: var(--stave-h); }
 .stave-lines {
-  position: absolute; inset: 0;
+  position: absolute; left: 0; right: 14px; top: 12px; height: 34px;
   background-image: repeating-linear-gradient(
-    to bottom, transparent 0 9px, var(--rule) 9px 10px);
-  background-position: 0 12px;
-  background-size: 100% 50px;
-  background-repeat: no-repeat;
-  opacity: .85;
+    to bottom, var(--rule) 0 1px, transparent 1px 9px);
+  opacity: .8;
 }
 .stave-phrase {
   position: absolute; top: 8px; bottom: 8px;
-  background: color-mix(in srgb, var(--entry) 26%, transparent);
-  border-left: 1px solid var(--entry);
-  border-radius: 1px;
-  cursor: pointer;
+  border-left: 1px solid; border-radius: 1px; cursor: pointer;
 }
-.stave-phrase--cue {
-  background: color-mix(in srgb, var(--cue) 26%, transparent);
-  border-left-color: var(--cue);
+.stave-phrase:hover { filter: brightness(.94); }
+
+/* Dinamika: simpangan dari garis tengah, bukan gelombang amplitudo. */
+.stave-row--dyn .stave { height: 30px; }
+.dyn { position: relative; height: 30px; margin-right: 14px; }
+.dyn-rule {
+  position: absolute; left: 0; right: 0; top: 50%; height: 1px;
+  background: var(--rule); 
 }
-.stave-band {                             /* stabilo: momen gerak yang diarang */
-  position: absolute; top: 2px; bottom: 2px;
+.dyn-mark { position: absolute; width: 1.5px; border-radius: .5px; }
+.dyn-empty {
+  position: absolute; top: 50%; left: 8px; transform: translateY(-50%);
+  font-size: .72rem; color: var(--ink-3);
+}
+
+.stave-overlay { position: absolute; inset: 0 14px 0 var(--stave-name); pointer-events: none; }
+.stave-band {
+  position: absolute; top: 2px; bottom: 2px; left: 0; width: 100%;
+  transform-origin: left; transform: scaleX(0);
   background: var(--hl-wash);
   border-top: 2px solid var(--hl); border-bottom: 2px solid var(--hl);
-  pointer-events: none;
-  transition: left .42s cubic-bezier(.16, 1, .3, 1),
-              width .42s cubic-bezier(.16, 1, .3, 1);
+  transition: transform .42s cubic-bezier(.16, 1, .3, 1), opacity .2s ease;
 }
 .playline {
-  position: absolute; top: -3px; bottom: -3px; width: 2px;
-  background: var(--reh); pointer-events: none;
+  position: absolute; top: -3px; bottom: -3px; left: 0; width: 2px;
+  background: var(--reh);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--plate) 60%, transparent);
 }
 
@@ -317,7 +342,7 @@ a { color: var(--cue); text-underline-offset: 3px; text-decoration-thickness: 1p
 .brand-badge {
   font-family: 'Archivo', sans-serif; font-weight: 700; font-stretch: 80%;
   font-size: .62rem; letter-spacing: .12em; text-transform: uppercase;
-  color: #0B0E14; background: var(--hl);
+  color: #B9C6D8; border: 1px solid #2A3543;
   padding: 3px 7px; border-radius: 1px;
 }
 .header-meta {
@@ -332,11 +357,6 @@ a { color: var(--cue); text-underline-offset: 3px; text-decoration-thickness: 1p
   border-right: 1px solid var(--stage-2);
   display: flex; flex-direction: column; padding: 14px 0;
   position: sticky; top: 0; height: 100vh; height: 100dvh;
-}
-.rail-label {
-  padding: 0 18px 10px;
-  font-family: 'Archivo', sans-serif; font-weight: 700; font-stretch: 80%;
-  font-size: .6rem; letter-spacing: .14em; text-transform: uppercase; color: #55637A;
 }
 .nav-item {
   display: flex; align-items: center; gap: 11px;
@@ -402,13 +422,17 @@ a { color: var(--cue); text-underline-offset: 3px; text-decoration-thickness: 1p
   .main-content { padding: 14px 14px 20px; }
 
   .side-rail {
+    /* Bilah jempol menumpuk DI ATAS isi. Menambah padding saja tidak cukup:
+       huruf latihan dan label birama diposisikan absolut, jadi tanpa konteks
+       penumpukan sendiri ia mencetak di atas navigasinya. */
+    z-index: 30;
+    box-shadow: 0 -8px 20px -12px rgba(0, 0, 0, .7);
     position: sticky; bottom: 0; top: auto; height: auto;
     flex-direction: row; padding: 0;
     border-right: 0; border-top: 1px solid var(--stage-2);
     padding-bottom: env(safe-area-inset-bottom);
   }
-  .rail-label { display: none; }
-  .nav-item {
+    .nav-item {
     flex: 1; flex-direction: column; gap: 3px; justify-content: center;
     padding: 9px 2px; font-size: .62rem; text-align: center;
     border-left: 0; border-top: 3px solid transparent;
@@ -481,7 +505,16 @@ a { color: var(--cue); text-underline-offset: 3px; text-decoration-thickness: 1p
   }
   .tab-btn { padding: 12px 3px; }
   /* Nama instrumen menyempit supaya baloknya sendiri dapat lebar yang cukup. */
-  :root { --stave-name: 74px; }
+  :root { --stave-name: 62px; --stave-h: 44px; }
+  /* Bilah jempol menempel di bawah; tanpa ruang ini sistem terakhir
+     tertutup olehnya. */
+  .main-content { padding-bottom: 26px; }
+  .voice-name { display: none; }
+  .stave-name::after {
+    content: attr(data-n); font-size: .68rem; color: var(--ink);
+  }
+  .stave-lines { top: 9px; height: 26px; }
+  .stave-name { font-size: .58rem; letter-spacing: .06em; }
   .btn, .btn-primary, .btn-secondary { min-height: 42px; }
   .field, .search-input { font-size: 16px; }   /* 16px: iOS tidak ikut men-zoom */
   .work-block .actions { width: 100%; }
@@ -502,3 +535,14 @@ a { color: var(--cue); text-underline-offset: 3px; text-decoration-thickness: 1p
 }
 
 @keyframes pulse { 0%, 100% { opacity: .55; } 50% { opacity: .28; } }
+
+/* Gambar bergerak hidup hanya di dalam panggung: tiap thumbnail dibingkai
+   gelap, sehingga janji "satu-satunya tempat video hidup" berlaku di seluruh
+   aplikasi, bukan cuma di editor. */
+.pit-frame {
+  background: var(--stage);
+  border-radius: var(--r-sm);
+  padding: 6px;                 /* sumur, bukan bingkai setipis gambarnya */
+  box-shadow: inset 0 0 0 1px #ffffff12;
+}
+.pit-frame > .pit-well { position: relative; width: 100%; overflow: hidden; border-radius: 1px; }
