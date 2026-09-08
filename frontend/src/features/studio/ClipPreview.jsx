@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Play, Pause, RotateCcw, Loader2, Move } from 'lucide-react';
+import { Play, Pause, RotateCcw, Loader2, Move, Maximize2, Minimize2 } from 'lucide-react';
 import { fontStack } from '../../lib/fonts';
 
 const RATIO_BOX = {
@@ -50,6 +50,8 @@ export default function ClipPreview({
   const [clipTime, setClipTime] = useState(0);
   const [boxH, setBoxH] = useState(0);
   const [dragging, setDragging] = useState(null);   // 'move' | 'size' | null
+  const stageRef = useRef(null);
+  const [fullscreen, setFullscreen] = useState(false);
 
   const segments = clip?.segments ?? [];
   const offsets = useMemo(() => {
@@ -83,6 +85,19 @@ export default function ClipPreview({
     setBoxH(el.getBoundingClientRect().height);
     return () => ro.disconnect();
   }, [aspectRatio, frameMode]);
+
+  // Tombol Esc dan tombol layar-penuh bawaan browser sama-sama bisa keluar dari
+  // mode ini, jadi keadaannya dibaca dari dokumen — bukan ditebak dari klik.
+  useEffect(() => {
+    const sync = () => setFullscreen(document.fullscreenElement === stageRef.current);
+    document.addEventListener('fullscreenchange', sync);
+    return () => document.removeEventListener('fullscreenchange', sync);
+  }, []);
+
+  const toggleFullscreen = useCallback(() => {
+    if (document.fullscreenElement) document.exitFullscreen?.();
+    else stageRef.current?.requestFullscreen?.().catch(() => { /* ditolak browser */ });
+  }, []);
 
   const useReframe = frameMode === 'smart' && reframe?.available && constrained;
   const useCenter = frameMode === 'center';
@@ -119,7 +134,7 @@ export default function ClipPreview({
   // muncul setelah sempat memakai mode ikut-wajah.
   useEffect(() => {
     if (!useReframe && videoRef.current) videoRef.current.style.transform = '';
-  }, [useReframe, videoRef, aspectRatio, frameMode]);
+  }, [useReframe, videoRef, aspectRatio, frameMode, reframe]);
 
   // Loop rAF: menggerakkan crop lewat ref (tanpa state) dan menyegarkan waktu
   // klip pada ~20 Hz. `timeupdate` hanya menyala 4 Hz — terlalu kasar untuk
@@ -272,15 +287,25 @@ export default function ClipPreview({
   const zoom = reframe?.source_w && reframe?.crop_w
     ? (reframe.source_w / reframe.crop_w) * 100 : 100;
 
+  // `transform` HARUS muncul di setiap cabang, termasuk yang tidak memakainya.
+  //
+  // Loop rAF mode ikut-wajah menulis translateX langsung ke elemen DOM. React
+  // membandingkan objek gaya lama dengan yang baru, bukan dengan isi DOM
+  // sebenarnya — jadi kalau kedua objek itu sama-sama TIDAK menyebut
+  // `transform`, React tidak melihat perubahan apa pun dan geseran terakhir
+  // tetap menempel. Bilah kabur lalu tampil melenceng ke kiri, dan baru pulih
+  // setelah mampir ke potong-tengah, satu-satunya mode yang kebetulan menyebut
+  // `transform` sehingga memaksa React menuliskannya ulang.
   const videoStyle = useReframe
     ? {
       position: 'absolute', top: 0, left: 0, height: '100%', width: `${zoom}%`,
       objectFit: 'cover', willChange: 'transform', background: '#000',
+      transform: 'translateX(0)',       // ditimpa tiap frame oleh loop rAF
     }
     : useOriginal
       ? {
         position: 'absolute', inset: 0, width: '100%', height: '100%',
-        objectFit: 'contain', background: '#000',
+        objectFit: 'contain', background: '#000', transform: 'none',
       }
       : useCenter
         ? {
@@ -289,16 +314,27 @@ export default function ClipPreview({
         }
         : {
           position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
-          objectFit: 'contain', background: 'transparent',
+          objectFit: 'contain', background: 'transparent', transform: 'none',
         };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', width: '100%' }}>
+      {/* Yang di-layar-penuh-kan adalah PEMBUNGKUS, bukan kotak videonya.
+          Elemen layar penuh dipaksa selebar dan setinggi layar oleh browser,
+          yang akan menghapus rasio 9:16 kotaknya; membungkusnya membuat kotak
+          tetap memegang rasionya sendiri dan sekadar dipusatkan. */}
+      <div ref={stageRef} style={{
+        width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center',
+        ...(fullscreen ? { background: '#000', height: '100%' } : {}),
+      }}>
       <div ref={boxRef} style={{
-        position: 'relative', width: '100%', maxWidth: `${box.width}px`,
-        aspectRatio: box.aspect, background: '#000', borderRadius: '14px',
+        position: 'relative', background: '#000',
+        aspectRatio: box.aspect,
         overflow: 'hidden', boxShadow: 'var(--shadow-card)',
         touchAction: dragging ? 'none' : 'auto',
+        ...(fullscreen
+          ? { height: '100vh', width: 'auto', maxWidth: 'none', borderRadius: 0 }
+          : { width: '100%', maxWidth: `${box.width}px`, borderRadius: '14px' }),
       }}>
         {src ? (
           <>
@@ -379,6 +415,21 @@ export default function ClipPreview({
           </div>
         )}
 
+        {src && (
+          <button onClick={toggleFullscreen}
+                  title={fullscreen ? 'Keluar dari layar penuh' : 'Lihat layar penuh'}
+                  aria-label="Layar penuh"
+                  style={{
+                    position: 'absolute', right: '8px', bottom: '8px', zIndex: 3,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    width: '30px', height: '30px', borderRadius: '8px', cursor: 'pointer',
+                    background: 'rgba(0,0,0,0.66)', border: '1px solid rgba(255,255,255,0.22)',
+                    color: '#e2e8f0',
+                  }}>
+            {fullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+          </button>
+        )}
+
         {shownLine && boxH > 0 && (
           <CaptionOverlay line={shownLine} activeWordIndex={activeWordIndex}
                           style={style} clipTime={clipTime} boxH={boxH}
@@ -388,6 +439,7 @@ export default function ClipPreview({
                           onMoveStart={startDrag('move')}
                           onSizeStart={startDrag('size')} />
         )}
+      </div>
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.8rem' }}>

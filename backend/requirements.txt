@@ -25,6 +25,14 @@ faster-whisper>=1.2.1
 #     https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx
 opencv-python-headless==4.11.0.86
 
+# Pengenal suara untuk memisahkan narasumber. Menjalankan CAM++ (3D-Speaker)
+# sebagai satu berkas ONNX 27 MB — tanpa torch, yang tidak akan muat di
+# anggaran memori mesin target bersama Whisper.
+#
+# Modelnya diunduh sendiri saat pertama dipakai ke backend/models/campplus_sv.onnx.
+# Bila unduhan gagal, pemisahan narasumber dilewati tanpa menjatuhkan pipeline.
+onnxruntime>=1.17,<2
+
 # --- AI (opsional) ---
 # Tanpa API key, pemilihan klip tetap berjalan memakai mesin heuristik lokal.
 google-genai>=0.1.1

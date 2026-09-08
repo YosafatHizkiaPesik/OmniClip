@@ -313,6 +313,55 @@ const STYLE_PRESETS = [
   },
 ];
 
+/**
+ * Contoh sebuah preset, digambar memakai gaya preset itu sendiri.
+ *
+ * Daftar berbentuk teks tidak pernah menjawab pertanyaan yang sebenarnya
+ * ditanyakan pengguna — "yang mana yang kelihatannya bagus?" — dan menjawabnya
+ * dengan mencoba satu per satu berarti melewati render tiap kali. Petak ini
+ * memakai nilai preset yang persis sama dengan yang dikirim ke ffmpeg.
+ */
+function PresetTile({ preset, active, onPick }) {
+  const p = preset.patch;
+  const words = p.uppercase ? ['AYO', 'MULAI'] : ['Ayo', 'mulai'];
+  return (
+    <button onClick={onPick} title={preset.hint}
+            style={{
+              padding: 0, cursor: 'pointer', overflow: 'hidden',
+              borderRadius: 'var(--radius-sm)',
+              border: active ? '2px solid var(--accent-cyan)' : '1px solid var(--border-color)',
+              background: 'transparent',
+            }}>
+      <div style={{
+        // Latar gelap sedikit bergradasi meniru bingkai video: teks putih di
+        // atas putih tidak akan memberi tahu apa pun tentang keterbacaannya.
+        background: 'linear-gradient(160deg, #1d2430 0%, #0d1119 100%)',
+        padding: '15px 8px', display: 'flex', alignItems: 'center',
+        justifyContent: 'center', gap: '0.28em', minHeight: '58px',
+        fontFamily: fontStack(p.font), fontWeight: 800, fontSize: '0.92rem',
+        lineHeight: 1.1, letterSpacing: '0.01em',
+        WebkitTextStroke: `${Math.max(0.5, (p.outline_px ?? 7) * 0.16)}px #000`,
+        paintOrder: 'stroke fill',
+      }}>
+        <span style={{ color: p.primary }}>{words[0]}</span>
+        <span style={{ color: p.highlight }}>{words[1]}</span>
+      </div>
+      <div style={{
+        padding: '5px 7px 6px', textAlign: 'left',
+        background: active ? 'rgba(0,242,254,0.1)' : 'transparent',
+      }}>
+        <div style={{
+          fontSize: '0.74rem', fontWeight: 800,
+          color: active ? 'var(--accent-cyan)' : 'var(--text-primary)',
+        }}>{preset.label}</div>
+        <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)', lineHeight: 1.3 }}>
+          {preset.hint}
+        </div>
+      </div>
+    </button>
+  );
+}
+
 const ANIMATIONS = [
   ['karaoke_pop', 'Karaoke pantul'],
   ['karaoke_wipe', 'Karaoke warna'],
@@ -513,28 +562,17 @@ export function StylePanel({
     <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
       <Section id="preset" title="Gaya siap pakai" note={activePreset?.label ?? 'ubahan sendiri'}
                openId={openId} setOpenId={setOpenId}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
-          {STYLE_PRESETS.map((p) => {
-            const on = activePreset?.id === p.id;
-            return (
-              <button key={p.id} onClick={() => set(p.patch)} title={p.hint}
-                      style={{
-                        padding: '8px 9px', textAlign: 'left', cursor: 'pointer',
-                        borderRadius: 'var(--radius-sm)',
-                        border: on ? '2px solid var(--accent-cyan)' : '1px solid var(--border-color)',
-                        background: on ? 'rgba(0,242,254,0.1)' : 'transparent',
-                      }}>
-                <div style={{
-                  fontSize: '0.82rem', fontWeight: 800, fontFamily: fontStack(p.patch.font),
-                  color: on ? 'var(--accent-cyan)' : 'var(--text-primary)',
-                }}>{p.label}</div>
-                <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', lineHeight: 1.35 }}>
-                  {p.hint}
-                </div>
-              </button>
-            );
-          })}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '7px' }}>
+          {STYLE_PRESETS.map((p) => (
+            <PresetTile key={p.id} preset={p} active={activePreset?.id === p.id}
+                        onPick={() => set(p.patch)} />
+          ))}
         </div>
+        <p style={{ fontSize: '0.67rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
+          Tiap contoh digambar dengan font, warna, dan huruf besar-kecil yang
+          sebenarnya akan dipakai — jadi yang terlihat di sini itulah yang
+          dibakar ke video.
+        </p>
       </Section>
 
       <Section id="warna" title="Warna" openId={openId} setOpenId={setOpenId}

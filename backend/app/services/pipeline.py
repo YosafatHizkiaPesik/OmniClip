@@ -342,7 +342,7 @@ def run_auto_clip(ctx: JobContext) -> dict:
                 )
                 speaker_count = dia.speaker_count
                 speaker_conf = dia.confident
-                speaker_score = dia.silhouette
+                speaker_score = dia.separation
                 if dia.speaker_count > 1:
                     for sent, label in zip(sentences, dia.labels):
                         a, b = sent["wi"]

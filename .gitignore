@@ -22,3 +22,4 @@ OmniClip_Storage/*.db
 OmniClip_Storage/*.db-wal
 OmniClip_Storage/*.db-shm
 !OmniClip_Storage/**/.gitkeep
+backend/models/campplus_sv.onnx

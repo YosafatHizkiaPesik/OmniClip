@@ -147,6 +147,51 @@ def _entry_tag(animation: str, *, play_res: tuple[int, int], margin_v: int,
     return rf"{{\move({cx},{cy + 34},{cx},{cy},0,{ms})\fad({ms // 2},0)}}"
 
 
+def reconcile_words(line: dict) -> list[dict]:
+    """
+    Menyelaraskan `words` sebuah baris dengan `text`-nya.
+
+    Sorotan karaoke dibangun dari `words`, sedangkan penyuntingan di editor
+    mengubah `text`. Selama keduanya tidak pernah didamaikan, setiap koreksi
+    salah dengar hilang tanpa jejak: teksnya berubah di layar editor, lalu
+    ffmpeg membakar kata lama ke dalam video — dan tidak ada satu pun pesan
+    kesalahan, karena bagi renderer tidak ada yang salah.
+
+    Didamaikan DI SINI, di lapisan yang benar-benar menggambar, supaya klien
+    mana pun yang mengirim tidak bisa lagi membuat keduanya berbeda.
+    """
+    words = [w for w in (line.get("words") or []) if (w.get("w") or "").strip()]
+    text = (line.get("text") or "").strip()
+    if not text:
+        return words
+    tokens = text.split()
+    if not words or [w["w"] for w in words] == tokens:
+        return words if words else _spread(tokens, line)
+
+    # Jumlah kata sama: hampir selalu satu kata salah dengar yang ditukar, jadi
+    # waktu aslinya dipertahankan dan sorotan tetap jatuh tepat pada ucapannya.
+    if len(words) == len(tokens):
+        return [{**w, "w": t} for w, t in zip(words, tokens)]
+    return _spread(tokens, line)
+
+
+def _spread(tokens: list[str], line: dict) -> list[dict]:
+    """Membagi rentang baris ke sejumlah kata, ditimbang panjang tiap kata."""
+    if not tokens:
+        return []
+    start = float(line.get("start") or 0.0)
+    end = max(float(line.get("end") or start), start + 0.25)
+    weights = [len(t) + 1 for t in tokens]
+    total = sum(weights)
+    out: list[dict] = []
+    cursor = start
+    for token, weight in zip(tokens, weights):
+        dur = (end - start) * weight / total
+        out.append({"w": token, "s": round(cursor, 3), "e": round(cursor + dur, 3)})
+        cursor += dur
+    return out
+
+
 def build_ass(
     *,
     lines: list[dict],
@@ -208,8 +253,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
     # --- Caption ---------------------------------------------------------------
     for line in lines:
-        words = line.get("words") or []
-        raw_text = (line.get("text") or "").strip()
+        words = reconcile_words(line)
+        raw_text = (line.get("text") or "").strip() or " ".join(w["w"] for w in words)
         if not raw_text:
             continue
 
