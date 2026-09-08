@@ -23,3 +23,7 @@ OmniClip_Storage/*.db-wal
 OmniClip_Storage/*.db-shm
 !OmniClip_Storage/**/.gitkeep
 backend/models/campplus_sv.onnx
+
+# Impeccable: potret pemeriksaan dan mockup keputusan (bukan artefak kirim)
+.impeccable/mocks/
+frontend/.impeccable/review/

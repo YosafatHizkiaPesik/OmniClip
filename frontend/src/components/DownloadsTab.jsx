@@ -160,7 +160,7 @@ export default function DownloadsTab() {
               onClick={handleBulkDelete}
               disabled={bulkDeleting}
               className="btn-secondary"
-              style={{ color: '#ef4444', borderColor: 'rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.08)', fontSize: '0.82rem' }}
+              style={{ color: 'var(--danger)', borderColor: 'rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.08)', fontSize: '0.82rem' }}
             >
               {bulkDeleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
               Hapus {selectedItems.size} Terpilih
@@ -201,7 +201,7 @@ export default function DownloadsTab() {
           {[['all', 'Semua'], ['video', '🎬 Video'], ['audio', '🎵 Audio']].map(([val, label]) => (
             <button key={val} onClick={() => setFilter(val)} style={{
               padding: '8px 14px', borderRadius: '20px', border: 'none', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer',
-              background: filter === val ? '#fff' : 'rgba(255,255,255,0.1)',
+              background: filter === val ? '#fff' : 'var(--rule-2)',
               color: filter === val ? '#000' : 'var(--text-primary)',
             }}>{label}</button>
           ))}
@@ -212,8 +212,8 @@ export default function DownloadsTab() {
         <div style={{
           display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap',
           padding: '11px 14px', marginBottom: '14px', fontSize: '0.83rem',
-          borderRadius: 'var(--radius-md)', color: 'var(--accent-red, #ff4d6d)',
-          background: 'rgba(255,77,109,0.1)', border: '1px solid rgba(255,77,109,0.3)',
+          borderRadius: 'var(--radius-md)', color: 'var(--accent-red, var(--danger))',
+          background: 'color-mix(in srgb, var(--danger) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--danger) 30%, transparent)',
         }}>
           <AlertTriangle size={15} style={{ flexShrink: 0 }} />
           <span style={{ flex: 1, minWidth: '180px' }}>{actionError}</span>
@@ -254,8 +254,8 @@ export default function DownloadsTab() {
               key={item.file_name}
               style={{
                 display: 'flex', alignItems: 'center', gap: '12px',
-                background: selectedItems.has(item.file_name) ? 'rgba(0,242,254,0.06)' : 'var(--bg-card)',
-                border: selectedItems.has(item.file_name) ? '1px solid rgba(0,242,254,0.3)' : '1px solid var(--border-color)',
+                background: selectedItems.has(item.file_name) ? 'var(--hl-wash)' : 'var(--bg-card)',
+                border: selectedItems.has(item.file_name) ? '1px solid var(--hl-wash)' : '1px solid var(--border-color)',
                 borderRadius: '12px', padding: '12px 14px',
                 transition: 'all 0.15s ease',
               }}
@@ -276,7 +276,7 @@ export default function DownloadsTab() {
               {/* Icon */}
               <div style={{
                 width: '44px', height: '44px', borderRadius: '10px', flexShrink: 0,
-                background: item.type === 'audio' ? 'rgba(255,8,68,0.12)' : 'rgba(0,242,254,0.12)',
+                background: item.type === 'audio' ? 'rgba(255,8,68,0.12)' : 'var(--hl-wash)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 color: item.type === 'audio' ? 'var(--accent-pink)' : 'var(--accent-cyan)',
               }}>
@@ -311,7 +311,7 @@ export default function DownloadsTab() {
                 <button
                   onClick={() => handleProxyDownload(item.file_name)}
                   className="btn-secondary"
-                  style={{ padding: '6px 10px', fontSize: '0.78rem', color: 'var(--accent-cyan)', borderColor: 'rgba(0,242,254,0.25)' }}
+                  style={{ padding: '6px 10px', fontSize: '0.78rem', color: 'var(--accent-cyan)', borderColor: 'var(--hl-wash)' }}
                   title="Simpan ke perangkat"
                 >
                   <Download size={13} />
@@ -320,7 +320,7 @@ export default function DownloadsTab() {
                   onClick={() => handleDelete(item.file_name)}
                   disabled={deleting === item.file_name}
                   className="btn-secondary"
-                  style={{ padding: '6px 10px', fontSize: '0.78rem', color: '#ef4444', borderColor: 'rgba(239,68,68,0.25)' }}
+                  style={{ padding: '6px 10px', fontSize: '0.78rem', color: 'var(--danger)', borderColor: 'rgba(239,68,68,0.25)' }}
                   title="Hapus"
                 >
                   {deleting === item.file_name

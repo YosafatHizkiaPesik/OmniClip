@@ -158,7 +158,7 @@ export default function ProfileTab() {
                 fontWeight: 700,
                 fontSize: '0.85rem',
                 color: theme === id ? 'var(--accent-cyan)' : 'var(--text-secondary)',
-                background: theme === id ? 'rgba(0, 242, 254, 0.1)' : 'transparent',
+                background: theme === id ? 'var(--hl-wash)' : 'transparent',
                 border: theme === id ? '1px solid var(--border-active)' : '1px solid var(--border-color)',
                 transition: 'all 0.2s ease',
               }}
@@ -193,7 +193,7 @@ export default function ProfileTab() {
               textAlign: 'center', padding: '11px 6px', cursor: 'pointer',
               borderRadius: 'var(--radius-md)',
               border: maxClips === v ? '2px solid var(--accent-cyan)' : '1px solid var(--border-color)',
-              background: maxClips === v ? 'rgba(0,242,254,0.08)' : 'transparent',
+              background: maxClips === v ? 'var(--hl-wash)' : 'transparent',
             }}>
               <div style={{
                 fontSize: '0.84rem', fontWeight: 800, marginBottom: '2px',
@@ -230,7 +230,7 @@ export default function ProfileTab() {
               textAlign: 'left', padding: '11px 13px', cursor: 'pointer',
               borderRadius: 'var(--radius-md)',
               border: clipLength === v ? '2px solid var(--accent-cyan)' : '1px solid var(--border-color)',
-              background: clipLength === v ? 'rgba(0,242,254,0.08)' : 'transparent',
+              background: clipLength === v ? 'var(--hl-wash)' : 'transparent',
             }}>
               <div style={{
                 fontSize: '0.88rem', fontWeight: 800, marginBottom: '3px',
@@ -266,7 +266,7 @@ export default function ProfileTab() {
               textAlign: 'left', padding: '11px 13px', cursor: 'pointer',
               borderRadius: 'var(--radius-md)',
               border: whisperModel === v ? '2px solid var(--accent-cyan)' : '1px solid var(--border-color)',
-              background: whisperModel === v ? 'rgba(0,242,254,0.08)' : 'transparent',
+              background: whisperModel === v ? 'var(--hl-wash)' : 'transparent',
             }}>
               <div style={{
                 fontSize: '0.88rem', fontWeight: 800, marginBottom: '3px',
@@ -294,7 +294,7 @@ export default function ProfileTab() {
           <p style={{ ...helpText, marginTop: '10px' }}>Memuat daftar model…</p>
         )}
         {modelsError && (
-          <p style={{ ...helpText, marginTop: '10px', color: 'var(--accent-red, #ff4d6d)' }}>
+          <p style={{ ...helpText, marginTop: '10px', color: 'var(--accent-red, var(--danger))' }}>
             Tidak bisa mengambil daftar model: {modelsError}
           </p>
         )}
@@ -339,7 +339,7 @@ export default function ProfileTab() {
           <div style={{ ...helpText, marginTop: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
             {settings.gemini_api_key_set ? (
               <>
-                <CheckCircle2 size={15} style={{ color: '#10b981' }} />
+                <CheckCircle2 size={15} style={{ color: 'var(--entry)' }} />
                 Tersimpan (berakhiran <code>{settings.gemini_api_key_last4}</code>)
               </>
             ) : (
@@ -397,7 +397,7 @@ export default function ProfileTab() {
           <div style={{
             ...helpText,
             marginTop: '10px',
-            color: feedback.kind === 'ok' ? '#10b981' : 'var(--accent-red)',
+            color: feedback.kind === 'ok' ? 'var(--entry)' : 'var(--accent-red)',
             display: 'flex', alignItems: 'center', gap: '7px',
           }}>
             {feedback.kind === 'ok' ? <CheckCircle2 size={15} /> : <AlertTriangle size={15} />}
@@ -422,7 +422,7 @@ export default function ProfileTab() {
         {settings && (
           <div style={{ ...helpText, marginTop: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
             {settings.cookies_file_set ? (
-              <><CheckCircle2 size={15} style={{ color: '#10b981' }} /> File cookies terpasang.</>
+              <><CheckCircle2 size={15} style={{ color: 'var(--entry)' }} /> File cookies terpasang.</>
             ) : (
               <><Info size={15} style={{ color: 'var(--text-muted)' }} /> Belum dipakai (tidak wajib).</>
             )}

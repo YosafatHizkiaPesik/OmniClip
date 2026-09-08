@@ -1,24 +1,27 @@
 import React, { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Search, Download, Scissors, SlidersHorizontal, Film, Music4 } from 'lucide-react';
 import ErrorBoundary from './components/ErrorBoundary';
-import { Search, Download, Scissors, User, Sparkles, Film } from 'lucide-react';
 import { apiGet } from './lib/api';
 
+// Metafora partitur memberi bentuk pada layar kerjanya, tapi tidak boleh
+// menutupi tugasnya: nama bagian di sini menyebut apa yang ada di dalamnya.
+// "Partitur suara" terdengar bagus dan tidak memberi tahu apa pun.
 const NAV = [
-  { to: '/', label: 'YouTube Hub', Icon: Search, end: true },
-  { to: '/studio', label: 'Clip Studio', Icon: Scissors },
-  { to: '/clips', label: 'Klip Saya', Icon: Film },
-  { to: '/downloads', label: 'Downloads', Icon: Download },
-  { to: '/settings', label: 'Settings', Icon: User },
+  { to: '/', label: 'Cari video', Icon: Search, end: true },
+  { to: '/studio', label: 'Partitur', Icon: Music4 },
+  { to: '/clips', label: 'Klip jadi', Icon: Film },
+  { to: '/downloads', label: 'Unduhan', Icon: Download },
+  { to: '/settings', label: 'Pengaturan', Icon: SlidersHorizontal },
 ];
 
 /**
- * Kerangka aplikasi: header, area rute, dan navigasi bawah.
+ * Kerangka aplikasi.
  *
- * Sebelumnya seluruh aplikasi hidup di satu URL dengan state `activeTab`, jadi
- * tombol back browser keluar dari aplikasi, tidak ada halaman yang bisa
- * di-bookmark atau dibagikan, dan berpindah tab me-remount seluruh layar.
- * Sekarang tiap layar punya alamatnya sendiri.
+ * Navigasi duduk di KIRI pada layar lebar, di tempat partitur menuliskan nama
+ * instrumen tiap balok — bukan sebagai bilah di bawah halaman, yang memakan
+ * tinggi layar justru pada satu-satunya layar yang membutuhkannya (editor).
+ * Di bawah 900px ia turun jadi bilah jempol, karena di sanalah ibu jari sampai.
  */
 export default function App() {
   const [engine, setEngine] = useState(null);
@@ -28,12 +31,11 @@ export default function App() {
   const location = useLocation();
 
   useEffect(() => {
-    const savedTheme = localStorage.getItem('omniclip_theme') || 'dark';
+    const savedTheme = localStorage.getItem('omniclip_theme') || 'light';
     document.documentElement.setAttribute('data-theme', savedTheme);
   }, []);
 
-  // Label mesin dibaca dari pengaturan sungguhan. Sebelumnya tertulis "Gemini
-  // Flash Engine" secara permanen, bahkan tanpa API key.
+  // Label mesin dibaca dari pengaturan sungguhan, bukan ditulis permanen.
   useEffect(() => {
     apiGet('/settings')
       .then((s) => setEngine(s.gemini_api_key_set ? 'gemini' : 'lokal'))
@@ -43,41 +45,37 @@ export default function App() {
   return (
     <div className="app-viewport">
       <header className="top-header">
-        <div className="brand-logo" onClick={() => navigate('/')} style={{ cursor: 'pointer' }}>
-          <Scissors size={24} style={{ color: 'var(--accent-cyan)' }} />
-          <span>OmniClip AI</span>
-          <span className="brand-badge">Opus &amp; CapCut Suite</span>
+        <div className="brand-logo" onClick={() => navigate('/')}
+             style={{ cursor: 'pointer' }}>
+          <span>OMNI<em>CLIP</em></span>
         </div>
+        <span className="brand-badge">Auto-clipper</span>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <div style={{
-            fontSize: '0.8rem', color: 'var(--text-secondary)',
-            display: 'flex', alignItems: 'center', gap: '6px',
-          }}>
-            <Sparkles size={14} style={{ color: 'var(--accent-cyan)' }} />
-            {engine === 'gemini' ? 'Gemini + heuristik lokal'
-              : engine === 'lokal' ? 'Mesin heuristik lokal' : 'Memuat…'}
-          </div>
+        <div className="header-meta">
+          <span>
+            Mesin{' '}
+            <b>
+              {engine === 'gemini' ? 'Gemini + heuristik'
+                : engine === 'lokal' ? 'heuristik lokal' : '…'}
+            </b>
+          </span>
         </div>
       </header>
 
-      <main className="main-content">
-        <ErrorBoundary key={location.pathname}><Outlet /></ErrorBoundary>
-      </main>
-
-      <nav className="bottom-nav">
+      <nav className="side-rail">
+        <div className="rail-label">Bagian</div>
         {NAV.map(({ to, label, Icon, end }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={end}
-            className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
-          >
-            <Icon className="nav-icon" />
+          <NavLink key={to} to={to} end={end}
+                   className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+            <Icon className="nav-icon" size={17} strokeWidth={1.9} />
             <span>{label}</span>
           </NavLink>
         ))}
       </nav>
+
+      <main className="main-content">
+        <ErrorBoundary key={location.pathname}><Outlet /></ErrorBoundary>
+      </main>
     </div>
   );
 }

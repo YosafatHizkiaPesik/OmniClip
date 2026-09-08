@@ -18,8 +18,8 @@ const POLL_MS = 2500;
 const STATUS_META = {
   queued: { label: 'Menunggu antrean', color: 'var(--text-secondary)', Icon: Clock },
   running: { label: 'Sedang diproses', color: 'var(--accent-cyan)', Icon: Loader2 },
-  done: { label: 'Siap ditinjau', color: '#10b981', Icon: CheckCircle2 },
-  failed: { label: 'Gagal', color: 'var(--accent-red, #ff4d6d)', Icon: AlertTriangle },
+  done: { label: 'Siap ditinjau', color: 'var(--entry)', Icon: CheckCircle2 },
+  failed: { label: 'Gagal', color: 'var(--accent-red, var(--danger))', Icon: AlertTriangle },
   empty: { label: 'Tidak ada klip', color: 'var(--text-muted)', Icon: AlertTriangle },
   unknown: { label: 'Belum diproses', color: 'var(--text-muted)', Icon: Clock },
 };
@@ -82,7 +82,7 @@ export default function StudioHome({ onOpen, onFindVideos }) {
         flexWrap: 'wrap', marginBottom: '18px',
       }}>
         <div>
-          <h1 style={{ fontSize: '1.3rem', fontWeight: 800, marginBottom: '3px' }}>Clip Studio</h1>
+          <h1 style={{ fontSize: '1.3rem', fontWeight: 800, marginBottom: '3px' }}>Partitur</h1>
           <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: 0 }}>
             {projects.length
               ? `${projects.length} video · klik kartu untuk membuka editor`
@@ -101,8 +101,8 @@ export default function StudioHome({ onOpen, onFindVideos }) {
       {error && (
         <div style={{
           padding: '11px 13px', marginBottom: '14px', fontSize: '0.82rem',
-          borderRadius: 'var(--radius-md)', color: 'var(--accent-red, #ff4d6d)',
-          background: 'rgba(255,77,109,0.1)', border: '1px solid rgba(255,77,109,0.3)',
+          borderRadius: 'var(--radius-md)', color: 'var(--accent-red, var(--danger))',
+          background: 'color-mix(in srgb, var(--danger) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--danger) 30%, transparent)',
         }}>
           {error.message}
         </div>
@@ -168,7 +168,7 @@ export default function StudioHome({ onOpen, onFindVideos }) {
                 {p.status === 'done' && p.clip_count > 0 && (
                   <span style={{
                     position: 'absolute', left: '7px', top: '7px', padding: '3px 8px',
-                    background: 'rgba(0,242,254,0.92)', borderRadius: '99px',
+                    background: 'var(--hl-wash)', borderRadius: '99px',
                     fontSize: '0.68rem', fontWeight: 800, color: '#00121a',
                   }}>
                     {p.clip_count} klip
@@ -204,8 +204,9 @@ export default function StudioHome({ onOpen, onFindVideos }) {
                   <>
                     <div style={{ height: '4px', borderRadius: '99px', background: 'var(--bg-glass)', overflow: 'hidden' }}>
                       <div style={{
-                        width: `${pct}%`, height: '100%', background: 'var(--accent-cyan)',
-                        transition: 'width 0.3s ease',
+                        width: '100%', height: '100%', background: 'var(--reh)',
+                        transform: `scaleX(${pct / 100})`, transformOrigin: 'left',
+                        transition: 'transform .3s cubic-bezier(.16,1,.3,1)',
                       }} />
                     </div>
                     <div style={{ fontSize: '0.71rem', color: 'var(--text-secondary)' }}>

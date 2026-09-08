@@ -36,7 +36,7 @@ export default function JobProgress({ job, error, onCancel, compact = false }) {
   const running = status === 'running' || status === 'queued';
 
   const color = failed ? 'var(--accent-red)' : cancelled ? 'var(--text-muted)'
-    : done ? '#10b981' : 'var(--accent-cyan)';
+    : done ? 'var(--entry)' : 'var(--accent-cyan)';
 
   const Icon = failed ? AlertTriangle : cancelled ? XCircle : done ? CheckCircle2 : Loader2;
 
@@ -65,11 +65,12 @@ export default function JobProgress({ job, error, onCancel, compact = false }) {
       {!compact && (
         <div style={{ height: '5px', borderRadius: '99px', background: 'var(--border-color)', overflow: 'hidden' }}>
           <div style={{
-            height: '100%',
-            width: `${done ? 100 : pct}%`,
+            height: '100%', width: '100%',
+            transform: `scaleX(${(done ? 100 : pct) / 100})`,
+            transformOrigin: 'left',
             background: color,
             borderRadius: '99px',
-            transition: 'width 0.3s ease',
+            transition: 'transform .3s cubic-bezier(.16,1,.3,1)',
           }} />
         </div>
       )}

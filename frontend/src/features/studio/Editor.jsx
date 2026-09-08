@@ -1,14 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft, Scissors, Type, Palette, Download, Loader2, CheckCircle2,
-  AlertTriangle, Crop, Plus, Trash2, Film, Play, Save,
+  AlertTriangle, Crop, Plus, Trash2, Play, Save,
 } from 'lucide-react';
 import { apiGet, apiPost, downloadToDisk } from '../../lib/api';
 import { loadFonts } from '../../lib/fonts';
 import { formatTime } from '../../utils/timeFormat';
 import { useClipEditor } from './useClipEditor';
 import ClipPreview from './ClipPreview';
-import Timeline from './timeline/Timeline';
+import StaveSystem, { rehearsalLetter } from './StaveSystem';
 import { TrimPanel, SubtitlePanel, StylePanel } from './EditorPanels';
 
 const DEFAULT_STYLE = {
@@ -380,15 +380,16 @@ export default function Editor({ project, onBack }) {
     }
     setExporting(false);
   };
-
   if (error) {
     return (
       <Centered>
-        <AlertTriangle size={34} style={{ color: 'var(--accent-red, #ff4d6d)', marginBottom: '12px' }} />
-        <h3 style={{ fontWeight: 700, marginBottom: '7px' }}>Gagal membuka project</h3>
-        <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{error.message}</p>
-        <button className="btn-primary" onClick={onBack} style={{ marginTop: '16px' }}>
-          <ArrowLeft size={14} /> Kembali ke Studio
+        <AlertTriangle size={30} style={{ color: 'var(--danger)', marginBottom: '10px' }} />
+        <h3 className="work-title" style={{ fontSize: '1.1rem', marginBottom: '7px' }}>
+          Partitur ini tidak bisa dibuka
+        </h3>
+        <p style={{ fontSize: '.85rem', color: 'var(--ink-2)' }}>{error.message}</p>
+        <button className="btn-secondary" onClick={onBack} style={{ marginTop: '16px' }}>
+          <ArrowLeft size={14} /> Kembali
         </button>
       </Centered>
     );
@@ -397,141 +398,178 @@ export default function Editor({ project, onBack }) {
   if (!data) {
     return (
       <Centered>
-        <Loader2 size={26} className="animate-spin" style={{ color: 'var(--accent-cyan)' }} />
-        <p style={{ marginTop: '10px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-          Memuat editor…
+        <Loader2 size={24} className="animate-spin" style={{ color: 'var(--reh)' }} />
+        <p style={{ marginTop: '10px', fontSize: '.85rem', color: 'var(--ink-2)' }}>
+          Membuka partitur…
         </p>
       </Centered>
     );
   }
 
+  const letter = selected ? rehearsalLetter(clips.indexOf(selected)) : '—';
+
   return (
-    <div style={{ paddingBottom: '30px' }}>
-      {/* Kepala */}
-      <header style={{
-        display: 'flex', alignItems: 'center', gap: '12px',
-        flexWrap: 'wrap', marginBottom: '14px',
-      }}>
-        <button className="btn-secondary" onClick={onBack} style={{ fontSize: '0.8rem' }}>
-          <ArrowLeft size={14} /> Studio
+    <div className="page">
+      {/* ── Blok judul karya ────────────────────────────────────────────── */}
+      <div className="work-block">
+        <button className="btn-secondary" onClick={onBack}
+                style={{ padding: '8px 11px', marginTop: '3px' }} aria-label="Kembali">
+          <ArrowLeft size={15} />
         </button>
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <h1 style={{
-            fontSize: '1rem', fontWeight: 800, marginBottom: '2px',
-            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-          }}>
-            {data.title}
-          </h1>
-          <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)' }}>
-            {clips.length} klip · {formatTime(duration)} ·{' '}
-            {data.speaker_count > 1 && (
-              <>{data.speaker_confident ? `± ${data.speaker_count} narasumber`
-                : 'narasumber sulit dipisahkan'} · </>
-            )}
+        <div style={{ minWidth: 0, flex: '1 1 320px' }}>
+          <h1 className="work-title">{data.title}</h1>
+          <div className="sub">
+            {clips.length} huruf latihan · {formatTime(duration)} ·{' '}
+            {data.speaker_count > 1
+              ? `${data.speaker_confident ? '' : '± '}${data.speaker_count} narasumber`
+              : 'satu narasumber'} ·{' '}
             {data.transcript_source === 'whisper' ? 'transkrip Whisper lokal'
               : data.transcript_source === 'youtube_manual' ? 'transkrip resmi kanal'
                 : 'transkrip otomatis YouTube'}
           </div>
         </div>
-        <label style={{ display: 'flex', alignItems: 'center', gap: '7px', fontSize: '0.8rem', cursor: 'pointer' }}>
-          <input type="checkbox"
-                 checked={checked.size === clips.length && clips.length > 0}
-                 onChange={(e) => editor.setAllChecked(e.target.checked)}
-                 style={{ accentColor: 'var(--accent-cyan)', width: '15px', height: '15px' }} />
-          {checked.size}/{clips.length}
-        </label>
-        <button className="btn-primary" disabled={exporting || checked.size === 0}
-                onClick={handleExportSelected} style={{ fontSize: '0.8rem' }}>
-          {exporting ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
-          Render &amp; simpan
-        </button>
-      </header>
+        <div className="actions">
+          <label style={{
+            display: 'flex', alignItems: 'center', gap: '7px', fontSize: '.82rem',
+            cursor: 'pointer', color: 'var(--ink-2)',
+          }}>
+            <input type="checkbox"
+                   checked={checked.size === clips.length && clips.length > 0}
+                   onChange={(e) => editor.setAllChecked(e.target.checked)}
+                   style={{ width: '15px', height: '15px' }} />
+            {checked.size}/{clips.length}
+          </label>
+          <button className="btn-secondary" onClick={handleSaveClips}
+                  disabled={saving === 'running'}>
+            {saving === 'running' ? <Loader2 size={14} className="animate-spin" />
+              : saving === 'done' ? <CheckCircle2 size={14} style={{ color: 'var(--entry)' }} />
+                : <Save size={14} />}
+            {saving === 'done' ? 'Tersimpan' : 'Simpan susunan'}
+          </button>
+          <button className="btn-primary" disabled={exporting || checked.size === 0}
+                  onClick={handleExportSelected}>
+            {exporting ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+            Render &amp; simpan
+          </button>
+        </div>
+      </div>
 
       {data.model_requested && data.model && data.model_requested !== data.model && (
-        <div style={{
-          marginBottom: '14px', padding: '10px 13px', fontSize: '0.79rem',
-          borderRadius: 'var(--radius-md)', lineHeight: 1.55,
-          background: 'rgba(255,159,28,0.1)', border: '1px solid rgba(255,159,28,0.32)',
+        <div className="plate" style={{
+          padding: '10px 13px', marginBottom: '14px', fontSize: '.8rem', lineHeight: 1.55,
+          borderLeftColor: 'var(--warn)',
         }}>
-          Model <strong>{data.model_requested}</strong> tidak bisa dipakai saat analisis
-          ini berjalan — biasanya karena kuota harian model itu habis. Sistem memakai{' '}
-          <strong>{data.model}</strong> sebagai cadangan.
+          Model <b>{data.model_requested}</b> tidak bisa dipakai saat analisis ini berjalan —
+          biasanya karena kuota hariannya habis. Sistem memakai <b>{data.model}</b> sebagai cadangan.
         </div>
       )}
 
       {exportLog.length > 0 && (
-        <div style={{
-          marginBottom: '14px', padding: '10px 13px', background: 'var(--bg-card)',
-          border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)',
+        <div className="plate" style={{
+          padding: '10px 13px', marginBottom: '14px',
           display: 'flex', flexDirection: 'column', gap: '6px',
         }}>
           {exportLog.map((e) => (
-            <div key={e.name} style={{ display: 'flex', alignItems: 'center', gap: '9px', fontSize: '0.79rem' }}>
-              {e.status === 'running' && <Loader2 size={13} className="animate-spin" style={{ color: 'var(--accent-cyan)' }} />}
-              {e.status === 'done' && <CheckCircle2 size={13} style={{ color: '#10b981' }} />}
-              {e.status === 'failed' && <AlertTriangle size={13} style={{ color: 'var(--accent-red, #ff4d6d)' }} />}
-              <strong style={{ minWidth: '64px' }}>{e.name}</strong>
-              <span style={{ color: 'var(--text-secondary)' }}>{e.message}</span>
+            <div key={e.name} style={{
+              display: 'flex', alignItems: 'center', gap: '9px', fontSize: '.8rem',
+            }}>
+              {e.status === 'running' && <Loader2 size={13} className="animate-spin" style={{ color: 'var(--reh)' }} />}
+              {e.status === 'done' && <CheckCircle2 size={13} style={{ color: 'var(--entry)' }} />}
+              {e.status === 'failed' && <AlertTriangle size={13} style={{ color: 'var(--danger)' }} />}
+              <b style={{ minWidth: '64px' }}>{e.name}</b>
+              <span style={{ color: 'var(--ink-2)' }}>{e.message}</span>
             </div>
           ))}
         </div>
       )}
 
-      {/* Badan: daftar klip | pratinjau | panel */}
-      <div className="editor-grid" style={{
-        display: 'grid', gridTemplateColumns: '250px minmax(0, 1fr) 320px',
-        gap: '14px', alignItems: 'start', marginBottom: '14px',
+      {/* ── Sistem balok: seluruh durasi terbaca sekaligus ───────────────── */}
+      <StaveSystem
+        duration={duration} peaks={peaks} clips={clips}
+        selectedId={editor.selectedId}
+        speakerCount={data.speaker_count || 1}
+        videoRef={videoRef}
+        onSeek={seekSource} onSelectClip={selectClip}
+      />
+
+      {/* ── Transport ───────────────────────────────────────────────────── */}
+      <div className="plate" style={{
+        display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap',
+        padding: '9px 12px', marginBottom: '16px',
       }}>
-        {/* Kiri: hasil klip */}
-        <aside style={{
-          background: 'var(--bg-card)', border: '1px solid var(--border-color)',
-          borderRadius: 'var(--radius-md)', overflow: 'hidden',
-          display: 'flex', flexDirection: 'column', maxHeight: '520px',
+        <button className="btn-secondary" onClick={togglePlay} style={{ minWidth: '84px' }}>
+          <Play size={13} /> Spasi
+        </button>
+        <div className="tc" style={{
+          fontSize: '1.02rem', fontWeight: 700, color: 'var(--reh)',
         }}>
-          <div style={{
-            padding: '9px 12px', borderBottom: '1px solid var(--border-color)',
-            fontSize: '0.75rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '7px',
-          }}>
-            <Film size={13} style={{ color: 'var(--accent-cyan)' }} />
-            Hasil klip ({clips.length})
+          {formatTimecode(sourceTime)}
+          <span style={{ color: 'var(--ink-3)', fontWeight: 500, fontSize: '.82rem' }}>
+            {' / '}{formatTimecode(duration)}
+          </span>
+        </div>
+        <span style={{ width: '1px', height: '20px', background: 'var(--rule-2)' }} />
+        <button className="btn-secondary" style={{ fontSize: '.76rem', padding: '7px 10px' }}
+                onClick={() => setMark((m) => ({ ...m, in: videoRef.current?.currentTime ?? 0 }))}>
+          Tandai <kbd style={kbd}>I</kbd>
+        </button>
+        <button className="btn-secondary" style={{ fontSize: '.76rem', padding: '7px 10px' }}
+                onClick={() => setMark((m) => ({ ...m, out: videoRef.current?.currentTime ?? 0 }))}>
+          Tandai <kbd style={kbd}>O</kbd>
+        </button>
+        <span className="tc" style={{ fontSize: '.76rem', color: 'var(--ink-2)' }}>
+          {mark.in === null && mark.out === null
+            ? 'belum ada rentang'
+            : `${mark.in === null ? '…' : formatTime(mark.in)} – ${mark.out === null ? '…' : formatTime(mark.out)}`
+              + (mark.in !== null && mark.out !== null
+                ? ` · ${Math.max(0, mark.out - mark.in).toFixed(1)}s` : '')}
+        </span>
+        <button className="btn-primary" onClick={createFromMarks}
+                disabled={editor.busy || (mark.in !== null && mark.out !== null
+                  && mark.out - mark.in < 1.5)}
+                style={{ fontSize: '.78rem', padding: '7px 11px' }}>
+          {editor.busy ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
+          Huruf baru
+        </button>
+        <span className="mark" style={{ marginLeft: 'auto' }}>
+          ← → 1 dtk · Shift 10 dtk · J K L 5 dtk · Home awal huruf
+        </span>
+      </div>
+
+      {/* ── Badan: indeks · lirik+panel · lubang orkestra ────────────────── */}
+      <div className="editor-grid">
+        {/* indeks huruf latihan */}
+        <aside className="plate" style={{ overflow: 'hidden', alignSelf: 'start' }}>
+          <div className="plate-head">
+            <span className="mark" style={{ color: 'var(--ink)' }}>Huruf latihan</span>
+            <span className="tc" style={{ marginLeft: 'auto', fontSize: '.72rem', color: 'var(--ink-3)' }}>
+              {clips.length}
+            </span>
           </div>
-          <div style={{ overflowY: 'auto', flex: 1 }}>
-            {clips.map((clip) => {
-              const active = clip.clip_id === editor.selectedId;
+          <div className="reh-index">
+            {clips.map((clip, i) => {
+              const on = clip.clip_id === editor.selectedId;
               return (
                 <div key={clip.clip_id} onClick={() => selectClip(clip.clip_id)}
-                     style={{
-                       display: 'flex', gap: '9px', padding: '10px 11px', cursor: 'pointer',
-                       borderBottom: '1px solid var(--border-color)',
-                       background: active ? 'rgba(0,242,254,0.09)' : 'transparent',
-                       borderLeft: active ? '3px solid var(--accent-cyan)' : '3px solid transparent',
-                     }}>
+                     className={`reh-row${on ? ' is-on' : ''}`}>
                   <input type="checkbox" checked={checked.has(clip.clip_id)}
                          onClick={(e) => e.stopPropagation()}
                          onChange={() => editor.toggleChecked(clip.clip_id)}
-                         style={{ accentColor: 'var(--accent-cyan)', width: '14px', height: '14px', marginTop: '2px' }} />
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '3px' }}>
-                      <strong style={{ fontSize: '0.78rem' }}>#{clip.index}</strong>
-                      <span style={{
-                        fontSize: '0.65rem', fontWeight: 800, padding: '1px 6px', borderRadius: '99px',
-                        background: 'rgba(0,242,254,0.15)', color: 'var(--accent-cyan)',
-                      }}>{Math.round(clip.score)}</span>
-                      <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>
-                        {formatTime(clip.segments[0].start)} · {Math.round(clip.duration || 0)}s
-                      </span>
+                         style={{ width: '14px', height: '14px', marginTop: '3px' }} />
+                  <span className={`reh${clip.source === 'manual' ? ' reh--manual' : ''}`}>
+                    {rehearsalLetter(i)}
+                  </span>
+                  <div style={{ minWidth: 0 }}>
+                    <div className="tc" style={{ fontSize: '.7rem', color: 'var(--ink-3)' }}>
+                      {formatTime(clip.segments[0].start)} · {Math.round(clip.duration || 0)}s
+                      {clip.score != null && ` · ${Math.round(clip.score)}`}
+                      {clip.source === 'manual' && ' · tangan'}
                     </div>
                     <div style={{
-                      fontSize: '0.72rem', color: 'var(--text-secondary)', lineHeight: 1.4,
-                      display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
-                    }}>
-                      {clip.hook_text}
-                    </div>
-                    {clip.segments.length > 1 && (
-                      <div style={{ fontSize: '0.66rem', color: 'var(--accent-cyan)', marginTop: '3px' }}>
-                        {clip.segments.length} potongan digabung
-                      </div>
-                    )}
+                      fontSize: '.76rem', color: 'var(--ink-2)', lineHeight: 1.35,
+                      display: '-webkit-box', WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                    }}>{clip.hook_text}</div>
                   </div>
                 </div>
               );
@@ -539,11 +577,97 @@ export default function Editor({ project, onBack }) {
           </div>
         </aside>
 
-        {/* Tengah: pratinjau */}
-        <div style={{
-          background: 'var(--bg-card)', border: '1px solid var(--border-color)',
-          borderRadius: 'var(--radius-md)', padding: '14px',
-          display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center',
+        {/* lirik + panel */}
+        <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <div className="plate" style={{ overflow: 'hidden' }}>
+            <div className="plate-head">
+              <span className={`reh${selected?.source === 'manual' ? ' reh--manual' : ''}`}>{letter}</span>
+              <span className="tc" style={{ fontSize: '.76rem', color: 'var(--ink-2)' }}>
+                {selected
+                  ? `${formatTime(selected.segments[0].start)} → ${formatTime(selected.end_seconds)} · ${Math.round(selected.duration || 0)} dtk`
+                  : 'belum ada huruf dipilih'}
+              </span>
+              {selected?.score != null && (
+                <span className="mark" style={{ marginLeft: 'auto' }}>skor {Math.round(selected.score)}</span>
+              )}
+            </div>
+            <div style={{
+              display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
+              borderBottom: '1px solid var(--rule-2)',
+            }}>
+              {TABS.map(({ id, label, Icon }) => (
+                <button key={id} onClick={() => setTab(id)} className={`tab-btn${tab === id ? ' is-on' : ''}`}>
+                  <Icon size={14} strokeWidth={1.9} />{label}
+                </button>
+              ))}
+            </div>
+            <div style={{ padding: '13px' }}>
+              {tab === 'trim' && (
+                <TrimPanel clip={selected} videoDuration={duration} busy={editor.busy}
+                           onNudge={editor.nudgeSegment} onSetBounds={editor.setSegmentBounds}
+                           onAddSegment={editor.addSegment} onRemoveSegment={editor.removeSegment} />
+              )}
+              {tab === 'subtitle' && (
+                <SubtitlePanel clip={selected} onUpdate={editor.updateSubtitle}
+                               onRemove={editor.removeSubtitle} style={style}
+                               onAutoSpeakers={editor.autoSpeakers}
+                               speakerCount={data.speaker_count || 2}
+                               speakerConfident={data.speaker_confident ?? null}
+                               onRedetect={redetectSpeakers} redetecting={redetecting} />
+              )}
+              {tab === 'style' && (
+                <StylePanel style={style} onChange={setStyle}
+                            speakerCount={Math.max(data.speaker_count || 1, 2)}
+                            aspectRatio={aspectRatio} onAspectChange={setAspectRatio}
+                            showHook={showHook} onShowHookChange={setShowHook}
+                            hookText={selected?.hook_text ?? ''}
+                            onHookTextChange={(t) => selected
+                              && editor.updateClip(selected.clip_id, { hook_text: t })} />
+              )}
+              {tab === 'frame' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div className="mark" style={{ color: 'var(--ink)' }}>Cara membingkai</div>
+                  {FRAME_MODES.map((m) => (
+                    <button key={m.id} onClick={() => setFrameMode(m.id)}
+                            className={`choice${frameMode === m.id ? ' is-on' : ''}`}>
+                      <div className="choice-t">{m.label}</div>
+                      <div className="choice-h">{m.hint}</div>
+                    </button>
+                  ))}
+                  <p style={{ fontSize: '.72rem', color: 'var(--ink-3)', lineHeight: 1.5, margin: '4px 0 0' }}>
+                    Mode ikut-wajah menganalisis klip sebelum render. Bila wajah jarang
+                    terlihat — misalnya rekaman layar — sistem otomatis memakai bilah kabur.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {selected && selected.segments.length > 1 && (
+            <div className="plate" style={{
+              padding: '9px 12px', display: 'flex', alignItems: 'center',
+              gap: '9px', flexWrap: 'wrap', fontSize: '.78rem',
+            }}>
+              <b>Huruf {letter} menyambung {selected.segments.length} potongan:</b>
+              {selected.segments.map((s, i) => (
+                <span key={i} className="tc" style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '6px',
+                  padding: '3px 8px', background: 'var(--plate-2)',
+                  border: '1px solid var(--rule-2)', borderRadius: 'var(--r-sm)',
+                }}>
+                  {formatTime(s.start)}–{formatTime(s.end)}
+                  <Trash2 size={11} style={{ cursor: 'pointer', color: 'var(--danger)' }}
+                          onClick={() => editor.removeSegment(selected.clip_id, i)} />
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* lubang orkestra */}
+        <div className="pit editor-pit" style={{
+          padding: '14px', display: 'flex', flexDirection: 'column',
+          gap: '10px', alignItems: 'center', alignSelf: 'start',
         }}>
           <ClipPreview src={data.local_url} clip={selected} aspectRatio={aspectRatio}
                        style={{ ...style, showHook }} videoRef={videoRef}
@@ -551,222 +675,19 @@ export default function Editor({ project, onBack }) {
                        reframe={reframe} reframeLoading={reframeLoading}
                        onStyleChange={patchStyle} />
           <div style={{ display: 'flex', gap: '7px', flexWrap: 'wrap', justifyContent: 'center' }}>
-            <button className="btn-secondary" style={{ fontSize: '0.74rem', padding: '5px 10px' }}
-                    onClick={addSegmentAtPlayhead} disabled={!selected || editor.busy}
-                    title="Ambil bagian dari posisi playhead dan sambungkan ke klip ini">
-              <Plus size={12} /> Sambung dari posisi ini
+            <button className="btn-secondary" style={{ fontSize: '.76rem', padding: '6px 10px' }}
+                    onClick={addSegmentAtPlayhead} disabled={!selected || editor.busy}>
+              <Plus size={12} /> Sambung dari sini
             </button>
             {!constrained && (
-              <button className="btn-secondary" style={{ fontSize: '0.74rem', padding: '5px 10px' }}
+              <button className="btn-secondary" style={{ fontSize: '.76rem', padding: '6px 10px' }}
                       onClick={() => selected && selectClip(selected.clip_id)}>
-                Kembali ke klip
+                Kembali ke huruf
               </button>
             )}
           </div>
         </div>
-
-        {/* Kanan: panel edit */}
-        <div style={{
-          background: 'var(--bg-card)', border: '1px solid var(--border-color)',
-          borderRadius: 'var(--radius-md)', padding: '13px',
-          display: 'flex', flexDirection: 'column', gap: '12px',
-          // Panel ini bisa sangat panjang (daftar font, daftar subtitle, palet
-          // warna). Dibatasi dan digulirkan sendiri supaya kolom pratinjau di
-          // sebelahnya tidak ikut terdorong dan meninggalkan ruang kosong.
-          position: 'sticky', top: '14px',
-          maxHeight: 'calc(100vh - 150px)', overflowY: 'auto',
-        }}>
-          <div style={{
-            display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '5px',
-            position: 'sticky', top: 0, zIndex: 2,
-            background: 'var(--bg-card)', paddingBottom: '8px',
-          }}>
-            {TABS.map(({ id, label, Icon }) => (
-              <button key={id} onClick={() => setTab(id)} style={{
-                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px',
-                padding: '7px 3px', borderRadius: 'var(--radius-sm)', cursor: 'pointer',
-                fontSize: '0.65rem', fontWeight: 700,
-                border: tab === id ? '2px solid var(--accent-cyan)' : '1px solid var(--border-color)',
-                background: tab === id ? 'rgba(0,242,254,0.1)' : 'transparent',
-                color: tab === id ? 'var(--accent-cyan)' : 'var(--text-secondary)',
-              }}>
-                <Icon size={14} />{label}
-              </button>
-            ))}
-          </div>
-
-          {tab === 'trim' && (
-            <TrimPanel clip={selected} videoDuration={duration} busy={editor.busy}
-                       onNudge={editor.nudgeSegment} onSetBounds={editor.setSegmentBounds}
-                       onAddSegment={editor.addSegment} onRemoveSegment={editor.removeSegment} />
-          )}
-          {tab === 'subtitle' && (
-            <SubtitlePanel clip={selected} onUpdate={editor.updateSubtitle}
-                           onRemove={editor.removeSubtitle} style={style}
-                           onAutoSpeakers={editor.autoSpeakers}
-                           speakerCount={data.speaker_count || 2}
-                           speakerConfident={data.speaker_confident ?? null}
-                           onRedetect={redetectSpeakers} redetecting={redetecting} />
-          )}
-          {tab === 'style' && (
-            <StylePanel style={style} onChange={setStyle}
-                        speakerCount={Math.max(data.speaker_count || 1, 2)}
-                        aspectRatio={aspectRatio} onAspectChange={setAspectRatio}
-                        showHook={showHook} onShowHookChange={setShowHook}
-                        hookText={selected?.hook_text ?? ''}
-                        onHookTextChange={(t) => selected
-                          && editor.updateClip(selected.clip_id, { hook_text: t })} />
-          )}
-          {tab === 'frame' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <div style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--text-secondary)' }}>
-                CARA MEMBINGKAI
-              </div>
-              {FRAME_MODES.map((m) => (
-                <button key={m.id} onClick={() => setFrameMode(m.id)} style={{
-                  textAlign: 'left', padding: '9px 11px', cursor: 'pointer',
-                  borderRadius: 'var(--radius-sm)',
-                  border: frameMode === m.id ? '2px solid var(--accent-cyan)' : '1px solid var(--border-color)',
-                  background: frameMode === m.id ? 'rgba(0,242,254,0.08)' : 'transparent',
-                }}>
-                  <div style={{
-                    fontSize: '0.79rem', fontWeight: 700, marginBottom: '3px',
-                    color: frameMode === m.id ? 'var(--accent-cyan)' : 'var(--text-primary)',
-                  }}>{m.label}</div>
-                  <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', lineHeight: 1.45 }}>
-                    {m.hint}
-                  </div>
-                </button>
-              ))}
-              <p style={{ fontSize: '0.69rem', color: 'var(--text-muted)', lineHeight: 1.5, margin: '4px 0 0' }}>
-                Mode ikut-wajah menganalisis klip sebelum render (beberapa detik).
-                Bila wajah jarang terlihat — misalnya rekaman layar — sistem otomatis
-                memakai bilah kabur.
-              </p>
-              {frameMode === 'original' && (
-                <p style={{ fontSize: '0.69rem', color: 'var(--text-muted)', lineHeight: 1.5, margin: '2px 0 0' }}>
-                  Pilihan rasio di tab Gaya diabaikan pada mode ini: hasilnya memakai
-                  ukuran dan bingkai video aslinya, dan ukuran teks ikut disesuaikan.
-                </p>
-              )}
-            </div>
-          )}
-        </div>
       </div>
-
-      {/* Bar transport: jam, penanda, dan pembuat klip manual */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap',
-        padding: '9px 12px', marginBottom: '10px',
-        background: 'var(--bg-card)', border: '1px solid var(--border-color)',
-        borderRadius: 'var(--radius-md)',
-      }}>
-        <button className="btn-secondary" onClick={togglePlay}
-                style={{ fontSize: '0.76rem', padding: '5px 11px' }}>
-          <Play size={13} /> Spasi
-        </button>
-
-        {/* Jam sumber. Font tabular supaya angkanya tidak bergoyang tiap detik —
-            timecode yang bergerak-gerak sendiri sangat sulit dibaca. */}
-        <div style={{
-          fontVariantNumeric: 'tabular-nums', fontSize: '0.95rem', fontWeight: 800,
-          letterSpacing: '0.02em', color: 'var(--accent-cyan)',
-        }}>
-          {formatTimecode(sourceTime)}
-          <span style={{ color: 'var(--text-muted)', fontWeight: 600, fontSize: '0.8rem' }}>
-            {' / '}{formatTimecode(duration)}
-          </span>
-        </div>
-
-        <div style={{ width: '1px', height: '22px', background: 'var(--border-color)' }} />
-
-        <button className="btn-secondary" style={{ fontSize: '0.74rem', padding: '5px 9px' }}
-                onClick={() => setMark((m) => ({ ...m, in: videoRef.current?.currentTime ?? 0 }))}>
-          Tandai masuk <kbd style={kbd}>I</kbd>
-        </button>
-        <button className="btn-secondary" style={{ fontSize: '0.74rem', padding: '5px 9px' }}
-                onClick={() => setMark((m) => ({ ...m, out: videoRef.current?.currentTime ?? 0 }))}>
-          Tandai keluar <kbd style={kbd}>O</kbd>
-        </button>
-
-        <span style={{
-          fontSize: '0.74rem', color: 'var(--text-secondary)',
-          fontVariantNumeric: 'tabular-nums',
-        }}>
-          {mark.in === null && mark.out === null
-            ? 'Belum ada rentang ditandai'
-            : `${mark.in === null ? '…' : formatTime(mark.in)} – `
-              + `${mark.out === null ? '…' : formatTime(mark.out)}`
-              + (mark.in !== null && mark.out !== null
-                ? ` · ${Math.max(0, mark.out - mark.in).toFixed(1)}s` : '')}
-        </span>
-
-        <button className="btn-primary" onClick={createFromMarks}
-                disabled={editor.busy || (mark.in !== null && mark.out !== null
-                  && mark.out - mark.in < 1.5)}
-                style={{ fontSize: '0.76rem', padding: '5px 11px' }}>
-          {editor.busy ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
-          Jadikan klip
-        </button>
-
-        <div style={{ flex: 1 }} />
-
-        <button className="btn-secondary" onClick={handleSaveClips}
-                disabled={saving === 'running'}
-                style={{ fontSize: '0.74rem', padding: '5px 10px' }}>
-          {saving === 'running' ? <Loader2 size={13} className="animate-spin" />
-            : saving === 'done' ? <CheckCircle2 size={13} style={{ color: '#10b981' }} />
-              : <Save size={13} />}
-          {saving === 'done' ? 'Tersimpan' : 'Simpan susunan klip'}
-        </button>
-      </div>
-
-      <p style={{
-        fontSize: '0.68rem', color: 'var(--text-muted)', margin: '0 0 10px',
-        lineHeight: 1.6,
-      }}>
-        Pintasan: <kbd style={kbd}>Spasi</kbd> putar/jeda ·
-        {' '}<kbd style={kbd}>←</kbd> <kbd style={kbd}>→</kbd> geser 1 detik
-        (tahan <kbd style={kbd}>Shift</kbd> untuk 10 detik) ·
-        {' '}<kbd style={kbd}>J</kbd> <kbd style={kbd}>K</kbd> <kbd style={kbd}>L</kbd>{' '}
-        mundur/jeda/maju 5 detik · <kbd style={kbd}>I</kbd> <kbd style={kbd}>O</kbd>{' '}
-        tandai rentang · <kbd style={kbd}>Home</kbd> kembali ke awal klip.
-      </p>
-
-      {/* Bawah: timeline video sumber */}
-      <Timeline
-        duration={duration}
-        peaks={peaks}
-        clips={clips}
-        selectedId={editor.selectedId}
-        videoRef={videoRef}
-        busy={editor.busy}
-        onSeek={seekSource}
-        onSelectClip={selectClip}
-        onCommitSegment={commitSegment}
-      />
-
-      {selected && selected.segments.length > 1 && (
-        <div style={{
-          marginTop: '10px', padding: '9px 12px', fontSize: '0.76rem',
-          background: 'var(--bg-card)', border: '1px solid var(--border-color)',
-          borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center',
-          gap: '10px', flexWrap: 'wrap',
-        }}>
-          <strong>Klip #{selected.index} menggabungkan {selected.segments.length} potongan:</strong>
-          {selected.segments.map((s, i) => (
-            <span key={i} style={{
-              display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '3px 8px',
-              borderRadius: '99px', background: 'rgba(0,242,254,0.1)',
-              color: 'var(--accent-cyan)', fontVariantNumeric: 'tabular-nums',
-            }}>
-              {formatTime(s.start)}–{formatTime(s.end)}
-              <Trash2 size={11} style={{ cursor: 'pointer' }}
-                      onClick={() => editor.removeSegment(selected.clip_id, i)} />
-            </span>
-          ))}
-        </div>
-      )}
     </div>
   );
 }

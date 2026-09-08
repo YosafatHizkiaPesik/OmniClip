@@ -301,7 +301,7 @@ function SpeakerCountPicker({ current, busy, onRedetect }) {
                     width: '30px', height: '30px', borderRadius: '7px',
                     cursor: busy ? 'default' : 'pointer', fontWeight: 800, fontSize: '0.8rem',
                     border: value === n ? '2px solid var(--accent-cyan)' : '1px solid var(--border-color)',
-                    background: value === n ? 'rgba(0,242,254,0.12)' : 'transparent',
+                    background: value === n ? 'var(--hl-wash)' : 'transparent',
                     color: value === n ? 'var(--accent-cyan)' : 'var(--text-secondary)',
                   }}>{n}</button>
         ))}
@@ -356,7 +356,7 @@ const STYLE_PRESETS = [
   },
   {
     id: 'papan', label: 'Papan', hint: 'Blok tebal, sangat mencolok',
-    patch: { size: 88, primary: '#FFFFFF', highlight: '#FF4D6D', font: 'Archivo Black',
+    patch: { size: 88, primary: '#FFFFFF', highlight: 'var(--danger)', font: 'Archivo Black',
              uppercase: true, animation: 'pop_in', position: 'bottom', outline_px: 9 },
   },
   {
@@ -411,7 +411,7 @@ function PresetTile({ preset, active, onPick }) {
       </div>
       <div style={{
         padding: '5px 7px 6px', textAlign: 'left',
-        background: active ? 'rgba(0,242,254,0.1)' : 'transparent',
+        background: active ? 'var(--hl-wash)' : 'transparent',
       }}>
         <div style={{
           fontSize: '0.74rem', fontWeight: 800,
@@ -443,7 +443,7 @@ function Segmented({ options, value, onChange, columns = 3, size = '0.76rem' }) 
                   padding: '9px 2px', fontSize: size, fontWeight: 700, cursor: 'pointer',
                   borderRadius: 'var(--radius-sm)',
                   border: value === v ? '2px solid var(--accent-cyan)' : '1px solid var(--border-color)',
-                  background: value === v ? 'rgba(0,242,254,0.12)' : 'transparent',
+                  background: value === v ? 'var(--hl-wash)' : 'transparent',
                   color: value === v ? 'var(--accent-cyan)' : 'var(--text-secondary)',
                 }}>{t}</button>
       ))}
@@ -459,7 +459,7 @@ function Swatch({ color, selected, onClick, size = 26, title }) {
               cursor: 'pointer', background: color, padding: 0, flex: 'none',
               border: selected ? '3px solid var(--accent-cyan)'
                 : '1px solid rgba(255,255,255,0.25)',
-              boxShadow: selected ? '0 0 0 2px rgba(0,242,254,0.25)' : 'none',
+              boxShadow: selected ? '0 0 0 2px var(--hl-wash)' : 'none',
             }} />
   );
 }
@@ -659,7 +659,7 @@ export function StylePanel({
                           display: 'flex', alignItems: 'center', gap: '7px', cursor: 'pointer',
                           padding: '6px 8px', borderRadius: 'var(--radius-sm)',
                           border: on ? '2px solid var(--accent-cyan)' : '1px solid var(--border-color)',
-                          background: on ? 'rgba(0,242,254,0.1)' : 'transparent',
+                          background: on ? 'var(--hl-wash)' : 'transparent',
                         }}>
                   <span style={{ display: 'flex' }}>
                     <span style={{
@@ -744,7 +744,7 @@ export function StylePanel({
                           display: 'flex', alignItems: 'baseline', gap: '8px', cursor: 'pointer',
                           padding: '7px 9px', textAlign: 'left', borderRadius: 'var(--radius-sm)',
                           border: on ? '2px solid var(--accent-cyan)' : '1px solid var(--border-color)',
-                          background: on ? 'rgba(0,242,254,0.1)' : 'transparent',
+                          background: on ? 'var(--hl-wash)' : 'transparent',
                         }}>
                   {/* Nama font digambar DENGAN font itu sendiri: bedanya harus
                       terlihat sebelum dipilih, bukan setelah dirender. */}

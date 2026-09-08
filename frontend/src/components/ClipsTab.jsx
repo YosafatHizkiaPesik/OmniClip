@@ -95,8 +95,8 @@ export default function ClipsTab() {
         <div style={{
           display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap',
           padding: '11px 14px', marginBottom: '14px', fontSize: '0.83rem',
-          borderRadius: 'var(--radius-md)', color: 'var(--accent-red, #ff4d6d)',
-          background: 'rgba(255,77,109,0.1)', border: '1px solid rgba(255,77,109,0.3)',
+          borderRadius: 'var(--radius-md)', color: 'var(--accent-red, var(--danger))',
+          background: 'color-mix(in srgb, var(--danger) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--danger) 30%, transparent)',
         }}>
           <span style={{ flex: 1, minWidth: '180px' }}>{actionError}</span>
           <button className="btn-secondary" style={{ fontSize: '0.76rem', padding: '5px 11px' }}
@@ -105,7 +105,7 @@ export default function ClipsTab() {
       )}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', marginBottom: '18px' }}>
         <h1 style={{ fontSize: '1.2rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '9px' }}>
-          <Film size={20} style={{ color: 'var(--accent-cyan)' }} /> Klip Tersimpan
+          <Film size={20} style={{ color: 'var(--accent-cyan)' }} /> Klip jadi
         </h1>
         <div style={{ flex: 1 }} />
         {selected.size > 0 && (
@@ -180,7 +180,7 @@ export default function ClipsTab() {
                   {segCount > 1 && (
                     <div style={{
                       position: 'absolute', top: '6px', left: '6px',
-                      background: 'rgba(0,242,254,0.9)', color: '#000', fontSize: '0.66rem',
+                      background: 'var(--hl-wash)', color: '#000', fontSize: '0.66rem',
                       fontWeight: 800, padding: '2px 6px', borderRadius: '4px',
                       display: 'flex', alignItems: 'center', gap: '3px',
                     }}>

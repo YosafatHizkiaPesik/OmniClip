@@ -19,7 +19,7 @@ export function formatViews(views) {
 // Avatar Channel
 export function ChannelAvatar({ name, size = 36 }) {
   const initials = name ? name.slice(0, 2).toUpperCase() : '?';
-  const colors = ['#00f2fe', '#4facfe', '#7f00ff', '#ff0844', '#10b981', '#f59e0b'];
+  const colors = ['var(--reh)', '#4facfe', '#7f00ff', 'var(--danger)', 'var(--entry)', '#f59e0b'];
   const colorIdx = name ? name.charCodeAt(0) % colors.length : 0;
   return (
     <div style={{
@@ -70,7 +70,7 @@ export function VideoCard({ video, isSelected, onClick }) {
         {isSelected && (
           <div style={{
             position: 'absolute', inset: 0,
-            background: 'rgba(0, 242, 254, 0.15)',
+            background: 'var(--hl-wash)',
             border: '2px solid var(--accent-cyan)',
             borderRadius: '10px',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -91,13 +91,13 @@ export function VideoCard({ video, isSelected, onClick }) {
         <ChannelAvatar name={video.channel} size={36} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{
-            fontSize: '0.87rem', fontWeight: 600, lineHeight: 1.35, color: '#fff',
+            fontSize: '0.87rem', fontWeight: 660, lineHeight: 1.35, color: 'var(--ink)',
             display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
           }}>{video.title}</div>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '3px' }}>
+          <div style={{ fontSize: '0.75rem', color: 'var(--ink-2)', marginTop: '3px' }}>
             {video.channel}
           </div>
-          <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '1px', display: 'flex', gap: '6px' }}>
+          <div style={{ fontSize: '0.72rem', color: 'var(--ink-3)', marginTop: '1px', display: 'flex', gap: '6px' }}>
             {video.views > 0 && <span>{formatViews(video.views)} views</span>}
             {video.duration > 0 && <span>• {formatDurationHuman(video.duration)}</span>}
           </div>
@@ -116,7 +116,7 @@ export function RelatedVideoCard({ video, onClick }) {
         display: 'flex', gap: '10px', cursor: 'pointer', padding: '6px',
         borderRadius: '8px', transition: 'background 0.15s',
       }}
-      onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+      onMouseEnter={e => e.currentTarget.style.background = 'var(--plate-2)'}
       onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
     >
       <div style={{ position: 'relative', flexShrink: 0, width: '160px', height: '90px', borderRadius: '8px', overflow: 'hidden', background: '#0d1b2e' }}>
@@ -131,11 +131,11 @@ export function RelatedVideoCard({ video, onClick }) {
       </div>
       <div style={{ flex: 1, minWidth: 0, paddingTop: '2px' }}>
         <div style={{
-          fontSize: '0.82rem', fontWeight: 600, lineHeight: 1.3, color: '#fff',
+          fontSize: '0.82rem', fontWeight: 660, lineHeight: 1.3, color: 'var(--ink)',
           display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
         }}>{video.title}</div>
-        <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '4px' }}>{video.channel}</div>
-        {video.views > 0 && <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>{formatViews(video.views)} views</div>}
+        <div style={{ fontSize: '0.72rem', color: 'var(--ink-2)', marginTop: '4px' }}>{video.channel}</div>
+        {video.views > 0 && <div style={{ fontSize: '0.68rem', color: 'var(--ink-3)' }}>{formatViews(video.views)} views</div>}
       </div>
     </div>
   );

@@ -140,7 +140,7 @@ export default function Watch() {
   if (infoError) {
     return (
       <div style={{ maxWidth: '520px', margin: '60px auto', textAlign: 'center' }}>
-        <AlertTriangle size={34} style={{ color: 'var(--accent-red, #ff4d6d)', marginBottom: '12px' }} />
+        <AlertTriangle size={34} style={{ color: 'var(--accent-red, var(--danger))', marginBottom: '12px' }} />
         <h3 style={{ fontWeight: 700, marginBottom: '7px' }}>Video tidak bisa dibuka</h3>
         <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{infoError.message}</p>
         <button className="btn-primary" onClick={() => navigate('/')} style={{ marginTop: '16px' }}>
@@ -210,7 +210,7 @@ export default function Watch() {
                 <Download size={16} /> Download
               </button>
               <button onClick={handleClip} disabled={queueing} className="btn-primary"
-                      style={{ background: 'linear-gradient(135deg, #ff0844, #ff4e50)', color: '#fff', fontSize: '0.85rem' }}>
+                      style={{ background: 'linear-gradient(135deg, var(--danger), #ff4e50)', color: '#fff', fontSize: '0.85rem' }}>
                 {queueing
                   ? <><Loader2 size={16} className="animate-spin" /> Mengantre…</>
                   : <><Scissors size={16} /><Sparkles size={14} /> Clip Video</>}
@@ -254,11 +254,11 @@ export default function Watch() {
             <div style={{
               marginTop: '14px', padding: '12px 15px', borderRadius: 'var(--radius-md)',
               display: 'flex', alignItems: 'center', gap: '11px', flexWrap: 'wrap',
-              background: notice.kind === 'error' ? 'rgba(255,77,109,0.1)' : 'rgba(0,242,254,0.08)',
-              border: `1px solid ${notice.kind === 'error' ? 'rgba(255,77,109,0.3)' : 'rgba(0,242,254,0.3)'}`,
+              background: notice.kind === 'error' ? 'color-mix(in srgb, var(--danger) 12%, transparent)' : 'var(--hl-wash)',
+              border: `1px solid ${notice.kind === 'error' ? 'color-mix(in srgb, var(--danger) 30%, transparent)' : 'var(--hl-wash)'}`,
             }}>
               {notice.kind === 'error'
-                ? <AlertTriangle size={16} style={{ color: 'var(--accent-red, #ff4d6d)' }} />
+                ? <AlertTriangle size={16} style={{ color: 'var(--accent-red, var(--danger))' }} />
                 : <CheckCircle2 size={16} style={{ color: 'var(--accent-cyan)' }} />}
               <span style={{ fontSize: '0.83rem', flex: 1, minWidth: '200px' }}>{notice.text}</span>
               {notice.kind !== 'error' && (
@@ -278,7 +278,7 @@ export default function Watch() {
 
       <div className="watch-sidebar" style={{ width: '360px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '4px' }}>
         <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '8px', paddingLeft: '4px' }}>
-          Video Berikutnya
+          Video lain
         </div>
         {relatedLoading ? (
           <div style={{ padding: '40px', textAlign: 'center' }}>
@@ -309,7 +309,7 @@ export default function Watch() {
                 <button key={res} onClick={() => setResolution(res)} style={{
                   padding: '10px 6px', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', fontSize: '0.82rem',
                   border: resolution === res ? '2px solid var(--accent-cyan)' : '1px solid var(--border-color)',
-                  background: resolution === res ? 'rgba(0,242,254,0.12)' : 'rgba(30,41,59,0.5)',
+                  background: resolution === res ? 'var(--hl-wash)' : 'rgba(30,41,59,0.5)',
                   color: resolution === res ? 'var(--accent-cyan)' : 'var(--text-primary)',
                   display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px',
                 }}>
@@ -330,7 +330,7 @@ export default function Watch() {
                       {downloadResult.width}×{downloadResult.height} · {(downloadResult.file_size / 1048576).toFixed(1)} MB
                     </div>
                     <button onClick={() => saveToDisk(downloadResult.file_name)} className="btn-primary"
-                            style={{ background: '#10b981', color: '#fff', fontSize: '0.78rem', padding: '6px 12px', alignSelf: 'flex-start' }}>
+                            style={{ background: 'var(--entry)', color: '#fff', fontSize: '0.78rem', padding: '6px 12px', alignSelf: 'flex-start' }}>
                       <Download size={13} /> Simpan ke Perangkat
                     </button>
                   </div>
