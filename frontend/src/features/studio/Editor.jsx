@@ -27,6 +27,7 @@ const FRAME_MODES = [
   { id: 'smart', label: 'Ikuti wajah', hint: 'Kamera mengikuti pembicara. Layar penuh, tanpa bilah kabur.' },
   { id: 'blur', label: 'Bilah kabur', hint: 'Video utuh di tengah, sisi atas-bawah diisi versi kabur.' },
   { id: 'center', label: 'Potong tengah', hint: 'Ambil bagian tengah frame. Paling cepat, tanpa analisis.' },
+  { id: 'original', label: 'Orisinal', hint: 'Bingkai video sumber apa adanya, tanpa dipotong sama sekali.' },
 ];
 
 /**
@@ -436,6 +437,12 @@ export default function Editor({ project, onBack }) {
                 Bila wajah jarang terlihat — misalnya rekaman layar — sistem otomatis
                 memakai bilah kabur.
               </p>
+              {frameMode === 'original' && (
+                <p style={{ fontSize: '0.69rem', color: 'var(--text-muted)', lineHeight: 1.5, margin: '2px 0 0' }}>
+                  Pilihan rasio di tab Gaya diabaikan pada mode ini: hasilnya memakai
+                  ukuran dan bingkai video aslinya, dan ukuran teks ikut disesuaikan.
+                </p>
+              )}
             </div>
           )}
         </div>

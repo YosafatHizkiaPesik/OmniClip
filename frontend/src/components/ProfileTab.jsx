@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   KeyRound, Loader2, Sun, Moon, Settings, Eye, EyeOff, Info,
-  CheckCircle2, AlertTriangle, Cookie, Sparkles,
+  CheckCircle2, AlertTriangle, Cookie, Sparkles, Scissors, Mic,
 } from 'lucide-react';
 import { apiGet, apiPost } from '../lib/api';
 
@@ -42,6 +42,13 @@ export default function ProfileTab() {
   const [models, setModels] = useState(null);
   const [model, setModel] = useState(() => localStorage.getItem('omniclip_gemini_model') || '');
   const [modelsError, setModelsError] = useState(null);
+  // Preferensi pengklipan. Dulu tinggal di halaman tonton, yang membuat layar
+  // itu penuh pilihan yang harus dibaca ulang setiap membuka video padahal
+  // jarang diubah.
+  const [clipLength, setClipLength] = useState(
+    () => localStorage.getItem('omniclip_clip_length') || 'medium');
+  const [whisperModel, setWhisperModel] = useState(
+    () => localStorage.getItem('omniclip_whisper_model') || 'base');
 
   const loadSettings = async () => {
     try {
@@ -65,6 +72,16 @@ export default function ProfileTab() {
       })
       .catch((err) => setModelsError(err.message));
   }, []);
+
+  const chooseClipLength = (v) => {
+    setClipLength(v);
+    localStorage.setItem('omniclip_clip_length', v);
+  };
+
+  const chooseWhisper = (v) => {
+    setWhisperModel(v);
+    localStorage.setItem('omniclip_whisper_model', v);
+  };
 
   const chooseModel = (value) => {
     setModel(value);
@@ -141,6 +158,76 @@ export default function ProfileTab() {
             >
               <Icon size={16} />
               {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* --- Preferensi klip --- */}
+      <div style={card}>
+        <div style={sectionTitle}>
+          <Scissors size={18} style={{ color: 'var(--accent-cyan)' }} />
+          Panjang klip
+        </div>
+        <p style={helpText}>
+          Batas durasi yang dicari saat menyusun klip otomatis. Batas atas inilah
+          yang menentukan apakah sebuah pembahasan tertangkap utuh atau hanya
+          bagian pembukanya.
+        </p>
+        <div style={{ display: 'grid', gap: '8px', marginTop: '13px' }}>
+          {[
+            ['short', 'Pendek', '15–40 detik', 'Untuk potongan singkat yang langsung ke inti.'],
+            ['medium', 'Sedang', '20–60 detik', 'Pilihan aman untuk kebanyakan konten.'],
+            ['long', 'Panjang', '35–110 detik', 'Menangkap pembahasan utuh: pertanyaan beserta jawabannya.'],
+          ].map(([v, title, range, hint]) => (
+            <button key={v} onClick={() => chooseClipLength(v)} style={{
+              textAlign: 'left', padding: '11px 13px', cursor: 'pointer',
+              borderRadius: 'var(--radius-md)',
+              border: clipLength === v ? '2px solid var(--accent-cyan)' : '1px solid var(--border-color)',
+              background: clipLength === v ? 'rgba(0,242,254,0.08)' : 'transparent',
+            }}>
+              <div style={{
+                fontSize: '0.88rem', fontWeight: 800, marginBottom: '3px',
+                color: clipLength === v ? 'var(--accent-cyan)' : 'var(--text-primary)',
+              }}>
+                {title} <span style={{ fontWeight: 600, color: 'var(--text-muted)' }}>{range}</span>
+              </div>
+              <div style={{ fontSize: '0.76rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                {hint}
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* --- Ketelitian transkrip --- */}
+      <div style={card}>
+        <div style={sectionTitle}>
+          <Mic size={18} style={{ color: 'var(--accent-cyan)' }} />
+          Ketelitian transkrip
+        </div>
+        <p style={helpText}>
+          Hanya berlaku untuk video yang belum punya subtitle di YouTube dan harus
+          disalin ucapannya di komputer ini. Video yang sudah bersubtitle tidak
+          terpengaruh dan tetap selesai dalam hitungan detik.
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '13px' }}>
+          {[
+            ['base', 'Cepat', '± 5x lebih cepat', 'Cukup untuk bicara jelas dan pelan.'],
+            ['small', 'Akurat', '± 5x lebih lama', 'Jauh lebih baik untuk percakapan cepat dan bahasa gaul.'],
+          ].map(([v, title, speed, hint]) => (
+            <button key={v} onClick={() => chooseWhisper(v)} style={{
+              textAlign: 'left', padding: '11px 13px', cursor: 'pointer',
+              borderRadius: 'var(--radius-md)',
+              border: whisperModel === v ? '2px solid var(--accent-cyan)' : '1px solid var(--border-color)',
+              background: whisperModel === v ? 'rgba(0,242,254,0.08)' : 'transparent',
+            }}>
+              <div style={{
+                fontSize: '0.88rem', fontWeight: 800, marginBottom: '3px',
+                color: whisperModel === v ? 'var(--accent-cyan)' : 'var(--text-primary)',
+              }}>{title}</div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '3px' }}>{speed}</div>
+              <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', lineHeight: 1.45 }}>{hint}</div>
             </button>
           ))}
         </div>

@@ -22,6 +22,8 @@ import uuid
 from pathlib import Path
 from typing import Any, Callable, Optional
 
+from dataclasses import replace
+
 from ..config import CLIPS_DIR, FONTS_DIR, LOGS_DIR
 from .paths import extract_id_from_filename
 from .reframe import build_reframe_filter, plan_reframe
@@ -211,8 +213,18 @@ def render_clip(
         # menghasilkan crop yang meloncat-loncat.
         chain: list[str] = []
         out_w, out_h = PLAY_RES.get(aspect_ratio, (1080, 1920))
-        frame_used = frame_mode if frame_mode in ("blur", "center") else "blur"
+        frame_used = frame_mode if frame_mode in ("blur", "center", "original") else "blur"
         face_coverage = None
+
+        if frame_mode == "original":
+            # Bingkai sumber dipertahankan apa adanya: tanpa crop, tanpa bilah,
+            # tanpa penskalaan. Subtitle tetap dibakar, jadi kanvas ASS harus
+            # memakai ukuran video aslinya — bukan 1080x1920 — supaya ukuran dan
+            # posisi teks tidak melenceng.
+            from .media import probe as _probe
+            info = _probe(src)
+            out_w = int(info.get("width") or 1920)
+            out_h = int(info.get("height") or 1080)
 
         if frame_mode == "smart":
             plan = plan_reframe(str(src), segments, aspect_ratio=aspect_ratio)
@@ -223,7 +235,7 @@ def render_clip(
                     plan, workdir / "reframe.cmd", out_w, out_h))
                 frame_used = "smart"
 
-        if frame_used != "smart":
+        if frame_used not in ("smart", "original"):
             table = CENTER_FILTERS if frame_used == "center" else ASPECT_FILTERS
             aspect = table.get(aspect_ratio)
             if aspect:
@@ -234,6 +246,21 @@ def render_clip(
             chain.append(grade)
 
         # Subtitle + hook + watermark, semuanya lewat satu file ASS.
+        # Gaya teks dipatok pada kanvas 1080x1920. Pada bingkai orisinal yang
+        # tingginya 720 piksel, ukuran dan margin yang sama akan melempar
+        # subtitle ke tengah layar dan membuat hurufnya raksasa — jadi keduanya
+        # diskalakan mengikuti tinggi kanvas sebenarnya.
+        style_for_render = caption_style or CaptionStyle()
+        if out_h and out_h != 1920:
+            factor = out_h / 1920.0
+            style_for_render = replace(
+                style_for_render,
+                size=max(20, int(round(style_for_render.size * factor))),
+                margin_v=max(12, int(round(style_for_render.margin_v * factor))),
+                outline_px=max(2, int(round(style_for_render.outline_px * factor))),
+                shadow_px=max(1, int(round(style_for_render.shadow_px * factor))),
+            )
+
         ass_path = None
         if (subtitles and any((l.get("text") or "").strip() for l in subtitles)) \
                 or hook_text.strip() or watermark.strip():
@@ -241,10 +268,10 @@ def render_clip(
             ass_path.write_text(
                 build_ass(
                     lines=subtitles or [],
-                    style=caption_style or CaptionStyle(),
+                    style=style_for_render,
                     hook=HookSpec(text=hook_text) if hook_text.strip() else None,
                     watermark=watermark,
-                    play_res=PLAY_RES.get(aspect_ratio, (1080, 1920)),
+                    play_res=(out_w, out_h),
                     clip_duration=total_duration,
                 ),
                 encoding="utf-8",

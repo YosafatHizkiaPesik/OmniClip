@@ -195,6 +195,10 @@ body {
   gap: 4px;
   background: none;
   border: none;
+  /* Navigasi kini memakai <a> dari NavLink, bukan <button>: tanpa dua baris ini
+     tautannya muncul bergaris bawah dan berwarna biru bawaan browser. */
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
   color: var(--text-secondary);
   font-size: 0.75rem;
   font-weight: 600;
@@ -581,5 +585,17 @@ body {
 @media (max-width: 900px) {
   .editor-grid {
     grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+
+/* --- Halaman tonton -----------------------------------------------------------
+   Sidebar rekomendasi turun ke bawah pemutar di layar sempit. Tanpa ini,
+   pemutar terjepit sampai beberapa ratus piksel di laptop kecil. */
+@media (max-width: 1080px) {
+  .watch-layout {
+    flex-direction: column;
+  }
+  .watch-sidebar {
+    width: 100% !important;
   }
 }

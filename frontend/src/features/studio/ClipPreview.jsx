@@ -63,7 +63,8 @@ export default function ClipPreview({
 
   const useReframe = frameMode === 'smart' && reframe?.available && constrained;
   const useCenter = frameMode === 'center';
-  const useBlur = !useReframe && !useCenter;
+  const useOriginal = frameMode === 'original';
+  const useBlur = !useReframe && !useCenter && !useOriginal;
 
   /**
    * Posisi crop pada waktu klip tertentu.
@@ -178,7 +179,11 @@ export default function ClipPreview({
     return activeLine.words.findIndex((w) => clipTime >= w.s && clipTime <= w.e);
   }, [activeLine, clipTime]);
 
-  const box = RATIO_BOX[aspectRatio] ?? RATIO_BOX['9:16'];
+  // Bingkai orisinal mengabaikan pilihan rasio: kotaknya harus mengikuti bentuk
+  // video sumber, bukan 9:16, atau pratinjaunya berbohong soal hasil akhir.
+  const box = useOriginal
+    ? RATIO_BOX['16:9']
+    : (RATIO_BOX[aspectRatio] ?? RATIO_BOX['9:16']);
   const showHook = constrained && clipTime < 3.5 && (clip?.hook_text || '').trim()
     && style?.showHook !== false;
 
@@ -192,15 +197,20 @@ export default function ClipPreview({
       position: 'absolute', top: 0, left: 0, height: '100%', width: `${zoom}%`,
       objectFit: 'cover', willChange: 'transform', background: '#000',
     }
-    : useCenter
+    : useOriginal
       ? {
-        position: 'absolute', top: 0, left: '50%', height: '100%', width: 'auto',
-        transform: 'translateX(-50%)', background: '#000',
+        position: 'absolute', inset: 0, width: '100%', height: '100%',
+        objectFit: 'contain', background: '#000',
       }
-      : {
-        position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
-        objectFit: 'contain', background: 'transparent',
-      };
+      : useCenter
+        ? {
+          position: 'absolute', top: 0, left: '50%', height: '100%', width: 'auto',
+          transform: 'translateX(-50%)', background: '#000',
+        }
+        : {
+          position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
+          objectFit: 'contain', background: 'transparent',
+        };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
@@ -256,7 +266,8 @@ export default function ClipPreview({
             {reframeLoading && <Loader2 size={10} className="animate-spin" />}
             {reframeLoading ? 'Melacak wajah…'
               : useReframe ? `Ikut wajah ${Math.round((reframe.face_coverage ?? 0) * 100)}%`
-                : useCenter ? 'Potong tengah' : 'Bilah kabur'}
+                : useOriginal ? 'Bingkai orisinal'
+                  : useCenter ? 'Potong tengah' : 'Bilah kabur'}
           </div>
         )}
 
