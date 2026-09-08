@@ -3,5 +3,18 @@
   "rules": {
     "no-undef": "error"
   },
-  "env": { "browser": true, "es2024": true }
+  "env": {
+    "browser": true,
+    "es2024": true
+  },
+  "overrides": [
+    {
+      "files": [
+        "scripts/**"
+      ],
+      "env": {
+        "node": true
+      }
+    }
+  ]
 }

@@ -18,7 +18,7 @@ from .routers import settings as settings_router
 from .routers import videos as videos_router
 from .services.events import broker
 from .services.jobs import queue
-from .services.pipeline import run_auto_clip, run_download, run_render
+from .services.pipeline import run_auto_clip, run_diarize, run_download, run_render
 
 logging.basicConfig(
     level=logging.INFO,
@@ -67,6 +67,7 @@ async def lifespan(app: FastAPI):
     queue.register("download", run_download, lane="net")
     queue.register("render", run_render, lane="cpu")
     queue.register("auto_clip", run_auto_clip, lane="cpu")
+    queue.register("diarize", run_diarize, lane="cpu")
     queue.start()
 
     # Smart reframe bersifat opsional dan gagal dengan anggun, jadi ketiadaannya

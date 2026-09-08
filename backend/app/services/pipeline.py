@@ -2,6 +2,7 @@
 
 import logging
 import os
+import tempfile
 
 from ..errors import AppError, RenderError
 from ..repos import media as media_repo
@@ -123,8 +124,10 @@ def run_render(ctx: JobContext) -> dict:
               else "Montserrat"),
         margin_v=max(24, min(1400, int(style_in.get("margin_v") or 300))),
         outline_px=max(0, min(16, int(style_in.get("outline_px") or 7))),
+        pos_x=max(0.0, min(100.0, float(style_in.get("pos_x", 50.0)))),
+        box_w=max(20.0, min(100.0, float(style_in.get("box_w", 84.0)))),
         speaker_colors=tuple(style_in.get("speaker_colors")
-                             or ("#7CFFB2", "#FFB3C7", "#B39DFF")),
+                             or ("#FFFFFF", "#7CFFB2", "#FFB3C7", "#B39DFF")),
     )
 
     total = sum(float(s["end"]) - float(s["start"]) for s in segments)
@@ -142,8 +145,14 @@ def run_render(ctx: JobContext) -> dict:
         ctx.progress(0.08 + 0.90 * frac, stage="encode",
                      message=f"{label}… {int(frac * 100)}%")
 
+    # Judul dipakai untuk menamai berkas hasilnya. Diambil dari basis data, bukan
+    # dari klien: nama berkas ikut terbaca orang saat klipnya diunggah.
+    video_row = media_repo.get_video(video_id) or {}
+
     result = render_clip(
         source_video_path=str(source),
+        title=ctx.payload.get("title") or video_row.get("title") or video_id,
+        clip_index=ctx.payload.get("clip_index"),
         segments=segments,
         subtitles=subtitles,
         aspect_ratio=ctx.payload.get("aspect_ratio", "9:16"),
@@ -460,6 +469,103 @@ def run_auto_clip(ctx: JobContext) -> dict:
         ctx.progress(1.0, stage="done", message=f"{len(clips)} klip siap ditinjau.")
         return payload
 
+    finally:
+        try:
+            if os.path.exists(audio_path):
+                os.remove(audio_path)
+            os.rmdir(tmpdir)
+        except OSError:
+            pass
+
+
+def run_diarize(ctx: JobContext) -> dict:
+    """
+    payload: {video_id, speakers}
+
+    Menandai ulang penutur pada analisis yang SUDAH ada, tanpa mengunduh atau
+    mentranskrip ulang apa pun.
+
+    Ini jalan keluar untuk saat tebakan otomatis meleset. Pemisahan suara
+    otomatis harus menebak dua hal sekaligus — berapa orangnya, dan siapa
+    bicara kapan — dan yang pertama adalah bagian paling rapuhnya. Ketika
+    pengguna sudah tahu jawabannya (ia menonton videonya), memberitahukan
+    jumlahnya menghapus separuh masalah dan biasanya memperbaiki sisanya.
+    """
+    from ..repos import analyses as analyses_repo
+    from ..repos import transcripts as tx_repo
+    from .clipmodel import rebuild_subtitles_for_segments, strip_non_speech
+    from .diarize import analyze_speakers
+    from .media import extract_audio_wav
+
+    video_id = ctx.payload["video_id"]
+    speakers = ctx.payload.get("speakers")
+    speakers = int(speakers) if speakers else None
+
+    cached = analyses_repo.latest_for_video(video_id)
+    if not cached:
+        raise AppError("Belum ada analisis untuk video ini.",
+                       code="NO_ANALYSIS", status=404)
+    stored = tx_repo.get_best(video_id)
+    if not stored or not stored.get("words"):
+        raise AppError("Video ini belum punya transkrip.",
+                       code="NO_TRANSCRIPT", status=409)
+
+    source = find_local_video(video_id)
+    if source is None:
+        raise AppError("Video sumber belum diunduh.",
+                       code="SOURCE_NOT_DOWNLOADED", status=409)
+
+    words = strip_non_speech(stored["words"])
+    sentences = stored["sentences"]
+
+    ctx.progress(0.05, stage="audio", message="Menyiapkan audio…")
+    tmpdir = tempfile.mkdtemp(prefix="omniclip_diarize_")
+    audio_path = os.path.join(tmpdir, "audio.wav")
+    try:
+        extract_audio_wav(str(source), audio_path)
+        ctx.check_cancelled()
+
+        label = (f"Memisahkan {speakers} narasumber…" if speakers
+                 else "Memperkirakan jumlah narasumber…")
+        ctx.progress(0.25, stage="diarize", message=label)
+        dia = analyze_speakers(audio_path, [(s["s"], s["e"]) for s in sentences],
+                               speakers=speakers)
+
+        ctx.progress(0.85, stage="apply", message="Menerapkan penanda ke subtitle…")
+        # Label menempel pada KATA, bukan pada baris subtitle: batas baris bisa
+        # berubah setiap kali pengguna menggeser rentang klip, sedangkan katanya
+        # tidak. Dari kata, warna baris dihitung ulang kapan pun dibutuhkan.
+        for word in words:
+            word.pop("sp", None)
+        if dia.speaker_count > 1:
+            for sentence, speaker in zip(sentences, dia.labels):
+                a, b = sentence["wi"]
+                for word in words[a:b]:
+                    word["sp"] = int(max(0, speaker))
+
+        result = dict(cached["result"])
+        result["clips"] = [
+            {**clip,
+             "subtitles": rebuild_subtitles_for_segments(clip["segments"], words)[0]}
+            for clip in (result.get("clips") or [])
+        ]
+        result["speaker_count"] = dia.speaker_count
+        result["speaker_confident"] = dia.confident
+        result["speaker_score"] = dia.separation
+        result["speaker_requested"] = speakers
+
+        analyses_repo.save(
+            video_id=video_id, transcript_id=stored["id"],
+            engine=result.get("engine", "heuristic"), model=result.get("model"),
+            params={"rediarized": True, "speakers": speakers},
+            result=result,
+        )
+        ctx.progress(1.0, stage="done",
+                     message=f"{dia.speaker_count} narasumber ditandai.")
+        return {"speaker_count": dia.speaker_count,
+                "speaker_confident": dia.confident,
+                "speaker_score": dia.separation,
+                "clips": result["clips"]}
     finally:
         try:
             if os.path.exists(audio_path):

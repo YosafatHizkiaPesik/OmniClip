@@ -33,6 +33,15 @@ class CaptionStyle:
     shadow_px: int = 3
     position: Position = "bottom"
     margin_v: int = 300
+    # Penempatan mendatar, dalam PERSEN lebar kanvas — bukan piksel. Kanvas
+    # bisa selebar 1080 (9:16) atau 1920 (16:9), jadi margin piksel tetap akan
+    # berarti penempatan yang berbeda-beda per rasio. Persen tidak.
+    #
+    # pos_x adalah titik TENGAH kotak teks, box_w lebarnya. Keduanya bersama
+    # membiarkan subtitle ditaruh di pojok kiri, pojok kanan, atau di mana pun,
+    # sekaligus menentukan di lebar berapa barisnya mulai dibungkus.
+    pos_x: float = 50.0
+    box_w: float = 84.0
     uppercase: bool = True
     # karaoke_pop  : kata aktif berganti warna dan memantul (bawaan)
     # karaoke_wipe : kata aktif hanya berganti warna, tanpa memantul
@@ -42,10 +51,14 @@ class CaptionStyle:
     # block/none   : tanpa animasi apa pun
     animation: Literal["karaoke_pop", "karaoke_wipe", "fade",
                        "slide_up", "pop_in", "block", "none"] = "karaoke_pop"
-    # Warna per penutur. Indeks 0 tidak dipakai — penutur pertama memakai
-    # `primary`, sehingga video satu narasumber terlihat persis seperti sebelum
-    # fitur ini ada. Percakapan jadi bisa dibedakan sekilas tanpa membaca isinya.
-    speaker_colors: tuple[str, ...] = ("#7CFFB2", "#FFB3C7", "#B39DFF")
+    # Warna per penutur, DIINDEKS LANGSUNG: speaker_colors[0] milik orang
+    # pertama, [1] orang kedua, dan seterusnya. Versi sebelumnya melewati indeks
+    # 0 dan memaksa orang pertama memakai `primary`, sehingga warnanya tidak
+    # bisa disetel sendiri dan penomoran di UI selalu meleset satu.
+    #
+    # Nilai bawaan menaruh putih di posisi pertama, jadi video satu narasumber
+    # tetap tampil persis seperti sebelum fitur ini ada.
+    speaker_colors: tuple[str, ...] = ("#FFFFFF", "#7CFFB2", "#FFB3C7", "#B39DFF")
     max_words_per_line: int = 5
     max_chars_per_line: int = 22
 
@@ -119,7 +132,7 @@ KARAOKE = {"karaoke_pop", "karaoke_wipe"}
 
 
 def _entry_tag(animation: str, *, play_res: tuple[int, int], margin_v: int,
-               align: int, budget: float) -> str:
+               align: int, budget: float, center_x: Optional[int] = None) -> str:
     """
     Tag ASS untuk animasi masuk satu baris.
 
@@ -137,7 +150,7 @@ def _entry_tag(animation: str, *, play_res: tuple[int, int], margin_v: int,
                 rf"\fad({ms // 2},0)}}")
     # slide_up butuh koordinat absolut, jadi posisinya dihitung dari alignment.
     w, h = play_res
-    cx = w // 2
+    cx = center_x if center_x is not None else w // 2
     if align in (7, 8, 9):        # atas
         cy = margin_v
     elif align in (4, 5, 6):      # tengah
@@ -217,6 +230,14 @@ def build_ass(
     hook_color = hex_to_ass(hook.color) if hook else "&H0000E5FF&"
     align = ALIGNMENT.get(st.position, 2)
 
+    # MarginL/MarginR pada ASS menjepit kotak tempat teks dipusatkan, jadi
+    # menggeser keduanya secara tidak simetris memindahkan teksnya ke kiri atau
+    # ke kanan — sekaligus mempersempit lebar pembungkus barisnya.
+    half = max(4.0, min(100.0, st.box_w)) / 2.0
+    center = max(half, min(100.0 - half, st.pos_x))
+    margin_l = max(0, int(round((center - half) / 100.0 * w)))
+    margin_r = max(0, int(round((100.0 - center - half) / 100.0 * w)))
+
     head = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {w}
@@ -227,7 +248,7 @@ YCbCr Matrix: TV.709
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Caption,{st.font},{st.size},{primary},&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,{st.outline_px},{st.shadow_px},{align},90,90,{st.margin_v},1
+Style: Caption,{st.font},{st.size},{primary},&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,{st.outline_px},{st.shadow_px},{align},{margin_l},{margin_r},{st.margin_v},1
 Style: Hook,{st.font},{hook.size if hook else 64},{hook_color},&H000000FF,&H00000000,&HB4000000,-1,0,0,0,100,100,0,0,3,0,0,8,100,100,150,1
 Style: Mark,{st.font},34,&H60FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,0,3,40,40,40,1
 
@@ -261,8 +282,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         # Warna dasar baris ini. Baris yang ditandai pembicara kedua memakai
         # warnanya sendiri; kata yang sedang diucapkan tetap memakai highlight.
         sp = int(line.get("speaker") or 0)
-        base = (speaker_ass[sp - 1]
-                if 1 <= sp <= len(speaker_ass) else primary)
+        base = (speaker_ass[sp]
+                if 0 <= sp < len(speaker_ass) else primary)
         base_tag = "" if base == primary else f"{{\\c{base}}}"
 
         if st.animation in KARAOKE and words:
@@ -292,6 +313,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             text = raw_text.upper() if st.uppercase else raw_text
             entry = _entry_tag(st.animation, play_res=play_res,
                                margin_v=st.margin_v, align=align,
+                               center_x=int(round(center / 100.0 * w)),
                                budget=max(0.2, line["end"] - line["start"]))
             events.append(
                 f"Dialogue: 0,{_ts(line['start'])},{_ts(line['end'])},Caption,,0,0,0,,"

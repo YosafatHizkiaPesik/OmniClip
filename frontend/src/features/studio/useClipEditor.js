@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { apiPost } from '../../lib/api';
+import { apiPost, apiPut } from '../../lib/api';
 
 /**
  * Satu-satunya sumber kebenaran untuk klip yang sedang diedit.
@@ -213,6 +213,73 @@ export function useClipEditor() {
     setChecked(value ? new Set(clips.map((c) => c.clip_id)) : new Set());
   }, [clips]);
 
+  /**
+   * Membuat klip baru dari rentang yang dipilih pengguna sendiri.
+   *
+   * Mesin otomatis pasti melewatkan momen: ia menilai dari pola bicara dan
+   * kosakata, bukan dari apa yang lucu atau mengena. Pengguna menonton
+   * videonya dan melihatnya. Tanpa jalan ini, satu-satunya cara mengambil
+   * momen itu adalah menggeser batas klip lain sampai menutupinya — yang
+   * berarti mengorbankan klip tersebut.
+   */
+  const createClip = useCallback(async (start, end) => {
+    const videoId = videoIdRef.current;
+    const segments = [{ start: Math.max(0, start), end: Math.max(start + 1.5, end) }];
+    const id = `manual_${Date.now().toString(36)}`;
+    setBusy(true);
+    try {
+      let payload = {
+        segments,
+        subtitles: [],
+        duration: segments[0].end - segments[0].start,
+      };
+      if (videoId) {
+        try {
+          const res = await apiPost('/clip-preview', { video_id: videoId, segments });
+          payload = { segments: res.segments, subtitles: res.subtitles, duration: res.duration };
+        } catch {
+          // Tanpa transkrip klipnya tetap dibuat, hanya tanpa subtitle.
+        }
+      }
+      const hook = (payload.subtitles[0]?.text || '').trim().toUpperCase();
+      const clip = {
+        clip_id: id,
+        index: 0,                       // dinomori ulang di bawah
+        ...payload,
+        start_seconds: payload.segments[0].start,
+        end_seconds: payload.segments[payload.segments.length - 1].end,
+        // Skor tidak dikarang untuk klip buatan tangan: pengguna yang memilih
+        // momennya, bukan mesin yang menilainya.
+        score: null,
+        source: 'manual',
+        reasons: ['Dipilih sendiri'],
+        hook_text: hook.slice(0, 60),
+      };
+      setClips((prev) => {
+        const next = [...prev, clip].sort(
+          (a, b) => a.segments[0].start - b.segments[0].start,
+        );
+        return next.map((c, i) => ({ ...c, index: i + 1 }));
+      });
+      setChecked((prev) => new Set([...prev, id]));
+      setSelectedId(id);
+      setDirty(true);
+      return id;
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
+  /** Menyimpan susunan klip ke server supaya bertahan setelah halaman ditutup. */
+  const saveClips = useCallback(async () => {
+    const videoId = videoIdRef.current;
+    if (!videoId) return false;
+    const payload = clips.map(({ clip_id: _ignored, ...rest }) => rest);
+    await apiPut(`/projects/${videoId}/clips`, { clips: payload });
+    setDirty(false);
+    return true;
+  }, [clips]);
+
   const removeClip = useCallback((id) => {
     setClips((prev) => {
       const next = prev.filter((c) => c.clip_id !== id);
@@ -228,7 +295,7 @@ export function useClipEditor() {
 
   return {
     clips, selected, selectedId, checked, dirty, busy,
-    load, setSelectedId, updateClip,
+    load, setSelectedId, updateClip, createClip, saveClips,
     nudgeSegment, setSegmentBounds, addSegment, removeSegment, recomputeSubtitles,
     updateSubtitle, removeSubtitle, autoSpeakers,
     toggleChecked, setAllChecked, removeClip,

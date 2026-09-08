@@ -18,7 +18,6 @@ import shlex
 import subprocess
 import tempfile
 import time
-import uuid
 from pathlib import Path
 from typing import Any, Callable, Optional
 
@@ -162,6 +161,56 @@ def _build_segment_graph(segments: list[dict]) -> tuple[list[str], str, str]:
     return inputs, ";".join(parts), "[vcat]|[acat]"
 
 
+SLUG_MAX = 52
+
+
+def slugify(text: str) -> str:
+    """
+    Judul video -> potongan nama berkas yang aman dan masih bisa dibaca.
+
+    Hanya huruf, angka, dan tanda hubung yang lolos. Aksen dibuang lewat
+    normalisasi Unicode supaya "Café" jadi "Cafe" dan bukan "Caf".
+    """
+    import re
+    import unicodedata
+
+    cleaned = unicodedata.normalize("NFKD", text)
+    cleaned = cleaned.encode("ascii", "ignore").decode("ascii")
+    cleaned = re.sub(r"[^A-Za-z0-9]+", "-", cleaned).strip("-")
+    cleaned = re.sub(r"-{2,}", "-", cleaned)
+    return cleaned[:SLUG_MAX].strip("-") or "klip"
+
+
+def build_clip_filename(*, title: str, index: Optional[int], start: float,
+                        existing: Path) -> str:
+    """
+    Nama berkas hasil render yang bisa dikenali tanpa dibuka.
+
+    Nama lama berbentuk "dSq0Z5XpoLc_1459360_56360_a5ee3fb1.mp4": unik, tapi
+    tidak memberi tahu apa pun. Setelah mengekspor sepuluh klip, tidak ada cara
+    tahu mana yang mana selain memutarnya satu per satu — dan berkas itu yang
+    diunggah ke media sosial, tempat nama berkas ikut terbaca orang.
+
+    Bentuk barunya "Pertemuan-Bersejarah-dr-Tirta_klip-03_24m19s.mp4": judul
+    videonya, nomor klipnya, dan menit keberapa ia diambil. Tabrakan diselesaikan
+    dengan akhiran angka, bukan dengan menempelkan uuid ke setiap nama.
+    """
+    minutes = int(start // 60)
+    seconds = int(start % 60)
+    parts = [slugify(title)]
+    if index:
+        parts.append(f"klip-{int(index):02d}")
+    parts.append(f"{minutes:02d}m{seconds:02d}s")
+    stem = "_".join(parts)
+
+    candidate = f"{stem}.mp4"
+    n = 2
+    while (existing / candidate).exists():
+        candidate = f"{stem}-{n}.mp4"
+        n += 1
+    return candidate
+
+
 def render_clip(
     *,
     source_video_path: str,
@@ -175,6 +224,8 @@ def render_clip(
     frame_mode: str = "smart",
     loudnorm: bool = True,
     video_id: str = "",
+    title: str = "",
+    clip_index: Optional[int] = None,
     on_progress: Optional[Callable[[float], None]] = None,
     should_cancel: Optional[Callable[[], bool]] = None,
 ) -> dict[str, Any]:
@@ -197,8 +248,12 @@ def render_clip(
 
     vid = video_id or extract_id_from_filename(src.name) or "clip"
     first = segments[0]
-    out_name = (f"{vid}_{int(float(first['start']) * 1000)}"
-                f"_{int(total_duration * 1000)}_{uuid.uuid4().hex[:8]}.mp4")
+    out_name = build_clip_filename(
+        title=title or vid,
+        index=clip_index,
+        start=float(first["start"]),
+        existing=CLIPS_DIR,
+    )
     out_path = CLIPS_DIR / out_name
 
     workdir = Path(tempfile.mkdtemp(prefix="omniclip_render_"))
@@ -330,6 +385,8 @@ def render_clip(
         meta = {
             "file_name": out_name,
             "video_id": vid,
+            "title": title,
+            "clip_index": clip_index,
             "segments": segments,
             "duration": round(total_duration, 3),
             "aspect_ratio": aspect_ratio,

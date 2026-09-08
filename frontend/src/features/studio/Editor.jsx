@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft, Scissors, Type, Palette, Download, Loader2, CheckCircle2,
-  AlertTriangle, Crop, Plus, Trash2, Film,
+  AlertTriangle, Crop, Plus, Trash2, Film, Play, Save,
 } from 'lucide-react';
 import { apiGet, apiPost, downloadToDisk } from '../../lib/api';
 import { loadFonts } from '../../lib/fonts';
@@ -13,8 +13,14 @@ import { TrimPanel, SubtitlePanel, StylePanel } from './EditorPanels';
 
 const DEFAULT_STYLE = {
   size: 96, primary: '#FFFFFF', highlight: '#FFE500',
-  speaker_colors: ['#7CFFB2', '#FFB3C7', '#B39DFF'],
+  // Diindeks langsung: [0] orang pertama. Putih di depan supaya video satu
+  // narasumber tampil persis seperti sebelum warna per orang ada.
+  speaker_colors: ['#FFFFFF', '#7CFFB2', '#FFB3C7', '#B39DFF',
+                   '#FFD166', '#5BC8FF', '#FF9F1C', '#B8FF3A'],
   position: 'bottom', margin_v: 300, outline_px: 7,
+  // Penempatan mendatar dalam persen lebar kanvas: titik tengah kotak teks dan
+  // lebarnya. Keduanya diubah dengan menyeret subtitle di pratinjau.
+  pos_x: 50, box_w: 84,
   uppercase: true, animation: 'karaoke_pop', font: 'Montserrat',
 };
 
@@ -79,6 +85,11 @@ export default function Editor({ project, onBack }) {
   // Rencana crop untuk pratinjau — sama persis dengan yang dipakai render.
   const [reframe, setReframe] = useState(null);
   const [reframeLoading, setReframeLoading] = useState(false);
+  // Penanda masuk/keluar untuk memotong klip sendiri.
+  const [mark, setMark] = useState({ in: null, out: null });
+  const [redetecting, setRedetecting] = useState(false);
+  const [saving, setSaving] = useState(null);
+  const [sourceTime, setSourceTime] = useState(0);
 
   const { clips, selected, checked } = editor;
 
@@ -151,6 +162,24 @@ export default function Editor({ project, onBack }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [videoId, segmentKey, frameMode, aspectRatio]);
 
+  // Timecode dibaca dari elemen video pada ~10 Hz. `timeupdate` hanya menyala
+  // sekitar 4 Hz dan angkanya terlihat tersendat; membacanya tiap frame dan
+  // menaruhnya di state React akan me-render ulang pohon 60 kali per detik.
+  useEffect(() => {
+    let raf;
+    let last = -1;
+    const tick = () => {
+      const v = videoRef.current;
+      if (v && Math.abs(v.currentTime - last) > 0.09) {
+        last = v.currentTime;
+        setSourceTime(v.currentTime);
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
   const seekSource = useCallback((time) => {
     const v = videoRef.current;
     if (!v) return;
@@ -179,8 +208,139 @@ export default function Editor({ project, onBack }) {
     setConstrained(true);
   };
 
+  /** Melompat relatif terhadap posisi sekarang, dipakai panah kiri/kanan. */
+  const nudgePlayhead = useCallback((delta) => {
+    const v = videoRef.current;
+    if (!v) return;
+    setConstrained(false);
+    v.currentTime = Math.max(0, Math.min(duration || v.duration || 0,
+                                         v.currentTime + delta));
+  }, [duration]);
+
+  const togglePlay = useCallback(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (v.paused) v.play().catch(() => { /* butuh interaksi pengguna */ });
+    else v.pause();
+  }, []);
+
+  /**
+   * Pintasan papan tik ala editor video.
+   *
+   * Menandai batas klip berarti bolak-balik antara memutar, mundur sedikit, dan
+   * menandai — puluhan kali per klip. Dengan tetikus saja setiap putaran itu
+   * berarti membidik tombol kecil, dan pekerjaan yang seharusnya mengalir jadi
+   * tersendat.
+   *
+   * Dipasang di window, bukan pada satu elemen: playhead tidak punya fokus, dan
+   * memaksa pengguna mengklik dulu sebelum spasi bekerja adalah persis
+   * kejanggalan yang ingin dihilangkan. Yang perlu dijaga hanyalah tidak
+   * membajak tombol saat pengguna sedang mengetik.
+   */
+  useEffect(() => {
+    const onKey = (e) => {
+      const el = e.target;
+      const typing = el instanceof HTMLElement
+        && (el.isContentEditable
+          || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName));
+      if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
+
+      const step = e.shiftKey ? 10 : 1;
+      switch (e.key) {
+        case ' ':
+          e.preventDefault();
+          togglePlay();
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          nudgePlayhead(step);
+          break;
+        case 'ArrowLeft':
+          e.preventDefault();
+          nudgePlayhead(-step);
+          break;
+        case 'j': case 'J':
+          e.preventDefault();
+          nudgePlayhead(-5);
+          break;
+        case 'k': case 'K':
+          e.preventDefault();
+          togglePlay();
+          break;
+        case 'l': case 'L':
+          e.preventDefault();
+          nudgePlayhead(5);
+          break;
+        case 'i': case 'I':
+          e.preventDefault();
+          setMark((m) => ({ ...m, in: videoRef.current?.currentTime ?? 0 }));
+          break;
+        case 'o': case 'O':
+          e.preventDefault();
+          setMark((m) => ({ ...m, out: videoRef.current?.currentTime ?? 0 }));
+          break;
+        case 'Home':
+          e.preventDefault();
+          seekSource(selected?.segments[0].start ?? 0);
+          break;
+        default:
+          break;
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [togglePlay, nudgePlayhead, seekSource, selected]);
+
+  /** Membuat klip dari penanda masuk/keluar, atau dari posisi playhead. */
+  const createFromMarks = useCallback(async () => {
+    const v = videoRef.current;
+    const here = v?.currentTime ?? 0;
+    const start = mark.in ?? here;
+    const end = mark.out ?? Math.min(duration || start + 30, start + 30);
+    if (end - start < 1.5) return;
+    await editor.createClip(start, end);
+    setMark({ in: null, out: null });
+    setConstrained(true);
+  }, [mark, duration, editor]);
+
+  /** Menandai ulang penutur di seluruh klip, dengan jumlah dari pengguna. */
+  const redetectSpeakers = useCallback(async (speakers) => {
+    if (!videoId) return;
+    setRedetecting(true);
+    try {
+      const { job_id: jobId } = await apiPost('/clip-speakers', {
+        video_id: videoId, speakers,
+      });
+      const job = await waitForJob(jobId, { interval: 2000 });
+      if (job.status === 'done') {
+        const fresh = await apiGet(`/projects/${videoId}`);
+        setData(fresh);
+        editor.load(videoId, fresh.clips || []);
+      } else {
+        setExportLog([{ name: 'Narasumber', status: 'failed',
+                        message: job.error || 'Deteksi ulang gagal.' }]);
+      }
+    } catch (err) {
+      setExportLog([{ name: 'Narasumber', status: 'failed', message: err.message }]);
+    } finally {
+      setRedetecting(false);
+    }
+  }, [videoId, editor]);
+
+  const handleSaveClips = useCallback(async () => {
+    setSaving('running');
+    try {
+      await editor.saveClips();
+      setSaving('done');
+      setTimeout(() => setSaving(null), 2500);
+    } catch {
+      setSaving('failed');
+    }
+  }, [editor]);
+
   const renderPayload = useCallback((clip) => ({
     source_path: videoId,
+    clip_index: clip.index,
     segments: clip.segments,
     subtitles: clip.subtitles,
     hook_text: clip.hook_text,
@@ -445,11 +605,12 @@ export default function Editor({ project, onBack }) {
                            onRemove={editor.removeSubtitle} style={style}
                            onAutoSpeakers={editor.autoSpeakers}
                            speakerCount={data.speaker_count || 2}
-                           speakerConfident={data.speaker_confident ?? null} />
+                           speakerConfident={data.speaker_confident ?? null}
+                           onRedetect={redetectSpeakers} redetecting={redetecting} />
           )}
           {tab === 'style' && (
             <StylePanel style={style} onChange={setStyle}
-                        speakerCount={data.speaker_count || 2}
+                        speakerCount={Math.max(data.speaker_count || 1, 2)}
                         aspectRatio={aspectRatio} onAspectChange={setAspectRatio}
                         showHook={showHook} onShowHookChange={setShowHook}
                         hookText={selected?.hook_text ?? ''}
@@ -492,6 +653,85 @@ export default function Editor({ project, onBack }) {
           )}
         </div>
       </div>
+
+      {/* Bar transport: jam, penanda, dan pembuat klip manual */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap',
+        padding: '9px 12px', marginBottom: '10px',
+        background: 'var(--bg-card)', border: '1px solid var(--border-color)',
+        borderRadius: 'var(--radius-md)',
+      }}>
+        <button className="btn-secondary" onClick={togglePlay}
+                style={{ fontSize: '0.76rem', padding: '5px 11px' }}>
+          <Play size={13} /> Spasi
+        </button>
+
+        {/* Jam sumber. Font tabular supaya angkanya tidak bergoyang tiap detik —
+            timecode yang bergerak-gerak sendiri sangat sulit dibaca. */}
+        <div style={{
+          fontVariantNumeric: 'tabular-nums', fontSize: '0.95rem', fontWeight: 800,
+          letterSpacing: '0.02em', color: 'var(--accent-cyan)',
+        }}>
+          {formatTimecode(sourceTime)}
+          <span style={{ color: 'var(--text-muted)', fontWeight: 600, fontSize: '0.8rem' }}>
+            {' / '}{formatTimecode(duration)}
+          </span>
+        </div>
+
+        <div style={{ width: '1px', height: '22px', background: 'var(--border-color)' }} />
+
+        <button className="btn-secondary" style={{ fontSize: '0.74rem', padding: '5px 9px' }}
+                onClick={() => setMark((m) => ({ ...m, in: videoRef.current?.currentTime ?? 0 }))}>
+          Tandai masuk <kbd style={kbd}>I</kbd>
+        </button>
+        <button className="btn-secondary" style={{ fontSize: '0.74rem', padding: '5px 9px' }}
+                onClick={() => setMark((m) => ({ ...m, out: videoRef.current?.currentTime ?? 0 }))}>
+          Tandai keluar <kbd style={kbd}>O</kbd>
+        </button>
+
+        <span style={{
+          fontSize: '0.74rem', color: 'var(--text-secondary)',
+          fontVariantNumeric: 'tabular-nums',
+        }}>
+          {mark.in === null && mark.out === null
+            ? 'Belum ada rentang ditandai'
+            : `${mark.in === null ? '…' : formatTime(mark.in)} – `
+              + `${mark.out === null ? '…' : formatTime(mark.out)}`
+              + (mark.in !== null && mark.out !== null
+                ? ` · ${Math.max(0, mark.out - mark.in).toFixed(1)}s` : '')}
+        </span>
+
+        <button className="btn-primary" onClick={createFromMarks}
+                disabled={editor.busy || (mark.in !== null && mark.out !== null
+                  && mark.out - mark.in < 1.5)}
+                style={{ fontSize: '0.76rem', padding: '5px 11px' }}>
+          {editor.busy ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
+          Jadikan klip
+        </button>
+
+        <div style={{ flex: 1 }} />
+
+        <button className="btn-secondary" onClick={handleSaveClips}
+                disabled={saving === 'running'}
+                style={{ fontSize: '0.74rem', padding: '5px 10px' }}>
+          {saving === 'running' ? <Loader2 size={13} className="animate-spin" />
+            : saving === 'done' ? <CheckCircle2 size={13} style={{ color: '#10b981' }} />
+              : <Save size={13} />}
+          {saving === 'done' ? 'Tersimpan' : 'Simpan susunan klip'}
+        </button>
+      </div>
+
+      <p style={{
+        fontSize: '0.68rem', color: 'var(--text-muted)', margin: '0 0 10px',
+        lineHeight: 1.6,
+      }}>
+        Pintasan: <kbd style={kbd}>Spasi</kbd> putar/jeda ·
+        {' '}<kbd style={kbd}>←</kbd> <kbd style={kbd}>→</kbd> geser 1 detik
+        (tahan <kbd style={kbd}>Shift</kbd> untuk 10 detik) ·
+        {' '}<kbd style={kbd}>J</kbd> <kbd style={kbd}>K</kbd> <kbd style={kbd}>L</kbd>{' '}
+        mundur/jeda/maju 5 detik · <kbd style={kbd}>I</kbd> <kbd style={kbd}>O</kbd>{' '}
+        tandai rentang · <kbd style={kbd}>Home</kbd> kembali ke awal klip.
+      </p>
 
       {/* Bawah: timeline video sumber */}
       <Timeline
@@ -541,6 +781,30 @@ async function waitForJob(jobId, { interval = 1200, limit = 2400000 } = {}) {
     // eslint-disable-next-line no-await-in-loop
     await new Promise((r) => setTimeout(r, interval));
   }
+}
+
+const kbd = {
+  display: 'inline-block', padding: '1px 5px', margin: '0 1px',
+  borderRadius: '4px', background: 'var(--bg-glass)',
+  border: '1px solid var(--border-color)', fontSize: '0.66rem',
+  fontFamily: 'inherit', fontWeight: 700, color: 'var(--text-secondary)',
+};
+
+/**
+ * Timecode gaya editor: HH:MM:SS.d
+ *
+ * Sepersepuluh detik ikut ditampilkan karena batas klip disetel pada ketelitian
+ * itu; MM:SS saja membuat dua posisi yang berbeda terlihat identik persis saat
+ * pengguna sedang mencoba membedakannya.
+ */
+function formatTimecode(seconds) {
+  const t = Math.max(0, Number(seconds) || 0);
+  const h = Math.floor(t / 3600);
+  const m = Math.floor((t % 3600) / 60);
+  const s = Math.floor(t % 60);
+  const d = Math.floor((t % 1) * 10);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${pad(h)}:${pad(m)}:${pad(s)}.${d}`;
 }
 
 function Centered({ children }) {

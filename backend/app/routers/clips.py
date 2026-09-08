@@ -54,7 +54,12 @@ class CaptionStyleModel(BaseModel):
     # setinggi 1920. Diisi saat pengguna menyeret subtitle di pratinjau.
     margin_v: Optional[int] = None
     outline_px: Optional[int] = None
-    # Warna untuk penutur ke-2 dan seterusnya (penutur pertama pakai `primary`).
+    # Penempatan mendatar dalam persen lebar kanvas: pos_x titik tengah kotak
+    # teks, box_w lebarnya. Bersama margin_v, keduanya membuat subtitle bisa
+    # ditaruh di pojok mana pun, bukan hanya di tengah.
+    pos_x: Optional[float] = None
+    box_w: Optional[float] = None
+    # Warna per penutur, diindeks langsung: [0] orang pertama, [1] kedua, dst.
     speaker_colors: Optional[List[str]] = None
 
 
@@ -80,6 +85,8 @@ class RenderClipRequest(BaseModel):
     video_filter: str = "normal"
     # smart = ikuti wajah pembicara, blur = bilah kabur, center = crop tengah.
     frame_mode: str = "smart"
+    # Nomor klip, dipakai untuk menamai berkas hasilnya.
+    clip_index: Optional[int] = None
     caption_style: Optional[CaptionStyleModel] = None
 
 
@@ -272,6 +279,7 @@ async def render_clip(req: RenderClipRequest):
             "watermark": req.watermark,
             "video_filter": req.video_filter,
             "frame_mode": req.frame_mode,
+            "clip_index": req.clip_index,
             "caption_style": (req.caption_style.model_dump(exclude_none=True)
                               if req.caption_style else None),
         },
@@ -296,3 +304,63 @@ async def delete_clip(filename: str):
     if sidecar.exists():
         sidecar.unlink()
     return {"success": True, "file_name": path.name}
+
+
+class DiarizeRequest(BaseModel):
+    video_id: str
+    # None = biarkan sistem menebak sendiri; angka = pengguna sudah tahu
+    # jumlahnya dan ingin sistem berhenti menebak.
+    speakers: Optional[int] = Field(None, ge=1, le=8)
+
+
+@router.post("/clip-speakers", status_code=202)
+async def rediarize(req: DiarizeRequest):
+    """
+    Menandai ulang penutur pada analisis yang sudah ada.
+
+    Dipisahkan dari pipeline utama supaya membetulkan jumlah narasumber tidak
+    berarti mengunduh dan mentranskrip ulang video satu jam.
+    """
+    video_id = _resolve_video_id(req.video_id)
+    job_id, created = queue.enqueue(
+        "diarize",
+        {"video_id": video_id, "speakers": req.speakers},
+        video_id=video_id,
+        dedupe_key=f"diarize:{video_id}:{req.speakers or 'auto'}",
+    )
+    return {"job_id": job_id, "created": created, "video_id": video_id}
+
+
+class SaveClipsRequest(BaseModel):
+    clips: List[Dict[str, Any]]
+
+
+@router.put("/projects/{video_id}/clips")
+async def save_clips(video_id: str, req: SaveClipsRequest):
+    """
+    Menyimpan susunan klip hasil suntingan pengguna.
+
+    Dibutuhkan karena mesin otomatis pasti melewatkan momen: pengguna menonton
+    videonya sendiri dan melihat bagian bagus yang tidak terpilih. Tanpa ini,
+    klip yang ia potong sendiri hilang begitu halaman ditutup.
+    """
+    from ..repos import transcripts as tx_repo
+
+    vid = _resolve_video_id(video_id)
+    cached = analyses_repo.latest_for_video(vid)
+    if not cached:
+        raise NotFound("Belum ada analisis untuk video ini.")
+
+    result = dict(cached["result"])
+    # Nomor urut disusun ulang di server: klien boleh menambah dan menghapus di
+    # tengah daftar, dan penomoran yang bolong akan ikut ke nama berkas.
+    result["clips"] = [{**c, "index": i} for i, c in enumerate(req.clips, 1)]
+
+    stored = tx_repo.get_best(vid)
+    analyses_repo.save(
+        video_id=vid, transcript_id=stored["id"] if stored else None,
+        engine=result.get("engine", "heuristic"), model=result.get("model"),
+        params={"user_edited": True, "clip_count": len(result["clips"])},
+        result=result,
+    )
+    return {"success": True, "clip_count": len(result["clips"])}

@@ -72,6 +72,15 @@ export function apiPost(path, body, { signal } = {}) {
   });
 }
 
+export function apiPut(path, body, { signal } = {}) {
+  return request(path, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body ?? {}),
+    signal,
+  });
+}
+
 export function apiDelete(path, { signal } = {}) {
   return request(path, { method: 'DELETE', signal });
 }

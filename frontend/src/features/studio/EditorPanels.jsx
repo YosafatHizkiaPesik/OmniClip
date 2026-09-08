@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, Trash2, Loader2, Star, ChevronRight } from 'lucide-react';
+import { Plus, Trash2, Loader2, Star, ChevronRight, Users } from 'lucide-react';
 import { formatTime, parseTimeString } from '../../utils/timeFormat';
 import { cachedFonts, fontStack, loadFonts } from '../../lib/fonts';
 import {
@@ -64,7 +64,10 @@ function TimeInput({ value, onCommit, disabled }) {
 }
 
 /** Panel batas klip dan penggabungan potongan. */
-const DEFAULT_SPEAKER_COLORS = ['#7CFFB2', '#FFB3C7', '#B39DFF'];
+// Diindeks langsung: [0] milik orang pertama. Putih di posisi pertama supaya
+// video satu narasumber tampil persis seperti sebelum fitur ini ada.
+const DEFAULT_SPEAKER_COLORS = ['#FFFFFF', '#7CFFB2', '#FFB3C7', '#B39DFF',
+                               '#FFD166', '#5BC8FF', '#FF9F1C', '#B8FF3A'];
 
 export function TrimPanel({ clip, videoDuration, busy, onNudge, onSetBounds, onAddSegment, onRemoveSegment }) {
   if (!clip) return null;
@@ -148,7 +151,8 @@ export function TrimPanel({ clip, videoDuration, busy, onNudge, onSetBounds, onA
 
 /** Panel penyuntingan subtitle per baris. */
 export function SubtitlePanel({ clip, onUpdate, onRemove, style, onAutoSpeakers,
-                               speakerCount = 2, speakerConfident = null }) {
+                               speakerCount = 2, speakerConfident = null,
+                               onRedetect = null, redetecting = false }) {
   if (!clip) return null;
   const lines = clip.subtitles ?? [];
 
@@ -163,8 +167,8 @@ export function SubtitlePanel({ clip, onUpdate, onRemove, style, onAutoSpeakers,
   }
 
   const palette = style?.speaker_colors ?? DEFAULT_SPEAKER_COLORS;
-  const colorOf = (i) => (i === 0 ? (style?.primary ?? '#FFFFFF') : palette[i - 1] ?? '#FFFFFF');
-  const total = Math.max(2, Math.min(4, speakerCount || 2));
+  const colorOf = (i) => palette[i] ?? style?.primary ?? '#FFFFFF';
+  const total = Math.max(2, Math.min(8, speakerCount || 2));
   const tally = lines.reduce((acc, l) => {
     const i = l.speaker || 0;
     acc[i] = (acc[i] || 0) + 1;
@@ -179,27 +183,38 @@ export function SubtitlePanel({ clip, onUpdate, onRemove, style, onAutoSpeakers,
       </p>
 
       <div style={{
-        padding: '9px 11px', borderRadius: 'var(--radius-sm)',
+        padding: '10px 11px', borderRadius: 'var(--radius-sm)',
         background: 'var(--bg-glass)', border: '1px solid var(--border-color)',
       }}>
         <div style={{ fontSize: '0.75rem', fontWeight: 700, marginBottom: '4px' }}>
           {speakerConfident === null ? 'Penanda penutur'
             : speakerConfident
-              ? `Perkiraan ${speakerCount} narasumber`
-              : 'Suara sulit dipisahkan'}
+              ? `Terdeteksi ${speakerCount} narasumber`
+              : 'Suara sulit dipisahkan otomatis'}
         </div>
         <p style={{ fontSize: '0.68rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.55 }}>
           {speakerConfident === false
-            ? 'Suara narasumbernya terlalu mirip untuk dipisahkan otomatis, jadi '
-              + 'semua baris ditandai orang pertama. Tandai manual di bawah.'
-            : 'Ditebak dari warna suara, bukan pengenalan suara terlatih. '
-              + 'Sering meleset di kalimat pendek — periksa dan betulkan di bawah.'}
+            ? 'Sistem harus menebak dua hal sekaligus: berapa orangnya, dan '
+              + 'siapa bicara kapan. Yang pertama paling sering meleset — kalau '
+              + 'Anda sudah tahu jumlahnya, isikan di bawah dan sisanya biasanya ikut membaik.'
+            : 'Ditebak dari warna suara. Kalau jumlahnya keliru, setel sendiri '
+              + 'di bawah lalu deteksi ulang.'}
         </p>
+
+        {onRedetect && <SpeakerCountPicker current={speakerCount} busy={redetecting}
+                                          onRedetect={onRedetect} />}
+
         <button className="btn-secondary" onClick={() => onAutoSpeakers?.(clip.clip_id)}
-                style={{ fontSize: '0.73rem', padding: '6px 9px', marginTop: '8px' }}>
+                disabled={redetecting}
+                style={{ fontSize: '0.72rem', padding: '6px 9px', marginTop: '8px' }}>
           Tandai ulang dari jeda bicara
         </button>
+        <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)', margin: '5px 0 0', lineHeight: 1.5 }}>
+          Cara cepat tanpa mendengarkan ulang: menganggap jeda panjang sebagai
+          pergantian giliran. Hanya berlaku untuk klip ini.
+        </p>
       </div>
+
       {/* Berapa baris yang jatuh ke tiap orang, dengan warnanya. Selama semua
           baris masih orang 1, mengganti warna di tab Gaya memang tidak akan
           mengubah apa pun — itu harus terlihat di sini, bukan ditebak. */}
@@ -260,6 +275,54 @@ export function SubtitlePanel({ clip, onUpdate, onRemove, style, onAutoSpeakers,
           );
         })}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Memberitahukan jumlah narasumber kepada sistem.
+ *
+ * Menebak jumlah kelompok adalah bagian paling rapuh dari pemisahan suara
+ * otomatis — jauh lebih rapuh daripada menentukan siapa bicara kapan begitu
+ * jumlahnya diketahui. Pengguna sudah menonton videonya dan tahu jawabannya,
+ * jadi membiarkannya menjawab menghapus separuh kesulitannya.
+ */
+function SpeakerCountPicker({ current, busy, onRedetect }) {
+  const [value, setValue] = useState(Math.max(1, Math.min(6, current || 2)));
+  return (
+    <div style={{ marginTop: '10px' }}>
+      <div style={{ ...label, fontSize: '0.66rem', marginBottom: '6px' }}>
+        Jumlah narasumber
+      </div>
+      <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
+        {[1, 2, 3, 4, 5, 6].map((n) => (
+          <button key={n} onClick={() => setValue(n)} disabled={busy}
+                  style={{
+                    width: '30px', height: '30px', borderRadius: '7px',
+                    cursor: busy ? 'default' : 'pointer', fontWeight: 800, fontSize: '0.8rem',
+                    border: value === n ? '2px solid var(--accent-cyan)' : '1px solid var(--border-color)',
+                    background: value === n ? 'rgba(0,242,254,0.12)' : 'transparent',
+                    color: value === n ? 'var(--accent-cyan)' : 'var(--text-secondary)',
+                  }}>{n}</button>
+        ))}
+      </div>
+      <div style={{ display: 'flex', gap: '6px', marginTop: '8px', flexWrap: 'wrap' }}>
+        <button className="btn-primary" disabled={busy}
+                onClick={() => onRedetect(value)}
+                style={{ fontSize: '0.73rem', padding: '6px 10px' }}>
+          {busy ? <Loader2 size={13} className="animate-spin" /> : <Users size={13} />}
+          Deteksi ulang dengan {value} orang
+        </button>
+        <button className="btn-secondary" disabled={busy}
+                onClick={() => onRedetect(null)}
+                style={{ fontSize: '0.73rem', padding: '6px 10px' }}>
+          Biar sistem menebak
+        </button>
+      </div>
+      <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)', margin: '6px 0 0', lineHeight: 1.5 }}>
+        Menandai ulang seluruh klip dari suaranya. Butuh sekitar dua menit untuk
+        video satu jam — transkripnya tidak diulang.
+      </p>
     </div>
   );
 }
@@ -544,8 +607,12 @@ export function StylePanel({
   style, onChange, aspectRatio, onAspectChange,
   showHook, onShowHookChange, hookText, onHookTextChange,
   speakerCount = 2,
+  // Bagian yang terbuka saat panel dibuka. Bisa disetel dari luar supaya uji
+  // asap bisa merender isi tiap bagian — isi bagian yang tertutup tidak pernah
+  // dijalankan, jadi kesalahan di dalamnya tidak akan tertangkap.
+  defaultSection = 'preset',
 }) {
-  const [openId, setOpenId] = useState('preset');
+  const [openId, setOpenId] = useState(defaultSection);
   const [fonts, setFonts] = useState(cachedFonts);
 
   useEffect(() => { loadFonts().then(setFonts); }, []);
@@ -554,7 +621,7 @@ export function StylePanel({
   const activePreset = STYLE_PRESETS.find(
     (p) => Object.entries(p.patch).every(([k, v]) => style[k] === v),
   );
-  const speakers = Math.max(2, Math.min(4, speakerCount || 2));
+  const speakers = Math.max(1, Math.min(8, speakerCount || 1));
   const palette = style.speaker_colors ?? DEFAULT_SPEAKER_COLORS;
   const fontLabel = fonts.find((f) => f.family === style.font)?.label ?? style.font;
 
@@ -624,32 +691,28 @@ export function StylePanel({
         </div>
 
         <div>
-          <div style={{ ...label, marginBottom: '6px' }}>Warna per narasumber</div>
-          <p style={{ fontSize: '0.68rem', color: 'var(--text-muted)', margin: '0 0 8px', lineHeight: 1.5 }}>
-            Hanya berlaku untuk baris yang sudah ditandai di tab <strong>Subtitle</strong>.
-            Selama semua baris masih bertanda orang 1, mengubah warna di sini tidak
-            akan mengubah apa pun di layar.
-          </p>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '9px', marginBottom: '9px' }}>
-            <span style={{ fontSize: '0.74rem', width: '64px', color: 'var(--text-secondary)' }}>
-              Orang 1
-            </span>
-            <Swatch color={style.primary ?? '#FFFFFF'} size={20} />
-            <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
-              ikut warna teks
-            </span>
+          <div style={{ ...label, marginBottom: '6px' }}>
+            Warna per narasumber
           </div>
-          {Array.from({ length: speakers - 1 }, (_, i) => (
+          <p style={{ fontSize: '0.68rem', color: 'var(--text-muted)', margin: '0 0 9px', lineHeight: 1.5 }}>
+            Berlaku untuk baris yang ditandai di tab <strong>Subtitle</strong>.
+            Deteksi otomatis mengisinya lebih dulu; kalau meleset, setel jumlah
+            orangnya di tab Subtitle lalu betulkan barisnya di sana.
+          </p>
+          {Array.from({ length: speakers }, (_, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '9px', marginBottom: '7px' }}>
-              <span style={{ fontSize: '0.74rem', width: '64px', color: 'var(--text-secondary)', flex: 'none' }}>
-                Orang {i + 2}
+              <span style={{
+                fontSize: '0.74rem', width: '58px', flex: 'none',
+                color: 'var(--text-secondary)', fontWeight: 700,
+              }}>
+                Orang {i + 1}
               </span>
               <div style={{ flex: 1 }}>
                 <ColorPicker
                   value={palette[i] ?? DEFAULT_SPEAKER_COLORS[i] ?? '#FFFFFF'}
                   onChange={(c) => {
                     const next = [...(style.speaker_colors ?? DEFAULT_SPEAKER_COLORS)];
-                    while (next.length < 3) next.push(DEFAULT_SPEAKER_COLORS[next.length]);
+                    while (next.length <= i) next.push(DEFAULT_SPEAKER_COLORS[next.length] ?? '#FFFFFF');
                     next[i] = c;
                     set({ speaker_colors: next });
                   }}
@@ -657,6 +720,11 @@ export function StylePanel({
               </div>
             </div>
           ))}
+          <button className="btn-secondary"
+                  onClick={() => set({ speaker_colors: [...DEFAULT_SPEAKER_COLORS] })}
+                  style={{ fontSize: '0.73rem', padding: '6px 9px', marginTop: '4px' }}>
+            Kembalikan warna bawaan
+          </button>
         </div>
       </Section>
 

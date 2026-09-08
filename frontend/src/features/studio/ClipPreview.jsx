@@ -49,6 +49,7 @@ export default function ClipPreview({
   const [playing, setPlaying] = useState(false);
   const [clipTime, setClipTime] = useState(0);
   const [boxH, setBoxH] = useState(0);
+  const [boxW, setBoxW] = useState(0);
   const [dragging, setDragging] = useState(null);   // 'move' | 'size' | null
   const stageRef = useRef(null);
   const [fullscreen, setFullscreen] = useState(false);
@@ -80,9 +81,14 @@ export default function ClipPreview({
   useLayoutEffect(() => {
     const el = boxRef.current;
     if (!el) return undefined;
-    const ro = new ResizeObserver(([entry]) => setBoxH(entry.contentRect.height));
+    const ro = new ResizeObserver(([entry]) => {
+      setBoxH(entry.contentRect.height);
+      setBoxW(entry.contentRect.width);
+    });
     ro.observe(el);
-    setBoxH(el.getBoundingClientRect().height);
+    const rect = el.getBoundingClientRect();
+    setBoxH(rect.height);
+    setBoxW(rect.width);
     return () => ro.disconnect();
   }, [aspectRatio, frameMode]);
 
@@ -243,26 +249,36 @@ export default function ClipPreview({
    * diterjemahkan lagi.
    */
   const startDrag = useCallback((mode) => (e) => {
-    if (!onStyleChange || !boxH) return;
+    if (!onStyleChange || !boxH || !boxW) return;
     e.preventDefault();
     e.stopPropagation();
     e.currentTarget.setPointerCapture?.(e.pointerId);
     setDragging(mode);
 
     const y0 = e.clientY;
+    const x0 = e.clientX;
     const startMargin = style?.margin_v ?? 300;
+    const startPosX = style?.pos_x ?? 50;
     const startSize = style?.size ?? 96;
+    const startBoxW = style?.box_w ?? 84;
     const anchorTop = style?.position === 'top';
     const perPx = CANVAS_H / boxH;      // piksel layar -> satuan kanvas
 
     const onMove = (ev) => {
       const dy = (ev.clientY - y0) * perPx;
+      const dx = ((ev.clientX - x0) / boxW) * 100;   // piksel layar -> persen lebar
       if (mode === 'move') {
-        // Jangkar bawah: menyeret ke bawah berarti margin mengecil.
-        const next = anchorTop ? startMargin + dy : startMargin - dy;
-        onStyleChange({ margin_v: Math.round(Math.max(40, Math.min(1500, next))) });
+        // Dua sumbu sekaligus. Jangkar bawah: menyeret ke bawah mengecilkan
+        // margin. Mendatar dibatasi setengah lebar kotak dari tiap tepi supaya
+        // teksnya tidak bisa diseret sampai keluar bingkai.
+        const half = startBoxW / 2;
+        onStyleChange({
+          margin_v: Math.round(Math.max(20, Math.min(1700,
+            anchorTop ? startMargin + dy : startMargin - dy))),
+          pos_x: Math.round(Math.max(half, Math.min(100 - half, startPosX + dx)) * 10) / 10,
+        });
       } else {
-        onStyleChange({ size: Math.round(Math.max(44, Math.min(190, startSize - dy))) });
+        onStyleChange({ size: Math.round(Math.max(36, Math.min(220, startSize - dy))) });
       }
     };
     const onUp = () => {
@@ -272,7 +288,8 @@ export default function ClipPreview({
     };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
-  }, [onStyleChange, boxH, style?.margin_v, style?.size, style?.position]);
+  }, [onStyleChange, boxH, boxW, style?.margin_v, style?.pos_x, style?.size,
+      style?.box_w, style?.position]);
 
   // Bingkai orisinal mengabaikan pilihan rasio: kotaknya harus mengikuti bentuk
   // video sumber, bukan 9:16, atau pratinjaunya berbohong soal hasil akhir.
@@ -396,7 +413,7 @@ export default function ClipPreview({
             fontVariantNumeric: 'tabular-nums',
           }}>
             {dragging === 'move'
-              ? `Jarak ${style?.margin_v ?? 300}`
+              ? `X ${Math.round(style?.pos_x ?? 50)}% · Y ${style?.margin_v ?? 300}`
               : `Ukuran ${style?.size ?? 96}`}
           </div>
         )}
@@ -493,11 +510,12 @@ function CaptionOverlay({
 
   // Warna per penutur. Penutur pertama memakai warna teks utama, sehingga video
   // satu narasumber tampil persis seperti sebelum fitur ini ada.
-  const palette = style?.speaker_colors ?? ['#7CFFB2', '#FFB3C7', '#B39DFF'];
+  // Diindeks langsung: palette[0] milik orang pertama. Versi sebelumnya
+  // melewati indeks 0 dan memaksa orang pertama memakai `primary`, sehingga
+  // warnanya tidak bisa disetel sendiri.
+  const palette = style?.speaker_colors ?? [];
   const sp = line.speaker || 0;
-  const speakerColor = sp >= 1 && sp <= palette.length
-    ? palette[sp - 1]
-    : (style?.primary ?? '#FFFFFF');
+  const speakerColor = palette[sp] ?? style?.primary ?? '#FFFFFF';
 
   const age = clipTime - line.start;
   const entry = ghost || anim === 'none' ? {} : lineEntryStyle(anim, age);
@@ -513,6 +531,12 @@ function CaptionOverlay({
 
   const place = anchorMiddle
     ? { top: '50%' } : anchorTop ? { top: `${marginPx}px` } : { bottom: `${marginPx}px` };
+
+  // Penempatan mendatar memakai satuan yang sama dengan MarginL/MarginR pada
+  // file ASS: titik tengah kotak dan lebarnya, keduanya dalam persen lebar
+  // kanvas. Jadi apa yang terlihat di sini benar-benar nilai yang dikirim.
+  const boxWidth = style?.box_w ?? 84;
+  const posX = style?.pos_x ?? 50;
   // Posisi tengah dan animasi masuk sama-sama memakai `transform`, jadi
   // keduanya digabung — bukan saling menimpa, yang membuat baris melompat ke
   // bawah tiap kali animasi menyala.
@@ -523,7 +547,8 @@ function CaptionOverlay({
     <div
       onPointerDown={draggable ? onMoveStart : undefined}
       style={{
-        position: 'absolute', left: '4%', right: '4%',
+        position: 'absolute',
+        left: `${posX - boxWidth / 2}%`, width: `${boxWidth}%`,
         ...place,
         textAlign: 'center',
         pointerEvents: draggable ? 'auto' : 'none',
