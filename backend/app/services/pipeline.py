@@ -167,6 +167,7 @@ def run_render(ctx: JobContext) -> dict:
         caption_style=style,
         frame_mode=frame_mode,
         frame_layout=ctx.payload.get("frame_layout"),
+        lock_person=ctx.payload.get("lock_person"),
         video_id=video_id,
         on_progress=on_progress,
         should_cancel=lambda: ctx.cancelled,

@@ -180,14 +180,28 @@ export default function ClipPreview({
     };
   }, [reframe]);
 
-  // Sisa geseran dari mode ikut-wajah HARUS dihapus saat mode bingkai berganti.
-  // Tanpa ini, `translateX` terakhir yang ditulis loop rAF tetap menempel di
-  // elemen video, dan bilah kabur tampil dengan videonya melenceng ke kiri —
-  // persis bug "kadang tampilannya begini" yang sulit ditiru karena hanya
-  // muncul setelah sempat memakai mode ikut-wajah.
+  /**
+   * Geseran video, satu-satunya sumber kebenaran.
+   *
+   * Ada DUA pihak yang menulis `transform` ke elemen yang sama: React lewat
+   * objek gaya, dan loop rAF mode ikut-wajah lewat DOM langsung. Keduanya
+   * harus setuju, dan satu-satunya cara membuatnya setuju adalah satu nilai
+   * yang dibaca keduanya.
+   *
+   * Versi sebelumnya menulis `transform = ''` untuk membersihkan sisa geseran
+   * mode ikut-wajah. Itu memang membersihkannya — sekaligus MENGHAPUS geseran
+   * yang dibutuhkan potong-tengah, yang baru saja dipasang React. Videonya
+   * lalu duduk mulai dari tengah kotak, dan separuh kiri kanvas tergambar
+   * hitam. Ini kambuhan dari bug bilah-kabur yang dulu, dengan arah terbalik.
+   */
+  const baseTransform = useReframe ? 'translateX(0)'
+    : useCenter ? 'translateX(-50%)' : 'none';
+
   useEffect(() => {
-    if (!useReframe && videoRef.current) videoRef.current.style.transform = '';
-  }, [useReframe, videoRef, aspectRatio, frameMode, reframe]);
+    if (!useReframe && videoRef.current) {
+      videoRef.current.style.transform = baseTransform;
+    }
+  }, [useReframe, videoRef, aspectRatio, frameMode, reframe, baseTransform]);
 
   // Loop rAF: menggerakkan crop lewat ref (tanpa state) dan menyegarkan waktu
   // klip pada ~20 Hz. `timeupdate` hanya menyala 4 Hz — terlalu kasar untuk
@@ -451,21 +465,21 @@ export default function ClipPreview({
     ? {
       position: 'absolute', top: 0, left: 0, height: '100%', width: `${zoom}%`,
       objectFit: 'cover', willChange: 'transform', background: '#000',
-      transform: 'translateX(0)',       // ditimpa tiap frame oleh loop rAF
+      transform: baseTransform,         // ditimpa tiap frame oleh loop rAF
     }
     : useOriginal
       ? {
         position: 'absolute', inset: 0, width: '100%', height: '100%',
-        objectFit: 'contain', background: '#000', transform: 'none',
+        objectFit: 'contain', background: '#000', transform: baseTransform,
       }
       : useCenter
         ? {
           position: 'absolute', top: 0, left: '50%', height: '100%', width: 'auto',
-          transform: 'translateX(-50%)', background: '#000',
+          transform: baseTransform, background: '#000',
         }
         : {
           position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
-          objectFit: 'contain', background: 'transparent', transform: 'none',
+          objectFit: 'contain', background: 'transparent', transform: baseTransform,
         };
 
   return (

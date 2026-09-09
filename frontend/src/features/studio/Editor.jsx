@@ -82,6 +82,10 @@ export default function Editor({ project, onBack }) {
   const [frameMode, setFrameMode] = useState(framing.mode);
   const [layout, setLayout] = useState(framing.layout);
   const [selectedFrameId, setSelectedFrameId] = useState(null);
+  // Orang yang ditunjuk pengguna untuk mode ikut-wajah. Disetel ulang tiap
+  // ganti klip: nomor orang datang dari pengelompokan per klip, jadi "orang 2"
+  // di klip lain belum tentu orang yang sama.
+  const [lockPerson, setLockPerson] = useState(null);
   useEffect(() => { saveFraming(videoId, frameMode, layout); },
     [videoId, frameMode, layout]);
   const [constrained, setConstrained] = useState(true);
@@ -152,6 +156,8 @@ export default function Editor({ project, onBack }) {
     ? selected.segments.map((s) => `${s.start.toFixed(2)}-${s.end.toFixed(2)}`).join(',')
     : '';
   const followKey = (layout?.frames ?? []).map((f) => (f.follow ? '1' : '0')).join('');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { setLockPerson(null); }, [segmentKey]);
   useEffect(() => {
     let cancelled = false;
     // Jejak wajah juga dibutuhkan oleh susunan sendiri, begitu ada satu bingkai
@@ -169,6 +175,7 @@ export default function Editor({ project, onBack }) {
       video_id: videoId,
       segments: selected.segments,
       aspect_ratio: aspectRatio,
+      lock_person: lockPerson,
       // Label penutur ikut dikirim: dengan itu server bisa mencocokkan wajah
       // dengan suara, dan crop mengikuti orang yang sedang bicara.
       subtitles: (selected.subtitles ?? []).map((l) => ({
@@ -180,7 +187,7 @@ export default function Editor({ project, onBack }) {
       .finally(() => { if (!cancelled) setReframeLoading(false); });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [videoId, segmentKey, frameMode, aspectRatio, followKey]);
+  }, [videoId, segmentKey, frameMode, aspectRatio, followKey, lockPerson]);
 
   // Timecode dibaca dari elemen video pada ~10 Hz. `timeupdate` hanya menyala
   // sekitar 4 Hz dan angkanya terlihat tersendat; membacanya tiap frame dan
@@ -373,8 +380,9 @@ export default function Editor({ project, onBack }) {
     aspect_ratio: aspectRatio,
     frame_mode: frameMode,
     frame_layout: frameMode === 'layout' ? serializeLayout(layout) : null,
+    lock_person: frameMode === 'smart' ? lockPerson : null,
     caption_style: style,
-  }), [videoId, aspectRatio, frameMode, layout, style, showHook]);
+  }), [videoId, aspectRatio, frameMode, layout, lockPerson, style, showHook]);
 
   const handleExportSelected = async () => {
     const targets = clips.filter((c) => checked.has(c.clip_id));
@@ -519,7 +527,8 @@ export default function Editor({ project, onBack }) {
                     segments={selected?.segments ?? null}
                     frameMode={frameMode} reframe={reframe} aspectRatio={aspectRatio}
                     layout={layout} onLayoutChange={setLayout}
-                    selectedFrameId={selectedFrameId} onSelectFrame={setSelectedFrameId} />
+                    selectedFrameId={selectedFrameId} onSelectFrame={setSelectedFrameId}
+                    lockPerson={lockPerson} onLockPerson={setLockPerson} />
 
       {/* lubang orkestra */}
       <div className="pit editor-pit" style={{
@@ -706,7 +715,9 @@ export default function Editor({ project, onBack }) {
                             layout={layout} onLayoutChange={setLayout}
                             selectedFrameId={selectedFrameId}
                             onSelectFrame={setSelectedFrameId}
-                            faceTrackAvailable={!!reframe?.people?.length} />
+                            faceTrackAvailable={!!reframe?.people?.length}
+                            peopleCount={reframe?.people?.length ?? 0}
+                            lockPerson={lockPerson} onLockPerson={setLockPerson} />
               )}
             </div>
           </div>

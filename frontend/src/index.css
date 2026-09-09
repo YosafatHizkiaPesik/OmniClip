@@ -562,6 +562,23 @@ a { color: var(--cue); text-underline-offset: 3px; text-decoration-thickness: 1p
 /* Kotak yang membuntuti orang digambar putus-putus: posisi mendatarnya bukan
    milik pengguna lagi, dan garis penuh akan menjanjikan sebaliknya. */
 .frame-rect.is-following { border-style: dashed; }
+
+/* Penanda orang di mode ikut-wajah. Duduk di bawah kotak crop supaya tidak
+   menutupi wajahnya, dan cukup besar untuk ditekan dengan jari. */
+.person-pin {
+  position: absolute; bottom: 8px; transform: translateX(-50%);
+  z-index: 4; cursor: pointer;
+  min-width: 30px; height: 30px; padding: 0 8px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font: inherit; font-size: .82rem; font-weight: 750; font-variant-numeric: tabular-nums;
+  color: #fff; background: rgba(10, 14, 22, .72);
+  border: 2px solid rgba(255, 255, 255, .5); border-radius: 99px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .5);
+}
+.person-pin:hover { background: rgba(10, 14, 22, .92); border-color: #fff; }
+.person-pin.is-on {
+  background: var(--hl); color: #1A1400; border-color: #fff;
+}
 .frame-rect.is-on { box-shadow: 0 0 0 1px rgba(0, 0, 0, .55), inset 0 0 0 2px rgba(255, 255, 255, .6); }
 .frame-rect-tag {
   position: absolute; left: -2px; top: -2px; padding: 2px 6px;

@@ -322,6 +322,7 @@ def render_clip(
     caption_style: Optional[CaptionStyle] = None,
     frame_mode: str = "smart",
     frame_layout: Optional[dict] = None,
+    lock_person: Optional[int] = None,
     loudnorm: bool = True,
     video_id: str = "",
     title: str = "",
@@ -428,7 +429,7 @@ def render_clip(
 
         if frame_mode == "smart":
             plan = plan_reframe(str(src), segments, aspect_ratio=aspect_ratio,
-                                speaker_turns=speaker_turns)
+                                speaker_turns=speaker_turns, lock_person=lock_person)
             if plan is not None:
                 face_coverage = plan.face_coverage
             if plan is not None and plan.usable:

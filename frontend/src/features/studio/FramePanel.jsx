@@ -25,6 +25,9 @@ export default function FramePanel({
   layout, onLayoutChange,
   selectedFrameId, onSelectFrame,
   faceTrackAvailable = false,
+  peopleCount = 0,
+  lockPerson = null,
+  onLockPerson = null,
 }) {
   const frames = layout?.frames ?? [];
   const selected = frames.find((f) => f.id === selectedFrameId) ?? frames[0] ?? null;
@@ -65,6 +68,32 @@ export default function FramePanel({
           <div className="choice-h">{m.hint}</div>
         </button>
       ))}
+
+      {frameMode === 'smart' && peopleCount > 1 && onLockPerson && (
+        <>
+          <div style={{ height: '1px', background: 'var(--rule-2)', margin: '4px 0' }} />
+          <div className="mark" style={{ color: 'var(--ink)' }}>Arahkan bingkai</div>
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+            <button className={`chip${lockPerson === null ? ' is-on' : ''}`}
+                    onClick={() => onLockPerson(null)}>
+              Otomatis
+            </button>
+            {Array.from({ length: peopleCount }, (_, i) => (
+              <button key={i} className={`chip${lockPerson === i ? ' is-on' : ''}`}
+                      onClick={() => onLockPerson(i)}>
+                Orang {i + 1}
+              </button>
+            ))}
+          </div>
+          <p style={{ fontSize: '.72rem', color: 'var(--ink-3)', lineHeight: 1.55, margin: '2px 0 0' }}>
+            <b>Otomatis</b> mencocokkan wajah dengan suara: sistem sudah tahu
+            kapan tiap orang bicara, lalu mencari mulut siapa yang ikut bergerak
+            saat itu. Ia bisa keliru — mulut yang tertutup mikrofon hampir tidak
+            bergerak di gambar — dan kalau begitu, tunjuk saja orangnya, di sini
+            atau langsung pada nomor di atas video sumber.
+          </p>
+        </>
+      )}
 
       {frameMode !== 'layout' && (
         <p style={{ fontSize: '.72rem', color: 'var(--ink-3)', lineHeight: 1.5, margin: '4px 0 0' }}>

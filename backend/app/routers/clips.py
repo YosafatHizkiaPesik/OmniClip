@@ -116,6 +116,8 @@ class RenderClipRequest(BaseModel):
     # yang diambil) dan persegi TUJUAN (di mana ia ditaruh pada kanvas hasil),
     # keduanya dalam persen. Hanya dibaca bila frame_mode == "layout".
     frame_layout: Optional[FrameLayoutModel] = None
+    # Mode ikut-wajah: orang yang ditunjuk pengguna. None = otomatis.
+    lock_person: Optional[int] = Field(None, ge=0, le=7)
     # Nomor klip, dipakai untuk menamai berkas hasilnya.
     clip_index: Optional[int] = None
     # Judul dan tagar klip. Judulnya jadi nama berkas hasil; tanpanya semua
@@ -204,7 +206,9 @@ async def get_analysis(video_id: str):
         if not (clip.get("title") or "").strip():
             clip["title"] = suggest_title(text, vtitle)
         clip["hashtags"] = normalize_hashtags(
-            clip.get("hashtags") or suggest_hashtags(text, vtitle, channel))
+            clip.get("hashtags")
+            or suggest_hashtags(text, vtitle, channel,
+                                duration=float(clip.get("duration") or 0)))
     return result
 
 
@@ -220,6 +224,8 @@ class ReframePlanRequest(BaseModel):
     # Baris subtitle berlabel penutur. Dipakai untuk mencocokkan wajah dengan
     # penutur, supaya pratinjau memakai rencana yang sama dengan render.
     subtitles: Optional[List[Dict[str, Any]]] = None
+    # Orang yang ditunjuk pengguna (indeks, kiri ke kanan). None = otomatis.
+    lock_person: Optional[int] = Field(None, ge=0, le=7)
 
 
 # Perencanaan reframe memakan beberapa detik per klip, sementara editor
@@ -253,7 +259,7 @@ async def clip_reframe(req: ReframePlanRequest):
     ]
     key = (video_id, req.aspect_ratio,
            tuple((s["start"], s["end"]) for s in segments),
-           tuple(turns))
+           tuple(turns), req.lock_person)
     if key in _REFRAME_CACHE:
         return _REFRAME_CACHE[key]
 
@@ -270,7 +276,7 @@ async def clip_reframe(req: ReframePlanRequest):
     # dalamnya masih punya ruang untuk bergeser.
     plan = await asyncio.to_thread(plan_reframe, str(source), segments,
                                    aspect_ratio=req.aspect_ratio, track_only=True,
-                                   speaker_turns=turns)
+                                   speaker_turns=turns, lock_person=req.lock_person)
     if plan is None:
         payload = {"available": False, "reason": "unsupported"}
     else:
@@ -363,6 +369,7 @@ async def render_clip(req: RenderClipRequest):
             "title": req.title,
             "hashtags": req.hashtags,
             "frame_mode": req.frame_mode,
+            "lock_person": req.lock_person,
             "frame_layout": (req.frame_layout.model_dump()
                              if req.frame_layout else None),
             "clip_index": req.clip_index,

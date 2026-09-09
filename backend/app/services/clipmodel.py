@@ -262,34 +262,90 @@ _STOP = {
     "orang", "waktu", "tahun", "kalo", "emang", "memang", "harus", "lebih",
     "masih", "bikin", "pernah", "kenapa", "gimana", "apa", "siapa", "kapan",
     "mau", "udah", "bilang", "banyak", "sekali", "sangat", "salah", "benar",
+    # Ditambahkan setelah melihat tagar yang benar-benar keluar: semuanya kata
+    # sambung atau kata umum yang lolos hanya karena sering diucapkan, dan
+    # sebagai tagar tidak menggambarkan apa pun. "#selain", "#awal", "#luar"
+    # tidak membawa satu penonton pun.
+    "selain", "awal", "akhir", "luar", "dalam", "habis", "langsung", "sekarang",
+    "apalagi", "sebelum", "sesudah", "setelah", "sampai", "ketika", "begitu",
+    "bagus", "gede", "kecil", "cuma", "hanya", "pertama", "kedua", "lagi",
+    "sendiri", "semua", "setiap", "antara", "tentang", "menurut", "seperti",
+    "misalnya", "contohnya", "intinya", "pokoknya", "soalnya", "makanya",
+    "kemarin", "besok", "nanti", "tadi", "banget", "sekitar", "kurang",
+    "cerita", "ngomong", "ngomongin", "bicara", "kelihatan", "ngelihat",
 }
 
 TITLE_MAX = 70
 
 
+def _sentences(text: str) -> list[str]:
+    """Memecah teks klip jadi kalimat, tanpa membuang apa pun."""
+    import re
+    parts = re.split(r"(?<=[.?!])\s+", " ".join((text or "").split()))
+    return [p.strip() for p in parts if len(p.strip()) >= 12]
+
+
 def suggest_title(text: str, fallback: str = "") -> str:
     """
-    Judul dari KALIMAT PERTAMA klip itu sendiri.
+    Judul dari kalimat TERBAIK di klip itu, bukan sekadar kalimat pertamanya.
 
-    Kutipan nyata, bukan headline karangan. Prinsipnya sama dengan hook_text:
-    sistem ini tidak boleh menuliskan kalimat yang tidak pernah diucapkan, dan
-    kalimat pembuka sebuah klip yang bagus hampir selalu memang kalimat yang
-    membuatnya bagus.
+    Tetap kutipan nyata — sistem ini tidak boleh menuliskan kalimat yang tidak
+    pernah diucapkan. Yang berubah hanya kalimat mana yang dipilih: kalimat
+    pembuka sering berupa sambungan dari kalimat sebelumnya ("Jadi aku yang
+    paling gede…"), sementara beberapa detik kemudian ada kalimat yang
+    benar-benar menyatakan isi klipnya.
 
-    Gemini boleh menuliskan judul yang lebih baik; ini yang dipakai saat ia
-    tidak ikut, dan tanpanya klip hasil mesin lokal sama sekali tidak punya
-    judul.
+    Dipilih dengan ukuran yang sama yang dipakai mesin klip untuk menilai
+    pembuka: pertanyaan, kata pembuka yang menjanjikan sesuatu, angka, dan
+    panjang yang pas untuk judul.
     """
-    body = " ".join((text or "").split())
-    if not body:
-        return fallback[:TITLE_MAX]
+    import re
 
-    # Berhenti di akhir kalimat pertama bila ada, selama tidak terlalu pendek.
-    for i, ch in enumerate(body):
-        if ch in ".?!" and i >= 24:
-            body = body[: i + (1 if ch in "?!" else 0)]
-            break
+    sents = _sentences(text)
+    if not sents:
+        body = " ".join((text or "").split())
+        return (body or fallback)[:TITLE_MAX].strip()
 
+    def score(sentence: str, index: int) -> float:
+        low = sentence.lower()
+        v = 0.0
+        if "?" in sentence:
+            v += 0.9
+        for word in ("kenapa", "ternyata", "sebenarnya", "rahasia", "jangan",
+                     "faktanya", "ini yang", "banyak orang", "nggak nyangka",
+                     "gue kaget", "yang bikin", "salah besar", "paling"):
+            if word in low:
+                v += 0.7
+                break
+        if re.search(r"\b\d+\b", sentence):
+            v += 0.35
+        n = len(sentence)
+        # Panjang yang pas: cukup untuk berdiri sendiri, cukup pendek untuk
+        # tidak terpotong di daftar YouTube.
+        #
+        # Kalimat sangat pendek dihukum keras, bukan sekadar diberi nilai kecil.
+        # Tanpa itu, "Aduh, kenapa?" menang atas kalimat yang sebenarnya
+        # menyatakan isi klip — dua bonus kecil (tanda tanya dan kata "kenapa")
+        # cukup mengalahkan selisih nilai panjangnya. Judul yang tidak memberi
+        # tahu apa pun tentang isinya bukan judul.
+        if n < 20:
+            v -= 1.3
+        elif n < 30:
+            v += 0.45
+        elif n <= TITLE_MAX:
+            v += 1.0
+        else:
+            v += 0.25
+        # Kalimat awal sedikit diunggulkan: klip yang baik biasanya memang
+        # dibuka oleh kalimat yang membuatnya baik.
+        v += max(0.0, 0.5 - index * 0.12)
+        # Sambungan dari kalimat sebelumnya jarang berdiri sendiri sebagai judul.
+        if re.match(r"^(jadi|terus|nah|dan|tapi|karena|yang|atau|kalau)\b", low):
+            v -= 0.45
+        return v
+
+    best = max(range(len(sents)), key=lambda i: score(sents[i], i))
+    body = sents[best].rstrip(".")
     if len(body) > TITLE_MAX:
         cut = body[:TITLE_MAX].rsplit(" ", 1)[0]
         body = (cut or body[:TITLE_MAX]).rstrip(" ,;:-") + "…"
@@ -313,7 +369,7 @@ def normalize_hashtags(tags) -> list[str]:
 
 
 def suggest_hashtags(text: str, video_title: str = "", channel: str = "",
-                     limit: int = 6) -> list[str]:
+                     limit: int = 8, duration: float = 0.0) -> list[str]:
     """
     Tagar dari kata yang BENAR-BENAR diucapkan di klip itu.
 
@@ -331,27 +387,44 @@ def suggest_hashtags(text: str, video_title: str = "", channel: str = "",
         return re.sub(r"[^a-z0-9]", "", word.lower())
 
     counts: Counter = Counter()
-    for w in re.findall(r"[A-Za-zÀ-ÿ']{4,}", text or ""):
+    for w in re.findall(r"[A-Za-zÀ-ÿ']{5,}", text or ""):
         s = slug(w)
-        if len(s) >= 4 and s not in _STOP:
+        # Lima huruf, bukan empat. Kata pendek dalam bahasa Indonesia hampir
+        # selalu kata fungsi, dan menyaringnya lewat daftar henti saja tidak
+        # pernah selesai.
+        if len(s) >= 5 and s not in _STOP:
             counts[s] += 1
 
     tags: list[str] = []
+
+    # Penanda format. Ini FAKTA tentang berkasnya, bukan tagar populer yang
+    # ditempelkan asal: hasil render memang tegak, dan memang sependek ini.
+    # YouTube memakai #shorts untuk menempatkan video di rak Shorts, jadi
+    # mencantumkannya pada klip yang memenuhi syarat benar-benar menambah
+    # tempat ia bisa muncul — sementara tagar yang tidak nyambung dengan isinya
+    # justru menurunkan video.
+    if 0 < duration <= 180:
+        tags.append("#shorts")
+
     ch = slug(channel)
     if 3 <= len(ch) <= 22:
         tags.append(f"#{ch}")
 
     # Kata dari judul videonya sendiri lebih menggambarkan topik daripada kata
-    # yang sering diucapkan di tengah percakapan.
+    # yang sering diucapkan di tengah percakapan — nama tamu, nama acara.
+    from_title = 0
     for w in re.findall(r"[A-Za-zÀ-ÿ']{4,}", video_title or ""):
         s = slug(w)
         if len(s) >= 4 and s not in _STOP and f"#{s}" not in tags:
             tags.append(f"#{s}")
-        if len(tags) >= 3:
+            from_title += 1
+        if from_title >= 3:
             break
 
-    for word, n in counts.most_common(20):
-        if n < 2:
+    for word, n in counts.most_common(30):
+        # Sekali sebut bukan topik. Kata yang benar-benar jadi bahasan klip
+        # muncul berkali-kali di dalamnya.
+        if n < 3:
             break
         if f"#{word}" not in tags:
             tags.append(f"#{word}")

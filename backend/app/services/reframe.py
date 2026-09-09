@@ -57,6 +57,13 @@ DETECT_NMS = 0.3
 # per wajah per sampel), tidak butuh model tambahan, dan tidak bergantung pada
 # suara — jadi ia tetap bekerja pada video yang belum ditranskripsi.
 MOUTH_PATCH = (24, 16)      # petak mulut dinormalkan ke ukuran ini
+# Ukuran petak mulut. Saya sempat melebarkannya jadi 0,78 x 0,46 supaya ia
+# memuat rahang — alasannya masuk akal, karena mikrofon podcast sering menutupi
+# bibir dan rahang tetap bergerak. Diukur, hasilnya menukar satu hal dengan hal
+# lain: kemurnian naik ke 99,6% tapi klip berisi LIMA orang berhenti membedakan
+# penuturnya. Petak yang lebar ikut menangkap gerakan tetangga sebelahnya, dan
+# di meja panjang tetangga itu duduk rapat. Angka yang lebih sempit menang di
+# tempat yang paling sulit, jadi angka itu yang dipakai.
 MOUTH_W_RATIO = 0.55        # lebar petak relatif lebar wajah
 MOUTH_H_RATIO = 0.30
 # Jendela rata-rata gerakan mulut. 0,75 detik cukup panjang untuk menjembatani
@@ -783,7 +790,8 @@ def assign_faces_to_speakers(people, motion, speaker_turns, n_samples):
 def plan_reframe(source_video_path: str, segments: list[dict], *,
                  aspect_ratio: str = "9:16",
                  track_only: bool = False,
-                 speaker_turns: Optional[list] = None) -> Optional[ReframePlan]:
+                 speaker_turns: Optional[list] = None,
+                 lock_person: Optional[int] = None) -> Optional[ReframePlan]:
     """
     Menyusun rencana crop yang mengikuti pembicara.
 
@@ -847,11 +855,28 @@ def plan_reframe(source_video_path: str, segments: list[dict], *,
         log.warning("Pengelompokan orang gagal: %s", e)
         people, motion = [], []
 
+    # Pengguna menunjuk sendiri. Ini mengalahkan segalanya, dan memang harus:
+    # pencocokan otomatis bisa keliru — mulut yang tertutup mikrofon hampir
+    # tidak bergerak di gambar — dan saat itu terjadi, yang dibutuhkan bukan
+    # tebakan yang lebih pintar melainkan cara untuk membetulkannya.
+    if lock_person is not None and 0 <= lock_person < len(people):
+        held: Optional[float] = None
+        locked: list[Optional[float]] = []
+        for i in range(len(centers)):
+            v = people[lock_person][i]
+            if v is not None:
+                held = v
+            # Saat orangnya tidak terlihat, posisinya ditahan — bukan melompat
+            # ke wajah lain, yang justru hal yang sedang dihindari.
+            locked.append(held if held is not None else centers[i])
+        centers = locked
+        log.info("Bingkai dikunci ke orang %d oleh pengguna", lock_person + 1)
+
     # Kalau kita tahu siapa bicara kapan, crop mengikuti WAJAH ORANG ITU dan
     # bukan wajah yang kebetulan paling besar. Tanpa data itu — atau kalau
     # pasangannya tidak meyakinkan — aturan lama tetap berlaku, jadi rekaman
     # berpotong kamera yang sudah benar tidak ikut diubah.
-    if speaker_turns and people:
+    elif speaker_turns and people:
         mapping = assign_faces_to_speakers(people, motion, speaker_turns, len(centers))
         if mapping:
             centers = _centers_from_speakers(centers, people, mapping,

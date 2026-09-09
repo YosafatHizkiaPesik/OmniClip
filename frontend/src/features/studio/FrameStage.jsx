@@ -32,6 +32,9 @@ export default function FrameStage({
   segments = null,
   selectedFrameId = null,
   onSelectFrame = null,
+  // Mode ikut-wajah: orang yang ditunjuk pengguna, dan cara mengubahnya.
+  lockPerson = null,
+  onLockPerson = null,
 }) {
   const mirrorRef = useRef(null);
   const boxRef = useRef(null);
@@ -41,6 +44,8 @@ export default function FrameStage({
   const followRefs = useRef({});
   const [aspect, setAspect] = useState(16 / 9);
   const [box, setBox] = useState({ w: 0, h: 0 });
+  // Posisi tiap orang pada sampel yang sedang tampil, untuk menaruh penandanya.
+  const personRefs = useRef({});
   const [drag, setDrag] = useState(null);
 
   const editable = frameMode === 'layout' && !!layout && !!onLayoutChange;
@@ -105,6 +110,27 @@ export default function FrameStage({
         if (c && cropXAt && reframe?.source_w) {
           const x = cropXAt(t);
           c.style.left = `${(x / reframe.source_w) * 100}%`;
+        }
+
+        // Penanda orang di mode ikut-wajah: ikut bergerak bersama orangnya,
+        // supaya yang ditunjuk pengguna adalah orang yang benar-benar dilihatnya
+        // di detik itu, bukan posisi rata-ratanya sepanjang klip.
+        const pf = reframe?.people_fps || 8;
+        const si = Math.max(0, Math.round(t * pf));
+        for (const [idx, el] of Object.entries(personRefs.current)) {
+          if (!el) continue;
+          const track = reframe?.people?.[Number(idx)];
+          if (!track?.length) continue;
+          let v = null;
+          for (let j = Math.min(si, track.length - 1); j >= 0; j -= 1) {
+            if (track[j] !== null && track[j] !== undefined) { v = track[j]; break; }
+          }
+          if (v !== null) {
+            el.style.left = `${v}%`;
+            el.style.visibility = 'visible';
+          } else {
+            el.style.visibility = 'hidden';
+          }
         }
 
         // Kotak bingkai pengikut di dalam susunan sendiri.
@@ -189,6 +215,25 @@ export default function FrameStage({
           ) : (
             <div className="frame-stage-empty">Video sumber belum tersedia.</div>
           )}
+
+          {/* Penanda orang, hanya di mode ikut-wajah.
+
+              Pencocokan otomatis bisa keliru — mulut yang tertutup mikrofon
+              hampir tidak bergerak di gambar, dan sistem lalu mengunci orang
+              yang sedang menyimak. Saat itu terjadi, yang dibutuhkan bukan
+              tebakan yang lebih pintar melainkan cara membetulkannya. */}
+          {frameMode === 'smart' && onLockPerson && (reframe?.people?.length ?? 0) > 1
+            && reframe.people.map((_, i) => (
+              <button key={i} type="button"
+                      ref={(el) => { personRefs.current[i] = el; }}
+                      onClick={() => onLockPerson(lockPerson === i ? null : i)}
+                      title={lockPerson === i
+                        ? `Lepaskan — kembali otomatis`
+                        : `Arahkan bingkai ke orang ${i + 1}`}
+                      className={`person-pin${lockPerson === i ? ' is-on' : ''}`}>
+                {i + 1}
+              </button>
+            ))}
 
           {/* Mode tetap: satu kotak, tidak bisa diseret. */}
           {!editable && staticCrop && (
