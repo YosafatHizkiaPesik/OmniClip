@@ -45,15 +45,31 @@ for (const [size, width, height] of SIZES) {
     errors.length = 0;
     await page.goto(BASE + path, { waitUntil: 'domcontentloaded' });
     await page.waitForLoadState('networkidle', { timeout: 25000 }).catch(() => {});
+
+    // Tunggu sampai TIDAK ADA lagi pemutar berputar di halaman.
+    //
+    // Kata "Memuat" saja tidak cukup: halaman Klip jadi memuat dengan sebuah
+    // pemutar berputar dan tanpa satu pun kata itu, jadi ia pernah lolos
+    // pemeriksaan ini sebagai potret sah padahal isinya hanya spinner. Yang
+    // menandai halaman belum siap adalah spinnernya, bukan tulisannya.
+    await page.waitForFunction(
+      () => document.querySelectorAll('.animate-spin').length === 0,
+      null, { timeout: 20000 },
+    ).catch(() => {});
     await page.waitForTimeout(900);
+
     const file = `${OUT}/${name}-${size}.png`;
     await page.screenshot({ path: file, fullPage: size === 'desktop' });
+
     // Sahkan: halaman kosong atau masih memuat bukan bukti apa pun.
     const text = (await page.locator('body').innerText()).trim();
-    const loading = /Membuka partitur|Memuat/i.test(text) && text.length < 120;
-    const status = loading ? 'MASIH MEMUAT' : text.length < 40 ? 'HAMPIR KOSONG' : 'ok';
+    const spinners = await page.locator('.animate-spin').count();
+    const status = spinners > 0 ? 'MASIH MEMUAT'
+      : /Membuka partitur|Memuat/i.test(text) && text.length < 120 ? 'MASIH MEMUAT'
+        : text.length < 40 ? 'HAMPIR KOSONG' : 'ok';
     if (status !== 'ok') bad += 1;
     console.log(`${status === 'ok' ? ' ok  ' : 'GAGAL'} ${name}-${size}  ${text.length} char`
+      + (spinners ? `  · ${spinners} pemutar masih berputar` : '')
       + (errors.length ? `  · ${errors.length} galat konsol: ${errors[0]}` : ''));
   }
   await ctx.close();
