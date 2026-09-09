@@ -217,6 +217,9 @@ class ReframePlanRequest(BaseModel):
     video_id: str
     segments: List[SegmentModel]
     aspect_ratio: str = "9:16"
+    # Baris subtitle berlabel penutur. Dipakai untuk mencocokkan wajah dengan
+    # penutur, supaya pratinjau memakai rencana yang sama dengan render.
+    subtitles: Optional[List[Dict[str, Any]]] = None
 
 
 # Perencanaan reframe memakan beberapa detik per klip, sementara editor
@@ -243,8 +246,14 @@ async def clip_reframe(req: ReframePlanRequest):
     if not segments:
         raise NotFound("Rentang klip tidak valid.")
 
+    turns = [
+        (float(l["start"]), float(l["end"]), int(l["speaker"]))
+        for l in (req.subtitles or [])
+        if l.get("speaker") is not None and l.get("end") is not None
+    ]
     key = (video_id, req.aspect_ratio,
-           tuple((s["start"], s["end"]) for s in segments))
+           tuple((s["start"], s["end"]) for s in segments),
+           tuple(turns))
     if key in _REFRAME_CACHE:
         return _REFRAME_CACHE[key]
 
@@ -260,7 +269,8 @@ async def clip_reframe(req: ReframePlanRequest):
     # sumbernya sudah tegak dijawab "tidak tersedia" padahal bingkai sempit di
     # dalamnya masih punya ruang untuk bergeser.
     plan = await asyncio.to_thread(plan_reframe, str(source), segments,
-                                   aspect_ratio=req.aspect_ratio, track_only=True)
+                                   aspect_ratio=req.aspect_ratio, track_only=True,
+                                   speaker_turns=turns)
     if plan is None:
         payload = {"available": False, "reason": "unsupported"}
     else:

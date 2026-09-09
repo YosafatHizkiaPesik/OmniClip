@@ -169,6 +169,11 @@ export default function Editor({ project, onBack }) {
       video_id: videoId,
       segments: selected.segments,
       aspect_ratio: aspectRatio,
+      // Label penutur ikut dikirim: dengan itu server bisa mencocokkan wajah
+      // dengan suara, dan crop mengikuti orang yang sedang bicara.
+      subtitles: (selected.subtitles ?? []).map((l) => ({
+        start: l.start, end: l.end, speaker: l.speaker,
+      })),
     })
       .then((res) => { if (!cancelled) setReframe(res); })
       .catch(() => { if (!cancelled) setReframe(null); })

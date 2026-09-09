@@ -397,7 +397,8 @@ def render_clip(
             layout_plan = None
             if any(f.get("follow") for f in layout_frames):
                 layout_plan = plan_reframe(str(src), segments,
-                                           aspect_ratio=aspect_ratio, track_only=True)
+                                           aspect_ratio=aspect_ratio, track_only=True,
+                                           speaker_turns=speaker_turns)
                 if layout_plan is not None:
                     face_coverage = layout_plan.face_coverage
                 if layout_plan is not None and not layout_plan.centers:
@@ -416,8 +417,18 @@ def render_clip(
             if layout_graph:
                 frame_used = "layout"
 
+        # Giliran bicara, dari subtitle yang sudah memuat label penutur hasil
+        # diarisasi. Waktunya sudah relatif terhadap klip, sama dengan waktu
+        # sampel deteksi wajah, jadi keduanya bisa langsung dibandingkan.
+        speaker_turns = [
+            (float(l["start"]), float(l["end"]), int(l["speaker"]))
+            for l in (subtitles or [])
+            if l.get("speaker") is not None and l.get("end") is not None
+        ]
+
         if frame_mode == "smart":
-            plan = plan_reframe(str(src), segments, aspect_ratio=aspect_ratio)
+            plan = plan_reframe(str(src), segments, aspect_ratio=aspect_ratio,
+                                speaker_turns=speaker_turns)
             if plan is not None:
                 face_coverage = plan.face_coverage
             if plan is not None and plan.usable:
