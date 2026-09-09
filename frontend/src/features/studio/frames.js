@@ -231,32 +231,56 @@ export function clipTimeFor(segments, sourceTime) {
 }
 
 /**
+ * Orang yang paling dekat dengan satu posisi mendatar.
+ *
+ * Kembaran `ReframePlan.person_near` di server. Beginilah cara pengguna
+ * menunjuk: ia menaruh kotak bingkainya di atas seseorang, dan yang diikuti
+ * adalah orang yang rata-rata duduk paling dekat kotak itu.
+ */
+export function personNear(people, xPct) {
+  if (!people?.length) return null;
+  let best = null;
+  let bestD = Infinity;
+  people.forEach((track, i) => {
+    const seen = track.filter((v) => v !== null && v !== undefined);
+    if (!seen.length) return;
+    const mean = seen.reduce((a, b) => a + b, 0) / seen.length;
+    const d = Math.abs(mean - xPct);
+    if (d < bestD) { best = i; bestD = d; }
+  });
+  return best;
+}
+
+/**
  * Posisi mendatar bingkai pengikut pada detik tertentu, dalam persen.
  *
- * Kembaran persis `ReframePlan.x_track` di server: titik tengah wajah dikurangi
- * separuh lebar jendela, lalu dijepit di dalam bidang video. Karena keduanya
- * membaca jejak yang sama dan menghitungnya dengan cara yang sama, kotak yang
- * bergerak di layar adalah kotak yang akan dipakai ffmpeg.
+ * Kembaran persis `ReframePlan.x_track` di server: titik tengah orangnya
+ * dikurangi separuh lebar jendela, lalu dijepit di dalam bidang video. Karena
+ * keduanya membaca jejak yang sama dan menghitungnya dengan cara yang sama,
+ * kotak yang bergerak di layar adalah kotak yang akan dipakai ffmpeg.
  *
- * @param centers  [[detik, titikTengahPiksel]] dari /api/clip-reframe
- * @param widthPct lebar jendela, persen lebar video
- * @param sourceW  lebar video sumber dalam piksel
+ * Celah pada jejak diisi nilai terakhir yang diketahui — sama seperti server —
+ * supaya kotaknya menahan posisi saat orangnya sesaat tidak terdeteksi, bukan
+ * melompat ke tengah.
  */
-export function followX(centers, widthPct, sourceW, t) {
-  if (!centers?.length || !sourceW) return null;
-  let lo = 0;
-  let hi = centers.length - 1;
-  if (t <= centers[0][0]) lo = 0;
-  else {
-    while (lo < hi) {
-      const mid = Math.ceil((lo + hi) / 2);
-      if (centers[mid][0] <= t) lo = mid;
-      else hi = mid - 1;
-    }
+export function followX(reframe, frame, t) {
+  const people = reframe?.people;
+  const fps = reframe?.people_fps || 8;
+  if (!people?.length) return null;
+
+  const idx = personNear(people, frame.src.x + frame.src.w / 2);
+  if (idx === null) return null;
+
+  const track = people[idx];
+  const i = Math.max(0, Math.min(track.length - 1, Math.round(t * fps)));
+  let v = null;
+  for (let j = i; j >= 0; j -= 1) {
+    if (track[j] !== null && track[j] !== undefined) { v = track[j]; break; }
   }
-  const halfPct = widthPct / 2;
-  const centerPct = (centers[lo][1] / sourceW) * 100;
-  return Math.max(0, Math.min(100 - widthPct, centerPct - halfPct));
+  if (v === null) return null;
+
+  const half = frame.src.w / 2;
+  return Math.max(0, Math.min(100 - frame.src.w, v - half));
 }
 
 /** Rasio kanvas keluaran sebagai angka. */

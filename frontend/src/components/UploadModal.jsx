@@ -34,7 +34,10 @@ export default function UploadModal({ clip, onClose, onDone }) {
   const [status, setStatus] = useState(null);
   const [target, setTarget] = useState('drive');
   const [title, setTitle] = useState(defaultTitle);
-  const [description, setDescription] = useState('');
+  // Tagar yang sudah disetel di editor mengisi deskripsi sendiri. Mengetiknya
+  // ulang di sini adalah pekerjaan yang sudah selesai sekali.
+  const [description, setDescription] = useState(
+    () => (meta.hashtags ?? []).join(' '));
   const [privacy, setPrivacy] = useState('private');
   const [phase, setPhase] = useState('form');   // form | sending | done | failed
   const [message, setMessage] = useState('');

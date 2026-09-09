@@ -128,7 +128,7 @@ export default function FramePanel({
                        onClick={(e) => e.stopPropagation()}
                        onChange={(e) => setField(f.id, { label: e.target.value })}
                        style={{ flex: 1, minWidth: 0, padding: '4px 7px', fontSize: '.78rem' }} />
-                <IconBtn title={f.follow ? 'Berhenti mengikuti orang' : 'Ikuti orang'}
+                <IconBtn title={f.follow ? 'Berhenti mengikuti' : 'Ikuti orang di kotak ini'}
                          active={f.follow}
                          onClick={(e) => { e.stopPropagation(); setField(f.id, { follow: !f.follow }); }}>
                   <ScanFace size={12} />
@@ -165,10 +165,11 @@ export default function FramePanel({
           }}>
             <ScanFace size={15} style={{ flex: 'none', marginTop: '2px', color: 'var(--cue)' }} />
             <div style={{ fontSize: '.74rem', color: 'var(--ink-2)', lineHeight: 1.55 }}>
-              <b style={{ color: 'var(--ink)' }}>Ikuti orang:</b> tekan ikon wajah
-              pada baris bingkai. Kotaknya berhenti diam dan mulai membuntuti
-              pembicara — Anda tetap yang menentukan seberapa rapat dan setinggi
-              apa bingkainya, sistem hanya menjaga orangnya tetap di dalam.
+              <b style={{ color: 'var(--ink)' }}>Ikuti orang:</b> taruh kotaknya
+              di atas orang yang Anda mau, lalu tekan ikon wajah pada baris
+              bingkai itu. Bingkainya akan membuntuti <i>orang itu</i> sepanjang
+              klip — bukan siapa pun yang wajahnya kebetulan paling besar.
+              Lebar, tinggi, dan posisi tegaknya tetap milik Anda.
               {!faceTrackAvailable && (
                 <> Untuk klip ini wajah belum terlacak, jadi bingkai pengikut
                 akan diam di tempat kotaknya.</>

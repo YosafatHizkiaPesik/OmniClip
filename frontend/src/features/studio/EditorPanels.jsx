@@ -299,7 +299,7 @@ function SpeakerCountPicker({ current, busy, onRedetect }) {
         Jumlah narasumber
       </div>
       <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
-        {[1, 2, 3, 4, 5, 6].map((n) => (
+        {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
           <button key={n} onClick={() => setValue(n)} disabled={busy}
                   style={{
                     width: '30px', height: '30px', borderRadius: '7px',

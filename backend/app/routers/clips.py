@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 from ..errors import NotFound
 from ..repos import analyses as analyses_repo
+from ..repos import media as media_repo
 from ..services.jobs import queue
 from ..services.paths import (
     extract_id_from_filename,
@@ -117,6 +118,10 @@ class RenderClipRequest(BaseModel):
     frame_layout: Optional[FrameLayoutModel] = None
     # Nomor klip, dipakai untuk menamai berkas hasilnya.
     clip_index: Optional[int] = None
+    # Judul dan tagar klip. Judulnya jadi nama berkas hasil; tanpanya semua
+    # klip dari satu video bernama sama kecuali nomornya.
+    title: str = ""
+    hashtags: List[str] = Field(default_factory=list)
     caption_style: Optional[CaptionStyleModel] = None
 
 
@@ -180,7 +185,27 @@ async def get_analysis(video_id: str):
     cached = analyses_repo.latest_for_video(_resolve_video_id(video_id))
     if not cached:
         raise NotFound("Belum ada analisis untuk video ini.")
-    return cached["result"]
+
+    # Judul dan tagar diisikan saat DIBACA, bukan hanya saat dianalisis.
+    #
+    # Analisis yang tersimpan sebelum keduanya ada akan membuka editor dengan
+    # tab Judul kosong, dan satu-satunya jalan keluarnya adalah menganalisis
+    # ulang video sepanjang satu jam. Mengisinya di sini membuat project lama
+    # ikut mendapatkannya tanpa memproses apa pun lagi.
+    from ..services.clipmodel import (
+        normalize_hashtags, suggest_hashtags, suggest_title,
+    )
+
+    result = cached["result"]
+    vtitle = result.get("title") or ""
+    channel = (media_repo.get_video(_resolve_video_id(video_id)) or {}).get("channel") or ""
+    for clip in result.get("clips") or []:
+        text = clip.get("transcript_text") or ""
+        if not (clip.get("title") or "").strip():
+            clip["title"] = suggest_title(text, vtitle)
+        clip["hashtags"] = normalize_hashtags(
+            clip.get("hashtags") or suggest_hashtags(text, vtitle, channel))
+    return result
 
 
 class ClipPreviewRequest(BaseModel):
@@ -224,7 +249,7 @@ async def clip_reframe(req: ReframePlanRequest):
         return _REFRAME_CACHE[key]
 
     from ..services.paths import find_local_video
-    from ..services.reframe import plan_reframe
+    from ..services.reframe import SAMPLE_FPS, plan_reframe
 
     source = find_local_video(video_id)
     if source is None:
@@ -250,6 +275,15 @@ async def clip_reframe(req: ReframePlanRequest):
             # tiap bingkai pengikut dari sini memakai rumus yang sama dengan
             # render, jadi yang terlihat di layar adalah yang akan dirender.
             "centers": plan.centers,
+            # Satu jejak per ORANG di layar, urut kiri ke kanan, dalam persen
+            # lebar. Bingkai yang diminta membuntuti seseorang memakai jejak
+            # ini, bukan jejak wajah utama.
+            "people": [
+                [None if v is None else round(v / plan.source_w * 100, 2)
+                 for v in track]
+                for track in plan.people
+            ],
+            "people_fps": SAMPLE_FPS,
         }
 
     if len(_REFRAME_CACHE) >= _REFRAME_CACHE_MAX:
@@ -316,6 +350,8 @@ async def render_clip(req: RenderClipRequest):
             "hook_text": req.hook_text if req.show_hook else "",
             "watermark": req.watermark,
             "video_filter": req.video_filter,
+            "title": req.title,
+            "hashtags": req.hashtags,
             "frame_mode": req.frame_mode,
             "frame_layout": (req.frame_layout.model_dump()
                              if req.frame_layout else None),

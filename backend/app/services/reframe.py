@@ -46,6 +46,55 @@ MIN_FACE_COVERAGE = 0.20
 DETECT_SCORE = 0.6
 DETECT_NMS = 0.3
 
+# --- Siapa yang sedang bicara -------------------------------------------------
+# Wajah terbesar bukan wajah yang bicara. Pada meja podcast berisi lima orang,
+# memilih berdasarkan luas berarti crop terkunci pada orang yang kebetulan
+# duduk paling dekat kamera dan bertahan di situ sepanjang klip — termasuk
+# selama menit-menit ketika yang bicara orang lain.
+#
+# Isyarat yang dipakai: gerakan di daerah MULUT. Mulut yang bicara berubah dari
+# frame ke frame; mulut yang diam tidak. Isyarat ini murah (satu petak kecil
+# per wajah per sampel), tidak butuh model tambahan, dan tidak bergantung pada
+# suara — jadi ia tetap bekerja pada video yang belum ditranskripsi.
+MOUTH_PATCH = (24, 16)      # petak mulut dinormalkan ke ukuran ini
+MOUTH_W_RATIO = 0.55        # lebar petak relatif lebar wajah
+MOUTH_H_RATIO = 0.30
+# Jendela rata-rata gerakan mulut. 0,75 detik cukup panjang untuk menjembatani
+# jeda antar suku kata, cukup pendek untuk menyusul pergantian giliran.
+MOUTH_SMOOTH_SECONDS = 0.75
+# Penantang harus SEKIAN KALI lebih aktif dari yang sedang dipegang sebelum
+# crop berpindah. Tanpa ambang ini, dua orang yang sama-sama sedikit bergerak
+# membuat crop bolak-balik tiap sampel.
+SPEAKER_SWITCH_RATIO = 1.6
+# Di bawah ini tidak ada yang dianggap sedang bicara, dan pilihan jatuh kembali
+# ke wajah terbesar yang paling dekat dengan posisi sebelumnya.
+# Diukur pada rekaman meja dua sampai lima orang: selisih mulut-dikurangi-dahi
+# untuk orang yang diam berkisar di sekitar nol (kadang sedikit negatif), dan
+# naik jelas di atasnya saat orang bicara. Ambangnya diletakkan di atas derau
+# itu, bukan di nol.
+MOUTH_MIN_ENERGY = 0.02
+# Jarak maksimum (relatif lebar sampel) untuk menganggap dua deteksi di frame
+# berurutan sebagai orang yang sama.
+TRACK_MAX_DIST = 0.09
+TRACK_MAX_MISSES = 6        # jejak dilupakan setelah sekian sampel tanpa deteksi
+
+# Kapan gerakan mulut BOLEH ikut menentukan.
+#
+# Video yang dipotong rapi sudah menjawab pertanyaannya sendiri: saat A bicara,
+# penyunting memotong ke close-up A, dan wajah terbesar memang pembicaranya.
+# Di situ, memaksakan pilihan berdasarkan gerakan mulut justru melawan pilihan
+# penyuntingnya — saya mengukurnya, dan hasilnya lebih buruk daripada sekadar
+# memilih wajah terbesar.
+#
+# Yang tidak terjawab adalah bidikan lebar berisi beberapa orang yang sama
+# besarnya, di mana kamera tidak pernah berpindah. Di situlah crop selama ini
+# terkunci pada orang yang kebetulan paling dekat kamera meski yang bicara
+# orang lain.
+#
+# Ambang ini memisahkan keduanya: bila wajah terbesar kedua masih sebesar ini
+# terhadap yang terbesar, bidikannya lebar dan pertanyaannya belum terjawab.
+WIDE_SHOT_AREA_RATIO = 0.55
+
 # Konstanta penghalusan, semuanya relatif terhadap lebar sumber.
 DEADZONE_RATIO = 0.055     # abaikan goyangan di bawah 5,5% lebar
 EMA_ALPHA = 0.12           # per sampel pada 8 Hz; dijalankan dua arah, dua kali
@@ -72,23 +121,68 @@ class ReframePlan:
     # keduanya harus bergerak seiring. Menyimpan hanya `keyframes` mengunci
     # jejaknya pada satu lebar.
     centers: list[tuple[float, float]] = field(default_factory=list)
+    # Satu jejak per ORANG di layar, urut kiri ke kanan, pada laju sampel.
+    # Dipakai bingkai yang diminta membuntuti orang tertentu: pengguna menaruh
+    # kotaknya di atas seseorang, dan bingkainya mengikuti orang ITU — bukan
+    # siapa pun yang kebetulan wajahnya terbesar.
+    people: list[list[Optional[float]]] = field(default_factory=list)
 
     @property
     def usable(self) -> bool:
         return self.face_coverage >= MIN_FACE_COVERAGE and len(self.keyframes) > 1
 
-    def x_track(self, crop_w: int) -> list[tuple[float, int]]:
+    def person_series(self, index: int) -> list[tuple[float, float]]:
+        """Jejak satu orang sebagai (detik, pusat_x), celah diisi nilai terakhir."""
+        if not (0 <= index < len(self.people)):
+            return []
+        out: list[tuple[float, float]] = []
+        last: Optional[float] = None
+        for i, v in enumerate(self.people[index]):
+            if v is not None:
+                last = v
+            if last is not None:
+                out.append((i / SAMPLE_FPS, last))
+        return out
+
+    def person_near(self, x_pct: float) -> Optional[int]:
+        """
+        Orang yang paling dekat dengan satu posisi mendatar (persen lebar).
+
+        Inilah cara pengguna menunjuk: ia menaruh kotak bingkainya di atas
+        seseorang, dan yang dipilih adalah orang yang rata-rata posisinya paling
+        dekat dengan kotak itu. Tidak ada tebakan tentang siapa yang bicara —
+        hanya siapa yang duduk di situ.
+        """
+        if not self.people or not self.source_w:
+            return None
+        target = (x_pct / 100.0) * self.source_w
+        best, best_d = None, None
+        for i in range(len(self.people)):
+            seen = [v for v in self.people[i] if v is not None]
+            if not seen:
+                continue
+            mean = sum(seen) / len(seen)
+            d = abs(mean - target)
+            if best_d is None or d < best_d:
+                best, best_d = i, d
+        return best
+
+    def x_track(self, crop_w: int, person: Optional[int] = None) -> list[tuple[float, int]]:
         """
         Jejak wajah -> posisi tepi kiri crop selebar `crop_w`.
 
+        `person` memilih jejak satu orang tertentu, bukan jejak wajah utama.
         Rumus yang sama dipakai pratinjau di browser, dari data yang sama, jadi
         yang terlihat di layar adalah yang akan dirender.
         """
+        series = self.person_series(person) if person is not None else self.centers
+        if not series:
+            series = self.centers
         half = crop_w / 2.0
         max_x = max(0, self.source_w - crop_w)
         out: list[tuple[float, int]] = []
         last = None
-        for t, cx in self.centers:
+        for t, cx in series:
             x = int(round(min(max(cx - half, 0.0), max_x)))
             if x != last:
                 out.append((t, x))
@@ -138,13 +232,97 @@ def _sample_frames(src: Path, start: float, duration: float,
             proc.stdout.close()
 
 
-def _detect_centers(src: Path, segments: list[dict],
-                    source_w: int, source_h: int) -> tuple[list[Optional[float]], list[bool]]:
+class _FaceTrack:
     """
-    Menjejak pusat wajah utama pada seluruh segmen, dalam koordinat sumber.
+    Satu orang, diikuti lintas sampel.
 
-    Mengembalikan (pusat_x per sampel, penanda potongan-adegan per sampel).
-    Nilai None berarti tidak ada wajah terdeteksi pada sampel itu.
+    Menyimpan petak mulut terakhirnya supaya gerakan bisa diukur terhadap
+    dirinya sendiri, bukan terhadap wajah orang lain — membandingkan petak
+    mulut dua orang berbeda hanya mengukur seberapa berbeda wajah mereka.
+    """
+
+    __slots__ = ("cx", "cy", "w", "h", "mouth", "brow", "energy", "misses")
+
+    def __init__(self, cx, cy, w, h, mouth, brow):
+        self.cx = cx
+        self.cy = cy
+        self.w = w
+        self.h = h
+        self.mouth = mouth
+        self.brow = brow
+        self.energy = 0.0
+        self.misses = 0
+
+
+def _crop_patch(frame, cx, cy, pw, ph, sw, sh):
+    """Petak abu-abu ternormalkan di sekitar satu titik, atau None."""
+    import cv2
+    import numpy as np
+
+    x0, x1 = int(round(cx - pw / 2)), int(round(cx + pw / 2))
+    y0, y1 = int(round(cy - ph / 2)), int(round(cy + ph / 2))
+    x0, y0 = max(0, x0), max(0, y0)
+    x1, y1 = min(sw, x1), min(sh, y1)
+    if x1 - x0 < 4 or y1 - y0 < 4:
+        return None
+    patch = cv2.cvtColor(frame[y0:y1, x0:x1], cv2.COLOR_BGR2GRAY)
+    patch = cv2.resize(patch, MOUTH_PATCH, interpolation=cv2.INTER_AREA)
+    patch = patch.astype(np.float32)
+    patch -= patch.mean()
+    std = float(patch.std())
+    return patch / std if std > 1e-3 else patch
+
+
+def _face_patches(frame, face, sw, sh):
+    """
+    Dua petak dari satu wajah: MULUT dan DAHI.
+
+    Dua, bukan satu, dan itu seluruh alasan pengukuran ini bisa dipercaya.
+    Petak mulut saja mengukur apa pun yang membuat pikselnya berubah — kepala
+    yang mengangguk, kamera yang bergoyang, kotak deteksi yang bergeser satu
+    piksel lalu mengambil ulang sampelnya. Diukur begitu, orang yang paling
+    banyak bergerak menang, bukan orang yang bicara. Saya sudah mencobanya:
+    hasilnya lebih buruk daripada sekadar memilih wajah terbesar.
+
+    Dahi jadi pembanding. Gerakan kepala mengubah keduanya; artikulasi bicara
+    hampir hanya mengubah mulut. Selisihnya yang dipakai.
+
+    Titik mulut diambil dari penanda YuNet (dua titik terakhir adalah sudut
+    mulut), bukan ditebak dari "sepertiga bawah kotak" — kepala yang menunduk
+    menggeser mulutnya keluar dari sepertiga itu.
+    """
+    x, y, w, h = float(face[0]), float(face[1]), float(face[2]), float(face[3])
+    if w < 12 or h < 12:
+        return None, None
+
+    mx = (float(face[10]) + float(face[12])) / 2.0
+    my = (float(face[11]) + float(face[13])) / 2.0
+    if not (0 <= mx < sw and 0 <= my < sh):
+        mx, my = x + w / 2.0, y + h * 0.72
+
+    # Dahi: di atas garis mata, selebar mulutnya supaya kedua petak memuat
+    # jumlah piksel yang sebanding.
+    ex = (float(face[4]) + float(face[6])) / 2.0
+    ey = (float(face[5]) + float(face[7])) / 2.0
+    if not (0 <= ex < sw and 0 <= ey < sh):
+        ex, ey = x + w / 2.0, y + h * 0.32
+    fy = ey - h * 0.18
+
+    pw = max(8.0, w * MOUTH_W_RATIO)
+    ph = max(6.0, h * MOUTH_H_RATIO)
+    return (_crop_patch(frame, mx, my, pw, ph, sw, sh),
+            _crop_patch(frame, ex, fy, pw, ph, sw, sh))
+
+
+def _detect_centers(src: Path, segments: list[dict], source_w: int, source_h: int
+                    ) -> tuple[list[Optional[float]], list[bool], list[list[float]]]:
+    """
+    Menjejak wajah utama, dalam koordinat sumber.
+
+    Mengembalikan (pusat_x per sampel, penanda potongan-adegan per sampel,
+    deteksi mentah per sampel). Nilai None berarti tidak ada wajah terdeteksi
+    pada sampel itu; daftar mentahnya dipakai untuk mengelompokkan wajah jadi
+    orang-orang yang bisa ditunjuk pengguna.
     """
     import cv2
     import numpy as np
@@ -157,10 +335,15 @@ def _detect_centers(src: Path, segments: list[dict],
         str(MODEL_PATH), "", (sw, sh), DETECT_SCORE, DETECT_NMS, 5000
     )
 
+    # Rata-rata bergerak gerakan mulut, sebagai bobot per sampel.
+    decay = math.exp(-1.0 / max(1e-6, MOUTH_SMOOTH_SECONDS * SAMPLE_FPS))
+
     centers: list[Optional[float]] = []
     cuts: list[bool] = []
+    raw: list[list[float]] = []
     prev_center: Optional[float] = None
     prev_hist = None
+    tracks: list[_FaceTrack] = []
 
     for seg in segments:
         start = float(seg["start"])
@@ -182,32 +365,165 @@ def _detect_centers(src: Path, segments: list[dict],
             prev_hist = hist
             first_of_segment = False
 
+            if is_cut:
+                # Setelah potongan, wajah di layar belum tentu orang yang sama
+                # di tempat yang sama.
+                tracks = []
+
             _, faces = detector.detect(frame)
+            detections = list(faces) if faces is not None and len(faces) else []
+
+            # --- Cocokkan deteksi ke jejak yang sudah ada -------------------
+            for t in tracks:
+                t.misses += 1
+            matched: list[_FaceTrack] = []
+            max_dist = TRACK_MAX_DIST * sw
+
+            for f in detections:
+                x, y, w, h = float(f[0]), float(f[1]), float(f[2]), float(f[3])
+                cx, cy = x + w / 2.0, y + h / 2.0
+                mouth, brow = _face_patches(frame, f, sw, sh)
+
+                best_t, best_d = None, max_dist
+                for t in tracks:
+                    if t in matched:
+                        continue
+                    d = math.hypot(cx - t.cx, cy - t.cy)
+                    if d < best_d:
+                        best_t, best_d = t, d
+
+                if best_t is None:
+                    best_t = _FaceTrack(cx, cy, w, h, mouth, brow)
+                    tracks.append(best_t)
+                else:
+                    # Gerakan mulut DIKURANGI gerakan dahi, keduanya terhadap
+                    # orang yang sama pada sampel sebelumnya. Yang tersisa
+                    # adalah gerakan yang khas mulut.
+                    def _diff(now, before):
+                        if now is None or before is None or now.shape != before.shape:
+                            return None
+                        return float(np.abs(now - before).mean())
+
+                    dm = _diff(mouth, best_t.mouth)
+                    db = _diff(brow, best_t.brow)
+                    motion = 0.0 if dm is None else dm - (db or 0.0)
+                    best_t.energy = best_t.energy * decay + motion * (1.0 - decay)
+                    best_t.cx, best_t.cy, best_t.w, best_t.h = cx, cy, w, h
+                    best_t.mouth, best_t.brow = mouth, brow
+                best_t.misses = 0
+                matched.append(best_t)
+
+            tracks = [t for t in tracks if t.misses <= TRACK_MAX_MISSES]
+
+            # --- Siapa yang dipilih ----------------------------------------
+            #
+            # Wajah terbesar yang paling dekat dengan posisi sebelumnya.
+            #
+            # Saya mencoba menggantinya dengan pemilihan berdasarkan gerakan
+            # mulut, supaya crop mengikuti orang yang SEDANG BICARA dan bukan
+            # orang yang kebetulan paling dekat kamera. Diukur terhadap label
+            # diarisasi pada rekaman meja lima orang, hasilnya lebih buruk
+            # daripada aturan ini pada dua dari tiga klip — sekali dengan
+            # gerakan mulut mentah, sekali dengan gerakan mulut dikurangi
+            # gerakan dahi untuk membuang gerakan kepala. Keduanya saya buang.
+            #
+            # Sebabnya, sejauh yang terukur: rekaman yang sudah dipotong rapi
+            # menjawab pertanyaannya sendiri. Saat A bicara, penyunting memotong
+            # ke close-up A, jadi wajah terbesar memang pembicaranya, dan
+            # memaksakan pilihan lain melawan penyuntingnya.
+            #
+            # Yang belum terjawab tetap ada: bidikan lebar berisi beberapa orang
+            # yang tidak pernah berpindah kamera. Jawabannya bukan menebak siapa
+            # yang bicara, melainkan membiarkan pengguna menunjuk orangnya —
+            # itulah `person_tracks` di bawah.
             best = None
-            if faces is not None and len(faces):
+            if matched:
                 best_score = -1e9
-                for f in faces:
-                    x, y, w, h = float(f[0]), float(f[1]), float(f[2]), float(f[3])
-                    cx = x + w / 2.0
-                    area = (w * h) / (sw * sh)
-                    # Suku kontinuitas inilah yang mencegah crop melompat bolak-balik
-                    # antara dua narasumber setiap kali wajah yang lebih kecil
-                    # kebetulan lebih terang.
+                for t in matched:
+                    area = (t.w * t.h) / (sw * sh)
+                    # Suku kontinuitas inilah yang mencegah crop melompat
+                    # bolak-balik antara dua narasumber setiap kali wajah yang
+                    # lebih kecil kebetulan lebih terang.
                     penalty = 0.0
                     if prev_center is not None and not is_cut:
-                        penalty = 0.6 * abs(cx - prev_center / scale_back) / sw
+                        penalty = 0.6 * abs(t.cx - prev_center / scale_back) / sw
                     score = area - penalty
                     if score > best_score:
-                        best_score = score
-                        best = cx
+                        best_score, best = score, t.cx
+
             if best is not None:
                 prev_center = best * scale_back
                 centers.append(prev_center)
             else:
                 centers.append(None)
             cuts.append(is_cut)
+            raw.append(sorted(t.cx * scale_back for t in matched))
 
-    return centers, cuts
+    return centers, cuts, raw
+
+
+def group_people(raw: list[list[float]], source_w: int,
+                 max_people: int = 6) -> list[list[Optional[float]]]:
+    """
+    Mengelompokkan deteksi wajah jadi ORANG, lalu menjejak tiap orang.
+
+    Ini jawaban untuk bidikan lebar yang kameranya tidak pernah berpindah: di
+    situ tidak ada yang bisa disimpulkan dari ukuran wajah, dan menebak siapa
+    yang bicara dari gambar sudah saya coba dan gagal. Yang bisa diandalkan
+    justru hal yang sederhana — orang duduk di tempatnya. Narasumber kedua ada
+    di sekitar sepertiga kiri layar sepanjang klip, dan itu cukup untuk
+    ditunjuk.
+
+    Pengelompokannya dilakukan pada posisi mendatar saja, dengan k-means 1-D
+    yang dibiakkan dari kuantil. Jumlah orangnya diambil dari jumlah wajah yang
+    paling sering terlihat bersamaan, bukan dari jumlah wajah terbanyak yang
+    pernah terlihat — satu frame dengan pantulan cermin tidak boleh menciptakan
+    orang keenam.
+
+    Mengembalikan satu jejak per orang, urut kiri ke kanan; None berarti orang
+    itu tidak terlihat pada sampel tersebut.
+    """
+    import numpy as np
+
+    counts = [len(r) for r in raw if r]
+    if not counts:
+        return []
+    # Modus jumlah wajah = bentuk bidikan yang paling sering muncul.
+    k = min(max_people, max(1, int(np.bincount(counts).argmax())))
+    points = np.array([x for r in raw for x in r], dtype=np.float64)
+    if len(points) < k or k < 1:
+        return []
+
+    # Biakan dari kuantil, bukan acak: hasilnya sama tiap kali dijalankan, dan
+    # rencana crop yang berubah-ubah antar render adalah bug yang sulit dikejar.
+    centroids = np.quantile(points, [(i + 0.5) / k for i in range(k)])
+    for _ in range(25):
+        assign = np.abs(points[:, None] - centroids[None, :]).argmin(axis=1)
+        moved = 0.0
+        for i in range(k):
+            sel = points[assign == i]
+            if len(sel):
+                new = float(np.median(sel))
+                moved = max(moved, abs(new - centroids[i]))
+                centroids[i] = new
+        if moved < source_w * 0.002:
+            break
+    order = np.argsort(centroids)
+    centroids = centroids[order]
+
+    tracks: list[list[Optional[float]]] = [[] for _ in range(k)]
+    last: list[Optional[float]] = [None] * k
+    for r in raw:
+        taken = set()
+        for x in r:
+            i = int(np.abs(centroids - x).argmin())
+            if i in taken:
+                continue
+            taken.add(i)
+            last[i] = x
+        for i in range(k):
+            tracks[i].append(last[i] if i in taken else last[i])
+    return tracks
 
 
 def _median(values: list[float], window: int) -> list[float]:
@@ -381,7 +697,7 @@ def plan_reframe(source_video_path: str, segments: list[dict], *,
         return None
 
     try:
-        centers, cuts = _detect_centers(src, segments, source_w, source_h)
+        centers, cuts, raw = _detect_centers(src, segments, source_w, source_h)
     except Exception as e:  # deteksi tidak boleh menjatuhkan render
         log.warning("Deteksi wajah gagal, memakai blur-pad: %s", e)
         return None
@@ -442,6 +758,11 @@ def plan_reframe(source_video_path: str, segments: list[dict], *,
         keyframes = [(0.0, int(round(min(max(smoothed[0] - half, 0.0), max_x))))]
     plan.keyframes = keyframes
     plan.centers = centers
+    try:
+        plan.people = group_people(raw, source_w)
+    except Exception as e:      # pengelompokan tidak boleh menjatuhkan render
+        log.warning("Pengelompokan orang gagal: %s", e)
+        plan.people = []
     log.info("Reframe siap: crop %dx%d, wajah terlihat %.0f%%, %d titik perintah",
              crop_w, crop_h, coverage * 100, len(keyframes))
     return plan
@@ -453,6 +774,7 @@ def build_reframe_filter(plan: ReframePlan, cmd_path: Path,
                          crop_w: Optional[int] = None,
                          crop_h: Optional[int] = None,
                          crop_y: int = 0,
+                         person: Optional[int] = None,
                          scale: bool = True) -> str:
     """
     Potongan filtergraph yang menerapkan rencana crop lalu menskalakan.
@@ -464,7 +786,7 @@ def build_reframe_filter(plan: ReframePlan, cmd_path: Path,
     """
     w = crop_w or plan.crop_w
     h = crop_h or plan.crop_h
-    track = plan.x_track(w)
+    track = plan.x_track(w, person)
     cmd_path.write_text(plan.to_sendcmd(name=name, track=track), encoding="utf-8")
     arg = str(cmd_path).replace("\\", "/").replace(":", r"\:")
     chain = (

@@ -169,6 +169,8 @@ def build_clip_payload(
     words: list[Word],
     sentences: list[Sentence],
     index: int,
+    video_title: str = "",
+    channel: str = "",
 ) -> dict[str, Any]:
     """Mengubah kandidat heuristik menjadi klip yang siap dikirim ke UI."""
     segments = [{"start": round(candidate.start, 3), "end": round(candidate.end, 3)}]
@@ -196,8 +198,17 @@ def build_clip_payload(
         "hook_text": candidate.hook_text,
         # Field berikut hanya terisi bila Gemini ikut menajamkan hasil. UI
         # membedakan alasan terukur (reasons) dari tulisan model (ai_reason).
-        "title": getattr(candidate, "suggested_title", "") or "",
-        "hashtags": getattr(candidate, "hashtags", []) or [],
+        # Judul dan tagar SELALU terisi. Sebelumnya keduanya hanya ada bila
+        # Gemini ikut menajamkan, jadi klip dari mesin lokal keluar tanpa judul
+        # sama sekali — dan judul berkasnya jatuh kembali ke judul video sumber
+        # yang sama untuk kelima belas klipnya.
+        "title": (getattr(candidate, "suggested_title", "")
+                  or suggest_title(candidate.text, video_title)),
+        # Gemini kadang menuliskannya tanpa pagar, kadang dengan. Disamakan di
+        # satu tempat supaya UI tidak perlu menebak bentuk mana yang datang.
+        "hashtags": normalize_hashtags(
+            getattr(candidate, "hashtags", [])
+            or suggest_hashtags(candidate.text, video_title, channel)),
         "ai_reason": getattr(candidate, "gemini_reason", "") or "",
         "transcript_text": candidate.text,
         "subtitles": clip_subtitles,
@@ -236,3 +247,115 @@ def rebuild_subtitles_for_segments(
         all_lines.extend(words_to_caption_lines(shifted))
 
     return all_lines, all_words
+
+
+# --- Judul dan tagar tanpa mengarang ------------------------------------------
+
+# Kata yang tidak pernah jadi tagar. Bukan daftar lengkap bahasa Indonesia —
+# hanya kata paling sering yang, kalau ikut, membuat tiap klip bertagar #yang.
+_STOP = {
+    "yang", "untuk", "dengan", "adalah", "tidak", "sudah", "akan", "bisa",
+    "kalau", "karena", "tapi", "juga", "saya", "kamu", "kita", "mereka", "gue",
+    "lu", "lo", "aku", "dia", "ini", "itu", "ada", "dari", "pada", "dalam",
+    "atau", "jadi", "kayak", "gitu", "banget", "aja", "sih", "nya", "dong",
+    "nggak", "enggak", "gak", "iya", "oke", "terus", "sama", "buat", "punya",
+    "orang", "waktu", "tahun", "kalo", "emang", "memang", "harus", "lebih",
+    "masih", "bikin", "pernah", "kenapa", "gimana", "apa", "siapa", "kapan",
+    "mau", "udah", "bilang", "banyak", "sekali", "sangat", "salah", "benar",
+}
+
+TITLE_MAX = 70
+
+
+def suggest_title(text: str, fallback: str = "") -> str:
+    """
+    Judul dari KALIMAT PERTAMA klip itu sendiri.
+
+    Kutipan nyata, bukan headline karangan. Prinsipnya sama dengan hook_text:
+    sistem ini tidak boleh menuliskan kalimat yang tidak pernah diucapkan, dan
+    kalimat pembuka sebuah klip yang bagus hampir selalu memang kalimat yang
+    membuatnya bagus.
+
+    Gemini boleh menuliskan judul yang lebih baik; ini yang dipakai saat ia
+    tidak ikut, dan tanpanya klip hasil mesin lokal sama sekali tidak punya
+    judul.
+    """
+    body = " ".join((text or "").split())
+    if not body:
+        return fallback[:TITLE_MAX]
+
+    # Berhenti di akhir kalimat pertama bila ada, selama tidak terlalu pendek.
+    for i, ch in enumerate(body):
+        if ch in ".?!" and i >= 24:
+            body = body[: i + (1 if ch in "?!" else 0)]
+            break
+
+    if len(body) > TITLE_MAX:
+        cut = body[:TITLE_MAX].rsplit(" ", 1)[0]
+        body = (cut or body[:TITLE_MAX]).rstrip(" ,;:-") + "…"
+    return body.strip()
+
+
+def normalize_hashtags(tags) -> list[str]:
+    """Selalu berpagar, selalu tanpa spasi, tanpa duplikat."""
+    import re
+    out: list[str] = []
+    for t in tags or []:
+        if not isinstance(t, str):
+            continue
+        clean = re.sub(r"[^0-9A-Za-zÀ-ÿ_]", "", t)
+        if len(clean) < 2:
+            continue
+        tag = f"#{clean}"
+        if tag.lower() not in {x.lower() for x in out}:
+            out.append(tag)
+    return out[:12]
+
+
+def suggest_hashtags(text: str, video_title: str = "", channel: str = "",
+                     limit: int = 6) -> list[str]:
+    """
+    Tagar dari kata yang BENAR-BENAR diucapkan di klip itu.
+
+    Diambil dari kata paling sering di klipnya sendiri, bukan dari daftar tagar
+    populer. Tagar yang tidak nyambung dengan isinya tidak membantu video naik —
+    ia hanya membuat klip terlihat seperti spam, dan itu justru yang dihukum.
+
+    Nama kanal ikut karena ia satu-satunya tagar yang pasti relevan dan pasti
+    dicari orang.
+    """
+    import re
+    from collections import Counter
+
+    def slug(word: str) -> str:
+        return re.sub(r"[^a-z0-9]", "", word.lower())
+
+    counts: Counter = Counter()
+    for w in re.findall(r"[A-Za-zÀ-ÿ']{4,}", text or ""):
+        s = slug(w)
+        if len(s) >= 4 and s not in _STOP:
+            counts[s] += 1
+
+    tags: list[str] = []
+    ch = slug(channel)
+    if 3 <= len(ch) <= 22:
+        tags.append(f"#{ch}")
+
+    # Kata dari judul videonya sendiri lebih menggambarkan topik daripada kata
+    # yang sering diucapkan di tengah percakapan.
+    for w in re.findall(r"[A-Za-zÀ-ÿ']{4,}", video_title or ""):
+        s = slug(w)
+        if len(s) >= 4 and s not in _STOP and f"#{s}" not in tags:
+            tags.append(f"#{s}")
+        if len(tags) >= 3:
+            break
+
+    for word, n in counts.most_common(20):
+        if n < 2:
+            break
+        if f"#{word}" not in tags:
+            tags.append(f"#{word}")
+        if len(tags) >= limit:
+            break
+
+    return tags[:limit]

@@ -65,7 +65,15 @@ MIN_WINDOW_SECONDS = 1.8
 # Jeda selebar ini memutus jendela: keheningan panjang hampir selalu menandai
 # pergantian pembicara, dan menyatukan seberangnya mencampur dua suara.
 WINDOW_BREAK_GAP = 1.6
-MAX_SPEAKERS = 4
+# Delapan, bukan empat. Empat memotong tepat pada bentuk yang paling sering
+# dipakai: podcast meja panjang dengan pembawa acara dan empat tamu. Video
+# seperti itu dijawab "4 penutur" apa pun isinya, dan orang kelima diam-diam
+# digabungkan ke salah satu dari empat yang lain — kesalahan yang tidak
+# terlihat sebagai kesalahan, hanya sebagai warna teks yang keliru.
+#
+# Batas ini juga yang membatasi pilihan manual: pengguna yang tahu ada lima
+# orang pun tidak bisa mengatakannya.
+MAX_SPEAKERS = 8
 
 # Ambang penerimaan, dinyatakan sebagai SELISIH kemiripan: rata-rata kemiripan
 # di dalam kelompok terlemah dikurangi rata-rata kemiripan antar kelompok.

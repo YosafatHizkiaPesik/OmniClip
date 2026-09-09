@@ -9,6 +9,30 @@ import { formatDurationHuman, formatTime } from '../utils/timeFormat';
  * halaman feed tidak bisa dipisah menjadi dua rute tanpa menyalin kodenya.
  */
 
+/**
+ * Umur video, dari tanggal unggah sungguhan.
+ *
+ * Mengembalikan string kosong bila tanggalnya belum diketahui — dan itu
+ * disengaja. Hasil pencarian YouTube tidak membawa tanggal unggah sama sekali;
+ * tanggalnya menyusul beberapa detik kemudian dari panggilan terpisah. Selama
+ * belum datang, kartunya tidak menuliskan apa pun. Menuliskan "baru" atau hari
+ * ini sebagai nilai bawaan akan membuat video tujuh tahun lalu terlihat seperti
+ * unggahan kemarin.
+ */
+export function formatAge(uploadDate) {
+  if (!uploadDate || !/^\d{8}$/.test(String(uploadDate))) return '';
+  const t = String(uploadDate);
+  const then = new Date(+t.slice(0, 4), +t.slice(4, 6) - 1, +t.slice(6, 8));
+  const days = Math.floor((Date.now() - then.getTime()) / 86400000);
+  if (!Number.isFinite(days) || days < 0) return '';
+  if (days < 1) return 'hari ini';
+  if (days < 7) return `${days} hari lalu`;
+  if (days < 30) return `${Math.floor(days / 7)} minggu lalu`;
+  if (days < 365) return `${Math.floor(days / 30)} bulan lalu`;
+  const years = Math.floor(days / 365);
+  return `${years} tahun lalu`;
+}
+
 export function formatViews(views) {
   if (!views) return '';
   if (views >= 1_000_000) return `${(views / 1_000_000).toFixed(1)}Jt`;
@@ -100,7 +124,8 @@ export function VideoCard({ video, isSelected, onClick }) {
             {video.channel}
           </div>
           <div style={{ fontSize: '0.72rem', color: 'var(--ink-3)', marginTop: '1px', display: 'flex', gap: '6px' }}>
-            {video.views > 0 && <span>{formatViews(video.views)} views</span>}
+            {video.views > 0 && <span>{formatViews(video.views)} tayangan</span>}
+            {formatAge(video.upload_date) && <span>• {formatAge(video.upload_date)}</span>}
             {video.duration > 0 && <span>• {formatDurationHuman(video.duration)}</span>}
           </div>
         </div>

@@ -234,9 +234,16 @@ def build_layout_graph(layout: dict, in_label: str, out_label: str, *,
         # akan ikut menggeser bingkai kedua.
         if f.get("follow") and plan is not None and workdir is not None:
             from .reframe import build_reframe_filter
+            # Orang yang dibuntuti dipilih dari LETAK KOTAKNYA: pengguna
+            # menaruh bingkai di atas seseorang, dan bingkai itu mengikuti orang
+            # tersebut. Bukan tebakan siapa yang sedang bicara — tebakan itu
+            # sudah saya coba dan hasilnya lebih buruk daripada tidak menebak.
+            src_rect = f.get("src") or {}
+            centre_pct = float(src_rect.get("x", 0)) + float(src_rect.get("w", 100)) / 2
             crop = build_reframe_filter(
                 plan, workdir / f"reframe_{i}.cmd", out_w, out_h,
-                name=f"lf{i}", crop_w=sw, crop_h=sh, crop_y=sy, scale=False)
+                name=f"lf{i}", crop_w=sw, crop_h=sh, crop_y=sy,
+                person=plan.person_near(centre_pct), scale=False)
             parts.append(f"[lsrc{i}]{crop},{place},setsar=1[lf{i}]")
         else:
             parts.append(f"[lsrc{i}]crop={sw}:{sh}:{sx}:{sy},{place},setsar=1[lf{i}]")
@@ -318,6 +325,7 @@ def render_clip(
     loudnorm: bool = True,
     video_id: str = "",
     title: str = "",
+    hashtags: Optional[list] = None,
     clip_index: Optional[int] = None,
     on_progress: Optional[Callable[[float], None]] = None,
     should_cancel: Optional[Callable[[], bool]] = None,
@@ -516,6 +524,9 @@ def render_clip(
             "file_name": out_name,
             "video_id": vid,
             "title": title,
+            # Ikut disimpan supaya formulir unggah bisa mengisinya sendiri
+            # nanti, tanpa pengguna mengetik ulang apa yang sudah ia setel.
+            "hashtags": hashtags or [],
             "clip_index": clip_index,
             "segments": segments,
             "duration": round(total_duration, 3),

@@ -213,12 +213,11 @@ export default function ClipPreview({
         // Bingkai pengikut: geser videonya mengikuti jejak wajah. Rumusnya
         // sama dengan yang dipakai render, dari jejak yang sama, jadi yang
         // terlihat di sini adalah yang akan keluar dari ffmpeg.
-        const centers = reframe?.centers;
-        if (useLayout && centers?.length && reframe?.source_w) {
+        if (useLayout && reframe?.people?.length) {
           for (const f of frames) {
             const entry = frameVideoRefs.current[f.id];
             if (!f.follow || !entry?.el || !entry.geo) continue;
-            const x = followX(centers, f.src.w, reframe.source_w, t);
+            const x = followX(reframe, f, t);
             if (x === null) continue;
             entry.el.style.left =
               `${entry.geo.left + ((f.src.x - x) / 100) * entry.geo.width}%`;

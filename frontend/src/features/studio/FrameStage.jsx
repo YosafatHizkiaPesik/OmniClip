@@ -108,12 +108,11 @@ export default function FrameStage({
         }
 
         // Kotak bingkai pengikut di dalam susunan sendiri.
-        const centers = reframe?.centers;
-        if (centers?.length && reframe?.source_w) {
+        if (reframe?.people?.length) {
           for (const f of layout?.frames ?? []) {
             const el = followRefs.current[f.id];
             if (!f.follow || !el) continue;
-            const x = followX(centers, f.src.w, reframe.source_w, t);
+            const x = followX(reframe, f, t);
             if (x !== null) el.style.left = `${x}%`;
           }
         }

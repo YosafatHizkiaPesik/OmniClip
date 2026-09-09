@@ -40,6 +40,11 @@ export default function Home() {
   // Dinaikkan oleh tombol Segarkan. Beranda tanpa kata kunci mengambil kueri
   // acak dari server, jadi menaikkan angka ini benar-benar mengganti isinya.
   const [nonce, setNonce] = useState(0);
+  const [sort, setSort] = useState('relevan');
+  // Tanggal unggah datang MENYUSUL, dari panggilan terpisah: hasil pencarian
+  // YouTube tidak membawanya sama sekali, dan mengambilnya berarti membuka tiap
+  // videonya. Kartunya tampil dulu, tanggalnya mengisi belakangan.
+  const [dates, setDates] = useState({});
 
   useEffect(() => { setDraft(q); }, [q]);
 
@@ -61,9 +66,21 @@ export default function Home() {
 
   useEffect(() => {
     load(q
-      ? `/search?q=${encodeURIComponent(q)}&limit=20`
+      ? `/search?q=${encodeURIComponent(q)}&limit=20&sort=${sort}`
       : `/trending?limit=20&refresh=${nonce}`);
-  }, [q, nonce, load]);
+  }, [q, nonce, sort, load]);
+
+  useEffect(() => {
+    const ids = feed.map((v) => v.id).filter(Boolean);
+    if (!ids.length) return undefined;
+    let cancelled = false;
+    apiGet(`/upload-dates?ids=${ids.join(',')}`)
+      .then((res) => { if (!cancelled) setDates((prev) => ({ ...prev, ...res })); })
+      // Tanggal yang tidak datang bukan kegagalan halaman: kartunya cukup
+      // tidak menuliskan tanggal apa pun.
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [feed]);
 
   const submit = (e) => {
     e.preventDefault();
@@ -72,6 +89,15 @@ export default function Home() {
   };
 
   const activeCategory = CATEGORIES.findIndex((c) => c.query === q);
+
+  // Urutan dikerjakan YouTube, bukan diurutkan ulang di sini: tanpa tanggal
+  // unggah di hasil pencarian, "terbaru" mustahil dijawab dari data yang ada.
+  const SORTS = [
+    ['relevan', 'Paling relevan'],
+    ['terbaru', 'Terbaru'],
+    ['terpopuler', 'Tayangan terbanyak'],
+    ['rating', 'Paling disukai'],
+  ];
 
   return (
     <div className="page">
@@ -125,6 +151,23 @@ export default function Home() {
         ))}
       </div>
 
+      {/* Urutan hanya berlaku untuk pencarian: beranda tanpa kata kunci sudah
+          mengambil kueri acak tiap muat, dan mengurutkannya tidak berarti. */}
+      {q && (
+        <div style={{
+          display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center',
+          marginBottom: '18px',
+        }}>
+          <span className="mark" style={{ color: 'var(--ink-3)' }}>Urutkan</span>
+          {SORTS.map(([id, label]) => (
+            <button key={id} onClick={() => setSort(id)}
+                    className={`chip${sort === id ? ' is-on' : ''}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
       {loading ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
           {[...Array(12)].map((_, i) => (
@@ -169,7 +212,7 @@ export default function Home() {
           {feed.map((video) => (
             <VideoCard
               key={video.id}
-              video={video}
+              video={{ ...video, ...(dates[video.id] ?? {}) }}
               onClick={() => navigate(`/watch/${video.id}`, { state: { video } })}
             />
           ))}

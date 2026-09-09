@@ -11,7 +11,9 @@ from ..repos import media as media_repo
 from ..services.jobs import queue
 from ..services.paths import extract_youtube_id, find_local_video, safe_media_path
 from ..services.ytdlp import (
+    SEARCH_SORTS,
     YtdlpError,
+    fetch_upload_dates,
     get_video_info,
     list_local_downloads,
     search_youtube_videos,
@@ -35,13 +37,33 @@ class DownloadRequest(BaseModel):
 
 
 @router.get("/search")
-async def search(q: str = Query(..., description="Kata kunci pencarian"), limit: int = 20):
+async def search(q: str = Query(..., description="Kata kunci pencarian"),
+                 limit: int = 20, sort: str = "relevan"):
     if not q.strip():
         return []
+    if sort not in SEARCH_SORTS:
+        sort = "relevan"
     try:
-        return search_youtube_videos(q, min(limit, 50))
+        return await asyncio.to_thread(search_youtube_videos, q, min(limit, 50), sort)
     except YtdlpError as e:
         raise _as_app_error(e) from e
+
+
+@router.get("/upload-dates")
+async def upload_dates(ids: str = Query(..., description="ID video, dipisah koma")):
+    """
+    Tanggal unggah untuk beberapa video sekaligus.
+
+    Terpisah dari pencarian dengan sengaja. Hasil pencarian datar YouTube tidak
+    memuat tanggal unggah sama sekali, dan mengambilnya berarti membuka tiap
+    videonya — sekitar tiga detik untuk enam video, bersamaan. Menjalankan itu
+    sebelum daftar hasilnya muncul akan membuat setiap pencarian terasa macet,
+    jadi kartunya tampil dulu dan tanggalnya menyusul.
+    """
+    wanted = [v.strip() for v in ids.split(",") if v.strip()][:50]
+    if not wanted:
+        return {}
+    return await asyncio.to_thread(fetch_upload_dates, wanted)
 
 
 # Kueri beranda. Satu kueri tetap adalah sebab beranda menampilkan video yang

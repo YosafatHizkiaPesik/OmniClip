@@ -156,6 +156,7 @@ def run_render(ctx: JobContext) -> dict:
     result = render_clip(
         source_video_path=str(source),
         title=ctx.payload.get("title") or video_row.get("title") or video_id,
+        hashtags=ctx.payload.get("hashtags") or [],
         clip_index=ctx.payload.get("clip_index"),
         segments=segments,
         subtitles=subtitles,
@@ -441,7 +442,10 @@ def run_auto_clip(ctx: JobContext) -> dict:
 
         # --- 6. Simpan --------------------------------------------------------
         _stage_progress(ctx, "persist", 0.4, "Menyusun hasil…")
-        clips = [build_clip_payload(c, words=words, sentences=sentences, index=i)
+        channel = (ctx.payload.get("channel")
+                   or (media_repo.get_video(video_id) or {}).get("channel") or "")
+        clips = [build_clip_payload(c, words=words, sentences=sentences, index=i,
+                                    video_title=title, channel=channel)
                  for i, c in enumerate(candidates, 1)]
 
         payload = {

@@ -2,6 +2,7 @@ import os
 import json
 import subprocess
 import yt_dlp
+from urllib.parse import quote_plus
 
 from ..config import DOWNLOAD_DIR as _DOWNLOAD_DIR, STORAGE_DIR as _STORAGE_DIR, get_cookies_file
 
@@ -124,9 +125,26 @@ def probe_media(path: str) -> dict:
         print(f"[OmniClip] ffprobe gagal untuk {path}: {e}")
         return {}
 
-def search_youtube_videos(query: str, limit: int = 20):
+# Parameter urutan hasil YouTube. Nilainya adalah protobuf terenkode yang
+# dipakai halaman pencarian YouTube sendiri; yt-dlp meneruskan URL-nya apa
+# adanya, jadi filternya benar-benar dikerjakan YouTube dan bukan diurutkan
+# ulang di sini atas data yang tidak lengkap.
+SEARCH_SORTS = {
+    "relevan": None,
+    "terbaru": "CAI%3D",
+    "terpopuler": "CAM%3D",
+    "rating": "CAE%3D",
+}
+
+
+def search_youtube_videos(query: str, limit: int = 20, sort: str = "relevan"):
     """
     Melakukan pencarian video YouTube menggunakan yt-dlp tanpa YouTube API Key.
+
+    `sort` memakai parameter urutan milik YouTube sendiri. Mengurutkan di sisi
+    kita mustahil: pencarian datar tidak mengembalikan tanggal unggah sama
+    sekali (lihat `fetch_upload_dates`), jadi "terbaru" hanya bisa dijawab oleh
+    YouTube.
     """
     ydl_opts = _base_opts()
     ydl_opts.update({
@@ -136,7 +154,17 @@ def search_youtube_videos(query: str, limit: int = 20):
     })
 
     results = []
-    search_target = f"ytsearch{limit}:{query}" if not (query.startswith("http://") or query.startswith("https://")) else query
+    is_url = query.startswith("http://") or query.startswith("https://")
+    sp = SEARCH_SORTS.get(sort)
+    if is_url:
+        search_target = query
+    elif sp:
+        # Lewat URL pencarian sungguhan supaya parameter urutannya ikut.
+        ydl_opts['playlistend'] = limit
+        search_target = ("https://www.youtube.com/results?search_query="
+                         + quote_plus(query) + "&sp=" + sp)
+    else:
+        search_target = f"ytsearch{limit}:{query}"
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         try:
@@ -433,3 +461,44 @@ def list_local_downloads():
             })
     files.sort(key=lambda x: x['created_at'], reverse=True)
     return files
+
+
+# Tanggal unggah TIDAK ADA di hasil pencarian datar — bukan salah, memang tidak
+# dikirim. Satu-satunya cara mendapatkannya adalah membuka tiap videonya, dan
+# itu terlalu lambat untuk dijalankan sebelum daftar hasilnya muncul.
+#
+# Jadi ia diambil belakangan, bersamaan, dan hasilnya diisikan ke kartu yang
+# sudah tampil. Sampai datang, kartunya tidak menuliskan tanggal apa pun —
+# lebih baik kosong daripada menampilkan tanggal yang dikarang.
+UPLOAD_DATE_WORKERS = 8
+
+
+def fetch_upload_dates(video_ids: list[str]) -> dict:
+    """Mengambil tanggal unggah beberapa video sekaligus."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    ids = [v for v in dict.fromkeys(video_ids) if v][:50]
+    if not ids:
+        return {}
+
+    def one(vid: str):
+        opts = _base_opts()
+        opts.update({'skip_download': True})
+        try:
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                # process=False melewati penguraian format, yang merupakan
+                # bagian termahal dan tidak dibutuhkan sama sekali di sini.
+                info = ydl.extract_info(vid, download=False, process=False)
+            return vid, {"upload_date": info.get("upload_date"),
+                         "timestamp": info.get("timestamp"),
+                         "views": info.get("view_count")}
+        except Exception:
+            # Satu video yang gagal tidak boleh mengosongkan seluruh baris.
+            return vid, None
+
+    out = {}
+    with ThreadPoolExecutor(max_workers=UPLOAD_DATE_WORKERS) as ex:
+        for vid, data in ex.map(one, ids):
+            if data and data.get("upload_date"):
+                out[vid] = data
+    return out

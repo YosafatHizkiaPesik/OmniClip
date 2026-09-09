@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft, Scissors, Type, Palette, Download, Loader2, CheckCircle2,
-  AlertTriangle, Crop, Plus, Trash2, Play, Save,
+  AlertTriangle, Crop, Plus, Trash2, Play, Save, Tag,
 } from 'lucide-react';
 import { apiGet, apiPost, downloadToDisk } from '../../lib/api';
 import { loadFonts } from '../../lib/fonts';
@@ -12,6 +12,7 @@ import StaveSystem, { rehearsalLetter } from './StaveSystem';
 import { TrimPanel, SubtitlePanel, StylePanel } from './EditorPanels';
 import FrameStage from './FrameStage';
 import FramePanel from './FramePanel';
+import TitlePanel from './TitlePanel';
 import { loadFraming, saveFraming, serializeLayout } from './frames';
 
 const DEFAULT_STYLE = {
@@ -50,6 +51,7 @@ const TABS = [
   { id: 'subtitle', label: 'Subtitle', Icon: Type },
   { id: 'style', label: 'Gaya', Icon: Palette },
   { id: 'frame', label: 'Bingkai', Icon: Crop },
+  { id: 'title', label: 'Judul', Icon: Tag },
 ];
 
 /**
@@ -358,6 +360,11 @@ export default function Editor({ project, onBack }) {
     subtitles: clip.subtitles,
     hook_text: clip.hook_text,
     show_hook: showHook,
+    // Judul klip, bukan judul video sumbernya: tanpa ini kelima belas klip
+    // dari satu video keluar dengan nama berkas yang sama persis kecuali
+    // nomornya.
+    title: (clip.title || '').trim(),
+    hashtags: clip.hashtags ?? [],
     aspect_ratio: aspectRatio,
     frame_mode: frameMode,
     frame_layout: frameMode === 'layout' ? serializeLayout(layout) : null,
@@ -652,7 +659,7 @@ export default function Editor({ project, onBack }) {
               )}
             </div>
             <div style={{
-              display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
+              display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)',
               borderBottom: '1px solid var(--rule-2)',
             }}>
               {TABS.map(({ id, label, Icon }) => (
@@ -684,12 +691,17 @@ export default function Editor({ project, onBack }) {
                             onHookTextChange={(t) => selected
                               && editor.updateClip(selected.clip_id, { hook_text: t })} />
               )}
+              {tab === 'title' && (
+                <TitlePanel clip={selected}
+                            onChange={(patch) => selected
+                              && editor.updateClip(selected.clip_id, patch)} />
+              )}
               {tab === 'frame' && (
                 <FramePanel frameMode={frameMode} onFrameModeChange={setFrameMode}
                             layout={layout} onLayoutChange={setLayout}
                             selectedFrameId={selectedFrameId}
                             onSelectFrame={setSelectedFrameId}
-                            faceTrackAvailable={!!reframe?.centers?.length} />
+                            faceTrackAvailable={!!reframe?.people?.length} />
               )}
             </div>
           </div>
