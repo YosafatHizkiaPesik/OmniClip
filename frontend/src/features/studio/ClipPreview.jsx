@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Play, Pause, RotateCcw, Loader2, Move, Maximize2, Minimize2 } from 'lucide-react';
 import { fontStack } from '../../lib/fonts';
+import { coverGeometry, frameInk } from './frames';
+import { beginRectDrag } from './rectDrag';
 
 const RATIO_BOX = {
   '9:16': { width: 300, aspect: '9 / 16' },
@@ -39,12 +41,23 @@ export default function ClipPreview({
   frameMode = 'smart',
   reframe = null,          // {available, crop_w, source_w, keyframes:[[t,x]]}
   reframeLoading = false,
+  layout = null,           // {background, frames:[{id,label,src,dst,fit}]}
+  onLayoutChange = null,   // menggeser kotak TUJUAN langsung di atas hasil
+  frameEditing = false,    // kotak bingkai hanya bisa dipegang di tab Bingkai
+  selectedFrameId = null,
+  onSelectFrame = null,
   onStyleChange = null,    // menggeser/mengubah ukuran subtitle di atas gambar
 }) {
   const innerRef = useRef(null);
   const videoRef = externalRef ?? innerRef;
   const bgRef = useRef(null);
   const boxRef = useRef(null);
+  // Elemen video tambahan untuk bingkai ke-2 dan seterusnya. Bingkai pertama
+  // memakai pemutar utama supaya suara dan waktu tetap datang dari satu tempat.
+  const extraRefs = useRef([]);
+  // Rasio sumber dibaca dari berkasnya. Geometri 'cover' tiap bingkai bergantung
+  // padanya, dan menebak 16:9 akan menggeser potongan pada sumber 4:3.
+  const [sourceAspect, setSourceAspect] = useState(16 / 9);
   const [segIndex, setSegIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [clipTime, setClipTime] = useState(0);
@@ -105,10 +118,30 @@ export default function ClipPreview({
     else stageRef.current?.requestFullscreen?.().catch(() => { /* ditolak browser */ });
   }, []);
 
-  const useReframe = frameMode === 'smart' && reframe?.available && constrained;
-  const useCenter = frameMode === 'center';
-  const useOriginal = frameMode === 'original';
-  const useBlur = !useReframe && !useCenter && !useOriginal;
+  const frames = layout?.frames ?? [];
+  const useLayout = frameMode === 'layout' && frames.length > 0;
+  const useReframe = frameMode === 'smart' && reframe?.available && constrained && !useLayout;
+  const useCenter = frameMode === 'center' && !useLayout;
+  const useOriginal = frameMode === 'original' && !useLayout;
+  const useBlur = !useReframe && !useCenter && !useOriginal && !useLayout;
+  // Susunan bingkai jarang menutupi seluruh kanvas — celah di antaranya diisi
+  // versi kabur dari sumbernya, kecuali bila pengguna memilih hitam pekat.
+  const showBlurBg = useBlur || (useLayout && layout?.background !== 'black');
+
+  const secondaries = useCallback(
+    () => [bgRef.current, ...extraRefs.current].filter(Boolean), []);
+
+  const readAspect = useCallback((e) => {
+    const { videoWidth: w, videoHeight: h } = e.currentTarget;
+    if (w > 0 && h > 0) setSourceAspect(w / h);
+  }, []);
+
+  // Daftar cermin dipangkas saat jumlah bingkai berkurang. Tanpa ini, elemen
+  // yang sudah dilepas React tetap tercatat di sini dan loop sinkronisasi
+  // menyetel `currentTime` pada node yang tidak lagi ada di halaman.
+  useEffect(() => {
+    extraRefs.current.length = Math.max(0, frames.length - 1);
+  }, [frames.length]);
 
   /**
    * Posisi crop pada waktu klip tertentu.
@@ -152,16 +185,24 @@ export default function ClipPreview({
       const v = videoRef.current;
       if (v) {
         const seg = segments[segIndex];
+        // Sebelum pemutar sempat melompat ke awal segmen, currentTime masih 0
+        // dan selisihnya negatif. Angka negatif di timecode terbaca sebagai
+        // kerusakan, padahal ia hanya berarti "belum mulai".
         const t = constrained && seg
-          ? (offsets[segIndex] ?? 0) + (v.currentTime - seg.start)
+          ? Math.max(0, (offsets[segIndex] ?? 0) + (v.currentTime - seg.start))
           : v.currentTime;
 
         if (useReframe && cropXAt) {
           const x = cropXAt(Math.max(0, t));
           v.style.transform = `translateX(${(-x / reframe.source_w) * 100}%)`;
         }
-        if (bgRef.current && Math.abs(bgRef.current.currentTime - v.currentTime) > 0.25) {
-          bgRef.current.currentTime = v.currentTime;
+        // Semua elemen cermin — latar kabur dan bingkai kedua dan seterusnya —
+        // dibetulkan hanya saat sudah menyimpang. Menyetel `currentTime` tiap
+        // frame membuat dekoder mencari terus dan gambarnya tersendat.
+        for (const m of secondaries()) {
+          if (Math.abs(m.currentTime - v.currentTime) > 0.25) m.currentTime = v.currentTime;
+          if (v.paused && !m.paused) m.pause();
+          else if (!v.paused && m.paused) m.play().catch(() => { /* diabaikan */ });
         }
         if (Math.abs(t - lastPushed) > 0.05) {
           lastPushed = t;
@@ -172,7 +213,8 @@ export default function ClipPreview({
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [videoRef, segments, segIndex, offsets, constrained, useReframe, cropXAt, reframe]);
+  }, [videoRef, segments, segIndex, offsets, constrained, useReframe, cropXAt,
+      reframe, secondaries]);
 
   const handleTimeUpdate = () => {
     const v = videoRef.current;
@@ -201,7 +243,7 @@ export default function ClipPreview({
     if (!v) return;
     if (playing) {
       v.pause();
-      bgRef.current?.pause();
+      for (const m of secondaries()) m.pause();
     } else {
       const seg = segments[segIndex];
       if (constrained && seg && (v.currentTime < seg.start || v.currentTime > seg.end)) {
@@ -211,7 +253,9 @@ export default function ClipPreview({
       // sebelum ia sempat selesai. Itu bukan kegagalan yang perlu ditangani —
       // hanya perlu tidak dibiarkan jadi penolakan promise yang menganggur.
       v.play().catch(() => { /* dibatalkan oleh pause berikutnya */ });
-      bgRef.current?.play().catch(() => { /* latar kabur boleh gagal diam-diam */ });
+      for (const m of secondaries()) {
+        m.play().catch(() => { /* cermin boleh gagal diam-diam */ });
+      }
     }
   };
 
@@ -417,8 +461,9 @@ export default function ClipPreview({
       }}>
         {src ? (
           <>
-            {/* Latar kabur — mencerminkan bilah kabur pada hasil render */}
-            {useBlur && (
+            {/* Latar kabur — mencerminkan bilah kabur pada hasil render, dan
+                mengisi celah di antara bingkai pada susunan sendiri. */}
+            {showBlurBg && (
               <video
                 ref={bgRef}
                 src={src}
@@ -431,15 +476,98 @@ export default function ClipPreview({
                 }}
               />
             )}
-            <video
-              ref={videoRef}
-              src={src}
-              onTimeUpdate={handleTimeUpdate}
-              onPlay={() => setPlaying(true)}
-              onPause={() => setPlaying(false)}
-              playsInline
-              style={videoStyle}
-            />
+
+            {useLayout ? frames.map((f, i) => {
+              const dw = (boxW * f.dst.w) / 100;
+              const dh = (boxH * f.dst.h) / 100;
+              const geo = coverGeometry(f.src, dw, dh, sourceAspect, f.fit);
+              // Sebelum kotaknya sempat diukur, videonya diisi dengan
+              // object-fit biasa. Menampilkan kotak kosong selama satu frame
+              // terbaca sebagai kedipan hitam tiap kali tata letak berubah.
+              const inner = geo
+                ? {
+                  position: 'absolute',
+                  left: `${geo.left}px`, top: `${geo.top}px`,
+                  width: `${geo.width}px`, height: `${geo.height}px`,
+                  transform: 'none', background: '#000',
+                }
+                : {
+                  position: 'absolute', inset: 0, width: '100%', height: '100%',
+                  objectFit: f.fit === 'contain' ? 'contain' : 'cover',
+                  transform: 'none', background: '#000',
+                };
+              return (
+                <div key={f.id} style={{
+                  position: 'absolute',
+                  left: `${f.dst.x}%`, top: `${f.dst.y}%`,
+                  width: `${f.dst.w}%`, height: `${f.dst.h}%`,
+                  overflow: 'hidden', background: '#000',
+                }}>
+                  {/* Bingkai pertama memakai pemutar utama: suara dan waktu
+                      klip hanya boleh datang dari satu elemen. */}
+                  {i === 0 ? (
+                    <video ref={videoRef} src={src}
+                           onTimeUpdate={handleTimeUpdate}
+                           onLoadedMetadata={readAspect}
+                           onPlay={() => setPlaying(true)}
+                           onPause={() => setPlaying(false)}
+                           playsInline style={inner} />
+                  ) : (
+                    <video ref={(el) => { extraRefs.current[i - 1] = el; }}
+                           src={src} muted playsInline aria-hidden="true"
+                           style={inner} />
+                  )}
+                </div>
+              );
+            }) : (
+              <video
+                ref={videoRef}
+                src={src}
+                onTimeUpdate={handleTimeUpdate}
+                onLoadedMetadata={readAspect}
+                onPlay={() => setPlaying(true)}
+                onPause={() => setPlaying(false)}
+                playsInline
+                style={videoStyle}
+              />
+            )}
+
+            {/* Kotak tujuan yang bisa dipegang. Hanya hidup di tab Bingkai —
+                di tab lain ia akan berebut jari dengan kotak subtitle yang
+                menempati kanvas yang sama. */}
+            {useLayout && frameEditing && onLayoutChange && !fullscreen
+              && frames.map((f, i) => {
+                const on = f.id === selectedFrameId;
+                const ink = frameInk(i);
+                const drag = (handle) => (e) => {
+                  onSelectFrame?.(f.id);
+                  beginRectDrag(e, {
+                    boxW, boxH, rect: f.dst, handle,
+                    onChange: (dst) => onLayoutChange({
+                      ...layout,
+                      frames: layout.frames.map((g) => (g.id === f.id ? { ...g, dst } : g)),
+                    }),
+                  });
+                };
+                return (
+                  <div key={`h-${f.id}`}
+                       className={`frame-rect${on ? ' is-on' : ''}`}
+                       onPointerDown={drag(null)}
+                       style={{
+                         left: `${f.dst.x}%`, top: `${f.dst.y}%`,
+                         width: `${f.dst.w}%`, height: `${f.dst.h}%`,
+                         borderColor: ink, cursor: 'grab', zIndex: on ? 6 : 5,
+                       }}>
+                    <span className="frame-rect-tag" style={{ background: ink }}>
+                      {i + 1}. {f.label}
+                    </span>
+                    {['nw', 'ne', 'sw', 'se'].map((h) => (
+                      <span key={h} className={`frame-grip grip-${h}`}
+                            style={{ borderColor: ink }} onPointerDown={drag(h)} />
+                    ))}
+                  </div>
+                );
+              })}
           </>
         ) : (
           <div style={{
@@ -456,14 +584,15 @@ export default function ClipPreview({
           <div style={{
             position: 'absolute', left: '8px', top: '8px', padding: '3px 8px',
             borderRadius: '99px', fontSize: '0.62rem', fontWeight: 800,
-            background: 'rgba(0,0,0,0.72)', color: useReframe ? '#00E5FF' : '#cbd5e1',
+            background: 'rgba(0,0,0,0.72)', color: (useReframe || useLayout) ? '#00E5FF' : '#cbd5e1',
             display: 'flex', alignItems: 'center', gap: '5px', pointerEvents: 'none',
           }}>
             {reframeLoading && <Loader2 size={10} className="animate-spin" />}
             {reframeLoading ? 'Melacak wajah…'
-              : useReframe ? `Ikut wajah ${Math.round((reframe.face_coverage ?? 0) * 100)}%`
-                : useOriginal ? 'Bingkai orisinal'
-                  : useCenter ? 'Potong tengah' : 'Bilah kabur'}
+              : useLayout ? `${frames.length} bingkai`
+                : useReframe ? `Ikut wajah ${Math.round((reframe.face_coverage ?? 0) * 100)}%`
+                  : useOriginal ? 'Bingkai orisinal'
+                    : useCenter ? 'Potong tengah' : 'Bilah kabur'}
           </div>
         )}
 

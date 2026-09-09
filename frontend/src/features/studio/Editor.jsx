@@ -10,6 +10,9 @@ import { useClipEditor } from './useClipEditor';
 import ClipPreview from './ClipPreview';
 import StaveSystem, { rehearsalLetter } from './StaveSystem';
 import { TrimPanel, SubtitlePanel, StylePanel } from './EditorPanels';
+import FrameStage from './FrameStage';
+import FramePanel from './FramePanel';
+import { defaultLayout, serializeLayout } from './frames';
 
 const DEFAULT_STYLE = {
   size: 96, primary: '#FFFFFF', highlight: '#FFE500',
@@ -49,13 +52,6 @@ const TABS = [
   { id: 'frame', label: 'Bingkai', Icon: Crop },
 ];
 
-const FRAME_MODES = [
-  { id: 'smart', label: 'Ikuti wajah', hint: 'Kamera mengikuti pembicara. Layar penuh, tanpa bilah kabur.' },
-  { id: 'blur', label: 'Bilah kabur', hint: 'Video utuh di tengah, sisi atas-bawah diisi versi kabur.' },
-  { id: 'center', label: 'Potong tengah', hint: 'Ambil bagian tengah frame. Paling cepat, tanpa analisis.' },
-  { id: 'original', label: 'Orisinal', hint: 'Bingkai video sumber apa adanya, tanpa dipotong sama sekali.' },
-];
-
 /**
  * Editor klip: video sumber panjang di timeline, hasil klip di kiri.
  *
@@ -78,6 +74,10 @@ export default function Editor({ project, onBack }) {
   const patchStyle = useCallback((patch) => setStyle((prev) => ({ ...prev, ...patch })), []);
   const [aspectRatio, setAspectRatio] = useState('9:16');
   const [frameMode, setFrameMode] = useState('smart');
+  // Susunan bingkai. Hidup di sini, bukan di dalam pratinjau, karena tiga tempat
+  // membacanya sekaligus: meja bingkai, kanvas hasil, dan muatan render.
+  const [layout, setLayout] = useState(defaultLayout);
+  const [selectedFrameId, setSelectedFrameId] = useState(null);
   const [constrained, setConstrained] = useState(true);
   // Judul mati secara bawaan: hasilnya lebih bersih, dan hook otomatis sering
   // kalah bagus dari klipnya sendiri.
@@ -349,8 +349,9 @@ export default function Editor({ project, onBack }) {
     show_hook: showHook,
     aspect_ratio: aspectRatio,
     frame_mode: frameMode,
+    frame_layout: frameMode === 'layout' ? serializeLayout(layout) : null,
     caption_style: style,
-  }), [videoId, aspectRatio, frameMode, style, showHook]);
+  }), [videoId, aspectRatio, frameMode, layout, style, showHook]);
 
   const handleExportSelected = async () => {
     const targets = clips.filter((c) => checked.has(c.clip_id));
@@ -484,6 +485,46 @@ export default function Editor({ project, onBack }) {
           ))}
         </div>
       )}
+
+      {/* ── Panggung: video sumber di ATAS, kanvas hasil di sampingnya ──────
+          Pratinjau dulu berdiri di kolom kanan selebar 336px. Cukup untuk
+          menonton, tidak cukup untuk memegang sebuah kotak crop dan
+          menggesernya — dan tidak memperlihatkan apa pun tentang bagian mana
+          dari video sumber yang sedang diambil. */}
+      <div className="stage-row">
+        <FrameStage src={data.local_url} videoRef={videoRef}
+                    frameMode={frameMode} reframe={reframe} aspectRatio={aspectRatio}
+                    layout={layout} onLayoutChange={setLayout}
+                    selectedFrameId={selectedFrameId} onSelectFrame={setSelectedFrameId} />
+
+      {/* lubang orkestra */}
+      <div className="pit editor-pit" style={{
+        padding: '14px', display: 'flex', flexDirection: 'column',
+        gap: '10px', alignItems: 'center', alignSelf: 'start',
+      }}>
+        <ClipPreview src={data.local_url} clip={selected} aspectRatio={aspectRatio}
+                     style={{ ...style, showHook }} videoRef={videoRef}
+                     constrained={constrained} frameMode={frameMode}
+                     reframe={reframe} reframeLoading={reframeLoading}
+                     onStyleChange={patchStyle}
+                     layout={layout} onLayoutChange={setLayout}
+                     frameEditing={tab === 'frame'}
+                     selectedFrameId={selectedFrameId}
+                     onSelectFrame={setSelectedFrameId} />
+        <div style={{ display: 'flex', gap: '7px', flexWrap: 'wrap', justifyContent: 'center' }}>
+          <button className="btn-secondary" style={{ fontSize: '.76rem', padding: '6px 10px' }}
+                  onClick={addSegmentAtPlayhead} disabled={!selected || editor.busy}>
+            <Plus size={12} /> Sambung dari sini
+          </button>
+          {!constrained && (
+            <button className="btn-secondary" style={{ fontSize: '.76rem', padding: '6px 10px' }}
+                    onClick={() => selected && selectClip(selected.clip_id)}>
+              Kembali ke huruf
+            </button>
+          )}
+        </div>
+      </div>
+      </div>
 
       {/* ── Sistem balok: seluruh durasi terbaca sekaligus ───────────────── */}
       <StaveSystem
@@ -628,20 +669,10 @@ export default function Editor({ project, onBack }) {
                               && editor.updateClip(selected.clip_id, { hook_text: t })} />
               )}
               {tab === 'frame' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <div className="mark" style={{ color: 'var(--ink)' }}>Cara membingkai</div>
-                  {FRAME_MODES.map((m) => (
-                    <button key={m.id} onClick={() => setFrameMode(m.id)}
-                            className={`choice${frameMode === m.id ? ' is-on' : ''}`}>
-                      <div className="choice-t">{m.label}</div>
-                      <div className="choice-h">{m.hint}</div>
-                    </button>
-                  ))}
-                  <p style={{ fontSize: '.72rem', color: 'var(--ink-3)', lineHeight: 1.5, margin: '4px 0 0' }}>
-                    Mode ikut-wajah menganalisis klip sebelum render. Bila wajah jarang
-                    terlihat — misalnya rekaman layar — sistem otomatis memakai bilah kabur.
-                  </p>
-                </div>
+                <FramePanel frameMode={frameMode} onFrameModeChange={setFrameMode}
+                            layout={layout} onLayoutChange={setLayout}
+                            selectedFrameId={selectedFrameId}
+                            onSelectFrame={setSelectedFrameId} />
               )}
             </div>
           </div>
@@ -667,29 +698,6 @@ export default function Editor({ project, onBack }) {
           )}
         </div>
 
-        {/* lubang orkestra */}
-        <div className="pit editor-pit" style={{
-          padding: '14px', display: 'flex', flexDirection: 'column',
-          gap: '10px', alignItems: 'center', alignSelf: 'start',
-        }}>
-          <ClipPreview src={data.local_url} clip={selected} aspectRatio={aspectRatio}
-                       style={{ ...style, showHook }} videoRef={videoRef}
-                       constrained={constrained} frameMode={frameMode}
-                       reframe={reframe} reframeLoading={reframeLoading}
-                       onStyleChange={patchStyle} />
-          <div style={{ display: 'flex', gap: '7px', flexWrap: 'wrap', justifyContent: 'center' }}>
-            <button className="btn-secondary" style={{ fontSize: '.76rem', padding: '6px 10px' }}
-                    onClick={addSegmentAtPlayhead} disabled={!selected || editor.busy}>
-              <Plus size={12} /> Sambung dari sini
-            </button>
-            {!constrained && (
-              <button className="btn-secondary" style={{ fontSize: '.76rem', padding: '6px 10px' }}
-                      onClick={() => selected && selectClip(selected.clip_id)}>
-                Kembali ke huruf
-              </button>
-            )}
-          </div>
-        </div>
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Search, Loader2, Video } from 'lucide-react';
+import { Search, Loader2, Video, RefreshCw } from 'lucide-react';
 import { apiGet } from '../lib/api';
 import { VideoCard } from '../components/VideoCards';
 
@@ -37,6 +37,9 @@ export default function Home() {
   const [feed, setFeed] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  // Dinaikkan oleh tombol Segarkan. Beranda tanpa kata kunci mengambil kueri
+  // acak dari server, jadi menaikkan angka ini benar-benar mengganti isinya.
+  const [nonce, setNonce] = useState(0);
 
   useEffect(() => { setDraft(q); }, [q]);
 
@@ -59,8 +62,8 @@ export default function Home() {
   useEffect(() => {
     load(q
       ? `/search?q=${encodeURIComponent(q)}&limit=20`
-      : '/trending?limit=20');
-  }, [q, load]);
+      : `/trending?limit=20&refresh=${nonce}`);
+  }, [q, nonce, load]);
 
   const submit = (e) => {
     e.preventDefault();
@@ -79,6 +82,15 @@ export default function Home() {
             Tempel tautan YouTube, atau telusuri untuk mencari bahan.
           </div>
         </div>
+        {!q && (
+          <div className="actions">
+            <button className="btn-secondary" disabled={loading}
+                    onClick={() => setNonce((n) => n + 1)}>
+              <RefreshCw size={14} className={loading ? 'animate-spin' : undefined} />
+              Segarkan
+            </button>
+          </div>
+        )}
       </div>
 
       <form onSubmit={submit} className="search-container">
@@ -140,7 +152,7 @@ export default function Home() {
             </p>
           )}
           <button className="btn-secondary" style={{ marginTop: '16px', fontSize: '0.83rem' }}
-                  onClick={() => load(q ? `/search?q=${encodeURIComponent(q)}&limit=20` : '/trending?limit=20')}>
+                  onClick={() => setNonce((n) => n + 1)}>
             Coba lagi
           </button>
         </div>

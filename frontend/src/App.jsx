@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Search, Download, Scissors, SlidersHorizontal, Film, Music4 } from 'lucide-react';
+import {
+  Search, Download, SlidersHorizontal, Film, Music4, Menu, X,
+} from 'lucide-react';
 import ErrorBoundary from './components/ErrorBoundary';
 import { apiGet } from './lib/api';
 
@@ -15,13 +17,24 @@ const NAV = [
   { to: '/settings', label: 'Pengaturan', Icon: SlidersHorizontal },
 ];
 
+/** Editor satu project: /studio/<videoId>. Bukan /studio yang berisi kartu. */
+function isEditorPath(pathname) {
+  return /^\/studio\/[^/]+/.test(pathname);
+}
+
 /**
  * Kerangka aplikasi.
  *
  * Navigasi duduk di KIRI pada layar lebar, di tempat partitur menuliskan nama
- * instrumen tiap balok — bukan sebagai bilah di bawah halaman, yang memakan
- * tinggi layar justru pada satu-satunya layar yang membutuhkannya (editor).
- * Di bawah 900px ia turun jadi bilah jempol, karena di sanalah ibu jari sampai.
+ * instrumen tiap balok. Di bawah 900px ia turun jadi bilah jempol, karena di
+ * sanalah ibu jari sampai.
+ *
+ * Di dalam editor ia MENUTUP SENDIRI. Mencari video, membuka unduhan, atau
+ * mengganti pengaturan bukan pekerjaan yang dilakukan sambil memotong klip;
+ * yang dibutuhkan editor adalah lebar, dan kolom 188px itu diambil dari
+ * satu-satunya layar yang benar-benar kekurangannya. Tombol burger di kepala
+ * halaman tetap membukanya kapan saja — keadaannya diingat per-jenis-layar,
+ * jadi menutupnya di editor tidak ikut menutupnya di beranda.
  */
 export default function App() {
   const [engine, setEngine] = useState(null);
@@ -29,6 +42,13 @@ export default function App() {
   // Kunci penahan galat: berpindah halaman harus menghapus galat sebelumnya,
   // bukan menyisakan pesan rusak dari rute yang sudah ditinggalkan.
   const location = useLocation();
+  const editor = isEditorPath(location.pathname);
+  const [railOpen, setRailOpen] = useState(() => !isEditorPath(window.location.pathname));
+
+  // Berpindah masuk atau keluar editor menyetel ulang bilahnya ke bawaan layar
+  // itu. Tanpa ini, menutup bilah di editor lalu kembali ke beranda memberi
+  // halaman tanpa navigasi sama sekali.
+  useEffect(() => { setRailOpen(!editor); }, [editor]);
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('omniclip_theme') || 'light';
@@ -43,8 +63,14 @@ export default function App() {
   }, []);
 
   return (
-    <div className="app-viewport">
+    <div className="app-viewport" data-rail={railOpen ? 'on' : 'off'}>
       <header className="top-header">
+        <button className="rail-toggle" onClick={() => setRailOpen((v) => !v)}
+                aria-label={railOpen ? 'Tutup menu' : 'Buka menu'}
+                aria-expanded={railOpen}>
+          {railOpen ? <X size={17} /> : <Menu size={17} />}
+        </button>
+
         <div className="brand-logo" onClick={() => navigate('/')}
              style={{ cursor: 'pointer' }}>
           <span>OMNI<em>CLIP</em></span>
@@ -62,9 +88,10 @@ export default function App() {
         </div>
       </header>
 
-      <nav className="side-rail">
+      <nav className="side-rail" aria-hidden={!railOpen}>
         {NAV.map(({ to, label, Icon, end }) => (
           <NavLink key={to} to={to} end={end}
+                   tabIndex={railOpen ? 0 : -1}
                    className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
             <Icon className="nav-icon" size={17} strokeWidth={1.9} />
             <span>{label}</span>

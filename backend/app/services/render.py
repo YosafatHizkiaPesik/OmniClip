@@ -161,6 +161,84 @@ def _build_segment_graph(segments: list[dict]) -> tuple[list[str], str, str]:
     return inputs, ";".join(parts), "[vcat]|[acat]"
 
 
+def _even(v: float, lo: int = 2) -> int:
+    """Pembulatan ke genap. yuv420p mencuplik krominansi 2x2, jadi lebar atau
+    tinggi ganjil membuat ffmpeg menolak atau menghasilkan baris rusak."""
+    return max(lo, int(round(v / 2.0)) * 2)
+
+
+def _pct_rect(rect: dict, w: int, h: int) -> tuple[int, int, int, int]:
+    """Persegi persen -> piksel, dijepit di dalam bidangnya."""
+    rw = _even(max(1.0, min(100.0, float(rect.get("w", 100)))) / 100.0 * w)
+    rh = _even(max(1.0, min(100.0, float(rect.get("h", 100)))) / 100.0 * h)
+    rw = min(rw, _even(w))
+    rh = min(rh, _even(h))
+    rx = _even(max(0.0, min(100.0, float(rect.get("x", 0)))) / 100.0 * w, lo=0)
+    ry = _even(max(0.0, min(100.0, float(rect.get("y", 0)))) / 100.0 * h, lo=0)
+    return min(rx, max(0, w - rw)), min(ry, max(0, h - rh)), rw, rh
+
+
+def build_layout_graph(layout: dict, in_label: str, out_label: str, *,
+                       src_w: int, src_h: int, out_w: int, out_h: int) -> str:
+    """
+    Menyusun beberapa potongan video sumber menjadi satu kanvas.
+
+    Inilah yang membuat klip main game dan klip reaksi streamer mungkin: satu
+    video sumber, beberapa jendela ke dalamnya, masing-masing diletakkan sendiri
+    di kanvas hasil. Karena semua bingkai berasal dari input yang sama, tidak ada
+    dekode kedua — `split` membagi aliran yang sudah terdekode.
+
+    Celah antar bingkai diisi versi kabur dari sumbernya (atau hitam), bukan
+    dibiarkan kosong: ffmpeg akan mengisi piksel yang tidak tertimpa dengan
+    apa pun yang kebetulan ada di buffer latar.
+    """
+    frames = [f for f in (layout.get("frames") or []) if isinstance(f, dict)]
+    if not frames:
+        return ""
+
+    parts: list[str] = []
+    n = len(frames)
+    # Satu cabang per bingkai, plus satu untuk latar.
+    parts.append(f"{in_label}split={n + 1}" + "".join(f"[lsrc{i}]" for i in range(n + 1)))
+
+    bg = "[lbg]"
+    if layout.get("background") == "black":
+        # Sumber latar tetap dipakai supaya panjang dan laju frame-nya persis
+        # sama dengan bingkainya; `drawbox` mengecatnya hitam penuh.
+        parts.append(
+            f"[lsrc{n}]scale={out_w}:{out_h}:force_original_aspect_ratio=increase,"
+            f"crop={out_w}:{out_h},drawbox=x=0:y=0:w={out_w}:h={out_h}:color=black:t=fill,"
+            f"setsar=1[lbg]"
+        )
+    else:
+        parts.append(
+            f"[lsrc{n}]scale={out_w}:{out_h}:force_original_aspect_ratio=increase,"
+            f"crop={out_w}:{out_h},boxblur=28:6,setsar=1[lbg]"
+        )
+
+    for i, f in enumerate(frames):
+        sx, sy, sw, sh = _pct_rect(f.get("src") or {}, src_w, src_h)
+        dx, dy, dw, dh = _pct_rect(f.get("dst") or {}, out_w, out_h)
+        if f.get("fit") == "contain":
+            place = (f"scale={dw}:{dh}:force_original_aspect_ratio=decrease,"
+                     f"pad={dw}:{dh}:(ow-iw)/2:(oh-ih)/2:color=black")
+        else:
+            place = (f"scale={dw}:{dh}:force_original_aspect_ratio=increase,"
+                     f"crop={dw}:{dh}")
+        parts.append(f"[lsrc{i}]crop={sw}:{sh}:{sx}:{sy},{place},setsar=1[lf{i}]")
+
+    # Ditumpuk berurutan: bingkai terakhir di daftar tergambar paling atas,
+    # sama seperti urutan yang ditampilkan panelnya.
+    prev = bg
+    for i in range(n):
+        nxt = f"[lo{i}]" if i < n - 1 else out_label
+        sx, sy, sw, sh = _pct_rect(frames[i].get("dst") or {}, out_w, out_h)
+        parts.append(f"{prev}[lf{i}]overlay={sx}:{sy}:shortest=0{nxt}")
+        prev = nxt
+
+    return ";".join(parts)
+
+
 SLUG_MAX = 52
 
 
@@ -222,6 +300,7 @@ def render_clip(
     video_filter: str = "normal",
     caption_style: Optional[CaptionStyle] = None,
     frame_mode: str = "smart",
+    frame_layout: Optional[dict] = None,
     loudnorm: bool = True,
     video_id: str = "",
     title: str = "",
@@ -281,6 +360,22 @@ def render_clip(
             out_w = int(info.get("width") or 1920)
             out_h = int(info.get("height") or 1080)
 
+        # Susunan bingkai sendiri. Bukan satu rantai filter melainkan graf
+        # bercabang, jadi ia disusun terpisah dan menghasilkan label barunya
+        # sendiri yang lalu dipakai rantai sisanya.
+        layout_graph = ""
+        if frame_mode == "layout" and frame_layout and frame_layout.get("frames"):
+            from .media import probe as _probe
+            info = _probe(src)
+            layout_graph = build_layout_graph(
+                frame_layout, vlabel, "[vlay]",
+                src_w=int(info.get("width") or 1920),
+                src_h=int(info.get("height") or 1080),
+                out_w=out_w, out_h=out_h,
+            )
+            if layout_graph:
+                frame_used = "layout"
+
         if frame_mode == "smart":
             plan = plan_reframe(str(src), segments, aspect_ratio=aspect_ratio)
             if plan is not None:
@@ -290,7 +385,7 @@ def render_clip(
                     plan, workdir / "reframe.cmd", out_w, out_h))
                 frame_used = "smart"
 
-        if frame_used not in ("smart", "original"):
+        if frame_used not in ("smart", "original", "layout"):
             table = CENTER_FILTERS if frame_used == "center" else ASPECT_FILTERS
             aspect = table.get(aspect_ratio)
             if aspect:
@@ -336,6 +431,9 @@ def render_clip(
             chain.append(f"ass=filename='{ass_arg}'" + (f":fontsdir='{fonts}'" if fonts else ""))
 
         graph = seg_graph
+        if layout_graph:
+            graph += ";" + layout_graph
+            vlabel = "[vlay]"
         if chain:
             graph += f";{vlabel}" + ",".join(chain) + "[vout]"
             vout = "[vout]"
@@ -392,6 +490,7 @@ def render_clip(
             "aspect_ratio": aspect_ratio,
             "frame_mode": frame_used,
             "face_coverage": face_coverage,
+            "frame_layout": frame_layout if frame_used == "layout" else None,
             "hook_text": hook_text,
             "watermark": watermark,
             "video_filter": video_filter,

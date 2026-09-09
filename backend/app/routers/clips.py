@@ -63,6 +63,28 @@ class CaptionStyleModel(BaseModel):
     speaker_colors: Optional[List[str]] = None
 
 
+class FrameRectModel(BaseModel):
+    """Persegi dalam persen. Dijepit di sini, bukan dipercaya dari klien."""
+    x: float = Field(0, ge=0, le=100)
+    y: float = Field(0, ge=0, le=100)
+    w: float = Field(100, ge=1, le=100)
+    h: float = Field(100, ge=1, le=100)
+
+
+class FrameModel(BaseModel):
+    label: str = ""
+    src: FrameRectModel = FrameRectModel()
+    dst: FrameRectModel = FrameRectModel()
+    fit: str = "cover"
+
+
+class FrameLayoutModel(BaseModel):
+    background: str = "blur"
+    # Delapan bingkai sudah jauh melewati apa pun yang masih terbaca di layar
+    # ponsel, dan tiap bingkai menambah satu cabang skala di filtergraph.
+    frames: List[FrameModel] = Field(default_factory=list, max_length=8)
+
+
 class RenderClipRequest(BaseModel):
     # Referensi video, bukan path filesystem: klien tidak menentukan file mana
     # yang dibuka server.
@@ -83,8 +105,13 @@ class RenderClipRequest(BaseModel):
     show_hook: bool = False
     watermark: str = ""
     video_filter: str = "normal"
-    # smart = ikuti wajah pembicara, blur = bilah kabur, center = crop tengah.
+    # smart = ikuti wajah pembicara, blur = bilah kabur, center = crop tengah,
+    # original = tanpa dipotong, layout = susunan bingkai buatan pengguna.
     frame_mode: str = "smart"
+    # Susunan bingkai. Tiap bingkai punya persegi SUMBER (bagian mana dari video
+    # yang diambil) dan persegi TUJUAN (di mana ia ditaruh pada kanvas hasil),
+    # keduanya dalam persen. Hanya dibaca bila frame_mode == "layout".
+    frame_layout: Optional[FrameLayoutModel] = None
     # Nomor klip, dipakai untuk menamai berkas hasilnya.
     clip_index: Optional[int] = None
     caption_style: Optional[CaptionStyleModel] = None
@@ -279,6 +306,8 @@ async def render_clip(req: RenderClipRequest):
             "watermark": req.watermark,
             "video_filter": req.video_filter,
             "frame_mode": req.frame_mode,
+            "frame_layout": (req.frame_layout.model_dump()
+                             if req.frame_layout else None),
             "clip_index": req.clip_index,
             "caption_style": (req.caption_style.model_dump(exclude_none=True)
                               if req.caption_style else None),

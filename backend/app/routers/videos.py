@@ -1,5 +1,8 @@
 """Pencarian YouTube, metadata video, dan unduhan."""
 
+import asyncio
+import random
+
 from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
 
@@ -41,13 +44,46 @@ async def search(q: str = Query(..., description="Kata kunci pencarian"), limit:
         raise _as_app_error(e) from e
 
 
+# Kueri beranda. Satu kueri tetap adalah sebab beranda menampilkan video yang
+# sama persis berapa kali pun disegarkan: `ytsearchN:` yt-dlp mengembalikan
+# urutan yang deterministik, jadi kueri yang sama = daftar yang sama.
+TRENDING_QUERIES = [
+    "podcast indonesia terbaru",
+    "wawancara mendalam indonesia",
+    "obrolan santai podcast indonesia",
+    "cerita pengalaman hidup indonesia",
+    "diskusi bisnis indonesia",
+    "talkshow indonesia terbaru",
+    "podcast edukasi indonesia",
+    "podcast komedi indonesia",
+    "kisah inspiratif indonesia",
+    "podcast teknologi indonesia",
+]
+
+
 @router.get("/trending")
-async def trending(limit: int = 20):
-    """Rekomendasi beranda. Fase 7 menggantinya dengan feed bersection."""
+async def trending(limit: int = 20, refresh: int = 0):
+    """
+    Rekomendasi beranda.
+
+    Tiap panggilan memakai kueri yang berbeda dari kolam di atas dan mengambil
+    lebih banyak hasil daripada yang ditampilkan, lalu mengacak sisanya. Hasilnya
+    beranda benar-benar berganti isi saat disegarkan — bukan memutar ulang dua
+    puluh judul yang sama.
+
+    Sepuluh hasil teratas ditahan di urutannya karena itulah yang paling relevan
+    dengan kuerinya; pengacakan hanya berlaku pada ekor daftar.
+    """
+    want = min(limit, 50)
+    query = random.choice(TRENDING_QUERIES)
     try:
-        return search_youtube_videos("podcast indonesia terbaru", min(limit, 50))
+        pool = await asyncio.to_thread(search_youtube_videos, query, min(want * 2, 60))
     except YtdlpError as e:
         raise _as_app_error(e) from e
+
+    head, tail = pool[:10], pool[10:]
+    random.shuffle(tail)
+    return (head + tail)[:want]
 
 
 @router.get("/video-info")

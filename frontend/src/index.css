@@ -372,6 +372,23 @@ a { color: var(--cue); text-underline-offset: 3px; text-decoration-thickness: 1p
 }
 .nav-icon { flex: none; opacity: .9; }
 
+/* Bilah navigasi yang bisa ditutup.
+
+   Editor membutuhkan lebar lebih dari apa pun di aplikasi ini, dan 188px kolom
+   navigasi adalah lebar yang paling mudah dikembalikan kepadanya. Kolomnya
+   diciutkan ke nol, bukan diberi `position: fixed` — dengan begitu isi halaman
+   benar-benar melebar, bukan sekadar tertutupi. */
+.rail-toggle {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; flex: none; cursor: pointer;
+  background: transparent; color: #B9C6D8;
+  border: 1px solid #2A3543; border-radius: var(--r-sm);
+}
+.rail-toggle:hover { color: #fff; background: #FFFFFF0D; border-color: #3A4757; }
+
+.app-viewport[data-rail='off'] { grid-template-columns: 0 minmax(0, 1fr); }
+.app-viewport[data-rail='off'] .side-rail { display: none; }
+
 .main-content {
   grid-area: main; padding: 20px 22px 34px; min-width: 0;
   background: var(--ground);
@@ -439,6 +456,10 @@ a { color: var(--cue); text-underline-offset: 3px; text-decoration-thickness: 1p
     min-height: 54px;                     /* target sentuh */
   }
   .nav-item.active { border-left: 0; border-top-color: var(--reh); }
+
+  /* Di layar sempit bilahnya ada di baris ketiga grid, bukan di kolom, jadi
+     menciutkan kolom tidak berpengaruh — bilahnya sendiri yang disembunyikan. */
+  .app-viewport[data-rail='off'] { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* ============================================================================
@@ -446,7 +467,9 @@ a { color: var(--cue); text-underline-offset: 3px; text-decoration-thickness: 1p
    ========================================================================== */
 .editor-grid {
   display: grid;
-  grid-template-columns: 250px minmax(0, 1fr) 336px;
+  /* Dua kolom, bukan tiga: pratinjau naik ke panggung di atas halaman, dan
+     lebar yang ditinggalkannya diberikan kepada lirik. */
+  grid-template-columns: 250px minmax(0, 1fr);
   gap: 14px; align-items: start;
 }
 
@@ -485,9 +508,73 @@ a { color: var(--cue); text-underline-offset: 3px; text-decoration-thickness: 1p
 .choice.is-on .choice-t { color: var(--reh); }
 .choice-h { font-size: .74rem; color: var(--ink-2); line-height: 1.45; }
 
+/* ── Meja bingkai ────────────────────────────────────────────────────────────
+   Video sumber duduk di ATAS, selebar tempat yang ada, dengan kanvas hasil di
+   sampingnya. Sebelumnya pratinjau berdiri di kolom kanan selebar 336px — cukup
+   untuk menonton, tidak cukup untuk memegang sebuah kotak dan menggesernya.  */
+.stage-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 14px; align-items: start; margin-bottom: 14px;
+}
+
+.frame-stage { background: var(--plate); border: 1px solid var(--rule); border-radius: var(--r-md); overflow: hidden; }
+.frame-stage-well { padding: 12px; background: var(--stage-2); }
+.frame-stage-box {
+  position: relative; width: 100%; margin: 0 auto; max-height: 56vh;
+  background: #000; overflow: hidden; touch-action: none;
+}
+.frame-stage-box > video { object-fit: contain; }
+.frame-stage-empty {
+  position: absolute; inset: 0; display: flex; align-items: center;
+  justify-content: center; color: #93A2B8; font-size: .8rem; text-align: center;
+  padding: 20px;
+}
+
+/* Kotak crop. Garis luarnya gelap DAN terang sekaligus: satu bayangan tipis di
+   luar garis berwarna, supaya kotaknya tetap terbaca di atas gambar cerah
+   maupun gelap tanpa mengecat ulang gambarnya. */
+.frame-rect {
+  position: absolute; border: 2px solid; border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .55), inset 0 0 0 1px rgba(255, 255, 255, .35);
+  touch-action: none;
+}
+.frame-rect.is-locked { pointer-events: none; }
+.frame-rect.is-on { box-shadow: 0 0 0 1px rgba(0, 0, 0, .55), inset 0 0 0 2px rgba(255, 255, 255, .6); }
+.frame-rect-tag {
+  position: absolute; left: -2px; top: -2px; padding: 2px 6px;
+  font-size: .62rem; font-weight: 750; color: #fff; white-space: nowrap;
+  border-radius: 2px 0 2px 0; pointer-events: none;
+  max-width: calc(100% + 4px); overflow: hidden; text-overflow: ellipsis;
+}
+.frame-grip {
+  position: absolute; width: 16px; height: 16px; background: #fff;
+  border: 2px solid; border-radius: 2px; touch-action: none;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .5);
+}
+.grip-nw { left: -8px; top: -8px; cursor: nwse-resize; }
+.grip-ne { right: -8px; top: -8px; cursor: nesw-resize; }
+.grip-sw { left: -8px; bottom: -8px; cursor: nesw-resize; }
+.grip-se { right: -8px; bottom: -8px; cursor: nwse-resize; }
+
+/* Baris satu bingkai di panel. */
+.frame-row {
+  display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+  border: 1px solid var(--rule-2); border-radius: var(--r-sm);
+  cursor: pointer; background: transparent; width: 100%; text-align: left;
+  font: inherit; color: var(--ink);
+}
+.frame-row:hover { background: var(--plate-3); }
+.frame-row.is-on { border-color: var(--reh); background: var(--hl-wash); }
+.frame-swatch { width: 12px; height: 12px; border-radius: 2px; flex: none; }
+
+@media (max-width: 1180px) {
+  .stage-row { grid-template-columns: minmax(0, 1fr); }
+  .stage-row > .pit { justify-self: center; width: 100%; max-width: 360px; }
+}
+
 @media (max-width: 1180px) {
   .editor-grid { grid-template-columns: 220px minmax(0, 1fr); }
-  .editor-pit { grid-column: 1 / -1; order: -1; }
 }
 @media (max-width: 760px) {
   .editor-grid { grid-template-columns: minmax(0, 1fr); }

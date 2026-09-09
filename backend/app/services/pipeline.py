@@ -138,6 +138,10 @@ def run_render(ctx: JobContext) -> dict:
     # pesan sendiri, pengguna melihat bar diam di 2% tanpa tahu sebabnya.
     if frame_mode == "smart":
         ctx.progress(0.02, stage="reframe", message="Melacak wajah pembicara…")
+    elif frame_mode == "layout":
+        frames = (ctx.payload.get("frame_layout") or {}).get("frames") or []
+        ctx.progress(0.02, stage="prepare",
+                     message=f"Menyusun {len(frames)} bingkai…")
     else:
         ctx.progress(0.02, stage="prepare", message=f"{label}…")
 
@@ -161,6 +165,7 @@ def run_render(ctx: JobContext) -> dict:
         video_filter=ctx.payload.get("video_filter", "normal"),
         caption_style=style,
         frame_mode=frame_mode,
+        frame_layout=ctx.payload.get("frame_layout"),
         video_id=video_id,
         on_progress=on_progress,
         should_cancel=lambda: ctx.cancelled,
