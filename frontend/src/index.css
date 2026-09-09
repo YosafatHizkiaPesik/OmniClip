@@ -518,13 +518,32 @@ a { color: var(--cue); text-underline-offset: 3px; text-decoration-thickness: 1p
   gap: 14px; align-items: start; margin-bottom: 14px;
 }
 
-.frame-stage { background: var(--plate); border: 1px solid var(--rule); border-radius: var(--r-md); overflow: hidden; }
-.frame-stage-well { padding: 12px; background: var(--stage-2); }
+.frame-stage {
+  background: var(--plate); border: 1px solid var(--rule);
+  border-radius: var(--r-md); overflow: hidden;
+  /* Sumurnya memanjang mengisi tinggi baris supaya tidak ada pelat kosong di
+     bawah video ketika kolom sebelahnya lebih tinggi. */
+  display: flex; flex-direction: column;
+}
+.frame-stage-well {
+  padding: 12px; background: var(--stage-2);
+  flex: 1; display: grid; place-items: center;
+}
+
+/* Kotak panggung HARUS berukuran persis sebesar videonya.
+   
+   Sebelumnya tingginya dibatasi `max-height` sementara lebarnya tetap 100%,
+   jadi pada layar pendek kotaknya jadi 960x430 — rasio 2,23 — sementara
+   videonya 16:9. `object-fit: contain` lalu menyisipkan bilah hitam di kiri
+   dan kanan, dan sejak itu persen KOTAK bukan lagi persen VIDEO: setiap kotak
+   crop yang digambar di sini menunjuk bagian video yang berbeda dari yang
+   benar-benar diambil. Batasnya sekarang lebar, diturunkan dari rasio videonya
+   sendiri, sehingga kotak dan video selalu satu bidang. */
 .frame-stage-box {
-  position: relative; width: 100%; margin: 0 auto; max-height: 56vh;
+  position: relative; width: 100%; margin: 0 auto;
   background: #000; overflow: hidden; touch-action: none;
 }
-.frame-stage-box > video { object-fit: contain; }
+.frame-stage-box > video { object-fit: fill; }
 .frame-stage-empty {
   position: absolute; inset: 0; display: flex; align-items: center;
   justify-content: center; color: #93A2B8; font-size: .8rem; text-align: center;
@@ -540,6 +559,9 @@ a { color: var(--cue); text-underline-offset: 3px; text-decoration-thickness: 1p
   touch-action: none;
 }
 .frame-rect.is-locked { pointer-events: none; }
+/* Kotak yang membuntuti orang digambar putus-putus: posisi mendatarnya bukan
+   milik pengguna lagi, dan garis penuh akan menjanjikan sebaliknya. */
+.frame-rect.is-following { border-style: dashed; }
 .frame-rect.is-on { box-shadow: 0 0 0 1px rgba(0, 0, 0, .55), inset 0 0 0 2px rgba(255, 255, 255, .6); }
 .frame-rect-tag {
   position: absolute; left: -2px; top: -2px; padding: 2px 6px;

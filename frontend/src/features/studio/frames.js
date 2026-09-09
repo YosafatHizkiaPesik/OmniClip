@@ -70,6 +70,11 @@ export function makeFrame(label, src, dst) {
     // seluruhnya dan menyisakan bilah. Cover jadi bawaan karena bilah hitam di
     // tengah susunan hampir selalu bukan yang dimaui.
     fit: 'cover',
+    // Bila benar, posisi MENDATAR kotak sumber digerakkan jejak wajah. Lebar,
+    // tinggi, dan posisi tegaknya tetap milik pengguna — itulah gunanya:
+    // pengguna menentukan seberapa rapat bingkainya, sistem menjaga orangnya
+    // tetap di dalamnya.
+    follow: false,
   };
 }
 
@@ -150,47 +155,114 @@ export function serializeLayout(layout) {
       src: clampRect(f.src),
       dst: clampRect(f.dst),
       fit: f.fit === 'contain' ? 'contain' : 'cover',
+      follow: !!f.follow,
     })),
   };
 }
 
 /**
- * Geometri 'cover' untuk pratinjau.
+ * Geometri 'cover' untuk pratinjau, dalam PERSEN kotak tujuan.
  *
- * Mengembalikan ukuran dan geseran elemen video di dalam kotak tujuan sehingga
- * `src` persis mengisi kotak itu — rumus yang sama dengan
- * `scale=…:force_original_aspect_ratio=increase,crop=…` di ffmpeg, supaya apa
- * yang terlihat di layar adalah apa yang akan dirender.
+ * Persen, bukan piksel, dan itu bukan soal selera. Versi piksel harus mengukur
+ * kotak pratinjau lebih dulu, dan ukuran hasil pengukuran itu bisa basi satu
+ * frame — ketika kotaknya berubah lebar, videonya tetap diberi ukuran lama.
+ * Yang terlihat: video yang tidak lagi menutupi kotaknya, dan sisa kotak
+ * tergambar hitam. Pada bingkai sempit, sisanya hampir seluruh kotak, dan
+ * bingkainya terbaca sebagai "gelap saja". Saya sempat mengirimkan versi itu.
  *
- * @param srcRect  persegi sumber dalam persen
- * @param boxW,boxH  ukuran kotak tujuan dalam piksel layar
- * @param aspect   lebar/tinggi video sumber
+ * Semua yang dibutuhkan rumus ini sudah diketahui tanpa mengukur apa pun:
+ * persegi sumber, persegi tujuan, rasio video sumber, dan rasio kanvas hasil.
+ * Karena tidak ada yang diukur, tidak ada yang bisa basi.
+ *
+ * Rumusnya sama dengan `scale=…:force_original_aspect_ratio=increase,crop=…`
+ * di ffmpeg, jadi apa yang terlihat di layar adalah apa yang akan dirender.
+ *
+ * @param srcRect      persegi sumber, persen video asli
+ * @param dstRect      persegi tujuan, persen kanvas hasil
+ * @param sourceAspect lebar/tinggi video sumber
+ * @param canvasAspect lebar/tinggi kanvas hasil (9/16 dan seterusnya)
  */
-export function coverGeometry(srcRect, boxW, boxH, aspect, fit = 'cover') {
-  if (!boxW || !boxH || !aspect) return null;
+export function coverPercent(srcRect, dstRect, sourceAspect, canvasAspect,
+                             fit = 'cover') {
   const fw = srcRect.w / 100;
   const fh = srcRect.h / 100;
-  if (fw <= 0 || fh <= 0) return null;
+  if (!(fw > 0) || !(fh > 0) || !(sourceAspect > 0) || !(canvasAspect > 0)) return null;
+  if (!(dstRect.w > 0) || !(dstRect.h > 0)) return null;
 
-  // Aspek potongan sumber, dinyatakan lewat aspek video utuhnya.
-  const rectAspect = (fw / fh) * aspect;
-  const boxAspect = boxW / boxH;
+  // Rasio kotak tujuan diturunkan, bukan diukur: kotak tujuan adalah sekian
+  // persen lebar dikali sekian persen tinggi dari kanvas yang rasionya sudah
+  // ditentukan pengguna.
+  const boxAspect = (dstRect.w / dstRect.h) * canvasAspect;
+  const rectAspect = (fw / fh) * sourceAspect;
   const heightBinds = fit === 'cover' ? rectAspect > boxAspect : rectAspect < boxAspect;
 
-  const rectW = heightBinds ? boxH * rectAspect : boxW;
-  const rectH = heightBinds ? boxH : boxW / rectAspect;
-
-  const fullW = rectW / fw;
-  const fullH = rectH / fh;
+  // Lebar dan tinggi potongan sumber, sebagai persen kotak tujuan.
+  const rectW = heightBinds ? (rectAspect / boxAspect) * 100 : 100;
+  const rectH = heightBinds ? 100 : (boxAspect / rectAspect) * 100;
 
   return {
-    width: fullW,
-    height: fullH,
-    left: -(srcRect.x / 100) * fullW + (boxW - rectW) / 2,
-    top: -(srcRect.y / 100) * fullH + (boxH - rectH) / 2,
+    width: rectW / fw,
+    height: rectH / fh,
+    left: -(srcRect.x / 100) * (rectW / fw) + (100 - rectW) / 2,
+    top: -(srcRect.y / 100) * (rectH / fh) + (100 - rectH) / 2,
   };
 }
 
+/**
+ * Waktu VIDEO SUMBER -> waktu KLIP.
+ *
+ * Jejak wajah dan subtitle keduanya berwaktu klip: nol adalah awal klip, dan
+ * potongan dari menit 10 dan menit 50 menyambung jadi satu garis waktu tanpa
+ * lompatan. Elemen `<video>` sebaliknya melaporkan waktu video sumber. Mencari
+ * jejak dengan angka yang salah tidak melempar galat apa pun — ia hanya selalu
+ * mengembalikan titik terakhir, dan kotaknya terlihat berhenti mengikuti.
+ */
+export function clipTimeFor(segments, sourceTime) {
+  if (!segments?.length) return sourceTime;
+  let acc = 0;
+  for (const s of segments) {
+    const len = Math.max(0, s.end - s.start);
+    if (sourceTime < s.end || s === segments[segments.length - 1]) {
+      return Math.max(0, acc + Math.min(len, sourceTime - s.start));
+    }
+    acc += len;
+  }
+  return acc;
+}
+
+/**
+ * Posisi mendatar bingkai pengikut pada detik tertentu, dalam persen.
+ *
+ * Kembaran persis `ReframePlan.x_track` di server: titik tengah wajah dikurangi
+ * separuh lebar jendela, lalu dijepit di dalam bidang video. Karena keduanya
+ * membaca jejak yang sama dan menghitungnya dengan cara yang sama, kotak yang
+ * bergerak di layar adalah kotak yang akan dipakai ffmpeg.
+ *
+ * @param centers  [[detik, titikTengahPiksel]] dari /api/clip-reframe
+ * @param widthPct lebar jendela, persen lebar video
+ * @param sourceW  lebar video sumber dalam piksel
+ */
+export function followX(centers, widthPct, sourceW, t) {
+  if (!centers?.length || !sourceW) return null;
+  let lo = 0;
+  let hi = centers.length - 1;
+  if (t <= centers[0][0]) lo = 0;
+  else {
+    while (lo < hi) {
+      const mid = Math.ceil((lo + hi) / 2);
+      if (centers[mid][0] <= t) lo = mid;
+      else hi = mid - 1;
+    }
+  }
+  const halfPct = widthPct / 2;
+  const centerPct = (centers[lo][1] / sourceW) * 100;
+  return Math.max(0, Math.min(100 - widthPct, centerPct - halfPct));
+}
+
+/** Rasio kanvas keluaran sebagai angka. */
+export const CANVAS_ASPECT = {
+  '9:16': 9 / 16, '1:1': 1, '4:5': 4 / 5, '16:9': 16 / 9,
+};
 
 // --- Ingatan susunan ---------------------------------------------------------
 
@@ -228,6 +300,7 @@ export function loadFraming(videoId) {
         frames: l.frames.map((f) => ({
           ...makeFrame(f.label || 'Bingkai', f.src, f.dst),
           fit: f.fit === 'contain' ? 'contain' : 'cover',
+          follow: !!f.follow,
         })),
       },
     };

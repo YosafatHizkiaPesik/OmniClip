@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
+import { Plus, Trash2, ArrowUp, ArrowDown, ScanFace } from 'lucide-react';
 import {
   LAYOUT_PRESETS, addedFrame, clampRect, frameInk, presetLayout,
 } from './frames';
@@ -24,6 +24,7 @@ export default function FramePanel({
   frameMode, onFrameModeChange,
   layout, onLayoutChange,
   selectedFrameId, onSelectFrame,
+  faceTrackAvailable = false,
 }) {
   const frames = layout?.frames ?? [];
   const selected = frames.find((f) => f.id === selectedFrameId) ?? frames[0] ?? null;
@@ -127,6 +128,11 @@ export default function FramePanel({
                        onClick={(e) => e.stopPropagation()}
                        onChange={(e) => setField(f.id, { label: e.target.value })}
                        style={{ flex: 1, minWidth: 0, padding: '4px 7px', fontSize: '.78rem' }} />
+                <IconBtn title={f.follow ? 'Berhenti mengikuti orang' : 'Ikuti orang'}
+                         active={f.follow}
+                         onClick={(e) => { e.stopPropagation(); setField(f.id, { follow: !f.follow }); }}>
+                  <ScanFace size={12} />
+                </IconBtn>
                 <IconBtn title="Naikkan" onClick={(e) => { e.stopPropagation(); move(f.id, -1); }}>
                   <ArrowUp size={12} />
                 </IconBtn>
@@ -147,6 +153,28 @@ export default function FramePanel({
             paling atas. Seret kotak di video sumber untuk memilih bagian yang
             diambil, dan kotak di kanvas hasil untuk menaruhnya.
           </p>
+
+          {/* Ikuti orang. Ditaruh di sini, bukan sebagai mode tersendiri:
+              "ikuti wajah" dan "susun sendiri" bukan dua pilihan yang saling
+              meniadakan — bingkai reaksi yang mengikuti gamer di atas gameplay
+              yang diam adalah satu susunan, bukan dua. */}
+          <div style={{
+            display: 'flex', gap: '9px', alignItems: 'flex-start',
+            padding: '9px 11px', borderRadius: 'var(--r-sm)',
+            border: '1px solid var(--rule-2)', background: 'var(--plate-3)',
+          }}>
+            <ScanFace size={15} style={{ flex: 'none', marginTop: '2px', color: 'var(--cue)' }} />
+            <div style={{ fontSize: '.74rem', color: 'var(--ink-2)', lineHeight: 1.55 }}>
+              <b style={{ color: 'var(--ink)' }}>Ikuti orang:</b> tekan ikon wajah
+              pada baris bingkai. Kotaknya berhenti diam dan mulai membuntuti
+              pembicara — Anda tetap yang menentukan seberapa rapat dan setinggi
+              apa bingkainya, sistem hanya menjaga orangnya tetap di dalam.
+              {!faceTrackAvailable && (
+                <> Untuk klip ini wajah belum terlacak, jadi bingkai pengikut
+                akan diam di tempat kotaknya.</>
+              )}
+            </div>
+          </div>
 
           {selected && (
             <>
@@ -177,15 +205,17 @@ export default function FramePanel({
   );
 }
 
-function IconBtn({ children, danger, ...rest }) {
+function IconBtn({ children, danger, active, ...rest }) {
   return (
     <button type="button" {...rest}
+            aria-pressed={active === undefined ? undefined : !!active}
             style={{
               display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
               width: '24px', height: '24px', flex: 'none', cursor: 'pointer',
-              background: 'transparent', border: '1px solid var(--rule-2)',
+              background: active ? 'var(--cue)' : 'transparent',
+              border: `1px solid ${active ? 'var(--cue)' : 'var(--rule-2)'}`,
               borderRadius: 'var(--r-sm)',
-              color: danger ? 'var(--danger)' : 'var(--ink-2)',
+              color: active ? '#fff' : danger ? 'var(--danger)' : 'var(--ink-2)',
               opacity: rest.disabled ? 0.4 : 1,
             }}>
       {children}

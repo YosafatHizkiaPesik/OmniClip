@@ -20,7 +20,7 @@ import UploadModal from '../src/components/UploadModal.jsx';
 import GoogleAccountCard from '../src/components/GoogleAccountCard.jsx';
 import FrameStage from '../src/features/studio/FrameStage.jsx';
 import FramePanel from '../src/features/studio/FramePanel.jsx';
-import { presetLayout, serializeLayout, coverGeometry } from '../src/features/studio/frames.js';
+import { presetLayout, serializeLayout, coverPercent } from '../src/features/studio/frames.js';
 
 const video = {
   id: 'dQw4w9WgXcQ',
@@ -133,32 +133,33 @@ const cases = [
 // Kalau tidak, pratinjaunya berbohong tentang hasil rendernya.
 //
 // Diuji sifatnya, bukan angka yang saya ketik sendiri: potongan sumber harus
-// MENUTUPI kotak tujuan di kedua sisi, menyentuhnya persis di satu sisi (yang
-// mengikat), dan rasio video utuhnya harus tetap rasio aslinya. Angka harapan
-// yang ditulis tangan hanya menguji apakah saya bisa berhitung.
+// MENUTUPI kotak tujuan di kedua sisi, menyentuhnya persis di sisi yang
+// mengikat, memakai rasio video aslinya, dan kelebihannya terpotong rata.
+// Angka harapan yang ditulis tangan hanya menguji apakah saya bisa berhitung.
+//
+// Satuannya persen kotak tujuan, jadi "menutupi" berarti >= 100.
 const geoCases = [
-  ['sumber utuh ke kotak tegak', { x: 0, y: 0, w: 100, h: 100 }, 300, 533, 16 / 9],
-  ['pojok 30% ke kotak lebar', { x: 0, y: 0, w: 30, h: 30 }, 300, 114, 16 / 9],
-  ['pita tengah ke kotak bujur sangkar', { x: 25, y: 20, w: 50, h: 60 }, 240, 240, 4 / 3],
-  ['sumber tegak ke kotak lebar', { x: 0, y: 10, w: 100, h: 40 }, 400, 120, 9 / 16],
+  ['sumber utuh ke kanvas tegak', { x: 0, y: 0, w: 100, h: 100 }, { x: 0, y: 0, w: 100, h: 100 }, 16 / 9, 9 / 16],
+  ['pojok 30% ke pita atas', { x: 0, y: 0, w: 30, h: 30 }, { x: 0, y: 0, w: 100, h: 38 }, 16 / 9, 9 / 16],
+  ['pita tengah ke sisipan pojok', { x: 25, y: 20, w: 50, h: 60 }, { x: 4, y: 64, w: 40, h: 24 }, 4 / 3, 9 / 16],
+  ['sumber tegak ke kanvas lebar', { x: 0, y: 10, w: 100, h: 40 }, { x: 10, y: 10, w: 60, h: 80 }, 9 / 16, 16 / 9],
 ];
-for (const [name, rect, bw, bh, aspect] of geoCases) {
-  const g = coverGeometry(rect, bw, bh, aspect);
-  const rw = (g.width * rect.w) / 100;
-  const rh = (g.height * rect.h) / 100;
-  const covers = rw >= bw - 0.01 && rh >= bh - 0.01;
-  const touches = Math.abs(rw - bw) < 0.01 || Math.abs(rh - bh) < 0.01;
-  const keepsAspect = Math.abs(g.width / g.height - aspect) < 0.001;
-  // Kelebihannya dipotong RATA di kedua sisi: itulah yang dilakukan `crop`
-  // ffmpeg tanpa argumen x/y. Tepi kiri potongan di layar harus jatuh persis
-  // di (lebar kotak - lebar potongan) / 2.
-  const rectLeft = g.left + (rect.x / 100) * g.width;
-  const rectTop = g.top + (rect.y / 100) * g.height;
-  const centred = Math.abs(rectLeft - (bw - rw) / 2) < 0.01
-    && Math.abs(rectTop - (bh - rh) / 2) < 0.01;
+for (const [name, src, dst, srcAspect, canvasAspect] of geoCases) {
+  const g = coverPercent(src, dst, srcAspect, canvasAspect);
+  const rw = (g.width * src.w) / 100;      // lebar potongan, % kotak tujuan
+  const rh = (g.height * src.h) / 100;
+  const boxAspect = (dst.w / dst.h) * canvasAspect;
+  const covers = rw >= 99.99 && rh >= 99.99;
+  const touches = Math.abs(rw - 100) < 0.01 || Math.abs(rh - 100) < 0.01;
+  // Rasio video utuh di layar = (lebar% x lebar kotak) / (tinggi% x tinggi kotak)
+  const shownAspect = (g.width / g.height) * boxAspect;
+  const keepsAspect = Math.abs(shownAspect - srcAspect) < 0.001;
+  const left = g.left + (src.x / 100) * g.width;
+  const top = g.top + (src.y / 100) * g.height;
+  const centred = Math.abs(left - (100 - rw) / 2) < 0.01
+    && Math.abs(top - (100 - rh) / 2) < 0.01;
   const ok = covers && touches && keepsAspect && centred;
-  console.log(`  ${ok ? 'ok   ' : 'GAGAL'} geometri ${name}: potongan `
-    + `${rw.toFixed(1)}x${rh.toFixed(1)} di kotak ${bw}x${bh}`
+  console.log(`  ${ok ? 'ok   ' : 'GAGAL'} geometri ${name}: potongan ${rw.toFixed(1)}%x${rh.toFixed(1)}%`
     + (ok ? '' : ` (menutupi=${covers} menyentuh=${touches} rasio=${keepsAspect} terpusat=${centred})`));
   if (!ok) process.exitCode = 1;
 }

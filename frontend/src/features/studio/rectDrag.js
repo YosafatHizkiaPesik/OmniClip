@@ -14,7 +14,8 @@ import { clampRect, MIN_PCT } from './frames';
  * @param handle  null untuk memindahkan; 'nw' | 'ne' | 'sw' | 'se' untuk sudut
  *                yang dipegang — sisi seberangnya jadi jangkar.
  */
-export function beginRectDrag(e, { boxW, boxH, rect, handle, onChange, onEnd }) {
+export function beginRectDrag(e, { boxW, boxH, rect, handle, onChange, onEnd,
+                                  lockX = false }) {
   if (!boxW || !boxH) return;
   e.preventDefault();
   e.stopPropagation();
@@ -29,7 +30,14 @@ export function beginRectDrag(e, { boxW, boxH, rect, handle, onChange, onEnd }) 
     const dy = ((ev.clientY - startY) / boxH) * 100;
 
     if (!handle) {
-      onChange(clampRect({ ...origin, x: origin.x + dx, y: origin.y + dy }));
+      // Bingkai yang mengikuti orang tidak punya posisi mendatar sendiri —
+      // jejak wajahnya yang menentukan. Membiarkannya digeser ke samping akan
+      // membuat kotaknya melompat balik begitu videonya jalan lagi.
+      onChange(clampRect({
+        ...origin,
+        x: lockX ? origin.x : origin.x + dx,
+        y: origin.y + dy,
+      }));
       return;
     }
 

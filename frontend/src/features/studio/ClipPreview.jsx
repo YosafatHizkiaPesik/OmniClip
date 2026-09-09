@@ -1,14 +1,18 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Play, Pause, RotateCcw, Loader2, Move, Maximize2, Minimize2 } from 'lucide-react';
 import { fontStack } from '../../lib/fonts';
-import { coverGeometry, frameInk } from './frames';
+import { CANVAS_ASPECT, coverPercent, followX, frameInk } from './frames';
 import { beginRectDrag } from './rectDrag';
 
+// `r` adalah rasio yang sama dengan `aspect`, dalam bentuk angka. Batas tinggi
+// kanvas dinyatakan lewat lebar (lebar = tinggi x rasio) karena membatasi
+// tingginya langsung akan membuat kotak lebih lebar daripada gambarnya, dan
+// kotak bingkai di atasnya berhenti menunjuk tempat yang benar.
 const RATIO_BOX = {
-  '9:16': { width: 300, aspect: '9 / 16' },
-  '1:1': { width: 380, aspect: '1 / 1' },
-  '4:5': { width: 340, aspect: '4 / 5' },
-  '16:9': { width: 520, aspect: '16 / 9' },
+  '9:16': { width: 300, aspect: '9 / 16', r: 9 / 16 },
+  '1:1': { width: 380, aspect: '1 / 1', r: 1 },
+  '4:5': { width: 340, aspect: '4 / 5', r: 4 / 5 },
+  '16:9': { width: 520, aspect: '16 / 9', r: 16 / 9 },
 };
 
 // Ukuran dan margin subtitle disimpan dalam satuan kanvas setinggi 1920 —
@@ -16,6 +20,12 @@ const RATIO_BOX = {
 // sebenarnya. Karena Fontsize pada ASS relatif terhadap PlayResY, pecahan
 // nilai/1920 berlaku untuk SEMUA rasio, jadi pratinjau bisa memakai satu rumus.
 const CANVAS_H = 1920;
+
+/** m:dd — satuan yang sama dengan yang tertulis di bilah transport. */
+function clockTime(seconds) {
+  const t = Math.max(0, Number(seconds) || 0);
+  return `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
+}
 
 /**
  * Pemutar pratinjau klip.
@@ -55,6 +65,9 @@ export default function ClipPreview({
   // Elemen video tambahan untuk bingkai ke-2 dan seterusnya. Bingkai pertama
   // memakai pemutar utama supaya suara dan waktu tetap datang dari satu tempat.
   const extraRefs = useRef([]);
+  // Elemen video tiap bingkai, dipetakan dari id-nya. Bingkai pengikut
+  // menggeser videonya tiap frame lewat ref.
+  const frameVideoRefs = useRef({});
   // Rasio sumber dibaca dari berkasnya. Geometri 'cover' tiap bingkai bergantung
   // padanya, dan menebak 16:9 akan menggeser potongan pada sumber 4:3.
   const [sourceAspect, setSourceAspect] = useState(16 / 9);
@@ -127,6 +140,7 @@ export default function ClipPreview({
   // Susunan bingkai jarang menutupi seluruh kanvas — celah di antaranya diisi
   // versi kabur dari sumbernya, kecuali bila pengguna memilih hitam pekat.
   const showBlurBg = useBlur || (useLayout && layout?.background !== 'black');
+  const canvasAspect = CANVAS_ASPECT[aspectRatio] ?? 9 / 16;
 
   const secondaries = useCallback(
     () => [bgRef.current, ...extraRefs.current].filter(Boolean), []);
@@ -196,6 +210,21 @@ export default function ClipPreview({
           const x = cropXAt(Math.max(0, t));
           v.style.transform = `translateX(${(-x / reframe.source_w) * 100}%)`;
         }
+        // Bingkai pengikut: geser videonya mengikuti jejak wajah. Rumusnya
+        // sama dengan yang dipakai render, dari jejak yang sama, jadi yang
+        // terlihat di sini adalah yang akan keluar dari ffmpeg.
+        const centers = reframe?.centers;
+        if (useLayout && centers?.length && reframe?.source_w) {
+          for (const f of frames) {
+            const entry = frameVideoRefs.current[f.id];
+            if (!f.follow || !entry?.el || !entry.geo) continue;
+            const x = followX(centers, f.src.w, reframe.source_w, t);
+            if (x === null) continue;
+            entry.el.style.left =
+              `${entry.geo.left + ((f.src.x - x) / 100) * entry.geo.width}%`;
+          }
+        }
+
         // Semua elemen cermin — latar kabur dan bingkai kedua dan seterusnya —
         // dibetulkan hanya saat sudah menyimpang. Menyetel `currentTime` tiap
         // frame membuat dekoder mencari terus dan gambarnya tersendat.
@@ -214,7 +243,7 @@ export default function ClipPreview({
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, [videoRef, segments, segIndex, offsets, constrained, useReframe, cropXAt,
-      reframe, secondaries]);
+      reframe, secondaries, useLayout, frames]);
 
   const handleTimeUpdate = () => {
     const v = videoRef.current;
@@ -457,7 +486,11 @@ export default function ClipPreview({
         touchAction: dragging ? 'none' : 'auto',
         ...(fullscreen
           ? { height: '100vh', width: 'auto', maxWidth: 'none', borderRadius: 0 }
-          : { width: '100%', maxWidth: `${box.width}px`, borderRadius: '14px' }),
+          : {
+            width: '100%',
+            maxWidth: `min(${box.width}px, calc(46vh * ${box.r ?? 9 / 16}))`,
+            borderRadius: '14px',
+          }),
       }}>
         {src ? (
           <>
@@ -478,18 +511,16 @@ export default function ClipPreview({
             )}
 
             {useLayout ? frames.map((f, i) => {
-              const dw = (boxW * f.dst.w) / 100;
-              const dh = (boxH * f.dst.h) / 100;
-              const geo = coverGeometry(f.src, dw, dh, sourceAspect, f.fit);
-              // Sebelum kotaknya sempat diukur, videonya diisi dengan
-              // object-fit biasa. Menampilkan kotak kosong selama satu frame
-              // terbaca sebagai kedipan hitam tiap kali tata letak berubah.
+              // Semuanya persen kotak tujuan: tidak ada satu pun angka di sini
+              // yang berasal dari pengukuran, jadi tidak ada yang bisa basi
+              // ketika kotaknya berubah lebar.
+              const geo = coverPercent(f.src, f.dst, sourceAspect, canvasAspect, f.fit);
               const inner = geo
                 ? {
                   position: 'absolute',
-                  left: `${geo.left}px`, top: `${geo.top}px`,
-                  width: `${geo.width}px`, height: `${geo.height}px`,
-                  transform: 'none', background: '#000',
+                  left: `${geo.left}%`, top: `${geo.top}%`,
+                  width: `${geo.width}%`, height: `${geo.height}%`,
+                  objectFit: 'fill', transform: 'none', background: '#000',
                 }
                 : {
                   position: 'absolute', inset: 0, width: '100%', height: '100%',
@@ -506,14 +537,20 @@ export default function ClipPreview({
                   {/* Bingkai pertama memakai pemutar utama: suara dan waktu
                       klip hanya boleh datang dari satu elemen. */}
                   {i === 0 ? (
-                    <video ref={videoRef} src={src}
+                    <video ref={(el) => {
+                             videoRef.current = el;
+                             frameVideoRefs.current[f.id] = { el, geo };
+                           }} src={src}
                            onTimeUpdate={handleTimeUpdate}
                            onLoadedMetadata={readAspect}
                            onPlay={() => setPlaying(true)}
                            onPause={() => setPlaying(false)}
                            playsInline style={inner} />
                   ) : (
-                    <video ref={(el) => { extraRefs.current[i - 1] = el; }}
+                    <video ref={(el) => {
+                             extraRefs.current[i - 1] = el;
+                             frameVideoRefs.current[f.id] = { el, geo };
+                           }}
                            src={src} muted playsInline aria-hidden="true"
                            style={inner} />
                   )}
@@ -667,10 +704,20 @@ export default function ClipPreview({
                 style={{ padding: '6px 12px' }} aria-label="Ulang dari awal">
           <RotateCcw size={14} />
         </button>
-        <span style={{ color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums' }}>
+        {/* Dua jam berjalan di layar ini sekaligus, dan tanpa nama keduanya
+            tidak bisa dibedakan: yang ini menghitung dari awal KLIP, yang di
+            bilah transport menghitung dari awal VIDEO. Angka "2,5 dtk" dan
+            "00:02:01.8" untuk momen yang sama memang membingungkan sampai
+            masing-masing menyebut dirinya menghitung apa. */}
+        <span style={{ color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums',
+                       display: 'inline-flex', alignItems: 'baseline', gap: '5px' }}>
           {constrained ? (
             <>
-              {clipTime.toFixed(1)}s / {totalDuration.toFixed(1)}s
+              <b style={{ fontSize: '.68rem', fontWeight: 700, letterSpacing: '.08em',
+                          textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+                Klip
+              </b>
+              {clockTime(clipTime)} / {clockTime(totalDuration)}
               {segments.length > 1 && ` · potongan ${segIndex + 1}/${segments.length}`}
             </>
           ) : 'Mode jelajah video sumber'}

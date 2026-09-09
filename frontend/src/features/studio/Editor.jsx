@@ -149,9 +149,16 @@ export default function Editor({ project, onBack }) {
   const segmentKey = selected
     ? selected.segments.map((s) => `${s.start.toFixed(2)}-${s.end.toFixed(2)}`).join(',')
     : '';
+  const followKey = (layout?.frames ?? []).map((f) => (f.follow ? '1' : '0')).join('');
   useEffect(() => {
     let cancelled = false;
-    if (!videoId || !selected || frameMode !== 'smart' || aspectRatio === '16:9') {
+    // Jejak wajah juga dibutuhkan oleh susunan sendiri, begitu ada satu bingkai
+    // yang diminta mengikuti orang. Dulu ia hanya diambil di mode ikut-wajah,
+    // jadi kotak pengikut di susunan sendiri diam saja di pratinjau meski
+    // hasil rendernya bergerak.
+    const wantsTrack = frameMode === 'smart'
+      || (frameMode === 'layout' && (layout?.frames ?? []).some((f) => f.follow));
+    if (!videoId || !selected || !wantsTrack || aspectRatio === '16:9') {
       setReframe(null);
       return undefined;
     }
@@ -166,7 +173,7 @@ export default function Editor({ project, onBack }) {
       .finally(() => { if (!cancelled) setReframeLoading(false); });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [videoId, segmentKey, frameMode, aspectRatio]);
+  }, [videoId, segmentKey, frameMode, aspectRatio, followKey]);
 
   // Timecode dibaca dari elemen video pada ~10 Hz. `timeupdate` hanya menyala
   // sekitar 4 Hz dan angkanya terlihat tersendat; membacanya tiap frame dan
@@ -497,6 +504,7 @@ export default function Editor({ project, onBack }) {
           dari video sumber yang sedang diambil. */}
       <div className="stage-row">
         <FrameStage src={data.local_url} videoRef={videoRef}
+                    segments={selected?.segments ?? null}
                     frameMode={frameMode} reframe={reframe} aspectRatio={aspectRatio}
                     layout={layout} onLayoutChange={setLayout}
                     selectedFrameId={selectedFrameId} onSelectFrame={setSelectedFrameId} />
@@ -548,9 +556,13 @@ export default function Editor({ project, onBack }) {
         <button className="btn-secondary" onClick={togglePlay} style={{ minWidth: '84px' }}>
           <Play size={13} /> Spasi
         </button>
+        {/* Diberi nama karena bukan satu-satunya jam di halaman ini: pratinjau
+            di atas menghitung dari awal klip, yang ini dari awal video. */}
         <div className="tc" style={{
           fontSize: '1.02rem', fontWeight: 700, color: 'var(--reh)',
+          display: 'flex', alignItems: 'baseline', gap: '7px',
         }}>
+          <span className="mark" style={{ color: 'var(--ink-3)' }}>Video</span>
           {formatTimecode(sourceTime)}
           <span style={{ color: 'var(--ink-3)', fontWeight: 500, fontSize: '.82rem' }}>
             {' / '}{formatTimecode(duration)}
@@ -676,7 +688,8 @@ export default function Editor({ project, onBack }) {
                 <FramePanel frameMode={frameMode} onFrameModeChange={setFrameMode}
                             layout={layout} onLayoutChange={setLayout}
                             selectedFrameId={selectedFrameId}
-                            onSelectFrame={setSelectedFrameId} />
+                            onSelectFrame={setSelectedFrameId}
+                            faceTrackAvailable={!!reframe?.centers?.length} />
               )}
             </div>
           </div>

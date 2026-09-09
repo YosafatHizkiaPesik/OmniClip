@@ -76,6 +76,9 @@ class FrameModel(BaseModel):
     src: FrameRectModel = FrameRectModel()
     dst: FrameRectModel = FrameRectModel()
     fit: str = "cover"
+    # Bila benar, posisi mendatar jendela ini digerakkan jejak wajah; lebar,
+    # tinggi, dan posisi tegaknya tetap dari kotak yang digambar pengguna.
+    follow: bool = False
 
 
 class FrameLayoutModel(BaseModel):
@@ -227,8 +230,12 @@ async def clip_reframe(req: ReframePlanRequest):
     if source is None:
         raise NotFound("Video sumber belum diunduh.")
 
+    # track_only: jejaknya juga dipakai bingkai buatan pengguna, yang lebar
+    # jendelanya tidak diturunkan dari rasio kanvas. Tanpa itu, video yang
+    # sumbernya sudah tegak dijawab "tidak tersedia" padahal bingkai sempit di
+    # dalamnya masih punya ruang untuk bergeser.
     plan = await asyncio.to_thread(plan_reframe, str(source), segments,
-                                   aspect_ratio=req.aspect_ratio)
+                                   aspect_ratio=req.aspect_ratio, track_only=True)
     if plan is None:
         payload = {"available": False, "reason": "unsupported"}
     else:
@@ -239,6 +246,10 @@ async def clip_reframe(req: ReframePlanRequest):
             "source_w": plan.source_w, "source_h": plan.source_h,
             "face_coverage": plan.face_coverage,
             "keyframes": plan.keyframes,
+            # Titik tengah wajah sepanjang waktu. Pratinjau menurunkan posisi
+            # tiap bingkai pengikut dari sini memakai rumus yang sama dengan
+            # render, jadi yang terlihat di layar adalah yang akan dirender.
+            "centers": plan.centers,
         }
 
     if len(_REFRAME_CACHE) >= _REFRAME_CACHE_MAX:

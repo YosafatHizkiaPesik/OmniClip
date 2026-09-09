@@ -179,7 +179,8 @@ def _pct_rect(rect: dict, w: int, h: int) -> tuple[int, int, int, int]:
 
 
 def build_layout_graph(layout: dict, in_label: str, out_label: str, *,
-                       src_w: int, src_h: int, out_w: int, out_h: int) -> str:
+                       src_w: int, src_h: int, out_w: int, out_h: int,
+                       plan=None, workdir=None) -> str:
     """
     Menyusun beberapa potongan video sumber menjadi satu kanvas.
 
@@ -225,7 +226,20 @@ def build_layout_graph(layout: dict, in_label: str, out_label: str, *,
         else:
             place = (f"scale={dw}:{dh}:force_original_aspect_ratio=increase,"
                      f"crop={dw}:{dh}")
-        parts.append(f"[lsrc{i}]crop={sw}:{sh}:{sx}:{sy},{place},setsar=1[lf{i}]")
+
+        # Bingkai yang mengikuti orang: lebar dan tinggi jendelanya tetap
+        # datang dari kotak yang digambar pengguna, tapi posisi mendatarnya
+        # digerakkan jejak wajah. Tiap bingkai memakai instance crop bernama
+        # sendiri — dengan satu nama bersama, perintah untuk bingkai pertama
+        # akan ikut menggeser bingkai kedua.
+        if f.get("follow") and plan is not None and workdir is not None:
+            from .reframe import build_reframe_filter
+            crop = build_reframe_filter(
+                plan, workdir / f"reframe_{i}.cmd", out_w, out_h,
+                name=f"lf{i}", crop_w=sw, crop_h=sh, crop_y=sy, scale=False)
+            parts.append(f"[lsrc{i}]{crop},{place},setsar=1[lf{i}]")
+        else:
+            parts.append(f"[lsrc{i}]crop={sw}:{sh}:{sx}:{sy},{place},setsar=1[lf{i}]")
 
     # Ditumpuk berurutan: bingkai terakhir di daftar tergambar paling atas,
     # sama seperti urutan yang ditampilkan panelnya.
@@ -367,11 +381,29 @@ def render_clip(
         if frame_mode == "layout" and frame_layout and frame_layout.get("frames"):
             from .media import probe as _probe
             info = _probe(src)
+            layout_frames = frame_layout.get("frames") or []
+
+            # Jejak wajah disusun SEKALI dan dipakai bersama semua bingkai yang
+            # mengikutinya: mereka mengikuti orang yang sama, jadi menjalankan
+            # deteksi dua kali hanya menghabiskan waktu untuk hasil yang sama.
+            layout_plan = None
+            if any(f.get("follow") for f in layout_frames):
+                layout_plan = plan_reframe(str(src), segments,
+                                           aspect_ratio=aspect_ratio, track_only=True)
+                if layout_plan is not None:
+                    face_coverage = layout_plan.face_coverage
+                if layout_plan is not None and not layout_plan.centers:
+                    layout_plan = None
+                if layout_plan is None:
+                    log.info("Wajah tidak terlacak — bingkai pengikut memakai "
+                             "posisi tetap dari kotaknya")
+
             layout_graph = build_layout_graph(
                 frame_layout, vlabel, "[vlay]",
                 src_w=int(info.get("width") or 1920),
                 src_h=int(info.get("height") or 1080),
                 out_w=out_w, out_h=out_h,
+                plan=layout_plan, workdir=workdir,
             )
             if layout_graph:
                 frame_used = "layout"

@@ -64,13 +64,41 @@ class ReframePlan:
     source_h: int
     face_coverage: float
     keyframes: list[tuple[float, int]] = field(default_factory=list)  # (waktu, x)
+    # Titik TENGAH wajah sepanjang waktu, sebelum diubah jadi posisi kiri crop.
+    #
+    # Disimpan terpisah karena satu jejak wajah yang sama harus melayani
+    # beberapa jendela crop dengan lebar berbeda: satu bingkai reaksi selebar
+    # 30% dan satu bingkai utama selebar 60% mengikuti orang yang sama, dan
+    # keduanya harus bergerak seiring. Menyimpan hanya `keyframes` mengunci
+    # jejaknya pada satu lebar.
+    centers: list[tuple[float, float]] = field(default_factory=list)
 
     @property
     def usable(self) -> bool:
         return self.face_coverage >= MIN_FACE_COVERAGE and len(self.keyframes) > 1
 
-    def to_sendcmd(self) -> str:
-        return "\n".join(f"{t:.3f} crop@reframe x {x};" for t, x in self.keyframes) + "\n"
+    def x_track(self, crop_w: int) -> list[tuple[float, int]]:
+        """
+        Jejak wajah -> posisi tepi kiri crop selebar `crop_w`.
+
+        Rumus yang sama dipakai pratinjau di browser, dari data yang sama, jadi
+        yang terlihat di layar adalah yang akan dirender.
+        """
+        half = crop_w / 2.0
+        max_x = max(0, self.source_w - crop_w)
+        out: list[tuple[float, int]] = []
+        last = None
+        for t, cx in self.centers:
+            x = int(round(min(max(cx - half, 0.0), max_x)))
+            if x != last:
+                out.append((t, x))
+                last = x
+        return out or [(0.0, int(max_x // 2))]
+
+    def to_sendcmd(self, name: str = "reframe",
+                   track: Optional[list[tuple[float, int]]] = None) -> str:
+        rows = track if track is not None else self.keyframes
+        return "\n".join(f"{t:.3f} crop@{name} x {x};" for t, x in rows) + "\n"
 
 
 def _even(value: float) -> int:
@@ -304,17 +332,26 @@ def _smooth(centers: list[Optional[float]], cuts: list[bool], *,
 
 
 def plan_reframe(source_video_path: str, segments: list[dict], *,
-                 aspect_ratio: str = "9:16") -> Optional[ReframePlan]:
+                 aspect_ratio: str = "9:16",
+                 track_only: bool = False) -> Optional[ReframePlan]:
     """
     Menyusun rencana crop yang mengikuti pembicara.
 
     Mengembalikan None bila reframe tidak layak dipakai — model tidak ada,
     OpenCV tidak terpasang, sumber sudah lebih sempit dari target, atau wajah
     terlalu jarang terlihat. Pemanggil lalu memakai jalur blur-pad.
+
+    `track_only` dipakai oleh susunan bingkai buatan pengguna: di sana yang
+    dibutuhkan hanya JEJAK wajahnya, karena lebar jendela crop ditentukan oleh
+    kotak yang digambar pengguna, bukan oleh rasio kanvas. Syarat "sumber harus
+    lebih lebar dari target" tidak berlaku di situ — bingkai selebar 30% tetap
+    punya ruang untuk bergeser meski sumbernya sendiri sudah tegak.
     """
     target = {"9:16": 9 / 16, "1:1": 1.0, "4:5": 4 / 5}.get(aspect_ratio)
-    if target is None:
+    if target is None and not track_only:
         return None
+    if target is None:
+        target = 9 / 16
     if not MODEL_PATH.is_file():
         log.info("Model YuNet tidak ada di %s — reframe dilewati", MODEL_PATH)
         return None
@@ -336,9 +373,9 @@ def plan_reframe(source_video_path: str, segments: list[dict], *,
     if not source_w or not source_h:
         return None
 
-    crop_w = _even(source_h * target)
+    crop_w = _even(min(source_h * target, source_w))
     crop_h = _even(source_h)
-    if crop_w >= source_w:
+    if crop_w >= source_w and not track_only:
         # Sumber sudah sama sempit atau lebih sempit dari target: tidak ada yang
         # bisa digeser.
         return None
@@ -376,6 +413,7 @@ def plan_reframe(source_video_path: str, segments: list[dict], *,
         return smoothed[min(max(idx, 0), n - 1)]
 
     keyframes: list[tuple[float, int]] = []
+    centers: list[tuple[float, float]] = []
     last_x = None
     t = 0.0
     while t <= total + 1e-9:
@@ -390,6 +428,9 @@ def plan_reframe(source_video_path: str, segments: list[dict], *,
             + (-p0 + 3 * p1 - 3 * p2 + p3) * u * u * u
         )
         x = int(round(min(max(cx - half, 0.0), max_x)))
+        # Titik tengahnya disimpan utuh: bingkai lain dengan lebar berbeda
+        # menurunkan posisinya sendiri dari sini.
+        centers.append((round(t, 3), round(cx, 2)))
         # Hanya tulis perintah bila nilainya berubah: file jadi jauh lebih kecil
         # dan ffmpeg tidak memproses ribuan perintah tak berguna.
         if x != last_x:
@@ -400,18 +441,36 @@ def plan_reframe(source_video_path: str, segments: list[dict], *,
     if not keyframes:
         keyframes = [(0.0, int(round(min(max(smoothed[0] - half, 0.0), max_x))))]
     plan.keyframes = keyframes
+    plan.centers = centers
     log.info("Reframe siap: crop %dx%d, wajah terlihat %.0f%%, %d titik perintah",
              crop_w, crop_h, coverage * 100, len(keyframes))
     return plan
 
 
 def build_reframe_filter(plan: ReframePlan, cmd_path: Path,
-                         out_w: int, out_h: int) -> str:
-    """Potongan filtergraph yang menerapkan rencana crop lalu menskalakan."""
-    cmd_path.write_text(plan.to_sendcmd(), encoding="utf-8")
+                         out_w: int, out_h: int, *,
+                         name: str = "reframe",
+                         crop_w: Optional[int] = None,
+                         crop_h: Optional[int] = None,
+                         crop_y: int = 0,
+                         scale: bool = True) -> str:
+    """
+    Potongan filtergraph yang menerapkan rencana crop lalu menskalakan.
+
+    Nama instance-nya bisa diganti supaya beberapa bingkai dalam satu susunan
+    bisa sama-sama mengikuti wajah: tiap cabang punya `crop@…` sendiri dan
+    file perintahnya sendiri. Dengan satu nama tetap, perintah untuk bingkai
+    pertama akan ikut menggerakkan bingkai kedua.
+    """
+    w = crop_w or plan.crop_w
+    h = crop_h or plan.crop_h
+    track = plan.x_track(w)
+    cmd_path.write_text(plan.to_sendcmd(name=name, track=track), encoding="utf-8")
     arg = str(cmd_path).replace("\\", "/").replace(":", r"\:")
-    return (
+    chain = (
         f"sendcmd=f='{arg}',"
-        f"crop@reframe=w={plan.crop_w}:h={plan.crop_h}:x={plan.keyframes[0][1]}:y=0,"
-        f"scale={out_w}:{out_h}:flags=lanczos,setsar=1"
+        f"crop@{name}=w={w}:h={h}:x={track[0][1]}:y={crop_y}"
     )
+    if scale:
+        chain += f",scale={out_w}:{out_h}:flags=lanczos,setsar=1"
+    return chain

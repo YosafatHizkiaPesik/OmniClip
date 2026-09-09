@@ -1,7 +1,7 @@
 import React, {
   useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState,
 } from 'react';
-import { frameInk } from './frames';
+import { clipTimeFor, followX, frameInk } from './frames';
 import { beginRectDrag } from './rectDrag';
 
 /**
@@ -27,12 +27,18 @@ export default function FrameStage({
   aspectRatio = '9:16',
   layout = null,
   onLayoutChange = null,
+  // Segmen klip terpilih. Dibutuhkan untuk menerjemahkan waktu video sumber
+  // yang dilaporkan elemen <video> ke waktu klip yang dipakai jejak wajah.
+  segments = null,
   selectedFrameId = null,
   onSelectFrame = null,
 }) {
   const mirrorRef = useRef(null);
   const boxRef = useRef(null);
   const cropRef = useRef(null);
+  // Kotak bingkai pengikut digerakkan lewat ref, bukan state: pada 60 fps,
+  // me-render ulang panel setiap frame membuat seluruh editor terasa berat.
+  const followRefs = useRef({});
   const [aspect, setAspect] = useState(16 / 9);
   const [box, setBox] = useState({ w: 0, h: 0 });
   const [drag, setDrag] = useState(null);
@@ -94,10 +100,22 @@ export default function FrameStage({
         // Kotak ikut-wajah digerakkan lewat ref, bukan state: pada 60 fps,
         // me-render ulang pohon komponen tiap frame akan membuat seluruh
         // editor terasa berat.
+        const t = clipTimeFor(segments, main.currentTime);
         const c = cropRef.current;
         if (c && cropXAt && reframe?.source_w) {
-          const x = cropXAt(main.currentTime);
+          const x = cropXAt(t);
           c.style.left = `${(x / reframe.source_w) * 100}%`;
+        }
+
+        // Kotak bingkai pengikut di dalam susunan sendiri.
+        const centers = reframe?.centers;
+        if (centers?.length && reframe?.source_w) {
+          for (const f of layout?.frames ?? []) {
+            const el = followRefs.current[f.id];
+            if (!f.follow || !el) continue;
+            const x = followX(centers, f.src.w, reframe.source_w, t);
+            if (x !== null) el.style.left = `${x}%`;
+          }
         }
       }
       raf = requestAnimationFrame(tick);
@@ -105,7 +123,7 @@ export default function FrameStage({
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [videoRef, reframe, frameMode]);
+  }, [videoRef, reframe, frameMode, layout, segments]);
 
 
   /** Menyeret kotak sumber. Aturan gerak dan jangkarnya dibagi dengan
@@ -118,6 +136,7 @@ export default function FrameStage({
     setDrag({ frameId, handle });
     beginRectDrag(e, {
       boxW: box.w, boxH: box.h, rect: frame.src, handle,
+      lockX: !!frame.follow,
       onChange: (src) => onLayoutChange({
         ...layout,
         frames: layout.frames.map((f) => (f.id === frameId ? { ...f, src } : f)),
@@ -158,7 +177,12 @@ export default function FrameStage({
       </div>
 
       <div className="frame-stage-well">
-        <div ref={boxRef} className="frame-stage-box" style={{ aspectRatio: aspect }}>
+        {/* Batas tinggi dinyatakan sebagai batas LEBAR yang diturunkan dari
+            rasio videonya. Membatasi tingginya langsung akan membuat kotak
+            lebih lebar daripada videonya, dan kotak crop di atasnya berhenti
+            menunjuk tempat yang benar. */}
+        <div ref={boxRef} className="frame-stage-box"
+             style={{ aspectRatio: aspect, maxWidth: `calc(58vh * ${aspect})` }}>
           {src ? (
             <video ref={mirrorRef} src={src} muted playsInline preload="auto"
                    onLoadedMetadata={onMeta}
@@ -187,7 +211,8 @@ export default function FrameStage({
             const ink = frameInk(i);
             return (
               <div key={f.id}
-                   className={`frame-rect${on ? ' is-on' : ''}`}
+                   ref={(el) => { followRefs.current[f.id] = el; }}
+                   className={`frame-rect${on ? ' is-on' : ''}${f.follow ? ' is-following' : ''}`}
                    onPointerDown={startDrag(f.id, null)}
                    style={{
                      left: `${f.src.x}%`, top: `${f.src.y}%`,
@@ -196,7 +221,7 @@ export default function FrameStage({
                      zIndex: on ? 3 : 2,
                    }}>
                 <span className="frame-rect-tag" style={{ background: ink }}>
-                  {i + 1}. {f.label}
+                  {i + 1}. {f.label}{f.follow ? ' · mengikuti' : ''}
                 </span>
                 {['nw', 'ne', 'sw', 'se'].map((h) => (
                   <span key={h} className={`frame-grip grip-${h}`}
