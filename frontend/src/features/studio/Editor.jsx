@@ -12,7 +12,7 @@ import StaveSystem, { rehearsalLetter } from './StaveSystem';
 import { TrimPanel, SubtitlePanel, StylePanel } from './EditorPanels';
 import FrameStage from './FrameStage';
 import FramePanel from './FramePanel';
-import { defaultLayout, serializeLayout } from './frames';
+import { loadFraming, saveFraming, serializeLayout } from './frames';
 
 const DEFAULT_STYLE = {
   size: 96, primary: '#FFFFFF', highlight: '#FFE500',
@@ -73,11 +73,15 @@ export default function Editor({ project, onBack }) {
   const [style, setStyle] = useState(loadStoredStyle);
   const patchStyle = useCallback((patch) => setStyle((prev) => ({ ...prev, ...patch })), []);
   const [aspectRatio, setAspectRatio] = useState('9:16');
-  const [frameMode, setFrameMode] = useState('smart');
-  // Susunan bingkai. Hidup di sini, bukan di dalam pratinjau, karena tiga tempat
+  // Cara membingkai dan susunannya dipulihkan bersama-sama untuk video ini.
+  // Susunan hidup di sini, bukan di dalam pratinjau, karena tiga tempat
   // membacanya sekaligus: meja bingkai, kanvas hasil, dan muatan render.
-  const [layout, setLayout] = useState(defaultLayout);
+  const [framing] = useState(() => loadFraming(videoId));
+  const [frameMode, setFrameMode] = useState(framing.mode);
+  const [layout, setLayout] = useState(framing.layout);
   const [selectedFrameId, setSelectedFrameId] = useState(null);
+  useEffect(() => { saveFraming(videoId, frameMode, layout); },
+    [videoId, frameMode, layout]);
   const [constrained, setConstrained] = useState(true);
   // Judul mati secara bawaan: hasilnya lebih bersih, dan hook otomatis sering
   // kalah bagus dari klipnya sendiri.

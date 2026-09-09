@@ -190,3 +190,60 @@ export function coverGeometry(srcRect, boxW, boxH, aspect, fit = 'cover') {
     top: -(srcRect.y / 100) * fullH + (boxH - rectH) / 2,
   };
 }
+
+
+// --- Ingatan susunan ---------------------------------------------------------
+
+const STORE_KEY = 'omniclip_framing';
+
+const MODES = new Set(['smart', 'layout', 'blur', 'center', 'original']);
+
+/**
+ * Susunan bingkai diingat PER VIDEO, bukan satu untuk semua.
+ *
+ * Letak kamera wajah pada rekaman game berbeda dari letak mediashare pada
+ * rekaman streaming, jadi satu susunan global akan memulihkan angka yang salah
+ * lebih sering daripada yang benar. Sebaliknya, membiarkannya kembali ke bawaan
+ * tiap kali editor dibuka berarti seluruh penyetelan diulang dari nol.
+ *
+ * CARA membingkainya ikut disimpan. Menyimpan susunannya saja membuat
+ * pemulihannya tidak terlihat: editor terbuka di mode ikut-wajah, panelnya
+ * tidak menampilkan daftar bingkai apa pun, dan bagi pengguna itu tidak bisa
+ * dibedakan dari susunan yang hilang.
+ */
+export function loadFraming(videoId) {
+  const fallback = { mode: 'smart', layout: defaultLayout() };
+  if (!videoId) return fallback;
+  try {
+    const all = JSON.parse(localStorage.getItem(STORE_KEY) || '{}');
+    const saved = all[videoId];
+    if (!saved?.layout?.frames?.length) return fallback;
+    const l = saved.layout;
+    return {
+      mode: MODES.has(saved.mode) ? saved.mode : 'smart',
+      layout: {
+        background: l.background === 'black' ? 'black' : 'blur',
+        // id dibuat ulang: yang tersimpan hanya bentuknya, dan id lama bisa
+        // bertabrakan dengan bingkai yang dibuat di sesi ini.
+        frames: l.frames.map((f) => ({
+          ...makeFrame(f.label || 'Bingkai', f.src, f.dst),
+          fit: f.fit === 'contain' ? 'contain' : 'cover',
+        })),
+      },
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+export function saveFraming(videoId, mode, layout) {
+  if (!videoId) return;
+  try {
+    const all = JSON.parse(localStorage.getItem(STORE_KEY) || '{}');
+    all[videoId] = { mode, layout: serializeLayout(layout) };
+    // Dibatasi 40 video supaya penyimpanan browser tidak tumbuh tanpa batas.
+    const keys = Object.keys(all);
+    if (keys.length > 40) delete all[keys[0]];
+    localStorage.setItem(STORE_KEY, JSON.stringify(all));
+  } catch { /* penyimpanan penuh atau ditolak: bukan alasan menjatuhkan editor */ }
+}
