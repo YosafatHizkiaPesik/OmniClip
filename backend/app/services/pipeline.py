@@ -578,3 +578,91 @@ def run_diarize(ctx: JobContext) -> dict:
             os.rmdir(tmpdir)
         except OSError:
             pass
+
+
+# --- Unggah ke Google ---------------------------------------------------------
+
+def run_upload(ctx: JobContext) -> dict:
+    """
+    payload: {clip_name, target, title, description, tags, privacy, folder_id,
+              upload_id}
+
+    Berjalan di lane `upload` yang lebarnya satu, jadi klip naik satu per satu
+    berapa pun yang diantrekan sekaligus. Untuk YouTube ada jeda tambahan antar
+    unggahan yang berhasil: mengirim selusin video ke satu kanal beruntun adalah
+    persis pola yang membuat sebuah kanal ditandai.
+    """
+    import time as _time
+
+    from ..config import UPLOAD_GAP_SECONDS
+    from ..repos import uploads as uploads_repo
+    from .google_upload import explain_error, upload_to_drive, upload_to_youtube
+    from .paths import safe_media_path
+
+    clip_name = ctx.payload["clip_name"]
+    target = ctx.payload.get("target", "drive")
+    upload_id = ctx.payload.get("upload_id")
+
+    # Nama berkas datang dari klien, jadi ia tidak boleh dipakai menyusun path
+    # begitu saja. safe_media_path menolak apa pun yang keluar dari CLIPS_DIR
+    # dan melempar sendiri bila berkasnya tidak ada.
+    path = safe_media_path("edited_clips", clip_name)
+    size_mb = path.stat().st_size / (1024 * 1024)
+
+    if target == "youtube" and UPLOAD_GAP_SECONDS > 0:
+        elapsed = _time.time() - uploads_repo.last_finished_at("youtube")
+        wait = UPLOAD_GAP_SECONDS - elapsed
+        while wait > 0:
+            ctx.check_cancelled()
+            ctx.progress(0.01, stage="spacing",
+                         message=f"Memberi jeda antar unggahan… {int(wait)} dtk lagi")
+            _time.sleep(min(2.0, wait))
+            wait -= 2.0
+
+    label = "YouTube" if target == "youtube" else "Google Drive"
+    ctx.progress(0.02, stage="upload",
+                 message=f"Mengirim {clip_name} ke {label}… ({size_mb:.1f} MB)")
+
+    def on_progress(frac: float) -> None:
+        ctx.progress(0.02 + 0.96 * frac, stage="upload",
+                     message=f"Mengirim ke {label}… {int(frac * 100)}%")
+
+    try:
+        if target == "youtube":
+            result = upload_to_youtube(
+                path,
+                title=ctx.payload.get("title") or path.stem,
+                description=ctx.payload.get("description", ""),
+                tags=ctx.payload.get("tags") or [],
+                privacy=ctx.payload.get("privacy", "private"),
+                on_progress=on_progress,
+                should_cancel=lambda: ctx.cancelled,
+            )
+        else:
+            result = upload_to_drive(
+                path,
+                title=ctx.payload.get("title") or path.name,
+                folder_id=ctx.payload.get("folder_id", ""),
+                on_progress=on_progress,
+                should_cancel=lambda: ctx.cancelled,
+            )
+    except AppError:
+        raise
+    except Exception as e:
+        message = explain_error(e)
+        if upload_id:
+            uploads_repo.fail(upload_id, message)
+        log.exception("Unggahan ke %s gagal", target)
+        raise AppError(message, code="UPLOAD_FAILED", status=502) from e
+
+    if upload_id:
+        uploads_repo.finish(upload_id, remote_id=result["remote_id"],
+                            remote_url=result["remote_url"])
+
+    ctx.progress(1.0, stage="done", message=f"Terunggah ke {label}.")
+    return {
+        "clip_name": clip_name,
+        "target": target,
+        "remote_id": result["remote_id"],
+        "remote_url": result["remote_url"],
+    }

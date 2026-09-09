@@ -4,6 +4,7 @@ import {
   CheckCircle2, AlertTriangle, Cookie, Sparkles, Scissors, Mic,
 } from 'lucide-react';
 import { apiGet, apiPost } from '../lib/api';
+import GoogleAccountCard from './GoogleAccountCard';
 
 // Bagian pada satu lembar bergaris, bukan kartu di atas kartu. Tumpukan kartu
 // ikon+judul+teks sebagai struktur halaman adalah wadah paling malas yang ada,
@@ -433,6 +434,8 @@ export default function ProfileTab() {
           </div>
         )}
       </div>
+
+      <GoogleAccountCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
 
       {/* --- Info --- */}
       <div style={card}>

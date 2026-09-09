@@ -207,13 +207,13 @@ export default function Watch() {
                         borderColor: 'rgba(79, 172, 254, 0.35)',
                         color: '#4facfe', fontSize: '0.85rem',
                       }}>
-                <Download size={16} /> Download
+                <Download size={16} /> Unduh video
               </button>
               <button onClick={handleClip} disabled={queueing} className="btn-primary"
                       style={{ background: 'linear-gradient(135deg, var(--danger), #ff4e50)', color: '#fff', fontSize: '0.85rem' }}>
                 {queueing
                   ? <><Loader2 size={16} className="animate-spin" /> Mengantre…</>
-                  : <><Scissors size={16} /><Sparkles size={14} /> Clip Video</>}
+                  : <><Scissors size={16} /><Sparkles size={14} /> Potong jadi klip</>}
               </button>
             </div>
           </div>

@@ -16,6 +16,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { VideoCard, RelatedVideoCard } from '../src/components/VideoCards.jsx';
 import { TrimPanel, SubtitlePanel, StylePanel } from '../src/features/studio/EditorPanels.jsx';
 import ClipPreview, { CaptionOverlay } from '../src/features/studio/ClipPreview.jsx';
+import UploadModal from '../src/components/UploadModal.jsx';
+import GoogleAccountCard from '../src/components/GoogleAccountCard.jsx';
 import FrameStage from '../src/features/studio/FrameStage.jsx';
 import FramePanel from '../src/features/studio/FramePanel.jsx';
 import { presetLayout, serializeLayout, coverGeometry } from '../src/features/studio/frames.js';
@@ -119,6 +121,12 @@ const cases = [
   ['FramePanel ikut wajah', <FramePanel frameMode="smart" onFrameModeChange={noop}
                                         layout={layout} onLayoutChange={noop}
                                         selectedFrameId={null} onSelectFrame={noop} />],
+  ['UploadModal', <UploadModal clip={{ file_name: 'Klip-Uji_klip-01_00m15s.mp4',
+                                       metadata: { hook_text: 'CONTOH HOOK' } }}
+                               onClose={noop} onDone={noop} />],
+  ['GoogleAccountCard', <GoogleAccountCard card={{ padding: 16 }}
+                                           sectionTitle={{ fontWeight: 700 }}
+                                           helpText={{ fontSize: '.8rem' }} />],
 ];
 
 // Geometri 'cover' harus cocok dengan `scale=…:increase,crop=…` di ffmpeg.

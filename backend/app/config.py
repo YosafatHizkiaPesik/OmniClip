@@ -40,7 +40,16 @@ for _d in (DOWNLOAD_DIR, CLIPS_DIR, THUMBS_DIR, LOGS_DIR, MODELS_DIR):
 LANE_LIMITS = {
     "net": int(os.getenv("OMNICLIP_LANE_NET", "2")),
     "cpu": int(os.getenv("OMNICLIP_LANE_CPU", "1")),
+    # Unggahan punya jalurnya sendiri, dan lebarnya SATU. Bukan karena memori —
+    # unggahan hampir tidak memakainya — melainkan karena mengirim selusin klip
+    # ke satu kanal dalam satu ledakan adalah persis pola yang membuat YouTube
+    # menandai sebuah kanal. Satu per satu, berurutan, selalu.
+    "upload": 1,
 }
+
+# Jeda minimum antara dua unggahan YouTube yang berhasil. Nol berarti langsung
+# menyambung; bawaannya sengaja tidak nol.
+UPLOAD_GAP_SECONDS = int(os.getenv("OMNICLIP_UPLOAD_GAP", "90"))
 JOB_PROGRESS_MIN_INTERVAL = 0.25  # detik antar tulisan progress ke DB
 
 

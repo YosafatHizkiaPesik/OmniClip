@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Film, Download, Trash2, RefreshCw, Loader2, AlertTriangle, Layers, X,
+  Film, Download, Trash2, RefreshCw, Loader2, AlertTriangle, Layers, X, UploadCloud,
 } from 'lucide-react';
 import { apiGet, apiDelete, downloadToDisk, mediaUrl } from '../lib/api';
 import { formatTime } from '../utils/timeFormat';
+import UploadModal from './UploadModal';
 
 function formatBytes(bytes) {
   if (!bytes) return '';
@@ -44,6 +45,11 @@ export default function ClipsTab() {
   // Terpisah dari `error`: kegagalan menghapus satu klip tidak boleh mengganti
   // seluruh daftar dengan layar error.
   const [actionError, setActionError] = useState(null);
+  // Klip yang sedang dibuka jendela unggahnya. Satu per satu — tidak ada
+  // bentuk jamaknya, dan itu disengaja.
+  const [uploading, setUploading] = useState(null);
+  // Klip mana yang sudah pernah naik ke mana, dibaca dari riwayat server.
+  const [sent, setSent] = useState({});
 
   const load = async () => {
     setLoading(true);
@@ -59,7 +65,19 @@ export default function ClipsTab() {
     }
   };
 
-  useEffect(() => { load(); }, []);
+  const loadUploads = async () => {
+    try {
+      const { uploads } = await apiGet('/uploads?limit=200');
+      const map = {};
+      for (const u of uploads) {
+        if (u.status !== 'done') continue;
+        (map[u.clip_name] ??= []).push(u);
+      }
+      setSent(map);
+    } catch { /* riwayat kosong bukan kegagalan halaman */ }
+  };
+
+  useEffect(() => { load(); loadUploads(); }, []);
 
   const toggle = (name) => setSelected((prev) => {
     const next = new Set(prev);
@@ -140,7 +158,7 @@ export default function ClipsTab() {
           <Film size={44} style={{ color: 'var(--text-muted)', marginBottom: '12px' }} />
           <h3 style={{ fontWeight: 700 }}>Belum ada klip</h3>
           <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-            Buka sebuah video di YouTube Hub, tekan “Clip Video”, lalu render klip di Studio.
+            Buka sebuah video di Cari video, tekan “Potong jadi klip”, lalu render klipnya di Partitur.
           </p>
         </div>
       ) : (
@@ -196,6 +214,20 @@ export default function ClipsTab() {
                   <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
                     {meta.aspect_ratio || '9:16'} · {formatBytes(clip.file_size)}
                   </div>
+                  {/* Sudah pernah naik ke mana. Ini yang mencegah klip yang
+                      sama dikirim dua kali ke kanal yang sama. */}
+                  {sent[clip.file_name]?.length > 0 && (
+                    <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
+                      {sent[clip.file_name].map((u) => (
+                        <a key={u.id} href={u.remote_url} target="_blank" rel="noreferrer"
+                           className="chip" style={{
+                             fontSize: '.64rem', padding: '2px 7px', textDecoration: 'none',
+                           }}>
+                          ↗ {u.target === 'youtube' ? 'YouTube' : 'Drive'}
+                        </a>
+                      ))}
+                    </div>
+                  )}
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer', fontSize: '0.72rem', flex: 1 }}>
                       <input type="checkbox" checked={selected.has(clip.file_name)}
@@ -203,6 +235,11 @@ export default function ClipsTab() {
                              style={{ accentColor: 'var(--accent-cyan)' }} />
                       Pilih
                     </label>
+                    <button onClick={() => setUploading(clip)} style={iconBtn}
+                            aria-label="Unggah ke Drive atau YouTube"
+                            title="Unggah ke Drive atau YouTube">
+                      <UploadCloud size={14} />
+                    </button>
                     <button onClick={() => downloadToDisk('edited_clips', clip.file_name)}
                             aria-label="Simpan" style={iconBtn}>
                       <Download size={14} />
@@ -220,6 +257,10 @@ export default function ClipsTab() {
       )}
 
       {playing && <PlayerModal clip={playing} onClose={() => setPlaying(null)} />}
+      {uploading && (
+        <UploadModal clip={uploading} onClose={() => setUploading(null)}
+                     onDone={loadUploads} />
+      )}
     </div>
   );
 }

@@ -15,10 +15,13 @@ from .routers import jobs as jobs_router
 from .routers import media as media_router
 from .routers import projects as projects_router
 from .routers import settings as settings_router
+from .routers import uploads as uploads_router
 from .routers import videos as videos_router
 from .services.events import broker
 from .services.jobs import queue
-from .services.pipeline import run_auto_clip, run_diarize, run_download, run_render
+from .services.pipeline import (
+    run_auto_clip, run_diarize, run_download, run_render, run_upload,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -68,6 +71,7 @@ async def lifespan(app: FastAPI):
     queue.register("render", run_render, lane="cpu")
     queue.register("auto_clip", run_auto_clip, lane="cpu")
     queue.register("diarize", run_diarize, lane="cpu")
+    queue.register("upload", run_upload, lane="upload")
     queue.start()
 
     # Smart reframe bersifat opsional dan gagal dengan anggun, jadi ketiadaannya
@@ -107,6 +111,7 @@ app.include_router(videos_router.router)
 app.include_router(clips_router.router)
 app.include_router(media_router.router)
 app.include_router(projects_router.router)
+app.include_router(uploads_router.router)
 
 
 @app.get("/api/health")

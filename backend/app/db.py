@@ -222,6 +222,30 @@ MIGRATIONS: list[str] = [
       updated_at REAL NOT NULL
     );
     """,
+    # 1 -> 2: riwayat unggahan.
+    #
+    # Dicatat di basis data, bukan hanya di daftar job: job dibersihkan, dan
+    # yang perlu diingat setelah itu adalah "klip ini SUDAH pernah diunggah ke
+    # sana" — satu-satunya hal yang mencegah klip yang sama naik dua kali ke
+    # kanal yang sama.
+    """
+    CREATE TABLE uploads (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      clip_name    TEXT NOT NULL,
+      target       TEXT NOT NULL,          -- 'drive' | 'youtube'
+      status       TEXT NOT NULL,          -- 'running' | 'done' | 'failed'
+      remote_id    TEXT,
+      remote_url   TEXT,
+      title        TEXT NOT NULL DEFAULT '',
+      privacy      TEXT NOT NULL DEFAULT '',
+      error        TEXT,
+      job_id       TEXT,
+      created_at   REAL NOT NULL,
+      finished_at  REAL
+    );
+    CREATE INDEX idx_uploads_clip ON uploads(clip_name);
+    CREATE INDEX idx_uploads_created ON uploads(created_at DESC);
+    """,
 ]
 
 

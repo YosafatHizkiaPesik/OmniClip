@@ -63,11 +63,18 @@ export function apiGet(path, { signal } = {}) {
   return request(path, { signal });
 }
 
-export function apiPost(path, body, { signal } = {}) {
+/**
+ * `raw: true` mengirim body sebagai teks apa adanya.
+ *
+ * Dipakai untuk memasang berkas OAuth client: isinya adalah JSON milik Google,
+ * dan membungkusnya lagi ke dalam JSON hanya menambah satu lapis escape yang
+ * harus dibuka lagi di server.
+ */
+export function apiPost(path, body, { signal, raw = false } = {}) {
   return request(path, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body ?? {}),
+    headers: { 'Content-Type': raw ? 'text/plain' : 'application/json' },
+    body: raw ? String(body) : JSON.stringify(body ?? {}),
     signal,
   });
 }

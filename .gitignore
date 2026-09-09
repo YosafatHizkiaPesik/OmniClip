@@ -21,6 +21,12 @@ OmniClip_Storage/logs/*
 OmniClip_Storage/*.db
 OmniClip_Storage/*.db-wal
 OmniClip_Storage/*.db-shm
+
+# Kredensial Google. Berkas client secret dan token penyegar keduanya cukup
+# untuk mengunggah ke kanal YouTube pemiliknya — keduanya tidak boleh masuk
+# riwayat git, termasuk bila repo ini nanti dijadikan publik.
+OmniClip_Storage/google_client_secret.json
+OmniClip_Storage/google_token.json
 !OmniClip_Storage/**/.gitkeep
 backend/models/campplus_sv.onnx
 

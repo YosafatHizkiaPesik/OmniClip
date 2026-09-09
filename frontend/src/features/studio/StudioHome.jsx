@@ -117,7 +117,7 @@ export default function StudioHome({ onOpen, onFindVideos }) {
           <Film size={38} style={{ color: 'var(--text-muted)', marginBottom: '14px' }} />
           <h3 style={{ fontWeight: 700, marginBottom: '8px' }}>Belum ada project klip</h3>
           <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.65 }}>
-            Cari video di YouTube Hub, buka videonya, lalu tekan <strong>Clip Video</strong>.
+            Buka halaman Cari video, pilih videonya, lalu tekan <strong>Potong jadi klip</strong>.
             Prosesnya berjalan di latar belakang, jadi Anda bisa langsung memilih
             video berikutnya tanpa menunggu.
           </p>
