@@ -53,6 +53,10 @@ function loadStoredStyle() {
   }
 }
 
+// Di bawah ini dok berhenti berguna: penggaris dan lajur potongan saja sudah
+// memakan sekitar seratus piksel.
+const DOCK_MIN = 132;
+
 const TABS = [
   { id: 'trim', label: 'Batas', Icon: Scissors },
   { id: 'subtitle', label: 'Subtitle', Icon: Type },
@@ -84,6 +88,42 @@ export default function Editor({ project, onBack }) {
   const [tab, setTab] = useState(null);
   const [railOpen, setRailOpen] = useState(true);
   const [dockView, setDockView] = useState('clip');
+
+  /**
+   * Tinggi dok, ditentukan pengguna dengan menyeret tepi atasnya.
+   *
+   * Pembagian antara panggung dan linimasa tidak punya jawaban yang benar
+   * untuk semua orang: layar 690 piksel tidak bisa memberi keduanya ruang
+   * lapang sekaligus, dan siapa yang harus mengalah bergantung pada apa yang
+   * sedang dikerjakan. Menyetel subtitle butuh linimasa tinggi; membingkai
+   * wajah butuh gambar besar. Jadi angkanya diserahkan, bukan ditebak — dan
+   * diingat, karena orang yang sudah memilih tidak mau memilih lagi tiap kali
+   * membuka klip.
+   */
+  const [dockH, setDockH] = useState(() => {
+    const tersimpan = Number(localStorage.getItem('omniclip.dockH'));
+    if (tersimpan >= DOCK_MIN) return tersimpan;
+    // Bawaannya sepertiga layar, dijepit supaya tetap masuk akal di layar
+    // sangat pendek maupun sangat tinggi.
+    return Math.round(Math.min(340, Math.max(220, window.innerHeight * 0.34)));
+  });
+
+  const dragDock = useCallback((e) => {
+    e.preventDefault();
+    const y0 = e.clientY;
+    const h0 = dockH;
+    const move = (ev) => {
+      const max = Math.max(DOCK_MIN, window.innerHeight * 0.72);
+      setDockH(Math.round(Math.min(max, Math.max(DOCK_MIN, h0 + (y0 - ev.clientY)))));
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      setDockH((h) => { localStorage.setItem('omniclip.dockH', String(h)); return h; });
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  }, [dockH]);
   const [style, setStyle] = useState(loadStoredStyle);
   const patchStyle = useCallback((patch) => setStyle((prev) => ({ ...prev, ...patch })), []);
   const [aspectRatio, setAspectRatio] = useState('9:16');
@@ -705,7 +745,7 @@ export default function Editor({ project, onBack }) {
        menggulir kecuali isi kotaknya sendiri. Panel alat tidak lagi berdiri
        permanen memakan tempat — ia muncul dari rel ikon di kanan hanya ketika
        dipanggil, dan menutup lagi dengan menekan ikon yang sama. */
-    <div className="studio">
+    <div className="studio" style={{ '--dock-h': `${dockH}px` }}>
       <header className="studio-bar">
         <button className="btn-secondary studio-icon" onClick={onBack} aria-label="Kembali">
           <ArrowLeft size={15} />
@@ -856,18 +896,6 @@ export default function Editor({ project, onBack }) {
                            frameEditing={tab === 'frame'}
                            selectedFrameId={selectedFrameId}
                            onSelectFrame={setSelectedFrameId} />
-              <div style={{ display: 'flex', gap: '7px', flexWrap: 'wrap', justifyContent: 'center' }}>
-                <button className="btn-secondary" style={{ fontSize: '.76rem', padding: '6px 10px' }}
-                        onClick={addSegmentAtPlayhead} disabled={!selected || editor.busy}>
-                  <Plus size={12} /> Sambung dari sini
-                </button>
-                {!constrained && (
-                  <button className="btn-secondary" style={{ fontSize: '.76rem', padding: '6px 10px' }}
-                          onClick={() => selected && selectClip(selected.clip_id)}>
-                    Kembali ke klip
-                  </button>
-                )}
-              </div>
             </div>
           </div>
         </main>
@@ -971,7 +999,24 @@ export default function Editor({ project, onBack }) {
       </div>
 
       {/* ── Dok: transport dan linimasa, selalu terlihat ──────────────────── */}
-      <div className="studio-dock">
+      <div className="studio-dock" style={{ height: `${dockH}px` }}>
+        {/* Tepi yang bisa ditarik. Diberi peran pemisah supaya pembaca layar
+            dan papan ketik juga bisa memakainya, bukan hanya tetikus. */}
+        <div className="dock-grip" onPointerDown={dragDock}
+             role="separator" aria-orientation="horizontal"
+             aria-label="Seret untuk mengubah tinggi linimasa"
+             tabIndex={0}
+             onKeyDown={(e) => {
+               const d = e.key === 'ArrowUp' ? 24 : e.key === 'ArrowDown' ? -24 : 0;
+               if (!d) return;
+               e.preventDefault();
+               setDockH((h) => {
+                 const max = Math.max(DOCK_MIN, window.innerHeight * 0.72);
+                 const n = Math.round(Math.min(max, Math.max(DOCK_MIN, h + d)));
+                 localStorage.setItem('omniclip.dockH', String(n));
+                 return n;
+               });
+             }} />
         <div className="dock-bar">
           <button className="btn-secondary" onClick={togglePlay} style={{ minWidth: '78px' }}>
             <Play size={13} /> Spasi
@@ -1026,6 +1071,18 @@ export default function Editor({ project, onBack }) {
               bersamaan: "di mana klip ini jatuh dalam satu jam rekaman" dan "di
               detik ke berapa baris ini muncul". Menaruh keduanya sekaligus di
               dok berarti tidak ada yang cukup tinggi untuk dipegang. */}
+          <button className="btn-secondary cutter-btn"
+                  onClick={addSegmentAtPlayhead} disabled={!selected || editor.busy}
+                  title="Menyambungkan potongan baru dari posisi playhead ke klip ini">
+            <Plus size={12} /> Sambung dari sini
+          </button>
+          {!constrained && (
+            <button className="btn-secondary cutter-btn"
+                    onClick={() => selected && selectClip(selected.clip_id)}>
+              Kembali ke klip
+            </button>
+          )}
+
           <div className="dock-switch">
             <button className={dockView === 'clip' ? 'is-on' : ''}
                     onClick={() => setDockView('clip')}>Klip ini</button>

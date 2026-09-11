@@ -45,6 +45,8 @@ export default function FrameStage({
   const followRefs = useRef({});
   const [aspect, setAspect] = useState(16 / 9);
   const [box, setBox] = useState({ w: 0, h: 0 });
+  const wellRef = useRef(null);
+  const [well, setWell] = useState({ w: 0, h: 0 });
   // Posisi tiap orang pada sampel yang sedang tampil, untuk menaruh penandanya.
   const personRefs = useRef({});
   const [drag, setDrag] = useState(null);
@@ -58,6 +60,26 @@ export default function FrameStage({
     const { videoWidth: w, videoHeight: h } = e.currentTarget;
     if (w > 0 && h > 0) setAspect(w / h);
   }, []);
+
+  // Ukuran sumur, diamati sekali per perubahan — bukan dibaca tiap bingkai.
+  useLayoutEffect(() => {
+    const el = wellRef.current;
+    if (!el) return undefined;
+    const ro = new ResizeObserver(([entry]) => {
+      setWell({ w: entry.contentRect.width, h: entry.contentRect.height });
+    });
+    ro.observe(el);
+    const r = el.getBoundingClientRect();
+    setWell({ w: r.width, h: r.height });
+    return () => ro.disconnect();
+  }, []);
+
+  /** Kotak terbesar berasio `aspect` yang masih muat di dalam sumurnya. */
+  const boxFit = useMemo(() => {
+    if (!well.w || !well.h) return { w: 0, h: 0 };
+    const w = Math.min(well.w, well.h * aspect);
+    return { w: Math.round(w), h: Math.round(w / aspect) };
+  }, [well.w, well.h, aspect]);
 
   useLayoutEffect(() => {
     const el = boxRef.current;
@@ -202,13 +224,28 @@ export default function FrameStage({
         </span>
       </div>
 
-      <div className="frame-stage-well">
-        {/* Batas tinggi dinyatakan sebagai batas LEBAR yang diturunkan dari
-            rasio videonya. Membatasi tingginya langsung akan membuat kotak
-            lebih lebar daripada videonya, dan kotak crop di atasnya berhenti
-            menunjuk tempat yang benar. */}
+      <div ref={wellRef} className="frame-stage-well">
+        {/* Ukuran kotak DIHITUNG dari sumurnya, bukan diserahkan ke CSS.
+            
+            Versi sebelumnya menyatakan batas tinggi sebagai batas lebar
+            (`58vh * rasio`) dan membiarkan `width: 100%` menentukan sisanya.
+            Itu bekerja selama halamannya bisa digulir — kotak yang menjulur
+            tinggal digulir. Di studio berlabuh tidak ada gulir yang
+            menyelamatkannya, dan `58vh` tidak tahu apa-apa tentang tinggi yang
+            BENAR-BENAR tersisa setelah bilah dan dok mengambil bagiannya.
+            Terukur pada layar 1366x690: sumurnya 717x270, isinya 717x414 —
+            144 piksel terpotong diam-diam oleh `overflow: hidden`, dan yang
+            hilang adalah bagian bawah wajah orangnya.
+            
+            CSS murni tidak bisa menjawab ini: elemen ber-`aspect-ratio` yang
+            kedua sisinya `auto` tidak punya ukuran intrinsik, sedangkan
+            menetapkan salah satunya membuat sisi yang lain menang dan kotaknya
+            gepeng. Jadi sumurnya diukur, dan ukurannya dihitung — sekali per
+            perubahan ukuran, bukan tiap bingkai. */}
         <div ref={boxRef} className="frame-stage-box"
-             style={{ aspectRatio: aspect, maxWidth: `calc(58vh * ${aspect})` }}>
+             style={boxFit.w > 0
+               ? { width: `${boxFit.w}px`, height: `${boxFit.h}px` }
+               : { aspectRatio: aspect, width: '100%' }}>
           {src ? (
             <video ref={mirrorRef} src={src} muted playsInline preload="auto"
                    onLoadedMetadata={onMeta}

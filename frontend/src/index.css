@@ -735,7 +735,10 @@ a { color: var(--cue); text-underline-offset: 3px; text-decoration-thickness: 1p
 }
 .frame-stage-well {
   padding: 12px; background: var(--stage-2);
-  flex: 1; display: grid; place-items: center;
+  /* `min-height: 0` bukan hiasan: tanpa itu item flex menolak menyusut di
+     bawah tinggi isinya, sumurnya melar melewati pelatnya, dan yang tergambar
+     adalah video yang terpotong di dalam pelat yang tampak utuh. */
+  flex: 1; min-height: 0; display: grid; place-items: center;
 }
 
 /* Kotak panggung HARUS berukuran persis sebesar videonya.
@@ -748,7 +751,9 @@ a { color: var(--cue); text-underline-offset: 3px; text-decoration-thickness: 1p
    benar-benar diambil. Batasnya sekarang lebar, diturunkan dari rasio videonya
    sendiri, sehingga kotak dan video selalu satu bidang. */
 .frame-stage-box {
-  position: relative; width: 100%; margin: 0 auto;
+  /* Lebar dan tinggi datang dari perhitungan di FrameStage — lihat catatan di
+     sana. Yang ditinggalkan di sini hanya hal yang tidak bergantung ukuran. */
+  position: relative; margin: 0 auto;
   background: #000; overflow: hidden; touch-action: none;
 }
 .frame-stage-box > video { object-fit: fill; }
@@ -973,6 +978,24 @@ body.is-studio .app-viewport,
 .studio-stage .stage-row {
   margin-bottom: 0; flex: 1 1 auto; min-height: 0;
   align-items: stretch;
+  /* Lebar kolom pratinjau mengikuti TINGGI yang tersisa.
+     
+     Kanvas 9:16 selebar 0,5625 kali tingginya. Kolom selebar 320 piksel tetap
+     karenanya mengunci kanvas di 166 piksel — terukur, tidak berubah sedikit
+     pun antara layar 900 dan 1040 piksel meski tingginya bertambah 140. Tinggi
+     yang tersedia diketahui di sini karena tinggi dok dibawa masuk sebagai
+     `--dock-h` dari komponennya.
+     
+     Angkanya dikalibrasi terhadap pengukuran, bukan dikarang: 160 piksel untuk
+     bilah atas dan bilah studio, 152 piksel untuk kolom kendali di samping
+     kanvas beserta jarak dan padding pelatnya. Taksiran tingginya sengaja
+     sedikit murah hati — kalau ia terlalu pelit, kolomnya menyempit lebih dulu
+     dan kanvasnya ikut mengecil meski tingginya masih ada. */
+  grid-template-columns:
+    minmax(0, 1fr)
+    clamp(230px,
+          calc((100dvh - 160px - var(--dock-h, 300px)) * 0.5625 + 152px),
+          46%);
 }
 .studio-stage .frame-stage { min-height: 0; }
 .studio-stage .editor-pit {
@@ -1010,7 +1033,22 @@ body.is-studio .app-viewport,
 .studio-dock {
   border-top: 1px solid var(--rule); background: var(--plate);
   display: flex; flex-direction: column; min-height: 0;
+  position: relative;
 }
+/* Tepi tarik. Sasaran sentuhnya sengaja lebih tebal daripada garis yang
+   terlihat — tepi setebal satu piksel bisa dilihat tapi hampir tidak bisa
+   dikenai. */
+.dock-grip {
+  position: absolute; left: 0; right: 0; top: -4px; height: 9px;
+  cursor: ns-resize; z-index: 5;
+}
+.dock-grip::after {
+  content: ''; position: absolute; left: 50%; top: 3px;
+  width: 46px; height: 3px; margin-left: -23px; border-radius: 99px;
+  background: var(--rule-2);
+}
+.dock-grip:hover::after, .dock-grip:focus-visible::after { background: var(--reh); }
+.dock-grip:focus-visible { outline: none; }
 .dock-bar {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   padding: 7px 12px; border-bottom: 1px solid var(--rule-2);
@@ -1037,11 +1075,15 @@ body.is-studio .app-viewport,
    hanya menggandakan garis batas dok. */
 .dock-body > .plate { margin: 0; border: 0; border-radius: 0; background: transparent; }
 
-/* Layar pendek dan sempit: dok menyusut, rel alat jadi ikon saja. */
-@media (max-height: 760px) {
-  .studio-tool span { display: none; }
-  .studio-tool { width: 44px; }
-}
+/* Rel alat boleh digulir kalau layarnya benar-benar pendek.
+   
+   Percobaan sebelumnya menyembunyikan labelnya di bawah 760 piksel untuk
+   menghemat tinggi. Penghematannya sekitar 70 piksel, dan yang dibayar adalah
+   lima ikon tanpa nama di satu-satunya tempat yang memberi tahu alat apa saja
+   yang ada. Relnya bukan bagian yang kekurangan tinggi — pada layar 690 piksel
+   ia butuh 266 dari 335 yang tersedia. Jadi labelnya tinggal, dan kalau suatu
+   saat memang tidak muat, ia digulir. */
+.studio-tools { overflow-y: auto; }
 @media (max-width: 1100px) {
   .studio-rail { width: 190px; }
   .studio-panel { width: 300px; }
@@ -1096,13 +1138,39 @@ body.is-studio .app-viewport,
 .studio-stage .clip-preview-stage { flex: 1 1 auto; min-height: 0; }
 /* Kotaknya sendiri sudah tahu cara mengukur diri; di sini tinggal dipastikan
    ia punya tinggi untuk diukur. */
-.studio-stage .clip-preview-stage { align-items: stretch; }
+.studio-stage .clip-preview-stage { align-items: center; }
 
-/* Dok tidak boleh melahap panggung. Lajur linimasa bertambah seiring jumlah
-   orang di klip, jadi tanpa plafon sebuah klip berisi lima orang akan
-   menyisakan sepertiga layar untuk gambarnya. */
-.studio-dock { max-height: 40dvh; }
+/* Kendali pratinjau pindah ke SAMPING kanvas, bukan di bawahnya.
+   
+   Kanvas 9:16 di layar lanskap selalu kekurangan tinggi dan kelebihan lebar —
+   terukur, kolomnya 320 piksel sementara kanvasnya hanya butuh 170. Menaruh
+   tombol putar, jam, dan petunjuk seret di bawah kanvas berarti membayar
+   sekitar 110 piksel dari sisi yang justru langka, sambil membiarkan 150
+   piksel di sisi yang berlimpah tidak terpakai. Dipindah ke samping, keduanya
+   selesai sekaligus. */
+.studio-stage .clip-preview { flex-direction: row; align-items: stretch; }
+.studio-stage .clip-preview-stage { flex: 1 1 auto; min-width: 0; }
+.studio-stage .preview-side {
+  flex: none; width: 118px; justify-content: center;
+}
+.studio-stage .preview-controls {
+  flex-direction: column; align-items: stretch; gap: 7px;
+}
+.studio-stage .preview-controls > button { width: 100%; justify-content: center; }
+.studio-stage .preview-hint {
+  white-space: normal; text-align: left; align-items: flex-start;
+  font-size: .62rem; line-height: 1.35;
+}
 
+
+.clip-preview {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 10px; width: 100%;
+}
+.preview-side { display: flex; flex-direction: column; gap: 8px; }
+.preview-controls {
+  display: flex; align-items: center; gap: 10px; font-size: .8rem;
+}
 .preview-hint {
   font-size: .68rem; color: var(--text-muted); margin: 0; flex: none;
   display: flex; align-items: center; gap: 5px;

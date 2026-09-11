@@ -79,6 +79,8 @@ export default function ClipPreview({
   const [clipTime, setClipTime] = useState(0);
   const [boxH, setBoxH] = useState(0);
   const [boxW, setBoxW] = useState(0);
+  const wellRef = useRef(null);
+  const [well, setWell] = useState({ w: 0, h: 0 });
   const [dragging, setDragging] = useState(null);   // 'move' | 'size' | null
   const stageRef = useRef(null);
   const [fullscreen, setFullscreen] = useState(false);
@@ -131,6 +133,19 @@ export default function ClipPreview({
     if (v && segments[0]) v.currentTime = segments[0].start;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clip?.clip_id, segments[0]?.start, segments.length]);
+
+  // Ruang yang tersedia untuk kanvas, diamati sekali per perubahan ukuran.
+  useLayoutEffect(() => {
+    const el = wellRef.current;
+    if (!el) return undefined;
+    const ro = new ResizeObserver(([entry]) => {
+      setWell({ w: entry.contentRect.width, h: entry.contentRect.height });
+    });
+    ro.observe(el);
+    const r = el.getBoundingClientRect();
+    setWell({ w: r.width, h: r.height });
+    return () => ro.disconnect();
+  }, []);
 
   // Tinggi kotak diukur, bukan ditebak, supaya ukuran teks pratinjau benar-benar
   // sebanding dengan hasil render pada rasio apa pun.
@@ -571,6 +586,14 @@ export default function ClipPreview({
   const box = useOriginal
     ? RATIO_BOX['16:9']
     : (RATIO_BOX[aspectRatio] ?? RATIO_BOX['9:16']);
+  /** Kanvas terbesar berasio `box.r` yang masih muat di ruang yang tersedia. */
+  const fit = useMemo(() => {
+    if (!well.w || !well.h) return { w: 0, h: 0 };
+    const r = box.r ?? 9 / 16;
+    const w = Math.min(well.w, well.h * r);
+    return { w: Math.round(w), h: Math.round(w / r) };
+  }, [well.w, well.h, box.r]);
+
   const showHook = constrained && clipTime < 3.5 && (clip?.hook_text || '').trim()
     && style?.showHook !== false;
 
@@ -712,13 +735,13 @@ export default function ClipPreview({
         };
 
   return (
-    <div className="clip-preview"
-         style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', width: '100%' }}>
+    <div className="clip-preview">
       {/* Yang di-layar-penuh-kan adalah PEMBUNGKUS, bukan kotak videonya.
           Elemen layar penuh dipaksa selebar dan setinggi layar oleh browser,
           yang akan menghapus rasio 9:16 kotaknya; membungkusnya membuat kotak
           tetap memegang rasionya sendiri dan sekadar dipusatkan. */}
-      <div ref={stageRef} className="clip-preview-stage" style={{
+      <div ref={(el) => { stageRef.current = el; wellRef.current = el; }}
+           className="clip-preview-stage" style={{
         width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center',
         ...(fullscreen ? { background: '#000', height: '100%' } : {}),
       }}>
@@ -727,25 +750,25 @@ export default function ClipPreview({
         aspectRatio: box.aspect,
         overflow: 'hidden', boxShadow: 'var(--shadow-card)',
         touchAction: dragging ? 'none' : 'auto',
-        // Diukur dari TINGGI yang tersisa, dengan lebar sebagai plafon.
+        // Ukurannya DIHITUNG dari ruang yang tersedia, bukan diserahkan ke CSS.
         //
-        // Dulu lebarnya 100% dengan plafon `min(300px, 46vh * rasio)`. Itu
-        // masuk akal pada halaman yang digulir: kalau kotaknya menjulur, orang
-        // tinggal menggulir. Di studio berlabuh tidak ada gulir yang
-        // menyelamatkannya — 46vh lebih tinggi daripada panggung yang tersisa
-        // setelah bilah dan dok mengambil bagiannya, dan yang terpotong justru
-        // bagian bawah kanvas tempat subtitle duduk.
+        // Dua percobaan sebelumnya gagal, dan keduanya gagal dengan cara yang
+        // sama. `width: 100%` dengan plafon `46vh * rasio` mengabaikan tinggi
+        // yang benar-benar tersisa di studio berlabuh, jadi bagian bawah kanvas
+        // terpotong. Lalu `height: 100%` dengan `width: auto` membiarkan
+        // `max-width` menjepit lebarnya sementara tingginya tetap 100% — dan
+        // kotaknya jadi gepeng: terukur 166x424, rasio 0,39 untuk kanvas yang
+        // seharusnya 0,563, sehingga apa yang dilihat pengguna bukan lagi
+        // bentuk video yang akan dirender.
         //
-        // Sekarang tingginya yang memimpin dan `aspect-ratio` menurunkan
-        // lebarnya; `maxWidth` tinggal menjaga agar kanvas 16:9 tidak melebar
-        // melewati kolomnya di layar yang pendek.
+        // Elemen ber-`aspect-ratio` tidak bisa "muat ke dalam kotak" dengan CSS
+        // saja: sisi yang ditetapkan selalu menang atas rasionya. Jadi ruangnya
+        // diukur dan ukurannya dihitung, sekali per perubahan.
         ...(fullscreen
           ? { height: '100vh', width: 'auto', maxWidth: 'none', borderRadius: 0 }
-          : {
-            height: '100%', width: 'auto',
-            maxWidth: '100%', maxHeight: `${box.width / (box.r ?? 9 / 16)}px`,
-            borderRadius: '14px',
-          }),
+          : fit.w > 0
+            ? { width: `${fit.w}px`, height: `${fit.h}px`, borderRadius: '14px' }
+            : { width: '100%', borderRadius: '14px' }),
       }}>
         {src ? (
           <>
@@ -1017,7 +1040,8 @@ export default function ClipPreview({
       </div>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.8rem' }}>
+      <div className="preview-side">
+      <div className="preview-controls">
         <button className="btn-secondary" onClick={toggle} disabled={!src}
                 style={{ padding: '6px 14px' }}>
           {playing ? <Pause size={14} /> : <Play size={14} />}
@@ -1060,6 +1084,7 @@ export default function ClipPreview({
           <Move size={11} /> Subtitle bisa diseret langsung di atas gambar
         </p>
       )}
+      </div>
     </div>
   );
 }
