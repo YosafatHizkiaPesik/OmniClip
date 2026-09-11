@@ -91,6 +91,19 @@ SAMPLE_FPS = 8.0
 # kali lipat.
 SAMPLE_WIDTH = 560
 
+# Lebar kerja untuk petak mulut, dipisahkan dari lebar deteksi.
+#
+# Deteksi wajah tidak butuh resolusi tinggi — YuNet menemukan wajah selebar 34
+# piksel dengan baik, dan menjalankannya pada 1280 memakan waktu lima kali
+# lipat untuk kotak yang sama. Mengukur GERAK MULUT butuh resolusi: artikulasi
+# bicara adalah gerakan kecil, dan pada salinan 560 piksel sebuah mulut tinggal
+# ~29x16 piksel. Dua kebutuhan yang berbeda, jadi dua angka yang berbeda.
+#
+# 1280 dipilih sebagai batas: di atas itu pipa mentahnya mulai mahal (satu
+# bingkai 4K adalah 25 MB) tanpa menambah apa pun — wajah dalam bidikan meja
+# sudah lebih dari cukup tajam pada 1280.
+FULL_WIDTH_CAP = 1280
+
 # Laju perintah yang ditulis ke sendcmd. 25 Hz melampaui laju frame video,
 # sehingga crop tidak pernah "menunggu" perintah berikutnya. Pada 10 Hz,
 # perubahan posisi datang tiap 3 frame dan itu terlihat sebagai getar halus.
@@ -196,6 +209,36 @@ MEDIAN_WINDOW = 7          # buang deteksi meleset sesaat sebelum difilter
 # Sebuah bidikan harus muncul di sekian bagian sampel sebelum jumlah wajahnya
 # dianggap menentukan berapa orang yang ada.
 ROSTER_MIN_SHARE = 0.05
+
+# Berapa lama seorang subjek baru harus bertahan sebelum bingkai benar-benar
+# berpindah kepadanya.
+#
+# Tanpa penahan ini, sela satu kata ("iya", "hmm") sudah cukup memindahkan
+# bingkai dan memindahkannya kembali — dan karena perpindahannya seketika,
+# hasilnya berkedip. Diukur pada podcast empat orang, 0,6 detik membuang
+# sebagian besar sela sambil tetap menangkap giliran bicara yang sungguhan.
+MIN_SUBJECT_HOLD = 0.6
+
+# Berapa kuat bukti gerak-mulut harus, sebelum bingkai berhenti mengikuti
+# bidikan aslinya dan mulai mengikuti penutur. Dinyatakan dalam statistik-t.
+#
+# Dipilih dari uji belah-dua pada 41 klip: pada ambang lama (t efektif 0)
+# kesepakatan antar paruh cuma 50%, pada t >= 2 ia naik tapi cakupannya turun
+# ke 14%. Dua angka itu bersama-sama mengatakan hal yang sama — sinyal gerak
+# mulut memang ada, tapi tipis, dan hanya sebagian kecil giliran yang
+# membawanya cukup banyak untuk dipercaya.
+MIN_SPEAKER_EVIDENCE = 2.0
+
+# Berapa lama posisi seseorang masih boleh dipakai setelah wajahnya tak lagi
+# terdeteksi.
+#
+# Membedakan dua hal yang tampak sama dari deretan angka: kepala yang menoleh
+# sebentar (posisinya masih benar, tahan saja) dan kamera yang sudah berpindah
+# ke orang lain (posisinya sudah tidak berarti apa-apa). Tanpa batas ini,
+# `_trace_people` menahan posisi terakhir SELAMANYA, sehingga bingkai terus
+# menunjuk tempat seseorang dulu duduk — di dalam close-up orang lain, tempat
+# itu cuma dinding.
+UNSEEN_GRACE = 0.8
 
 
 @dataclass
@@ -439,6 +482,71 @@ def _face_patches(frame, face, sw, sh):
             _crop_patch(frame, ex, fy, pw, ph, sw, sh))
 
 
+# Ukuran petak mulut yang diluruskan. Lebih besar dari MOUTH_PATCH karena ia
+# diambil dari bingkai beresolusi penuh, bukan dari salinan 560 piksel.
+ALIGNED_PATCH = (48, 32)
+
+
+def _aligned_patches(full, face, scale: float):
+    """
+    Petak MULUT dan DAHI dari bingkai beresolusi penuh, diluruskan garis mata.
+
+    Dua perbaikan atas `_face_patches`, dan keduanya terukur pada kontrol
+    positif — rekaman satu orang yang bicara terus, tempat "sedang bicara"
+    tidak perlu ditebak:
+
+    1. **Resolusi.** Deteksi berjalan pada salinan selebar 560 piksel, dan di
+       situ satu wajah hanya selebar ~53 piksel sehingga mulutnya tinggal
+       ~29x16. Bingkai aslinya 1280 dan mulutnya ~66x36 — empat kali lipat
+       pikselnya, dan artikulasi bicara adalah gerakan kecil.
+    2. **Penyelarasan.** Petak lama mengikuti titik mulut tapi tidak pernah
+       diputar atau diskalakan, jadi kepala yang miring atau maju-mundur
+       menghasilkan selisih piksel besar yang tidak ada hubungannya dengan
+       bicara. Di sini petaknya diputar mengikuti garis mata dan diskalakan
+       terhadap jarak antar mata, sehingga yang tersisa tinggal perubahan
+       bentuk mulut itu sendiri.
+
+    Terukur: korelasi dengan selubung suara naik dari +0,160 ke +0,255, dan
+    selisih gerak antara saat suara keras dan lirih naik dari 0,57 ke 0,73
+    simpangan baku.
+    """
+    import cv2
+    import numpy as np
+
+    lm = [(float(face[4 + 2 * i]) * scale, float(face[5 + 2 * i]) * scale)
+          for i in range(5)]
+    (ex1, ey1), (ex2, ey2) = lm[0], lm[1]
+    jarak = float(np.hypot(ex2 - ex1, ey2 - ey1))
+    if jarak < 8.0:
+        return None, None
+    sudut = float(np.degrees(np.arctan2(ey2 - ey1, ex2 - ex1)))
+
+    def petak(cx: float, cy: float):
+        bw, bh = jarak * 1.4, jarak * 0.9
+        M = cv2.getRotationMatrix2D((cx, cy), sudut, 1.0)
+        M[0, 2] += bw / 2.0 - cx
+        M[1, 2] += bh / 2.0 - cy
+        crop = cv2.warpAffine(full, M, (max(4, int(bw)), max(4, int(bh))),
+                              flags=cv2.INTER_AREA)
+        if crop.size == 0:
+            return None
+        g = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+        g = cv2.resize(g, ALIGNED_PATCH, interpolation=cv2.INTER_AREA)
+        g = g.astype(np.float32)
+        g -= g.mean()
+        sd = float(g.std())
+        return g / sd if sd > 1e-3 else g
+
+    mx = (lm[3][0] + lm[4][0]) / 2.0
+    my = (lm[3][1] + lm[4][1]) / 2.0
+    # Dahi: di atas garis mata, sejauh 0,55 jarak mata.
+    exm, eym = (ex1 + ex2) / 2.0, (ey1 + ey2) / 2.0
+    rad = math.radians(sudut)
+    fx = exm + math.sin(rad) * jarak * 0.55
+    fy = eym - math.cos(rad) * jarak * 0.55
+    return petak(mx, my), petak(fx, fy)
+
+
 def _detect_centers(src: Path, segments: list[dict], source_w: int, source_h: int
                     ) -> tuple[list[Optional[float]], list[bool],
                                list[list[tuple[float, float, int]]], dict]:
@@ -460,6 +568,15 @@ def _detect_centers(src: Path, segments: list[dict], source_w: int, source_h: in
     sw = SAMPLE_WIDTH
     sh = _even(SAMPLE_WIDTH * source_h / source_w)
     scale_back = source_w / sw
+
+    # Bingkai dipipa pada resolusi kerja yang lebih besar daripada lebar
+    # deteksi, lalu dikecilkan di sini. Deteksi tetap berjalan di 560 piksel
+    # (biayanya tidak berubah), sementara petak mulut diambil dari salinan yang
+    # masih tajam — dan gerak mulut adalah gerakan kecil yang paling dulu hilang
+    # saat gambarnya diperkecil.
+    fw = min(int(source_w), FULL_WIDTH_CAP)
+    fh = _even(fw * source_h / source_w)
+    to_detect = (fw != sw or fh != sh)
 
     detector = cv2.FaceDetectorYN.create(
         str(MODEL_PATH), "", (sw, sh), DETECT_SCORE, DETECT_NMS, 5000
@@ -497,9 +614,12 @@ def _detect_centers(src: Path, segments: list[dict], source_w: int, source_h: in
         # dan menit 50 adalah adegan berbeda, crop tidak boleh mem-pan ke sana.
         first_of_segment = True
 
-        for buf in _sample_frames(src, start, duration, sw, sh):
+        for buf in _sample_frames(src, start, duration, fw, fh):
             sample_i += 1
-            frame = np.frombuffer(buf, dtype=np.uint8).reshape((sh, sw, 3))
+            full = np.frombuffer(buf, dtype=np.uint8).reshape((fh, fw, 3))
+            frame = (cv2.resize(full, (sw, sh), interpolation=cv2.INTER_AREA)
+                     if to_detect else full)
+            full_scale = fw / sw
 
             hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
             hist = cv2.calcHist([hsv], [0, 1], None, [32, 32], [0, 180, 0, 256])
@@ -528,7 +648,9 @@ def _detect_centers(src: Path, segments: list[dict], source_w: int, source_h: in
             for f in detections:
                 x, y, w, h = float(f[0]), float(f[1]), float(f[2]), float(f[3])
                 cx, cy = x + w / 2.0, y + h / 2.0
-                mouth, brow = _face_patches(frame, f, sw, sh)
+                mouth, brow = _aligned_patches(full, f, full_scale)
+                if mouth is None:
+                    mouth, brow = _face_patches(frame, f, sw, sh)
 
                 best_t, best_d = None, max_dist
                 for t in tracks:
@@ -1099,8 +1221,36 @@ def _apply_deadzone(values: list[float], deadzone: float) -> list[float]:
     return out
 
 
+def _settle_subject(subject: list[Optional[int]]) -> list[Optional[int]]:
+    """
+    Membuang pergantian subjek yang terlalu pendek untuk dipercaya.
+
+    Sela satu kata di tengah giliran orang lain bukan pergantian giliran, dan
+    memperlakukannya sebagai pergantian membuat bingkai berkedip bolak-balik.
+    Subjek baru baru diakui setelah bertahan MIN_SUBJECT_HOLD detik.
+    """
+    need = max(1, int(round(MIN_SUBJECT_HOLD * SAMPLE_FPS)))
+    out: list[Optional[int]] = list(subject)
+    n = len(subject)
+    i = 0
+    current: Optional[int] = subject[0] if subject else None
+    while i < n:
+        j = i
+        while j < n and subject[j] == subject[i]:
+            j += 1
+        # Rentang [i, j) berisi satu nilai. Diterima kalau cukup panjang, atau
+        # kalau ia memang kelanjutan dari subjek yang sedang berlaku.
+        if subject[i] == current or (j - i) >= need:
+            current = subject[i]
+        for k in range(i, j):
+            out[k] = current
+        i = j
+    return out
+
+
 def _smooth(centers: list[Optional[float]], cuts: list[bool], *,
-            source_w: int, crop_w: int) -> list[float]:
+            source_w: int, crop_w: int,
+            subject: Optional[list] = None) -> list[float]:
     """
     Mengubah jejak wajah mentah menjadi gerakan kamera yang enak dilihat.
 
@@ -1109,6 +1259,20 @@ def _smooth(centers: list[Optional[float]], cuts: list[bool], *,
     menghaluskan melewati potongan adegan berarti kamera akan mem-pan
     menyeberangi pergantian kamera — persis yang membuat hasilnya terlihat
     seperti melayang, bukan berpindah.
+
+    Pergantian ORANG diperlakukan sama dengan potongan adegan, dan itu
+    perbaikan yang paling terasa di seluruh berkas ini. Sebelumnya penghalus
+    hanya mengenal potongan adegan, jadi ketika penutur berganti di dalam satu
+    bidikan yang sama, plafon kecepatan memaksa kamera MEM-PAN dari wajah yang
+    satu ke wajah yang lain: 0,10 lebar per detik berarti 128 piksel per detik
+    pada sumber 1280, sehingga menyeberangi jarak 430 piksel antara dua kursi
+    memakan 3,4 detik. Selama detik-detik itu bingkai tidak memuat siapa pun —
+    ia menatap mikrofon di antara mereka.
+
+    Terukur pada podcast empat orang sebelum perbaikan: 13,2% sampel punya
+    kotak yang lebih dekat ke titik tengah dua wajah daripada ke wajah mana
+    pun. Orang tidak mem-pan kepalanya dari satu lawan bicara ke lawan bicara
+    lain; ia menoleh. Maka bingkainya berpindah, bukan meluncur.
     """
     if not centers:
         return []
@@ -1127,8 +1291,14 @@ def _smooth(centers: list[Optional[float]], cuts: list[bool], *,
             last = c
         filled.append(last)
 
-    # Pecah menjadi rentang antar potongan adegan.
-    bounds = [i for i, is_cut in enumerate(cuts) if is_cut and i > 0]
+    # Pecah menjadi rentang antar potongan adegan DAN pergantian subjek.
+    breaks = {i for i, is_cut in enumerate(cuts) if is_cut and i > 0}
+    if subject is not None:
+        settled = _settle_subject(list(subject) + [None] * (len(filled) - len(subject)))
+        for i in range(1, min(len(settled), len(filled))):
+            if settled[i] != settled[i - 1]:
+                breaks.add(i)
+    bounds = sorted(breaks)
     runs: list[tuple[int, int]] = []
     prev = 0
     for b in bounds:
@@ -1163,15 +1333,28 @@ def _smooth(centers: list[Optional[float]], cuts: list[bool], *,
     return out
 
 
-def _centers_from_speakers(centers, people, mapping, speaker_turns, n):
+def _centers_from_speakers(centers, people, mapping, speaker_turns, n,
+                           seen=None, cuts=None):
     """
     Jejak pusat crop yang mengikuti penutur aktif.
 
-    Saat orangnya sedang tidak terlihat — kamera berpindah, kepala menoleh —
-    posisinya DITAHAN, tidak melompat ke orang lain. Penutur yang tidak punya
-    pasangan jatuh kembali ke aturan lama, dan yang penting ia tidak mewarisi
-    wajah penutur sebelumnya: pewarisan itulah yang membuat dua penutur berakhir
-    di wajah yang sama.
+    Saat orangnya sedang tidak terlihat, posisinya ditahan — tapi hanya
+    SEBENTAR, dan itu pembedaan yang menentukan.
+
+    `_trace_people` menahan posisi terakhir tiap orang tanpa batas, jadi
+    `people[p][i]` tidak pernah kosong setelah orang itu sekali terlihat.
+    Pemeriksaan "kalau orangnya tidak terlihat, pakai aturan cadangan" karena
+    itu tidak pernah sekali pun berjalan: yang dibaca selalu posisi lama yang
+    ditahan. Akibatnya paling parah justru pada kasus yang paling mudah —
+    close-up satu orang. Kamera memotong ke wajah A, penutur yang terpetakan
+    adalah B, dan bingkai dengan patuh menunjuk kursi tempat B duduk beberapa
+    detik lalu, yang di dalam bidikan ini hanya dinding. Terukur: dari 992
+    sampel berwajah tunggal, 37,7% kotaknya tidak memuat wajah yang ada.
+
+    Dengan `seen`, dua keadaan itu akhirnya bisa dibedakan. Kepala yang menoleh
+    sesaat: tahan. Kamera yang sudah pindah: bingkai apa yang sungguh ada di
+    layar, dan lepaskan subjeknya supaya penghalus memperlakukannya sebagai
+    perpindahan, bukan sebagai pan.
     """
     active: list = [None] * n
     for t0, t1, sp in speaker_turns:
@@ -1180,20 +1363,51 @@ def _centers_from_speakers(centers, people, mapping, speaker_turns, n):
         for i in range(lo, hi):
             active[i] = sp
 
+    grace = max(1, int(round(UNSEEN_GRACE * SAMPLE_FPS)))
+
+    # Awal bidikan yang sedang berjalan, per sampel. Masa tenggang tidak boleh
+    # menyeberanginya: tenggang itu ada untuk menjembatani kepala yang menoleh
+    # DI DALAM satu bidikan, dan sebuah potongan mengakhiri bidikan itu. Di
+    # seberang potongan, posisi lama seseorang bukan keterangan yang usang —
+    # ia bukan keterangan sama sekali.
+    shot_start = [0] * n
+    if cuts:
+        awal = 0
+        for i in range(n):
+            if i < len(cuts) and cuts[i] and i > 0:
+                awal = i
+            shot_start[i] = awal
+
+    def terlihat(person: int, i: int) -> bool:
+        """Terlihat sekarang, atau baru saja di dalam bidikan yang sama."""
+        if seen is None or person >= len(seen):
+            return people[person][i] is not None
+        lane = seen[person]
+        lo = max(shot_start[i] if i < len(shot_start) else 0, i - grace + 1)
+        return any(lane[j] for j in range(max(0, lo), min(i + 1, len(lane))))
+
     out: list[Optional[float]] = []
+    subject: list[Optional[int]] = []
     held: Optional[int] = None
     for i in range(n):
         sp = active[i]
         if sp is not None and sp in mapping:
             person = mapping[sp]
-            if people[person][i] is not None:
+            if terlihat(person, i):
                 held = person
-            out.append(people[held][i] if held is not None and people[held][i] is not None
-                       else centers[i])
+            elif held is not None and not terlihat(held, i):
+                held = None
+            if held is not None and people[held][i] is not None:
+                out.append(people[held][i])
+                subject.append(held)
+            else:
+                out.append(centers[i])
+                subject.append(None)
         else:
             held = None
             out.append(centers[i])
-    return out
+            subject.append(None)
+    return out, subject
 
 
 def assign_faces_to_speakers(people, motion, speaker_turns, n_samples):
@@ -1251,14 +1465,44 @@ def assign_faces_to_speakers(people, motion, speaker_turns, n_samples):
         if hi > lo:
             active[j, lo:hi] = True
 
+    # Nilainya dinyatakan sebagai statistik-t: selisih rata-rata DIBAGI galat
+    # bakunya, bukan selisih mentah.
+    #
+    # Bedanya bukan kosmetik. Selisih mentah pada giliran yang cuma berisi
+    # empat kalimat terlihat persis sama besarnya dengan selisih pada giliran
+    # sepanjang dua menit, padahal yang pertama hampir seluruhnya kebetulan.
+    # Dengan galat baku ikut dibagi, bukti yang tipis menghasilkan angka kecil
+    # dengan sendirinya — dan itulah yang membuat ambang di bawah bisa berarti
+    # "cukup bukti", bukan sekadar "cukup besar".
+    # Sampel berturutan TIDAK saling bebas, dan mengabaikannya membuat setiap
+    # pasangan terlihat jauh lebih meyakinkan daripada yang sebenarnya.
+    # Gerakan mulut sudah dihaluskan 0,75 detik sebelum sampai ke sini;
+    # terukur pada 41 klip, autokorelasi lag-1-nya +0,34. Jumlah sampel bebas
+    # yang sesungguhnya karena itu hanya (1-r)/(1+r) kali jumlah bingkai —
+    # sekitar separuhnya. Tanpa koreksi ini, ambang bukti di bawah akan
+    # meluluskan hampir semua pasangan, termasuk yang lahir dari kebetulan.
+    def n_efektif(v) -> float:
+        if len(v) < 8:
+            return float(len(v))
+        a, b = v[:-1], v[1:]
+        sa, sb = a.std(), b.std()
+        if sa < 1e-9 or sb < 1e-9:
+            return float(len(v))
+        r = float(np.clip(((a - a.mean()) * (b - b.mean())).mean() / (sa * sb),
+                          -0.95, 0.95))
+        return max(2.0, len(v) * (1.0 - r) / (1.0 + r))
+
     score = np.full((k, len(speakers)), -np.inf)
     for i in range(k):
         for j in range(len(speakers)):
             inside = mot[i][active[j] & vis[i]]
             outside = mot[i][(~active[j]) & vis[i]]
-            if len(inside) < 5 or len(outside) < 5:
+            if len(inside) < 8 or len(outside) < 8:
                 continue
-            score[i][j] = float(inside.mean() - outside.mean())
+            galat = math.sqrt(inside.var() / n_efektif(inside)
+                              + outside.var() / n_efektif(outside))
+            beda = float(inside.mean() - outside.mean())
+            score[i][j] = beda / galat if galat > 1e-9 else 0.0
 
     # Susunan TERBAIK secara keseluruhan, bukan serakah. Serakah mengunci
     # pasangan terkuat lebih dulu dan pasangan berikutnya tinggal menerima
@@ -1300,7 +1544,33 @@ def assign_faces_to_speakers(people, motion, speaker_turns, n_samples):
 
     # Tiap penutur diterima sendiri-sendiri: satu pasangan lemah tidak ikut
     # terbawa hanya karena pasangan lain di susunan yang sama kuat.
-    return {speakers[j]: i for j, i in best.items() if score[i][j] > 0}
+    #
+    # Ambangnya jauh lebih tinggi daripada "lebih besar dari nol", dan itu
+    # perubahan yang paling penting di fungsi ini.
+    #
+    # Diukur dengan uji belah-dua pada 41 klip dari tiga podcast — pemetaan
+    # dihitung terpisah di paruh pertama dan paruh kedua tiap klip, lalu
+    # diperiksa apakah keduanya menunjuk orang yang sama. Dengan ambang lama,
+    # pemetaan dibuat untuk 31% penutur dan hanya 50% yang sepakat: untuk
+    # pilihan antara dua wajah, itu persis selemah lempar koin. Pemetaan
+    # seperti itu bukan bantuan — ia mengunci bingkai ke orang yang salah
+    # sepanjang klip, dengan keyakinan penuh.
+    #
+    # Yang hilang karena ambang ini tidak sebesar kelihatannya. Diukur pada
+    # 8.953 sampel dari tiga video, mengikuti penutur TIDAK memperbaiki
+    # komposisi sama sekali dibandingkan mengikuti bidikan penyuntingnya
+    # sendiri (98,7% lawan 99,8% wajah di dalam kotak). Podcast yang sudah
+    # dipotong rapi memang sudah menjawab pertanyaannya: saat A bicara,
+    # penyuntingnya memotong ke A. Mengikuti penutur hanya perlu mengambil
+    # alih ketika ia benar-benar tahu sesuatu yang belum dikatakan gambar.
+    dipakai = {speakers[j]: i for j, i in best.items()
+               if score[i][j] >= MIN_SPEAKER_EVIDENCE}
+    if not dipakai:
+        log.info("Bukti wajah↔suara terlalu tipis (t maks %.1f) — bingkai "
+                 "mengikuti bidikan aslinya",
+                 max((score[i][j] for j, i in best.items()
+                      if np.isfinite(score[i][j])), default=float("nan")))
+    return dipakai
 
 
 def _hold_person(centers: list, track: list) -> list:
@@ -1320,7 +1590,8 @@ def _hold_person(centers: list, track: list) -> list:
     return out
 
 
-def _apply_person_keys(centers: list, people: list, keys: list) -> list:
+def _apply_person_keys(centers: list, people: list, keys: list,
+                       subject: list) -> tuple[list, list]:
     """
     Menerapkan tanda linimasa: dari tiap tanda sampai tanda berikutnya, bingkai
     menunjuk orang yang disebut tanda itu.
@@ -1335,27 +1606,34 @@ def _apply_person_keys(centers: list, people: list, keys: list) -> list:
         key=lambda k: k["t"],
     )
     if not clean:
-        return centers
+        return centers, subject
 
     # Tiap orang ditahan lebih dulu di seluruh klip, lalu potongannya diambil.
     # Menghitungnya per sampel akan kehilangan posisi terakhir yang ditahan
     # setiap kali tanda berganti.
     held = {}
     out = list(centers)
+    subj = list(subject)
     for idx, key in enumerate(clean):
         person = key["person"]
+        start = int(math.floor(key["t"] * SAMPLE_FPS))
+        stop = (int(math.floor(clean[idx + 1]["t"] * SAMPLE_FPS))
+                if idx + 1 < len(clean) else len(centers))
         if person is None or not (0 <= int(person) < len(people)):
+            # Tanda kosong berarti "lepaskan kembali ke otomatis di sini".
+            # Subjeknya ikut dikosongkan supaya penghalus tahu kendalinya
+            # berpindah tangan dan memperlakukannya sebagai perpindahan.
+            for i in range(max(0, start), min(stop, len(centers))):
+                subj[i] = None
             continue
         person = int(person)
         if person not in held:
             held[person] = _hold_person(centers, people[person])
-        start = int(math.floor(key["t"] * SAMPLE_FPS))
-        stop = (int(math.floor(clean[idx + 1]["t"] * SAMPLE_FPS))
-                if idx + 1 < len(clean) else len(centers))
         for i in range(max(0, start), min(stop, len(centers))):
             out[i] = held[person][i]
+            subj[i] = person
     log.info("Bingkai memakai %d tanda linimasa dari pengguna", len(clean))
-    return out
+    return out, subj
 
 
 # Hasil pemindaian wajah, dikunci pada berkas dan susunan segmennya.
@@ -1560,8 +1838,14 @@ def plan_reframe(source_video_path: str, segments: list[dict], *,
         mapping = assign_faces_to_speakers(people, motion, speaker_turns,
                                            len(centers))
 
+    # Siapa yang sedang dibidik, per sampel. Inilah yang membedakan "orang ini
+    # bergerak" dari "sekarang giliran orang lain" — dua hal yang terlihat sama
+    # dari deretan angka saja, tapi menuntut gerakan kamera yang berlawanan.
+    subject: list = [None] * len(centers)
+
     if lock_person is not None and 0 <= lock_person < len(people):
         centers = _hold_person(centers, people[lock_person])
+        subject = [lock_person] * len(centers)
         log.info("Bingkai dikunci ke orang %d oleh pengguna", lock_person + 1)
 
     # Kalau kita tahu siapa bicara kapan, crop mengikuti WAJAH ORANG ITU dan
@@ -1569,8 +1853,9 @@ def plan_reframe(source_video_path: str, segments: list[dict], *,
     # pasangannya tidak meyakinkan — aturan lama tetap berlaku, jadi rekaman
     # berpotong kamera yang sudah benar tidak ikut diubah.
     elif mapping:
-        centers = _centers_from_speakers(centers, people, mapping,
-                                         speaker_turns, len(centers))
+        centers, subject = _centers_from_speakers(centers, people, mapping,
+                                                  speaker_turns, len(centers),
+                                                  seen=seen, cuts=cuts)
         log.info("Wajah dicocokkan ke penutur: %s",
                  {f"penutur {k}": f"orang {v + 1}" for k, v in mapping.items()})
 
@@ -1579,9 +1864,10 @@ def plan_reframe(source_video_path: str, segments: list[dict], *,
     # di atas tetap berlaku — membetulkan satu kesalahan tidak boleh berarti
     # mengambil alih seluruh klip dengan tangan.
     if person_keys and people:
-        centers = _apply_person_keys(centers, people, person_keys)
+        centers, subject = _apply_person_keys(centers, people, person_keys, subject)
 
-    smoothed = _smooth(centers, cuts, source_w=source_w, crop_w=crop_w)
+    smoothed = _smooth(centers, cuts, source_w=source_w, crop_w=crop_w,
+                       subject=subject)
 
     plan = ReframePlan(crop_w=crop_w, crop_h=crop_h, source_w=source_w,
                        source_h=source_h, face_coverage=round(coverage, 3))
