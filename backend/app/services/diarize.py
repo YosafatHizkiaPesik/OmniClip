@@ -450,26 +450,54 @@ def analyze_speakers(wav_path: str, spans: list[tuple[float, float]], *,
     norms = np.linalg.norm(centered, axis=1, keepdims=True)
     centered = centered / np.maximum(norms, 1e-8)
 
+    # Pilihan otomatis SELALU dihitung, bahkan ketika pengguna sudah menyebut
+    # jumlahnya. Ia dipakai sebagai pembanding, bukan pengganti.
+    auto_k, auto_labels, auto_score = 1, np.zeros(len(x), dtype=int), 0.0
+    for k in range(2, min(max_speakers, len(x) // 3) + 1):
+        cand, _ = _kmeans(centered, k)
+        if len(np.unique(cand)) < k:
+            continue
+        gap = _separation(x, cand, k)
+        # Kelompok yang lebih banyak hampir selalu menurunkan selisih, jadi
+        # jumlah penutur bertambah hanya bila penambahannya benar-benar
+        # tidak merusak pemisahan.
+        if gap > auto_score + 1e-9:
+            auto_k, auto_labels, auto_score = k, cand, gap
+
     if speakers and speakers >= 2:
         chosen_k = max(2, min(speakers, max_speakers, len(x) // 3))
         labels, _ = _kmeans(centered, chosen_k)
         score = _separation(x, labels, chosen_k)
+
+        # Jumlah yang diminta pengguna DIPERIKSA, tidak sekadar dituruti.
+        #
+        # Ini kegagalan yang paling mahal di seluruh berkas ini, karena ia tidak
+        # terlihat sebagai kegagalan. Terukur pada podcast lima orang: diminta
+        # lima, k-means memang mengembalikan lima kelompok — tapi selisihnya
+        # -0,080, artinya kelompoknya lebih buruk daripada pembagian acak.
+        # Labelnya tetap dipasang, tersimpan, dan diwarnai di layar, sehingga
+        # yang dilihat pengguna adalah warna penutur yang sepenuhnya derau dan
+        # harus dibetulkan satu per satu dengan tangan. Pilihan otomatis pada
+        # rekaman yang sama memberi dua penutur dengan selisih +0,074 — lemah,
+        # tapi benar.
+        #
+        # Lima orang di ruangan bukan berarti lima suara yang bisa dipisahkan:
+        # yang bisa dipisahkan adalah yang warna suaranya cukup berbeda dan
+        # cukup sering bicara. Kalau jumlah yang diminta tidak sanggup
+        # dipisahkan, yang dikembalikan adalah pemisahan terbaik yang sungguh
+        # ada — bukan angka yang diminta.
+        if score < MIN_SEPARATION and auto_score > score:
+            log.info("Diminta %d penutur (selisih %.3f) tapi suaranya tidak "
+                     "terpisah sejauh itu — memakai %d penutur (selisih %.3f)",
+                     chosen_k, score, auto_k, auto_score)
+            chosen_k, labels, score = auto_k, auto_labels, auto_score
     else:
-        chosen_k, labels, score = 1, np.zeros(len(x), dtype=int), 0.0
-        for k in range(2, min(max_speakers, len(x) // 3) + 1):
-            cand, _ = _kmeans(centered, k)
-            if len(np.unique(cand)) < k:
-                continue
-            gap = _separation(x, cand, k)
-            # Kelompok yang lebih banyak hampir selalu menurunkan selisih, jadi
-            # jumlah penutur bertambah hanya bila penambahannya benar-benar
-            # tidak merusak pemisahan.
-            if gap > score + 1e-9:
-                chosen_k, labels, score = k, cand, gap
-        if score < MIN_SEPARATION:
-            log.info("Pemisahan suara lemah (selisih %.3f) — dianggap satu penutur", score)
-            return Diarization(labels=[0] * len(spans), speaker_count=1,
-                               separation=score)
+        chosen_k, labels, score = auto_k, auto_labels, auto_score
+
+    if chosen_k < 2 or score < MIN_SEPARATION:
+        log.info("Pemisahan suara lemah (selisih %.3f) — dianggap satu penutur", score)
+        return Diarization(labels=[0] * len(spans), speaker_count=1,
+                           separation=score)
 
     # Dihaluskan di ranah JENDELA lebih dulu, saat urutannya masih berurut
     # waktu: satu jendela nyasar di tengah giliran orang lain adalah derau, dan

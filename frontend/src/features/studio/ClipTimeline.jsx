@@ -390,6 +390,21 @@ export default function ClipTimeline({
     [reframe, people],
   );
 
+  /**
+   * Siapa yang BENAR-BENAR muncul di klip ini.
+   *
+   * Nomor orang sekarang milik seluruh video, bukan milik klipnya — itulah yang
+   * membuat "orang 2" tetap orang yang sama di klip mana pun. Konsekuensinya,
+   * daftar yang datang memuat semua orang di video, termasuk yang tidak sekali
+   * pun lewat di depan kamera pada rentang ini. Mereka disembunyikan, tapi
+   * NOMORNYA tidak dipakai ulang: lajur bisa melompat dari 1 ke 3, dan lompatan
+   * itu justru keterangan — ia berarti orang 2 memang tidak ada di sini.
+   */
+  const hadir = useMemo(
+    () => people.map((_, i) => i).filter((i) => (spans[i] ?? []).length > 0),
+    [people, spans],
+  );
+
   const aimAt = useCallback((t, person) => {
     if (!onPersonKeys) return;
     onPersonKeys(withPersonKey(personKeys, t, person));
@@ -408,7 +423,7 @@ export default function ClipTimeline({
      subtitle tetap memakai lajurnya sendiri seperti sebelumnya. */
   const speakerFaces = reframe?.speaker_faces ?? null;
   const byPerson = useMemo(() => {
-    if (!speakerFaces || !Object.keys(speakerFaces).length || people.length < 2) {
+    if (!speakerFaces || !Object.keys(speakerFaces).length || hadir.length < 2) {
       return null;
     }
     const rows = people.map(() => []);
@@ -510,12 +525,12 @@ export default function ClipTimeline({
           {!byPerson && (
             <span className="tl-name" style={{ height: `${subLaneH}px` }}>Subtitle</span>
           )}
-          {people.length > 1 && (
+          {hadir.length > 1 && (
             <>
               <span className="tl-name tl-name--aim" style={{ height: `${LANE_H.aim}px` }}>
                 Arah bingkai
               </span>
-              {people.map((_, p) => (
+              {hadir.map((p) => (
                 <span key={p} className="tl-name"
                       style={{ height: `${byPerson ? LANE_H.orang : LANE_H.frame}px` }}
                       title={byPerson
@@ -607,7 +622,7 @@ export default function ClipTimeline({
             )}
 
             {/* arah bingkai: potongan bersambungan yang bisa dipotong lagi */}
-            {people.length > 1 && (
+            {hadir.length > 1 && (
               <div className="tl-lane tl-lane--aim" style={{ height: `${LANE_H.aim}px` }}
                    onPointerDown={(e) => {
                      if (e.target === e.currentTarget) onSeekClip?.(timeAt(e.clientX));
@@ -620,7 +635,7 @@ export default function ClipTimeline({
                   // potongan tetangga, dan rentang sesempit itu memang harus
                   // diperbesar dulu sebelum bisa disunting dengan tepat.
                   const muat = (r.end - r.start) * pxPerSec
-                    > (people.length + (cut.keyIndex >= 0 ? 2 : 1)) * 22 + 74;
+                    > (hadir.length + (cut.keyIndex >= 0 ? 2 : 1)) * 22 + 74;
                   const ink = auto ? 'var(--ink-3)' : frameInk(cut.person);
                   return (
                     <div key={`${cut.keyIndex}:${ci}`} className="tl-block tl-block--aim"
@@ -653,7 +668,7 @@ export default function ClipTimeline({
                                 title="Biarkan bingkai memilih sendiri di potongan ini"
                                 onPointerDown={(e) => e.stopPropagation()}
                                 onClick={() => aimCut(cut, null)}>A</button>
-                        {people.map((_, pi) => (
+                        {hadir.map((pi) => (
                           <button key={pi} type="button"
                                   className={`tl-aim-btn${cut.person === pi ? ' is-on' : ''}`}
                                   style={cut.person === pi
@@ -689,9 +704,9 @@ export default function ClipTimeline({
                 tempat lain — dan tidak ada satu titik pun di layar yang bisa
                 menjawab "saat dia mengatakan ini, bingkainya sedang melihat
                 siapa". Itulah satu-satunya alasan kedua lajur itu dilihat. */}
-            {people.length > 1 && (
+            {hadir.length > 1 && (
               <div className="tl-frame-lanes">
-                {people.map((_, p) => {
+                {hadir.map((p) => {
                   const punya = byPerson ? byPerson.rows[p] : [];
                   const tinggi = byPerson ? LANE_H.orang : LANE_H.frame;
                   return (
@@ -738,7 +753,7 @@ export default function ClipTimeline({
         </div>
       </div>
 
-      {frameAiming && people.length <= 1 && (
+      {frameAiming && hadir.length <= 1 && (
         <div className="clip-tl-foot">
           <Crosshair size={12} style={{ color: 'var(--ink-3)' }} />
           <span>
@@ -749,7 +764,7 @@ export default function ClipTimeline({
         </div>
       )}
 
-      {people.length > 1 && (
+      {hadir.length > 1 && (
         <div className="clip-tl-foot">
           <button className="btn-secondary tl-cut" onClick={cutHere} disabled={!onPersonKeys}
                   title="Membelah arah bingkai di posisi garis main">

@@ -50,6 +50,19 @@ SFACE_PATH = MODELS_DIR / "face_recognition_sface_2021dec.onnx"
 # bukan pas-pasan di ambang.
 IDENTITY_SIMILARITY = 0.363
 
+# Ambang untuk mencocokkan ke DAFTAR TETAP video, lebih tinggi daripada ambang
+# pengelompokan di dalam satu klip — dan angkanya diukur, bukan dipilih.
+#
+# Pada tiga klip dari satu podcast, sidik rata-rata orang yang SAMA antar klip
+# berjarak +0,85 sampai +0,98; orang yang BERBEDA berjarak 0,01 sampai 0,38.
+# Jurang di antara keduanya lebar sekali, dan 0,363 jatuh di sisi yang salah:
+# sepasang kelompok berbeda yang kebetulan bernilai 0,38 ikut tergabung, dan
+# satu orang lenyap dari daftar. 0,60 duduk di tengah jurang itu.
+#
+# Yang dibandingkan di sini rata-rata seluruh kelompok, bukan satu jejak, jadi
+# ia memang berhak dituntut lebih tinggi.
+ROSTER_SIMILARITY = 0.60
+
 # Wajah yang lebih kecil dari ini tidak disidik. Diukur: pada ambang 26 piksel
 # jumlah kelompok berayun 5-6-7 mengikuti ambang kemiripan — sidik dari wajah
 # sekecil itu terlalu berderau untuk dipercaya. Pada 34 hasilnya sama persis di
@@ -685,7 +698,71 @@ def _cluster_identities(embeds: dict, weight: dict) -> list[list[int]]:
     return [[tids[i] for i in mem] for mem in groups.values()]
 
 
-def _identities_from_faces(raw: list, embeds: dict, max_people: int):
+# Daftar wajah TETAP per video, hidup selintas klip.
+#
+# Tanpa ini, tiap klip mengelompokkan wajahnya sendiri dari nol dan menomori
+# hasilnya dari kiri ke kanan — jadi orang yang sama bisa jadi "orang 2" di satu
+# klip dan "orang 4" di klip berikutnya, semata karena siapa yang kebetulan ikut
+# tertangkap kamera di rentang itu. Tanda arah bingkai disimpan sebagai NOMOR,
+# jadi penomoran yang berpindah bukan cuma membingungkan: ia membuat tanda yang
+# sudah dipasang menunjuk orang yang berbeda.
+#
+# Yang disimpan sidik rata-rata tiap orang beserta berapa kali ia dilihat. Klip
+# berikutnya mencocokkan kelompoknya ke daftar ini lebih dulu; yang tidak cocok
+# dengan siapa pun ditambahkan di belakang. Nomor sekali diberikan tidak pernah
+# berpindah — orang baru selalu dapat nomor baru.
+# Kuncinya memuat waktu ubah berkasnya, jadi mengunduh ulang video pada resolusi
+# yang lebih baik otomatis memulai daftar yang baru — tidak perlu tombol
+# "lupakan wajah" yang tidak pernah jelas kapan harus ditekan.
+_ROSTER: "OrderedDict[tuple, dict]" = OrderedDict()
+_ROSTER_MAX = 4
+
+
+def _roster_for(key: tuple) -> dict:
+    r = _ROSTER.get(key)
+    if r is None:
+        r = {"emb": [], "n": [], "x": []}
+        _ROSTER[key] = r
+        while len(_ROSTER) > _ROSTER_MAX:
+            _ROSTER.popitem(last=False)
+    else:
+        _ROSTER.move_to_end(key)
+    return r
+
+
+def _match_roster(roster: dict, vec, x: float, max_people: int) -> int:
+    """
+    Nomor orang untuk satu sidik wajah: yang sudah dikenal, atau nomor baru.
+
+    Pencocokannya memakai ambang yang sama dengan pengelompokan di dalam satu
+    klip. Kalau daftarnya sudah penuh, yang paling mirip tetap dipakai meski di
+    bawah ambang — menolak berarti membuang orangnya sama sekali, dan itu lebih
+    buruk daripada nomor yang kurang yakin.
+    """
+    import numpy as np
+
+    if roster["emb"]:
+        M = np.stack(roster["emb"])
+        sim = M @ vec
+        i = int(np.argmax(sim))
+        if float(sim[i]) >= ROSTER_SIMILARITY or len(roster["emb"]) >= max_people:
+            n = roster["n"][i]
+            # Rata-rata berjalan: sidik orang yang sama dari banyak klip lebih
+            # tahan terhadap satu sudut yang buruk daripada sidik pertama saja.
+            baru = (M[i] * n + vec) / (n + 1)
+            roster["emb"][i] = baru / max(float(np.linalg.norm(baru)), 1e-9)
+            roster["n"][i] = n + 1
+            roster["x"][i] = (roster["x"][i] * n + x) / (n + 1)
+            return i
+
+    roster["emb"].append(vec)
+    roster["n"].append(1)
+    roster["x"].append(x)
+    return len(roster["emb"]) - 1
+
+
+def _identities_from_faces(raw: list, embeds: dict, max_people: int,
+                           roster: Optional[dict] = None):
     """
     Siapa saja yang ada di rekaman ini, dari wajahnya — bukan dari kursinya.
 
@@ -721,11 +798,37 @@ def _identities_from_faces(raw: list, embeds: dict, max_people: int):
     if not dipakai:
         return None
 
-    return {t: i for i, mem in enumerate(dipakai) for t in mem}, len(dipakai)
+    if roster is None:
+        return {t: i for i, mem in enumerate(dipakai) for t in mem}, len(dipakai)
+
+    # --- Nomor diambil dari daftar tetap video ini ----------------------------
+    import numpy as np
+
+    posisi: dict[int, list[float]] = {}
+    for r in raw:
+        for x, _m, tid in r:
+            posisi.setdefault(tid, []).append(x)
+
+    peta: dict[int, int] = {}
+    for mem in dipakai:
+        vecs = [embeds[t] for t in mem if t in embeds]
+        if not vecs:
+            continue
+        rata = np.mean(np.stack(vecs), axis=0)
+        rata = rata / max(float(np.linalg.norm(rata)), 1e-9)
+        xs = [x for t in mem for x in posisi.get(t, [])]
+        nomor = _match_roster(roster, rata, float(np.median(xs)) if xs else 0.0,
+                              max_people)
+        for t in mem:
+            peta[t] = nomor
+    if not peta:
+        return None
+    return peta, len(roster["emb"])
 
 
 def group_people(raw: list[list[tuple[float, float, int]]], source_w: int,
                  embeds: Optional[dict] = None,
+                 roster: Optional[dict] = None,
                  max_people: int = 6
                  ) -> tuple[list[list[Optional[float]]], list[list[float]],
                             list[list[bool]]]:
@@ -765,23 +868,20 @@ def group_people(raw: list[list[tuple[float, float, int]]], source_w: int,
     # layar. Bedanya paling terasa persis di tempat cara lama gagal: bidikan
     # dekat berisi dua orang. Di situ tidak ada satu pun petunjuk posisi yang
     # benar, karena kameranya sudah memindahkan keduanya.
-    kenal = _identities_from_faces(raw, embeds or {}, max_people)
+    kenal = _identities_from_faces(raw, embeds or {}, max_people, roster)
     if kenal is not None:
         tid2id, k = kenal
-        # Diurutkan kiri ke kanan menurut tempat orangnya benar-benar terlihat.
-        # Nomor yang urut dari kiri adalah satu-satunya urutan yang bisa ditebak
-        # pengguna tanpa diberi tahu, dan pin di atas video dibaca begitu.
-        posisi: list[list[float]] = [[] for _ in range(k)]
-        for r in raw:
-            for x, _m, tid in r:
-                i = tid2id.get(tid)
-                if i is not None:
-                    posisi[i].append(x)
-        tengah = [float(np.median(p)) if p else float("inf") for p in posisi]
-        urut = sorted(range(k), key=lambda i: tengah[i])
-        ulang = {lama: baru for baru, lama in enumerate(urut)}
-        tid2id = {t: ulang[i] for t, i in tid2id.items()}
-        centroids = np.array([tengah[i] for i in urut], dtype=np.float64)
+        # Tempat duduk tiap nomor, untuk menjodohkan wajah yang tidak bersidik.
+        #
+        # Nomornya sendiri TIDAK diurutkan ulang di sini. Versi sebelumnya
+        # mengurutkannya kiri ke kanan tiap klip, dan itulah yang membuat orang
+        # yang sama berpindah nomor antar klip — urutan kiri-ke-kanan hanya
+        # berarti sesuatu bila semua orang kebetulan terlihat, dan di klip yang
+        # kameranya dekat hampir tidak pernah begitu. Urutan ditetapkan sekali
+        # saat daftar video ini pertama dibentuk, lalu dipegang.
+        centroids = np.array(
+            [(roster["x"][i] if roster and i < len(roster["x"]) else 0.0)
+             for i in range(k)], dtype=np.float64)
         return _trace_people(raw, centroids, k, tid2id)
 
     # --- Jalur cadangan: tebak dari tempat duduknya ----------------------------
@@ -1367,7 +1467,10 @@ def _scan_scene(src: Path, segments: list[dict], source_w: int, source_h: int,
 
     coverage = sum(1 for c in centers if c is not None) / len(centers)
     try:
-        people, motion, seen = group_people(raw, source_w, embeds)
+        # Daftar wajah tetap milik VIDEO ini, bukan milik klipnya: nomor orang
+        # harus sama di klip mana pun, karena tanda arah bingkai menyimpan nomor.
+        people, motion, seen = group_people(raw, source_w, embeds,
+                                            roster=_roster_for(head))
     except Exception as e:      # pengelompokan tidak boleh menjatuhkan render
         log.warning("Pengelompokan orang gagal: %s", e)
         people, motion, seen = [], [], []
