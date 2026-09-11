@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Plus, Trash2, Loader2, Star, ChevronRight, Users } from 'lucide-react';
 import { formatTime, parseTimeString } from '../../utils/timeFormat';
 import { inkSafe } from '../../lib/contrast';
@@ -160,6 +160,38 @@ export function SubtitlePanel({ clip, onUpdate, onRemove, style, onAutoSpeakers,
                                // saling membingungkan.
                                selectedLine = null, onSelectLine = null,
                                onSeekLine = null }) {
+  // Kait dipanggil SEBELUM percabangan keluar apa pun — komponen ini punya dua
+  // jalan keluar lebih awal, dan kait di bawahnya akan berubah-ubah jumlahnya
+  // antar render.
+  const listRef = useRef(null);
+  const rowRef = useRef(null);
+
+  /**
+   * Menggulir baris terpilih ke dalam pandangan — di dalam DAFTARNYA saja.
+   *
+   * Versi sebelumnya memanggil `scrollIntoView` dari sebuah ref callback, dan
+   * itu dua kesalahan sekaligus. Ref callback dijalankan ulang pada SETIAP
+   * render, bukan hanya saat pilihannya berpindah; dan `scrollIntoView`
+   * menggulir seluruh rantai leluhur yang bisa digulir — termasuk halamannya.
+   * Gabungan keduanya: selama video diputar, baris terpilih ikut berjalan, tiap
+   * denyut menarik seluruh halaman turun ke panel subtitle, dan pengguna tidak
+   * bisa menggulir kembali ke atas sampai videonya dijeda.
+   *
+   * Sekarang yang digulir hanya kotak daftarnya, lewat scrollTop, dan hanya
+   * ketika baris terpilih benar-benar berganti.
+   */
+  useEffect(() => {
+    const kotak = listRef.current;
+    const baris = rowRef.current;
+    if (!kotak || !baris) return;
+    const atas = baris.offsetTop;
+    const bawah = atas + baris.offsetHeight;
+    if (atas < kotak.scrollTop) kotak.scrollTop = atas - 6;
+    else if (bawah > kotak.scrollTop + kotak.clientHeight) {
+      kotak.scrollTop = bawah - kotak.clientHeight + 6;
+    }
+  }, [selectedLine]);
+
   if (!clip) return null;
   const lines = clip.subtitles ?? [];
 
@@ -244,13 +276,14 @@ export function SubtitlePanel({ clip, onUpdate, onRemove, style, onAutoSpeakers,
         ))}
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '380px', overflowY: 'auto' }}>
+      <div ref={listRef}
+           style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '380px', overflowY: 'auto' }}>
         {lines.map((line, i) => {
           const speaker = line.speaker || 0;
           const on = selectedLine === i;
           return (
             <div key={i}
-                 ref={on ? (el) => el?.scrollIntoView({ block: 'nearest' }) : null}
+                 ref={on ? rowRef : null}
                  onPointerDown={() => onSelectLine?.(i)}
                  style={{
                    display: 'grid', gridTemplateColumns: '52px 22px 1fr 26px', gap: '7px',

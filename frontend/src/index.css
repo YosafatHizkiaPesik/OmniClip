@@ -678,13 +678,8 @@ a { color: var(--cue); text-underline-offset: 3px; text-decoration-thickness: 1p
 /* ============================================================================
    Editor
    ========================================================================== */
-.editor-grid {
-  display: grid;
-  /* Dua kolom, bukan tiga: pratinjau naik ke panggung di atas halaman, dan
-     lebar yang ditinggalkannya diberikan kepada lirik. */
-  grid-template-columns: 250px minmax(0, 1fr);
-  gap: 14px; align-items: start;
-}
+/* `.editor-grid` dihapus bersama tata letak halaman yang digulir: studio
+   sekarang satu ruang berlabuh, dan kolomnya diatur `.studio-body`. */
 
 .reh-index { max-height: 560px; overflow-y: auto; }
 .reh-row {
@@ -832,12 +827,7 @@ a { color: var(--cue); text-underline-offset: 3px; text-decoration-thickness: 1p
   .stage-row > .pit { justify-self: center; width: 100%; max-width: 360px; }
 }
 
-@media (max-width: 1180px) {
-  .editor-grid { grid-template-columns: 220px minmax(0, 1fr); }
-}
 @media (max-width: 760px) {
-  .editor-grid { grid-template-columns: minmax(0, 1fr); }
-  .editor-grid > * { min-width: 0; }
   /* Indeks huruf jadi laci mendatar yang bisa digeser jempol. Item grid
      defaultnya min-width:auto — tanpa penjagaan di atas, laci selebar
      ribuan piksel akan melebarkan seluruh halaman. */
@@ -902,3 +892,219 @@ a { color: var(--cue); text-underline-offset: 3px; text-decoration-thickness: 1p
   box-shadow: inset 0 0 0 1px #ffffff12;
 }
 .pit-frame > .pit-well { position: relative; width: 100%; overflow: hidden; border-radius: 1px; }
+
+/* ============================================================================
+   Studio klip: ruang berlabuh, bukan halaman yang digulir
+   ============================================================================
+   Sebelum ini studio adalah satu halaman panjang — panggung, lalu linimasa,
+   lalu panel — sehingga pekerjaan yang paling sering dilakukan (melihat
+   gambarnya sambil menggeser sesuatu di linimasa) menuntut menggulir bolak-
+   balik, dan keduanya tidak pernah muncul di layar bersamaan.
+
+   Tingginya sekarang dikunci ke tinggi layar dan dibagi tiga baris: bilah,
+   panggung, dok. Yang menggulir hanya isi kotaknya sendiri; halamannya tidak
+   pernah. Itu satu aturan, dan ia yang membuat linimasa selalu ada di tempat
+   yang sama tanpa perlu dicari.  */
+body.is-studio .main-content,
+.main-content:has(.studio) {
+  padding: 0; height: calc(100dvh - 60px); overflow: hidden;
+}
+body.is-studio .app-viewport,
+.app-viewport:has(.studio) { height: 100dvh; min-height: 0; }
+
+.studio {
+  height: 100%; min-height: 0; background: var(--ground);
+  display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+/* ── Bilah atas ───────────────────────────────────────────────────────────── */
+.studio-bar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px; border-bottom: 1px solid var(--rule);
+  background: var(--plate); min-width: 0;
+}
+.studio-title { min-width: 0; flex: 1 1 auto; }
+.studio-title h1 {
+  font-size: 1.02rem; font-weight: 760; margin: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.studio-title .sub {
+  font-size: .74rem; color: var(--ink-3); margin-top: 1px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.studio-actions {
+  display: flex; align-items: center; gap: 8px; flex: none; flex-wrap: wrap;
+}
+.studio-check {
+  display: flex; align-items: center; gap: 6px;
+  font-size: .78rem; color: var(--ink-2); cursor: pointer; white-space: nowrap;
+}
+.studio-check input { width: 14px; height: 14px; }
+.studio-icon {
+  padding: 7px 9px; flex: none; min-height: 32px;
+}
+.studio-icon.is-on { border-color: var(--reh); color: var(--reh); }
+
+/* ── Badan ────────────────────────────────────────────────────────────────── */
+.studio-body {
+  display: grid; min-height: 0;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+}
+.studio-rail {
+  width: 232px; min-height: 0; overflow: hidden;
+  display: flex; flex-direction: column;
+  background: var(--plate); border-right: 1px solid var(--rule);
+}
+.studio-rail .reh-index { flex: 1 1 auto; max-height: none; min-height: 0; }
+.studio-rail-add {
+  width: 100%; border-radius: 0; border-width: 1px 0 0;
+  justify-content: flex-start; font-size: .76rem; flex: none;
+}
+
+.studio-stage {
+  min-width: 0; min-height: 0; overflow: auto;
+  padding: 12px; display: flex; flex-direction: column; gap: 10px;
+}
+.studio-note { padding: 9px 12px; font-size: .8rem; line-height: 1.5; }
+
+/* Panggung mengisi tinggi yang tersedia, bukan tinggi isinya: dengan begitu
+   video sumber ikut membesar saat panel ditutup, alih-alih meninggalkan pelat
+   kosong di bawahnya. */
+.studio-stage .stage-row {
+  margin-bottom: 0; flex: 1 1 auto; min-height: 0;
+  align-items: stretch;
+}
+.studio-stage .frame-stage { min-height: 0; }
+.studio-stage .editor-pit {
+  padding: 12px; display: flex; flex-direction: column;
+  gap: 10px; align-items: center; align-self: stretch;
+  min-height: 0; overflow: auto;
+}
+
+/* ── Panel alat ───────────────────────────────────────────────────────────── */
+.studio-panel {
+  width: 340px; min-height: 0; display: flex; flex-direction: column;
+  background: var(--plate); border-left: 1px solid var(--rule);
+}
+.studio-panel-body { padding: 13px; overflow: auto; min-height: 0; flex: 1 1 auto; }
+
+/* ── Rel ikon alat ────────────────────────────────────────────────────────── */
+.studio-tools {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 8px 6px; flex: none;
+  background: var(--plate-2); border-left: 1px solid var(--rule);
+}
+.studio-tool {
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  width: 62px; padding: 9px 2px; cursor: pointer;
+  font: inherit; font-size: .64rem; font-weight: 620; line-height: 1.1;
+  color: var(--ink-3); background: transparent;
+  border: 1px solid transparent; border-radius: var(--r-sm);
+}
+.studio-tool:hover { color: var(--ink); background: var(--plate-3); }
+.studio-tool.is-on {
+  color: var(--reh); background: var(--hl-wash); border-color: var(--reh);
+}
+
+/* ── Dok ──────────────────────────────────────────────────────────────────── */
+.studio-dock {
+  border-top: 1px solid var(--rule); background: var(--plate);
+  display: flex; flex-direction: column; min-height: 0;
+}
+.dock-bar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 7px 12px; border-bottom: 1px solid var(--rule-2);
+}
+.dock-clock {
+  font-size: .96rem; font-weight: 700; color: var(--reh);
+  display: flex; align-items: baseline; gap: 7px; white-space: nowrap;
+}
+.dock-keys { margin-left: auto; white-space: nowrap; }
+.dock-switch {
+  display: inline-flex; border: 1px solid var(--rule-2);
+  border-radius: var(--r-sm); overflow: hidden; flex: none;
+}
+.dock-switch button {
+  font: inherit; font-size: .74rem; font-weight: 620; cursor: pointer;
+  padding: 6px 11px; border: 0; background: transparent; color: var(--ink-3);
+}
+.dock-switch button + button { border-left: 1px solid var(--rule-2); }
+.dock-switch button:hover { color: var(--ink); background: var(--plate-3); }
+.dock-switch button.is-on { color: var(--reh); background: var(--hl-wash); }
+
+.dock-body { padding: 10px 12px 12px; overflow: auto; min-height: 0; }
+/* Pelat linimasa sudah punya bingkainya sendiri; di dalam dok bingkai itu
+   hanya menggandakan garis batas dok. */
+.dock-body > .plate { margin: 0; border: 0; border-radius: 0; background: transparent; }
+
+/* Layar pendek dan sempit: dok menyusut, rel alat jadi ikon saja. */
+@media (max-height: 760px) {
+  .studio-tool span { display: none; }
+  .studio-tool { width: 44px; }
+}
+@media (max-width: 1100px) {
+  .studio-rail { width: 190px; }
+  .studio-panel { width: 300px; }
+  .dock-keys { display: none; }
+}
+/* Layar sempit: ruang berlabuh dilepas jadi tumpukan yang digulir.
+
+   Yang TIDAK dilakukan: menyembunyikan daftar klip dan panel alat. Percobaan
+   pertama menyembunyikan keduanya, dan hasilnya editor yang tidak bisa dipakai
+   menyunting apa pun di telepon — terukur, isi halamannya menyusut dari 4644
+   jadi 1628 karakter. Yang benar adalah keduanya turun jadi blok selebar layar
+   di bawah panggung: tetap ada, tinggal digulir. Relnya sudah punya sakelar
+   sendiri di bilah atas, jadi yang tidak sedang dipakai bisa ditutup. */
+@media (max-width: 860px) {
+  body.is-studio .main-content,
+  .main-content:has(.studio) { height: auto; overflow: visible; }
+  body.is-studio .app-viewport,
+  .app-viewport:has(.studio) { height: auto; }
+  .studio { height: auto; grid-template-rows: auto auto auto; }
+  .studio-body {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: 'stage tools' 'rail rail' 'panel panel';
+  }
+  .studio-stage { grid-area: stage; overflow: visible; }
+  .studio-tools { grid-area: tools; }
+  .studio-rail {
+    grid-area: rail; width: auto; max-height: 320px;
+    border-right: 0; border-top: 1px solid var(--rule);
+  }
+  .studio-panel {
+    grid-area: panel; width: auto;
+    border-left: 0; border-top: 1px solid var(--rule);
+  }
+  .studio-panel-body { overflow: visible; }
+  .studio-stage .stage-row { grid-template-columns: minmax(0, 1fr); }
+  .studio-stage .clip-preview-box { height: auto; width: 100%; }
+  .studio-dock { max-height: none; }
+}
+
+/* Pratinjau di dalam studio berlabuh diukur dari TINGGI yang tersisa, bukan
+   dari tinggi viewport.
+
+   Batas bawaannya `min(300px, 46vh * rasio)` — masuk akal pada halaman yang
+   digulir, karena di sana kotaknya boleh menjulur dan pengguna tinggal
+   menggulir. Di ruang berlabuh tidak ada gulir untuk menyelamatkannya: 46vh
+   lebih tinggi daripada panggung yang tersisa setelah bilah dan dok mengambil
+   bagiannya, jadi bagian bawah kanvas — termasuk tombolnya — terpotong. */
+.studio-stage .clip-preview {
+  flex: 1 1 auto; min-height: 0;
+  display: flex; flex-direction: column; justify-content: center;
+}
+.studio-stage .clip-preview-stage { flex: 1 1 auto; min-height: 0; }
+/* Kotaknya sendiri sudah tahu cara mengukur diri; di sini tinggal dipastikan
+   ia punya tinggi untuk diukur. */
+.studio-stage .clip-preview-stage { align-items: stretch; }
+
+/* Dok tidak boleh melahap panggung. Lajur linimasa bertambah seiring jumlah
+   orang di klip, jadi tanpa plafon sebuah klip berisi lima orang akan
+   menyisakan sepertiga layar untuk gambarnya. */
+.studio-dock { max-height: 40dvh; }
+
+.preview-hint {
+  font-size: .68rem; color: var(--text-muted); margin: 0; flex: none;
+  display: flex; align-items: center; gap: 5px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+}

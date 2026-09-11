@@ -21,7 +21,8 @@ def run_download(ctx: JobContext) -> dict:
     berapa pun lamanya unduhan, tanpa progress dan tanpa cara membatalkan.
     """
     video_id = ctx.payload["video_id"]
-    resolution = ctx.payload.get("resolution", "720p")
+    # Sama seperti auto-clip: yang terbaik, kecuali pemintanya menyebut lain.
+    resolution = ctx.payload.get("resolution") or "Terbaik"
 
     ctx.progress(0.02, stage="metadata", message="Mengambil informasi video…")
     try:
@@ -232,7 +233,15 @@ def run_auto_clip(ctx: JobContext) -> dict:
     from .transcript import get_transcript, words_to_sentences
 
     video_id = ctx.payload["video_id"]
-    quality = ctx.payload.get("quality", "720p")
+    # Auto-clip SELALU mengambil yang terbaik kecuali diminta lain.
+    #
+    # Bukan pilihan gaya. Keluarannya 1080x1920, dan jendela 9:16 yang dipotong
+    # dari sumber 16:9 hanya selebar 9/16 tingginya — dari 720p itu berarti
+    # 405x720 yang lalu diregangkan hampir tiga kali lipat. Detail yang tidak
+    # pernah terekam tidak bisa dikembalikan filter apa pun, jadi resolusi
+    # sumber adalah plafon kualitas seluruh klip, dan satu-satunya tempat
+    # memutuskannya adalah di sini.
+    quality = ctx.payload.get("quality") or "Terbaik"
     whisper_model = ctx.payload.get("whisper_model", "base")
     # 0 = biarkan sistem yang menentukan dari durasi video.
     requested_clips = int(ctx.payload.get("max_clips") or 0)

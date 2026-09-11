@@ -33,7 +33,10 @@ def _as_app_error(exc: YtdlpError) -> AppError:
 
 class DownloadRequest(BaseModel):
     url: str = Field(..., description="ID atau URL YouTube")
-    resolution: str = "720p"
+    # Bawaannya yang terbaik: resolusi sumber adalah plafon kualitas seluruh
+    # klip, dan jendela 9:16 yang dipotong darinya jauh lebih sempit daripada
+    # bingkai penuhnya.
+    resolution: str = "Terbaik"
 
 
 @router.get("/search")

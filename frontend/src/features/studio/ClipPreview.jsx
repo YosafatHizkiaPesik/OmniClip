@@ -712,25 +712,38 @@ export default function ClipPreview({
         };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', width: '100%' }}>
+    <div className="clip-preview"
+         style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', width: '100%' }}>
       {/* Yang di-layar-penuh-kan adalah PEMBUNGKUS, bukan kotak videonya.
           Elemen layar penuh dipaksa selebar dan setinggi layar oleh browser,
           yang akan menghapus rasio 9:16 kotaknya; membungkusnya membuat kotak
           tetap memegang rasionya sendiri dan sekadar dipusatkan. */}
-      <div ref={stageRef} style={{
+      <div ref={stageRef} className="clip-preview-stage" style={{
         width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center',
         ...(fullscreen ? { background: '#000', height: '100%' } : {}),
       }}>
-      <div ref={boxRef} style={{
+      <div ref={boxRef} className="clip-preview-box" style={{
         position: 'relative', background: '#000',
         aspectRatio: box.aspect,
         overflow: 'hidden', boxShadow: 'var(--shadow-card)',
         touchAction: dragging ? 'none' : 'auto',
+        // Diukur dari TINGGI yang tersisa, dengan lebar sebagai plafon.
+        //
+        // Dulu lebarnya 100% dengan plafon `min(300px, 46vh * rasio)`. Itu
+        // masuk akal pada halaman yang digulir: kalau kotaknya menjulur, orang
+        // tinggal menggulir. Di studio berlabuh tidak ada gulir yang
+        // menyelamatkannya — 46vh lebih tinggi daripada panggung yang tersisa
+        // setelah bilah dan dok mengambil bagiannya, dan yang terpotong justru
+        // bagian bawah kanvas tempat subtitle duduk.
+        //
+        // Sekarang tingginya yang memimpin dan `aspect-ratio` menurunkan
+        // lebarnya; `maxWidth` tinggal menjaga agar kanvas 16:9 tidak melebar
+        // melewati kolomnya di layar yang pendek.
         ...(fullscreen
           ? { height: '100vh', width: 'auto', maxWidth: 'none', borderRadius: 0 }
           : {
-            width: '100%',
-            maxWidth: `min(${box.width}px, calc(46vh * ${box.r ?? 9 / 16}))`,
+            height: '100%', width: 'auto',
+            maxWidth: '100%', maxHeight: `${box.width / (box.r ?? 9 / 16)}px`,
             borderRadius: '14px',
           }),
       }}>
@@ -1034,14 +1047,17 @@ export default function ClipPreview({
         </span>
       </div>
 
+      {/* Petunjuk seret, sebagai SATU BARIS.
+          Sebelumnya tiga baris penuh di bawah kanvas — 95 piksel terukur, yang
+          di ruang berlabuh diambil langsung dari tinggi kanvasnya sendiri.
+          Kanvas 9:16 adalah bagian tersempit di layar lanskap; membayar
+          seperempat tingginya untuk kalimat yang sudah dibaca sekali dan tidak
+          pernah dibaca lagi adalah pertukaran yang salah. Kalimat penuhnya
+          pindah ke tooltip, tempat ia tetap ada saat benar-benar dicari. */}
       {onStyleChange && shownLine && (
-        <p style={{
-          fontSize: '0.68rem', color: 'var(--text-muted)', margin: 0,
-          display: 'flex', alignItems: 'center', gap: '5px', textAlign: 'center',
-        }}>
-          <Move size={11} /> Seret subtitle untuk memindahkannya, batang
-          kiri/kanan untuk melebar-sempitkan kotaknya, bulatan di pojok
-          kanan-bawah untuk memperbesar seluruhnya sekaligus.
+        <p className="preview-hint"
+           title="Seret subtitle untuk memindahkannya, batang kiri/kanan untuk melebar-sempitkan kotaknya, bulatan di pojok kanan-bawah untuk memperbesar seluruhnya sekaligus.">
+          <Move size={11} /> Subtitle bisa diseret langsung di atas gambar
         </p>
       )}
     </div>

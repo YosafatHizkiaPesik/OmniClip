@@ -228,7 +228,9 @@ export default function FrameStage({
               <button key={i} type="button"
                       ref={(el) => { personRefs.current[i] = el; }}
                       onClick={() => onLockPerson(i)}
-                      title={`Arahkan bingkai ke wajah ${i + 1} — mulai dari detik ini`}
+                      title={`Tekan: bingkai mengikuti wajah ${i + 1} mulai detik ini. `
+                        + 'Tekan lagi di detik lain: potongannya ditutup dan '
+                        + 'bingkai kembali memilih sendiri.'}
                       className="person-pin">
                 {i + 1}
               </button>
