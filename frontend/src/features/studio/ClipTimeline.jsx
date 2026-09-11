@@ -3,8 +3,7 @@ import React, {
 } from 'react';
 import { Crosshair, Scissors, Wand2, ZoomIn, ZoomOut } from 'lucide-react';
 import { formatTime, formatTimeFine } from '../../utils/timeFormat';
-import { frameInk } from './frames';
-import { personSpans, withPersonKey } from './frames';
+import { frameInk, personSpans, presentPeople, withPersonKey } from './frames';
 
 /**
  * Linimasa satu klip: batas potongan, tiap baris subtitle, dan arah bingkai —
@@ -439,9 +438,20 @@ export default function ClipTimeline({
     return out;
   }, [reframe]);
 
+  // Sekadar "pernah terlihat sekali" ternyata terlalu longgar.
+  //
+  // Terukur pada klip rekaman lapangan: enam lajur orang muncul padahal empat
+  // di antaranya hanya terlihat 1-2% dari durasi klip, dan tidak pernah lebih
+  // dari dua wajah ada di layar sekaligus. Yang tergambar bukan narasumber,
+  // melainkan orang yang lewat di latar selama dua-tiga bingkai — dan tiap
+  // lajur semu itu memakan tinggi linimasa yang justru langka.
+  //
+  // Dua syarat, dan keduanya perlu: PORSI menyaring klip panjang (2% dari dua
+  // menit masih terlihat lama), DURASI menyaring klip pendek (5% dari sepuluh
+  // detik hanya setengah detik).
   const hadir = useMemo(
-    () => people.map((_, i) => i).filter((i) => (spans[i] ?? []).length > 0),
-    [people, spans],
+    () => presentPeople(reframe, duration),
+    [reframe, duration],
   );
 
   const aimAt = useCallback((t, person) => {

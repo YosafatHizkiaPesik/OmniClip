@@ -350,6 +350,31 @@ export function personAt(reframe, index, t, hold = PIN_HOLD) {
  * menebak — pengguna tidak punya cara tahu bahwa orang yang ditunjuknya sedang
  * tidak ada di kamera pada detik itu.
  */
+/**
+ * Siapa yang benar-benar hadir di klip ini, bukan sekadar pernah terdeteksi.
+ *
+ * Nomor orang milik SELURUH video, jadi daftar yang datang dari server memuat
+ * semua orang yang pernah dikenali di video itu — termasuk yang tidak sekali
+ * pun lewat pada rentang klip ini. Terukur pada rekaman lapangan: enam nomor
+ * ditawarkan padahal empat di antaranya terlihat 1-2% durasi klip, dan tidak
+ * pernah lebih dari dua wajah ada di layar bersamaan.
+ *
+ * Nomornya TIDAK dipakai ulang — daftar bisa melompat dari 1 ke 3, dan lompatan
+ * itu keterangan: orang 2 memang tidak ada di sini. Menomori ulang per klip
+ * akan membuat tanda arah bingkai yang sudah disimpan menunjuk orang lain.
+ */
+export function presentPeople(reframe, duration, { minSeconds = 1.0, minShare = 0.04 } = {}) {
+  const people = reframe?.people ?? [];
+  const total = Math.max(0.001, duration || 0.001);
+  return people
+    .map((_, i) => i)
+    .filter((i) => {
+      const lama = personSpans(reframe, i)
+        .reduce((a, [s0, s1]) => a + Math.max(0, s1 - s0), 0);
+      return lama >= minSeconds && lama / total >= minShare;
+    });
+}
+
 export function personSpans(reframe, index, hold = PERSON_HOLD) {
   const track = reframe?.people?.[index];
   if (!track?.length) return [];

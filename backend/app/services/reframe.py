@@ -210,6 +210,25 @@ MEDIAN_WINDOW = 7          # buang deteksi meleset sesaat sebelum difilter
 # dianggap menentukan berapa orang yang ada.
 ROSTER_MIN_SHARE = 0.05
 
+# Seberapa terpisah sidik wajah harus, sebelum JUMLAH orang boleh ditentukan
+# olehnya dan bukan oleh apa yang sungguh terlihat di layar.
+#
+# Diukur sebagai koherensi di dalam kelompok dikurangi kemiripan antar
+# kelompok, pada klip pertama tiga rekaman:
+#
+#   podcast empat orang : dalam 0,727  antar 0,165  selisih 0,562
+#   podcast dua dokter  : dalam 0,670  antar 0,264  selisih 0,406
+#   rekaman lapangan    : dalam 0,470  antar 0,209  selisih 0,261
+#
+# Yang terakhir itu rekaman sungai: wajahnya kecil, sering menyamping, kadang
+# buram karena gerakan. Di situ pengenalan wajah memecah DUA orang menjadi
+# lima, dan kekeliruannya tidak bisa diperbaiki dengan menggeser ambang —
+# terukur, kemiripan antar nomor yang ternyata orang yang sama adalah 0,133,
+# 0,140, dan 0,175, sementara antar orang yang benar-benar berbeda 0,262,
+# 0,274, dan 0,279. Kedua sebaran itu bertumpang tindih seluruhnya, jadi tidak
+# ada satu pun garis yang memisahkannya.
+IDENTITY_TRUST_MARGIN = 0.35
+
 # Berapa lama seorang subjek baru harus bertahan sebelum bingkai benar-benar
 # berpindah kepadanya.
 #
@@ -911,6 +930,53 @@ def _identities_from_faces(raw: list, embeds: dict, max_people: int,
     bobot = [(sum(berat.get(t, 0) for t in mem), mem) for mem in kelompok]
     bobot.sort(key=lambda x: -x[0])
 
+    # --- Boleh atau tidaknya sidik wajah menentukan JUMLAH orang -------------
+    #
+    # Batas yang dipakai saat sidiknya tidak bisa dipercaya adalah jumlah wajah
+    # terbanyak yang pernah terlihat BERSAMAAN. Itu satu-satunya bukti yang
+    # tidak butuh pengenalan wajah sama sekali: dua wajah di layar pada detik
+    # yang sama pasti dua orang. Selebihnya adalah kesimpulan dari embedding,
+    # dan di rekaman yang wajahnya kecil, kesimpulan itu derau.
+    #
+    # Bukan pengganti pengenalan wajah, hanya pagarnya. Pada rekaman yang
+    # sidiknya jelas, selisihnya jauh di atas ambang dan pagar ini tidak pernah
+    # mengikat — podcast berpotong close-up tetap boleh mengenali lima orang
+    # meski tidak pernah ada dua wajah sekaligus.
+    import numpy as _np
+
+    jumlah = [len(r) for r in raw if r]
+    batas_terlihat = 1
+    if jumlah:
+        arr = _np.asarray(jumlah)
+        for c in range(1, max_people + 1):
+            if float((arr >= c).sum()) / len(jumlah) >= ROSTER_MIN_SHARE:
+                batas_terlihat = c
+
+    dalam, pusat = [], []
+    for mem in kelompok:
+        v = [embeds[t] for t in mem if t in embeds]
+        if len(v) >= 2:
+            M = _np.stack(v)
+            sim = M @ M.T
+            dalam.append(float(sim[_np.triu_indices(len(v), 1)].mean()))
+        if v:
+            m = _np.mean(_np.stack(v), axis=0)
+            pusat.append(m / max(1e-9, float(_np.linalg.norm(m))))
+    antar = []
+    if len(pusat) >= 2:
+        P = _np.stack(pusat)
+        sp = P @ P.T
+        antar = sp[_np.triu_indices(len(P), 1)].tolist()
+    selisih = ((float(_np.mean(dalam)) - float(_np.mean(antar)))
+               if dalam and antar else 0.0)
+
+    if selisih < IDENTITY_TRUST_MARGIN and batas_terlihat < max_people:
+        if len(bobot) > batas_terlihat:
+            log.info("Sidik wajah lemah (selisih %.3f) — jumlah orang dibatasi ke %d, "
+                     "sebanyak wajah yang pernah terlihat bersamaan (dari %d kelompok)",
+                     selisih, batas_terlihat, len(bobot))
+        max_people = max(1, batas_terlihat)
+
     # Kelompok yang hampir tidak pernah terlihat dibuang. Satu jejak sepanjang
     # satu sampel bukan orang keenam di ruangan — itu pantulan, atau separuh
     # wajah yang lewat di tepi bingkai. Ambangnya sama dengan ambang lama untuk
@@ -1250,7 +1316,8 @@ def _settle_subject(subject: list[Optional[int]]) -> list[Optional[int]]:
 
 def _smooth(centers: list[Optional[float]], cuts: list[bool], *,
             source_w: int, crop_w: int,
-            subject: Optional[list] = None) -> list[float]:
+            subject: Optional[list] = None,
+            motion: str = "smooth") -> list[float]:
     """
     Mengubah jejak wajah mentah menjadi gerakan kamera yang enak dilihat.
 
@@ -1312,6 +1379,24 @@ def _smooth(centers: list[Optional[float]], cuts: list[bool], *,
         if not chunk:
             continue
         chunk = [min(max(v, lo), hi) for v in chunk]
+
+        # Gaya "potong": kamera sama sekali tidak bergerak di dalam satu
+        # bidikan, lalu berpindah seketika di batasnya.
+        #
+        # Ini bukan versi kasar dari yang mulus — ia bahasa yang berbeda.
+        # Kamera yang mengikuti orang bergeser terus-menerus, dan pada klip
+        # pendek gerakan itu terbaca sebagai gelisah. Potongan keras adalah
+        # cara penyunting sungguhan berpindah antar orang, dan di rekaman meja
+        # yang orangnya duduk diam, tidak ada yang hilang karena tidak diikuti.
+        #
+        # Satu nilai untuk seluruh rentang: mediannya, bukan nilai awalnya —
+        # deteksi yang meleset di bingkai pertama sebuah bidikan tidak boleh
+        # menentukan ke mana kamera menatap selama sepuluh detik berikutnya.
+        if motion == "cut":
+            tetap = sorted(chunk)[len(chunk) // 2]
+            out.extend([min(max(tetap, lo), hi)] * len(chunk))
+            continue
+
         chunk = _median(chunk, MEDIAN_WINDOW)
         chunk = _apply_deadzone(chunk, deadzone)
         # Dua lintasan maju-mundur. Satu lintasan masih menyisakan riak halus
@@ -1768,7 +1853,8 @@ def plan_reframe(source_video_path: str, segments: list[dict], *,
                  track_only: bool = False,
                  speaker_turns: Optional[list] = None,
                  lock_person: Optional[int] = None,
-                 person_keys: Optional[list] = None) -> Optional[ReframePlan]:
+                 person_keys: Optional[list] = None,
+                 frame_motion: str = "smooth") -> Optional[ReframePlan]:
     """
     Menyusun rencana crop yang mengikuti pembicara.
 
@@ -1867,7 +1953,7 @@ def plan_reframe(source_video_path: str, segments: list[dict], *,
         centers, subject = _apply_person_keys(centers, people, person_keys, subject)
 
     smoothed = _smooth(centers, cuts, source_w=source_w, crop_w=crop_w,
-                       subject=subject)
+                       subject=subject, motion=frame_motion)
 
     plan = ReframePlan(crop_w=crop_w, crop_h=crop_h, source_w=source_w,
                        source_h=source_h, face_coverage=round(coverage, 3))
@@ -1897,13 +1983,21 @@ def plan_reframe(source_video_path: str, segments: list[dict], *,
         pos = t * SAMPLE_FPS
         i = int(math.floor(pos))
         u = pos - i
-        p0, p1, p2, p3 = at(i - 1), at(i), at(i + 1), at(i + 2)
-        cx = 0.5 * (
-            (2 * p1)
-            + (-p0 + p2) * u
-            + (2 * p0 - 5 * p1 + 4 * p2 - p3) * u * u
-            + (-p0 + 3 * p1 - 3 * p2 + p3) * u * u * u
-        )
+        if frame_motion == "cut":
+            # Tangga, bukan spline. Catmull-Rom melewati tiap titik dengan
+            # tangen bersambung — justru sifat yang membuatnya bagus untuk
+            # gerakan halus, dan justru yang merusak potongan keras: ia akan
+            # melandaikan lompatan setinggi 400 piksel menjadi luncuran
+            # sepertiga detik, yang terbaca sebagai sentakan, bukan potongan.
+            cx = at(i)
+        else:
+            p0, p1, p2, p3 = at(i - 1), at(i), at(i + 1), at(i + 2)
+            cx = 0.5 * (
+                (2 * p1)
+                + (-p0 + p2) * u
+                + (2 * p0 - 5 * p1 + 4 * p2 - p3) * u * u
+                + (-p0 + 3 * p1 - 3 * p2 + p3) * u * u * u
+            )
         x = int(round(min(max(cx - half, 0.0), max_x)))
         # Titik tengahnya disimpan utuh: bingkai lain dengan lebar berbeda
         # menurunkan posisinya sendiri dari sini.

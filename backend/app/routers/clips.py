@@ -1,6 +1,6 @@
 """Analisis auto-clip dan render klip."""
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
@@ -155,6 +155,9 @@ class RenderClipRequest(BaseModel):
     # smart = ikuti wajah pembicara, blur = bilah kabur, center = crop tengah,
     # original = tanpa dipotong, layout = susunan bingkai buatan pengguna.
     frame_mode: str = "smart"
+    # Gaya perpindahan bingkai: mulus (kamera mengikuti) atau potong (diam,
+    # lalu berpindah seketika).
+    frame_motion: Literal["smooth", "cut"] = "smooth"
     # Susunan bingkai. Tiap bingkai punya persegi SUMBER (bagian mana dari video
     # yang diambil) dan persegi TUJUAN (di mana ia ditaruh pada kanvas hasil),
     # keduanya dalam persen. Hanya dibaca bila frame_mode == "layout".
@@ -273,6 +276,9 @@ class ReframePlanRequest(BaseModel):
     lock_person: Optional[int] = Field(None, ge=0, le=7)
     # Tanda linimasa: berlaku per rentang, bukan sekali untuk seluruh klip.
     person_keys: List[PersonKeyModel] = Field(default_factory=list)
+    # Dikirim juga ke pratinjau, supaya jejak yang digambar di editor memakai
+    # gaya perpindahan yang sama dengan yang nanti dirender.
+    frame_motion: Literal["smooth", "cut"] = "smooth"
 
 
 # Perencanaan reframe memakan beberapa detik per klip, sementara editor
@@ -307,7 +313,8 @@ async def clip_reframe(req: ReframePlanRequest):
     key = (video_id, req.aspect_ratio,
            tuple((s["start"], s["end"]) for s in segments),
            tuple(turns), req.lock_person,
-           tuple((round(k.t, 3), k.person) for k in req.person_keys))
+           tuple((round(k.t, 3), k.person) for k in req.person_keys),
+           req.frame_motion)
     if key in _REFRAME_CACHE:
         return _REFRAME_CACHE[key]
 
@@ -325,7 +332,8 @@ async def clip_reframe(req: ReframePlanRequest):
     plan = await asyncio.to_thread(plan_reframe, str(source), segments,
                                    aspect_ratio=req.aspect_ratio, track_only=True,
                                    speaker_turns=turns, lock_person=req.lock_person,
-                                   person_keys=[k.model_dump() for k in req.person_keys])
+                                   person_keys=[k.model_dump() for k in req.person_keys],
+                                   frame_motion=req.frame_motion)
     if plan is None:
         payload = {"available": False, "reason": "unsupported"}
     else:
@@ -518,6 +526,7 @@ async def render_clip(req: RenderClipRequest):
             "title": req.title,
             "hashtags": req.hashtags,
             "frame_mode": req.frame_mode,
+            "frame_motion": req.frame_motion,
             "lock_person": req.lock_person,
             "person_keys": [k.model_dump() for k in req.person_keys],
             "title_card": (req.title_card.model_dump() if req.title_card else None),

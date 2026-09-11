@@ -22,6 +22,8 @@ export const FRAME_MODES = [
  */
 export default function FramePanel({
   frameMode, onFrameModeChange,
+  // Gaya perpindahan: kamera mengikuti dengan mulus, atau diam lalu memotong.
+  frameMotion = 'smooth', onFrameMotionChange = null,
   layout, onLayoutChange,
   selectedFrameId, onSelectFrame,
   faceTrackAvailable = false,
@@ -73,6 +75,26 @@ export default function FramePanel({
           <div className="choice-h">{m.hint}</div>
         </button>
       ))}
+
+      {(frameMode === 'smart' || frameMode === 'layout') && onFrameMotionChange && (
+        <>
+          <div style={{ height: '1px', background: 'var(--rule-2)', margin: '4px 0' }} />
+          <div className="mark" style={{ color: 'var(--ink)' }}>Perpindahan bingkai</div>
+          <div style={{ display: 'flex', gap: '6px' }}>
+            {[
+              { id: 'smooth', label: 'Mulus', hint: 'kamera mengikuti orangnya' },
+              { id: 'cut', label: 'Seketika', hint: 'diam, lalu berpindah' },
+            ].map((m) => (
+              <button key={m.id} onClick={() => onFrameMotionChange(m.id)}
+                      className={`choice${frameMotion === m.id ? ' is-on' : ''}`}
+                      style={{ flex: 1 }}>
+                <div className="choice-t">{m.label}</div>
+                <div className="choice-h">{m.hint}</div>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
 
       {frameMode === 'smart' && peopleCount > 1 && onAimPerson && (
         <>

@@ -17,6 +17,7 @@ import TitlePanel from './TitlePanel';
 import {
   loadFraming, saveFraming, serializeLayout, clipTimeFor, sourceTimeFor,
   personKeyAt, withPersonKey,
+  presentPeople,
 } from './frames';
 
 const DEFAULT_STYLE = {
@@ -140,6 +141,7 @@ export default function Editor({ project, onBack }) {
   // membacanya sekaligus: meja bingkai, kanvas hasil, dan muatan render.
   const [framing] = useState(() => loadFraming(videoId));
   const [frameMode, setFrameMode] = useState(framing.mode);
+  const [frameMotion, setFrameMotion] = useState('smooth');
   const [layout, setLayout] = useState(framing.layout);
   const [selectedFrameId, setSelectedFrameId] = useState(null);
   const [selectedLine, setSelectedLine] = useState(null);
@@ -296,7 +298,16 @@ export default function Editor({ project, onBack }) {
   // Apa yang menentukan WAJAH-WAJAHNYA — beda dari apa yang menentukan ke mana
   // bingkai diarahkan. Hanya perubahan yang pertama yang boleh mengosongkan
   // linimasa bingkai.
-  const sceneKey = `${videoId}|${segmentKey}|${frameMode}|${aspectRatio}|${followKey}`;
+  // Orang yang benar-benar ada di klip ini. Panel bingkai dan linimasa harus
+  // menawarkan daftar yang sama; dua daftar berbeda untuk hal yang sama adalah
+  // cara tercepat membuat nomor orang berhenti berarti apa-apa.
+  const orangHadir = useMemo(
+    () => presentPeople(reframe, selected?.duration
+      ?? (selected?.segments ?? []).reduce((a, x) => a + Math.max(0, x.end - x.start), 0)),
+    [reframe, selected],
+  );
+
+  const sceneKey = `${videoId}|${segmentKey}|${frameMode}|${frameMotion}|${aspectRatio}|${followKey}`;
   const sceneKeyRef = useRef(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { setSelectedLine(null); }, [segmentKey]);
@@ -329,6 +340,7 @@ export default function Editor({ project, onBack }) {
       video_id: videoId,
       segments: selected.segments,
       aspect_ratio: aspectRatio,
+      frame_motion: frameMotion,
       person_keys: personKeys,
       // Label penutur ikut dikirim: dengan itu server bisa mencocokkan wajah
       // dengan suara, dan crop mengikuti orang yang sedang bicara.
@@ -686,6 +698,7 @@ export default function Editor({ project, onBack }) {
     hashtags: clip.hashtags ?? [],
     aspect_ratio: aspectRatio,
     frame_mode: frameMode,
+    frame_motion: frameMotion,
     frame_layout: frameMode === 'layout' ? serializeLayout(layout) : null,
     // Tanda milik KLIP INI, bukan klip yang sedang dibuka: ekspor berjalan
     // atas semua huruf yang dicentang, dan memakai tanda klip terpilih untuk
@@ -703,7 +716,7 @@ export default function Editor({ project, onBack }) {
       }
       : null,
     caption_style: style,
-  }), [videoId, aspectRatio, frameMode, layout, style, showHook]);
+  }), [videoId, aspectRatio, frameMode, frameMotion, layout, style, showHook]);
 
   const handleExportSelected = async () => {
     const targets = clips.filter((c) => checked.has(c.clip_id));
@@ -1051,11 +1064,13 @@ export default function Editor({ project, onBack }) {
               )}
               {tab === 'frame' && (
                 <FramePanel frameMode={frameMode} onFrameModeChange={setFrameMode}
+                            frameMotion={frameMotion}
+                            onFrameMotionChange={setFrameMotion}
                             layout={layout} onLayoutChange={setLayout}
                             selectedFrameId={selectedFrameId}
                             onSelectFrame={setSelectedFrameId}
                             faceTrackAvailable={!!reframe?.people?.length}
-                            peopleCount={reframe?.people?.length ?? 0}
+                            peopleCount={orangHadir.length}
                             aimedPerson={aimedPerson} onAimPerson={aimPerson}
                             keyCount={personKeys.length}
                             onClearKeys={() => setPersonKeys([])} />

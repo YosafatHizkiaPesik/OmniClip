@@ -478,8 +478,18 @@ export default function ClipPreview({
   const shownLine = activeLine ?? ghostLine;
 
   const activeWordIndex = useMemo(() => {
-    if (!activeLine?.words?.length) return -1;
-    return activeLine.words.findIndex((w) => clipTime >= w.s && clipTime <= w.e);
+    const w = activeLine?.words;
+    if (!w?.length) return -1;
+    // Sorotan bertahan sampai kata BERIKUTNYA mulai, bukan sampai kata ini
+    // selesai — aturan yang sama dengan yang dipakai berkas ASS, tempat tiap
+    // kejadian berakhir tepat saat kejadian berikutnya dimulai. Dengan aturan
+    // lama, jeda antar kata (1,6% sampai 5,3% kata pada rekaman uji) membuat
+    // sorotan padam sesaat di editor padahal di video ia menyala terus.
+    if (clipTime < w[0].s) return -1;
+    for (let i = w.length - 1; i >= 0; i -= 1) {
+      if (clipTime >= w[i].s) return i;
+    }
+    return -1;
   }, [activeLine, clipTime]);
 
   /**
@@ -1136,7 +1146,26 @@ export function CaptionOverlay({
   const age = clipTime - line.start;
   const entry = ghost || anim === 'none' ? {} : lineEntryStyle(anim, age);
 
-  const fontPx = Math.max(9, (style?.size ?? 96) * scale);
+  // Kalibrasi ke libass, dan ini bukan angka hiasan.
+  //
+  // `size` adalah Fontsize di berkas ASS, dan libass TIDAK memperlakukannya
+  // seperti font-size CSS: ia memuatkan ascender+descender font ke dalam angka
+  // itu, sedangkan CSS memakainya sebagai tinggi em. Diukur dengan merender
+  // "GIMANA" ke bingkai 1080x1920 polos pada empat ukuran, tinggi kapitalnya
+  // 25, 37, 50, dan 75 piksel untuk Fontsize 48, 72, 96, dan 144 — lurus,
+  // dengan kemiringan 0,521. Pratinjau memakai 0,756 dari angka yang sama.
+  //
+  // Akibatnya terlihat persis seperti yang dikeluhkan: subtitle di editor 1,45x
+  // lebih besar daripada di hasil render, jadi barisnya pun terbungkus di
+  // tempat yang berbeda — "GIMANA YA, BANG?" dua baris di layar, satu baris di
+  // video. Pratinjau yang berbohong tentang ukuran adalah pratinjau yang
+  // membuat setiap penyetelan ukuran dan posisi harus diulang setelah render.
+  //
+  // Yang disamakan adalah pratinjau ke libass, bukan sebaliknya: hasil render
+  // adalah produknya, dan mengubah sisi itu akan mengubah semua video yang
+  // sudah pernah dibuat.
+  const ASS_FONT_RATIO = 0.521 / 0.756;
+  const fontPx = Math.max(9, (style?.size ?? 96) * scale * ASS_FONT_RATIO);
   const marginPx = (style?.margin_v ?? 300) * scale;
   // Garis luar libass diukur dari tepi glyph ke luar; -webkit-text-stroke
   // digambar di tengah garis, jadi setengahnya jatuh ke dalam huruf. Faktor 1.6
@@ -1173,6 +1202,12 @@ export function CaptionOverlay({
         cursor: draggable ? (dragging === 'move' ? 'grabbing' : 'grab') : 'default',
         fontFamily: fontStack(style?.font),
         fontWeight: 800, lineHeight: 1.16, letterSpacing: '0.005em',
+        // libass memakai WrapStyle 0, yang MENYEIMBANGKAN panjang baris alih-alih
+        // sekadar memotong saat penuh. Tanpa ini, baris yang sama pecah di kata
+        // yang berbeda: "YANG GUA EE TEMUKAN / ITU" di layar, "YANG GUA EE /
+        // TEMUKAN ITU" di video. Ukurannya sudah sama — yang tersisa tinggal
+        // aturan pemotongannya.
+        textWrap: 'balance',
         fontSize: `${fontPx}px`,
         // Garis luar sungguhan, bukan tumpukan text-shadow. Empat bayangan
         // bergeser satu piksel menghasilkan tepi bergerigi pada teks besar —

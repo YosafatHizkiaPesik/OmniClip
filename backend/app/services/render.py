@@ -322,6 +322,10 @@ def render_clip(
     video_filter: str = "normal",
     caption_style: Optional[CaptionStyle] = None,
     frame_mode: str = "smart",
+    # "smooth" = kamera mengikuti dengan mulus; "cut" = diam di dalam satu
+    # bidikan lalu berpindah seketika. Keduanya sah — yang mulus terasa
+    # sinematik, yang memotong terasa seperti hasil editor.
+    frame_motion: str = "smooth",
     frame_layout: Optional[dict] = None,
     lock_person: Optional[int] = None,
     # Tanda linimasa dari pengguna: [{t, person}] dalam waktu KLIP.
@@ -419,7 +423,8 @@ def render_clip(
                 layout_plan = plan_reframe(str(src), segments,
                                            aspect_ratio=aspect_ratio, track_only=True,
                                            speaker_turns=speaker_turns,
-                                           person_keys=person_keys)
+                                           person_keys=person_keys,
+                                           frame_motion=frame_motion)
                 if layout_plan is not None:
                     face_coverage = layout_plan.face_coverage
                 if layout_plan is not None and not layout_plan.centers:
@@ -441,7 +446,7 @@ def render_clip(
         if frame_mode == "smart":
             plan = plan_reframe(str(src), segments, aspect_ratio=aspect_ratio,
                                 speaker_turns=speaker_turns, lock_person=lock_person,
-                                person_keys=person_keys)
+                                person_keys=person_keys, frame_motion=frame_motion)
             if plan is not None:
                 face_coverage = plan.face_coverage
             if plan is not None and plan.usable:
