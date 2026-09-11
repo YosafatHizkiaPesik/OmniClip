@@ -22,7 +22,11 @@ import { personSpans, withPersonKey } from './frames';
  * dengan yang akan terjadi di hasil render.
  */
 
-const LANE_H = { seg: 34, sub: 30, aim: 30, frame: 22 };
+// Tinggi tiap lajur. Baris per orang memuat DUA hal bertumpuk — ucapannya dan
+// pita kehadirannya di kamera — jadi ia butuh lebih dari sekadar tinggi satu
+// blok subtitle. Pada 36 piksel pitanya tinggal tiga piksel di dasar baris dan
+// praktis tidak terlihat; 46 memberi keduanya ruang untuk dibaca.
+const LANE_H = { seg: 34, sub: 30, aim: 30, frame: 22, orang: 46 };
 
 // Turun sampai seperduapuluh detik. Sebuah kata diucapkan dalam sepertiga
 // detik; tanpa tanda yang lebih rapat dari itu, membetulkan letak satu kata
@@ -513,7 +517,7 @@ export default function ClipTimeline({
               </span>
               {people.map((_, p) => (
                 <span key={p} className="tl-name"
-                      style={{ height: `${byPerson ? LANE_H.sub + 6 : LANE_H.frame}px` }}
+                      style={{ height: `${byPerson ? LANE_H.orang : LANE_H.frame}px` }}
                       title={byPerson
                         ? `Orang ${p + 1}: ucapannya, dan kapan ia terlihat di kamera`
                         : `Wajah ${p + 1}: kapan ia terlihat di kamera`}>
@@ -521,7 +525,7 @@ export default function ClipTimeline({
                 </span>
               ))}
               {byPerson && byPerson.sisa.length > 0 && (
-                <span className="tl-name" style={{ height: `${LANE_H.sub + 6}px` }}
+                <span className="tl-name" style={{ height: `${LANE_H.orang}px` }}
                       title="Baris yang penuturnya tidak bisa dipastikan wajahnya">
                   Belum pasti
                 </span>
@@ -689,9 +693,7 @@ export default function ClipTimeline({
               <div className="tl-frame-lanes">
                 {people.map((_, p) => {
                   const punya = byPerson ? byPerson.rows[p] : [];
-                  const tinggi = byPerson
-                    ? LANE_H.sub + 6
-                    : LANE_H.frame;
+                  const tinggi = byPerson ? LANE_H.orang : LANE_H.frame;
                   return (
                     <div key={p} className="tl-lane tl-lane--frame"
                          style={{ height: `${tinggi}px` }}
@@ -707,7 +709,7 @@ export default function ClipTimeline({
                         <span key={k} className="tl-seen"
                               style={{
                                 left: pct(a), width: pctW(Math.max(0.05, b - a)),
-                                ...(byPerson ? { top: 'auto', bottom: '1px', height: '3px' } : {}),
+                                ...(byPerson ? { top: 'auto', bottom: '3px', height: '8px' } : {}),
                               }} />
                       ))}
                       {punya.map((i) => subBlock(lines[i], i, 0))}
@@ -722,7 +724,7 @@ export default function ClipTimeline({
                     justru perlu terlihat. */}
                 {byPerson && byPerson.sisa.length > 0 && (
                   <div className="tl-lane tl-lane--frame"
-                       style={{ height: `${LANE_H.sub + 6}px` }}
+                       style={{ height: `${LANE_H.orang}px` }}
                        onPointerDown={(e) => {
                          if (e.target === e.currentTarget) onSeekClip?.(timeAt(e.clientX));
                        }}

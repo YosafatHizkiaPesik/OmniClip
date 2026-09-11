@@ -235,7 +235,7 @@ a { color: var(--cue); text-underline-offset: 3px; text-decoration-thickness: 1p
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   padding: 8px 12px; border-bottom: 1px solid var(--rule-2);
 }
-.stave-scroll { overflow-x: auto; overflow-y: hidden; }
+.stave-scroll { overflow-x: auto; overflow-y: hidden; min-width: 0; }
 .stave-inner { position: relative; }
 /* Kolom nama tetap menempel di kiri saat baloknya digulir: tanpa itu,
    memperbesar berarti kehilangan satu-satunya penanda balok siapa yang
@@ -757,8 +757,19 @@ a { color: var(--cue); text-underline-offset: 3px; text-decoration-thickness: 1p
      bawah video ketika kolom sebelahnya lebih tinggi. */
   display: flex; flex-direction: column;
 }
+.frame-stage-tag {
+  position: absolute; left: 10px; top: 8px; z-index: 6;
+  display: flex; align-items: baseline; gap: 8px; pointer-events: none;
+  padding: 3px 9px; border-radius: 99px;
+  background: rgba(10, 14, 26, .68); backdrop-filter: blur(3px);
+  font-size: .66rem; line-height: 1.2; color: #C7D2E3;
+}
+.frame-stage-tag b {
+  font-weight: 720; letter-spacing: .08em; text-transform: uppercase; color: #fff;
+}
 .frame-stage-well {
-  padding: 12px; background: var(--stage-2);
+  position: relative;
+  padding: 6px; background: var(--stage-2);
   /* `min-height: 0` bukan hiasan: tanpa itu item flex menolak menyusut di
      bawah tinggi isinya, sumurnya melar melewati pelatnya, dan yang tergambar
      adalah video yang terpotong di dalam pelat yang tampak utuh. */
@@ -943,8 +954,23 @@ body.is-studio .app-viewport,
 
 .studio {
   height: 100%; min-height: 0; background: var(--ground);
-  display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
+  display: grid;
+  /* Satu kolom yang TIDAK boleh melebar mengikuti isinya.
+     
+     Tanpa penjepit ini, memperbesar linimasa rekaman meledakkan seluruh
+     halaman: lajurnya dilebarkan sesuai faktor zoom, kolom grid `auto`
+     mengikuti lebar isinya, pelatnya ikut melebar, ResizeObserver di dalamnya
+     melapor lebar baru, dan lebar itu dikalikan zoom lagi. Terukur: satu klik
+     perbesar membawa badan studio dari 1366 piksel ke 5.464.096, dan tidak ada
+     jalan kembali karena seluruh kendalinya ikut terdorong entah ke mana.
+     
+     `minmax(0, 100%)` memutus lingkarannya di akarnya: sekarang lajur yang
+     lebar digulir di dalam kotaknya sendiri, dan lebar yang dilaporkan
+     pengamat tidak pernah berubah. */
+  grid-template-columns: minmax(0, 100%);
+  grid-template-rows: auto minmax(0, 1fr) auto;
 }
+.studio-bar, .studio-body, .studio-dock { min-width: 0; }
 
 /* ── Bilah atas ───────────────────────────────────────────────────────────── */
 .studio-bar {
@@ -1011,21 +1037,23 @@ body.is-studio .app-viewport,
      `--dock-h` dari komponennya.
      
      Angkanya dikalibrasi terhadap pengukuran, bukan dikarang: 160 piksel untuk
-     bilah atas dan bilah studio, 108 piksel untuk kolom kendali di samping
-     kanvas (74) beserta jarak dan padding pelatnya (34). Taksiran tingginya sengaja
+     bilah atas dan bilah studio beserta baris kendali di bawah kanvas (170),
+     dan padding pelatnya (30). Taksirannya sengaja sedikit murah hati: kalau
+     kolomnya lebih sempit daripada yang tinggi izinkan, kanvasnya jadi
+     terbatas LEBAR, dan tinggi yang tersisa menganggur. Taksiran tingginya sengaja
      sedikit murah hati — kalau ia terlalu pelit, kolomnya menyempit lebih dulu
      dan kanvasnya ikut mengecil meski tingginya masih ada. */
   grid-template-columns:
     minmax(0, 1fr)
-    clamp(230px,
-          calc((100dvh - 160px - var(--dock-h, 300px)) * 0.5625 + 108px),
+    clamp(186px,
+          calc((100dvh - 170px - var(--dock-h, 300px)) * 0.5625 + 30px),
           46%);
 }
 .studio-stage .frame-stage { min-height: 0; }
 .studio-stage .editor-pit {
-  padding: 12px; display: flex; flex-direction: column;
-  gap: 10px; align-items: center; align-self: stretch;
-  min-height: 0; overflow: auto;
+  padding: 6px; display: flex; flex-direction: column;
+  gap: 6px; align-items: center; align-self: stretch;
+  min-height: 0; min-width: 0;
 }
 
 /* ── Panel alat ───────────────────────────────────────────────────────────── */
@@ -1094,7 +1122,10 @@ body.is-studio .app-viewport,
 .dock-switch button:hover { color: var(--ink); background: var(--plate-3); }
 .dock-switch button.is-on { color: var(--reh); background: var(--hl-wash); }
 
-.dock-body { padding: 10px 12px 12px; overflow: auto; min-height: 0; }
+.dock-body {
+  padding: 10px 12px 12px; overflow: auto;
+  min-height: 0; min-width: 0;
+}
 /* Pelat linimasa sudah punya bingkainya sendiri; di dalam dok bingkai itu
    hanya menggandakan garis batas dok. */
 .dock-body > .plate { margin: 0; border: 0; border-radius: 0; background: transparent; }
@@ -1172,24 +1203,30 @@ body.is-studio .app-viewport,
    sekitar 110 piksel dari sisi yang justru langka, sambil membiarkan 150
    piksel di sisi yang berlimpah tidak terpakai. Dipindah ke samping, keduanya
    selesai sekaligus. */
-.studio-stage .clip-preview { flex-direction: row; align-items: stretch; }
-.studio-stage .clip-preview-stage { flex: 1 1 auto; min-width: 0; }
-/* Kolom kendali dipersempit dari 118 ke 74 piksel.
+.studio-stage .clip-preview { flex-direction: column; align-items: center; gap: 7px; }
+.studio-stage .clip-preview-stage { flex: 1 1 auto; min-height: 0; width: 100%; }
+/* Kendali kembali ke BAWAH kanvas, dalam satu baris yang sangat ringkas.
    
-   Tombolnya melebar penuh mengisi kolom, jadi lebar kolomlah yang menentukan
-   besarnya — dan besar itu dibayar langsung oleh lebar kanvas di sebelahnya,
-   satu-satunya tempat yang benar-benar dipakai menyunting. Putar dan ulang
-   tidak butuh lebar; keduanya sudah dikenali dari ikonnya. */
+   Percobaan sebelumnya menaruhnya di kolom samping selebar 74 piksel. Itu
+   menghemat tinggi, tapi kolomnya sendiri terlihat sebagai ruang kosong di
+   sebelah gambar — dan yang diminta adalah gambar yang mengisi kotaknya, bukan
+   gambar yang berbagi kotak dengan sebaris tombol. Di bawah, biayanya cuma
+   sekitar 26 piksel tinggi, dan tombolnya dipadatkan sampai hampir tidak
+   memakan apa-apa: teks kecil, ikon 12 piksel, tanpa lebar yang dipaksakan. */
 .studio-stage .preview-side {
-  flex: none; width: 74px; justify-content: center; gap: 6px;
+  flex: none; flex-direction: row; align-items: center;
+  justify-content: center; gap: 6px; width: 100%;
 }
-.studio-stage .preview-controls {
-  flex-direction: column; align-items: stretch; gap: 5px;
+.studio-stage .preview-controls { gap: 6px; }
+.preview-btn {
+  padding: 3px 8px; min-height: 24px; font-size: .7rem; gap: 4px; border-radius: 6px;
 }
-.studio-stage .preview-controls > button { width: 100%; justify-content: center; }
-.studio-stage .preview-controls > span { font-size: .66rem; line-height: 1.3; }
-.preview-btn { padding: 5px 8px; min-height: 28px; font-size: .74rem; gap: 5px; }
-.preview-btn--icon { padding: 5px; }
+.preview-btn--icon { padding: 3px 5px; }
+.preview-controls > span { font-size: .66rem; white-space: nowrap; }
+.preview-hint {
+  display: inline-flex; align-items: center; cursor: help;
+  color: var(--ink-3); padding: 2px;
+}
 .studio-stage .preview-hint {
   white-space: normal; text-align: left; align-items: flex-start;
   font-size: .62rem; line-height: 1.35;
@@ -1208,4 +1245,16 @@ body.is-studio .app-viewport,
   font-size: .68rem; color: var(--text-muted); margin: 0; flex: none;
   display: flex; align-items: center; gap: 5px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+}
+
+/* Pelat panggung dipusatkan, bukan direntangkan: begitu ia memeluk videonya,
+   sisa lebar kolom harus jadi ruang kosong halaman — bukan pelat kosong. */
+.studio-stage .frame-stage {
+  justify-self: center;
+  width: min(100%, var(--plate-w, 100%));
+}
+/* Di layar sempit variabelnya diabaikan: di sana tinggi sumur ditentukan
+   isinya, jadi menurunkan lebar dari tinggi akan melingkar dan menciut. */
+@media (max-width: 860px) {
+  .studio-stage .frame-stage { width: 100%; }
 }

@@ -1042,10 +1042,17 @@ export default function ClipPreview({
 
       <div className="preview-side">
       <div className="preview-controls">
-        <button className="btn-secondary preview-btn" onClick={toggle} disabled={!src}
+        {/* Ikon saja, tanpa kata.
+            Barisnya duduk di bawah kanvas selebar 160 piksel; dengan kata
+            "Putar" saja ia sudah 208 piksel — lebih lebar daripada gambarnya,
+            sehingga pelatnya terpaksa melebar dan kembali terlihat sebagai
+            kotak yang tidak terisi. Putar dan ulang termasuk segelintir ikon
+            yang benar-benar universal. */}
+        <button className="btn-secondary preview-btn preview-btn--icon"
+                onClick={toggle} disabled={!src}
+                aria-label={playing ? 'Jeda' : 'Putar'}
                 title={playing ? 'Jeda' : 'Putar klip dari posisi sekarang'}>
           {playing ? <Pause size={13} /> : <Play size={13} />}
-          {playing ? 'Jeda' : 'Putar'}
         </button>
         <button className="btn-secondary preview-btn preview-btn--icon"
                 onClick={restart} disabled={!src}
@@ -1059,16 +1066,10 @@ export default function ClipPreview({
             masing-masing menyebut dirinya menghitung apa. */}
         <span style={{ color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums',
                        display: 'inline-flex', alignItems: 'baseline', gap: '5px' }}>
-          {constrained ? (
-            <>
-              <b style={{ fontSize: '.68rem', fontWeight: 700, letterSpacing: '.08em',
-                          textTransform: 'uppercase', color: 'var(--text-muted)' }}>
-                Klip
-              </b>
-              {clockTime(clipTime)} / {clockTime(totalDuration)}
-              {segments.length > 1 && ` · potongan ${segIndex + 1}/${segments.length}`}
-            </>
-          ) : 'Mode jelajah video sumber'}
+          {constrained
+            ? `${clockTime(clipTime)} / ${clockTime(totalDuration)}`
+              + (segments.length > 1 ? ` · ${segIndex + 1}/${segments.length}` : '')
+            : 'jelajah video sumber'}
         </span>
       </div>
 
@@ -1080,10 +1081,10 @@ export default function ClipPreview({
           pernah dibaca lagi adalah pertukaran yang salah. Kalimat penuhnya
           pindah ke tooltip, tempat ia tetap ada saat benar-benar dicari. */}
       {onStyleChange && shownLine && (
-        <p className="preview-hint"
-           title="Seret subtitle untuk memindahkannya, batang kiri/kanan untuk melebar-sempitkan kotaknya, bulatan di pojok kanan-bawah untuk memperbesar seluruhnya sekaligus.">
-          <Move size={11} /> Subtitle bisa diseret langsung di atas gambar
-        </p>
+        <span className="preview-hint"
+              title="Subtitle bisa diseret langsung di atas gambar: seret untuk memindahkan, batang kiri/kanan untuk melebar-sempitkan kotaknya, bulatan di pojok kanan-bawah untuk memperbesar seluruhnya sekaligus.">
+          <Move size={11} />
+        </span>
       )}
       </div>
     </div>
