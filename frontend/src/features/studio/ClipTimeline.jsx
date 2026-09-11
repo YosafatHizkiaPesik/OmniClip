@@ -114,6 +114,8 @@ export default function ClipTimeline({
   onMoveSubtitle = null,
   onSetSegmentBounds = null,
   onSelectSubtitle = null,
+  // Mengubah satu baris subtitle — dipakai untuk memindahkan penuturnya.
+  onUpdateSubtitle = null,
   selectedLine = null,
   speakerColors = [],
   reframeLoading = false,
@@ -400,6 +402,15 @@ export default function ClipTimeline({
    * NOMORNYA tidak dipakai ulang: lajur bisa melompat dari 1 ke 3, dan lompatan
    * itu justru keterangan — ia berarti orang 2 memang tidak ada di sini.
    */
+  /** Nomor wajah -> label penutur. Kebalikan dari `speaker_faces`. */
+  const penuturDariWajah = useMemo(() => {
+    const out = {};
+    for (const [sp, f] of Object.entries(reframe?.speaker_faces ?? {})) {
+      if (out[f] === undefined) out[f] = Number(sp);
+    }
+    return out;
+  }, [reframe]);
+
   const hadir = useMemo(
     () => people.map((_, i) => i).filter((i) => (spans[i] ?? []).length > 0),
     [people, spans],
@@ -444,6 +455,30 @@ export default function ClipTimeline({
    * — pegangan seret yang berperilaku beda di dua tempat adalah bug yang hanya
    * ketahuan oleh orang yang memakai keduanya.
    */
+  /**
+   * Memindahkan sebuah baris ke ORANG lain tanpa menyentuh waktunya.
+   *
+   * Dijatuhkan di lajur siapa pun ia mendarat, itulah penuturnya. Waktu mulai
+   * dan panjangnya tidak ikut berubah sama sekali — menggeser tegak lurus
+   * adalah gerakan yang berbeda dari menggeser mendatar, dan mencampur keduanya
+   * berarti setiap pembetulan siapa-bicara ikut merusak timing yang sudah pas.
+   */
+  const jatuhkanKe = (index, clientY) => {
+    if (!onUpdateSubtitle) return;
+    const lajur = [...(laneRef.current?.querySelectorAll('.tl-lane--frame') ?? [])];
+    const ke = lajur.findIndex((el) => {
+      const b = el.getBoundingClientRect();
+      return clientY >= b.top && clientY <= b.bottom;
+    });
+    if (ke < 0 || ke >= hadir.length) return;
+    const wajah = hadir[ke];
+    const label = penuturDariWajah[wajah];
+    if (label === undefined) return;
+    const baris = lines[index];
+    if (!baris || (baris.speaker ?? 0) === label) return;
+    onUpdateSubtitle(index, { speaker: label });
+  };
+
   const subBlock = (line, i, row) => {
     const r = shownRect('sub', i, line.start, line.end);
     const ink = speakerColors[line.speaker ?? 0];
@@ -463,9 +498,20 @@ export default function ClipTimeline({
              height: `${LANE_H.sub - 6}px`, bottom: 'auto',
              borderLeftColor: /^#[0-9a-f]{6}$/i.test(ink || '') ? ink : 'var(--cue)',
            }}
-           title={`${formatTime(line.start)} → ${formatTime(line.end)} · ${line.text}`}
+           title={`${formatTime(line.start)} → ${formatTime(line.end)} · ${line.text}`
+             + (onUpdateSubtitle && byPerson
+               ? '\n\nSeret tegak ke lajur orang lain untuk memindahkan penuturnya.'
+               : '')}
            onPointerDown={(e) => {
              onSelectSubtitle?.(i);
+             const y0 = e.clientY;
+             const lepas = (ev) => {
+               window.removeEventListener('pointerup', lepas);
+               // Tegak lurus dulu: kalau jarinya lebih banyak turun-naik
+               // daripada menyamping, yang dimaksud adalah pindah orang.
+               if (Math.abs(ev.clientY - y0) > 14) jatuhkanKe(i, ev.clientY);
+             };
+             window.addEventListener('pointerup', lepas);
              beginDrag({
                kind: 'sub', index: i, handle: 'move',
                start: line.start, end: line.end, commit,

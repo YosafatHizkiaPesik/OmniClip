@@ -80,7 +80,71 @@ def _parse_json3(data: dict[str, Any]) -> list[Word]:
             })
 
     words.sort(key=lambda w: w["s"])
-    return _clamp_overlaps(_dedupe(words))
+    return _clamp_overlaps(_dedupe(split_phrases(words)))
+
+
+# Kecepatan bicara, karakter per detik. Dipakai hanya untuk menaksir sampai
+# kapan sebuah kalimat takarir masih diucapkan ketika sumbernya tidak menyimpan
+# waktu per kata. Bahasa Indonesia lisan berkisar 13-15; 14 diambil sebagai
+# tengahnya, dan hasilnya selalu dijepit oleh mulainya cue berikutnya.
+SPEAK_CPS = 14.0
+
+
+def split_phrases(words: list[Word]) -> list[Word]:
+    """
+    Memecah cue yang berisi SATU KALIMAT PENUH menjadi kata-kata.
+
+    Takarir resmi kanal (`youtube_manual`) berbeda bentuk dari takarir otomatis:
+    ia berwaktu per-cue, bukan per-kata. Terukur pada satu video, 98% entrinya
+    berisi spasi, panjang tengahnya 36 karakter, dan durasinya 1,2 detik —
+    seluruhnya, karena `_clamp_overlaps` di bawah memang membatasi satu "kata"
+    pada 1,2 detik.
+
+    Selama entri itu diperlakukan sebagai kata, seluruh rantai di belakangnya
+    ikut salah: pemecah baris melihat satu kata dan berhenti memecah, sehingga
+    satu baris subtitle memuat 60 karakter dalam 1,8 detik — 33 karakter per
+    detik, dua kali lipat kecepatan baca yang nyaman. Itulah "subtitle terlalu
+    panjang dan cepat hilang" yang terlihat di hasil render.
+
+    Waktunya dibagi menurut panjang tiap kata. Itu perkiraan — takarir resmi
+    memang tidak menyimpan waktu per kata, dan tidak ada yang bisa
+    mengembalikannya. Tapi perkiraan yang membuat barisnya terpecah wajar jauh
+    lebih dekat ke kebenaran daripada satu kalimat yang mengaku satu kata.
+    """
+    out: list[Word] = []
+    for i, w in enumerate(words):
+        teks = (w.get("w") or "").strip()
+        bagian = teks.split()
+        if len(bagian) < 2:
+            if teks:
+                out.append({**w, "w": teks})
+            continue
+
+        mulai = float(w["s"])
+        # Ujung cue yang tersimpan tidak bisa dipakai apa adanya.
+        #
+        # Pada takarir resmi ia sering sudah dipotong — `_clamp_overlaps` di
+        # bawah membatasi satu entri pada 1,2 detik, dan kalimat 60 karakter
+        # yang dipaksa masuk ke 1,2 detik menghasilkan 50 karakter per detik
+        # betapapun rapi ia dipecah. Yang dipakai: perkiraan dari KECEPATAN
+        # BICARA, dijepit oleh mulainya cue berikutnya — karena di situlah
+        # kalimat ini pasti sudah selesai.
+        berikut = float(words[i + 1]["s"]) if i + 1 < len(words) else None
+        wajar = mulai + len(teks) / SPEAK_CPS
+        selesai = max(float(w["e"]), wajar)
+        if berikut is not None:
+            selesai = min(selesai, max(berikut, mulai + 0.12 * len(bagian)))
+        selesai = max(selesai, mulai + 0.12 * len(bagian))
+
+        bobot = [len(b) + 1 for b in bagian]
+        total = sum(bobot)
+        jalan = mulai
+        for b, bo in zip(bagian, bobot):
+            lebar = (selesai - mulai) * bo / total
+            out.append({**w, "w": b, "s": round(jalan, 3),
+                        "e": round(jalan + lebar, 3)})
+            jalan += lebar
+    return out
 
 
 def _clamp_overlaps(words: list[Word], max_word_duration: float = 1.2) -> list[Word]:

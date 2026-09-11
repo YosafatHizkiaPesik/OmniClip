@@ -35,7 +35,15 @@ def save(*, video_id: str, source: str, model: str | None, language: str | None,
 
 def _hydrate(row) -> dict:
     d = dict(row)
-    d["words"] = json.loads(d.pop("words_json") or "[]")
+    kata = json.loads(d.pop("words_json") or "[]")
+    # Takarir resmi kanal berwaktu PER-CUE, bukan per-kata: satu entri memuat
+    # kalimat utuh. Dipecah di sini, di pintu keluar penyimpanan, supaya
+    # transkrip yang sudah terlanjur tersimpan dalam bentuk itu ikut terbetulkan
+    # tanpa harus diunduh ulang — dan supaya setiap pemakainya melihat bentuk
+    # yang sama. Pemecahnya aman dijalankan berulang: entri yang memang sudah
+    # satu kata dilewati apa adanya.
+    from ..services.captions import split_phrases
+    d["words"] = split_phrases(kata)
     d["sentences"] = json.loads(d.pop("segments_json") or "[]")
     return d
 

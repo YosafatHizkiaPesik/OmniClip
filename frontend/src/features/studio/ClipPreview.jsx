@@ -308,6 +308,16 @@ export default function ClipPreview({
     const seg = segments[segIndex];
     if (!v || !seg) return;
     if (!constrained) return;
+    // Batas klip hanya berlaku saat SEDANG DIPUTAR.
+    //
+    // Keduanya di bawah memulangkan playhead ke awal klip, dan selama ia juga
+    // berjalan saat dijeda, mengklik dekat akhir klip di linimasa rekaman
+    // mustahil: begitu playhead mendarat di sana, denyut berikutnya langsung
+    // memulangkannya. Yang terlihat pengguna adalah klik yang tidak pernah
+    // sampai. Saat dijeda, tempat playhead diletakkan adalah tempat yang
+    // dimaksud — termasuk persis di ujung, tempat orang memeriksa apakah
+    // kalimatnya terpotong.
+    if (v.paused) return;
 
     if (v.currentTime >= seg.end - 0.03) {
       const next = segIndex + 1;

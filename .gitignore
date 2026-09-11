@@ -14,6 +14,10 @@ frontend/dist/
 frontend/*.log
 .DS_Store
 
+# Berkas video yang dijatuhkan di akar repo untuk ditinjau (hasil render yang
+# dikirim pengguna). Bukan artefak proyek, dan ukurannya puluhan megabita.
+/*.mp4
+
 # Media Storage
 OmniClip_Storage/local_downloads/*
 OmniClip_Storage/edited_clips/*

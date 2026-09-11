@@ -214,6 +214,26 @@ export default function Editor({ project, onBack }) {
     return () => document.body.classList.remove('is-studio');
   }, []);
 
+  /**
+   * Menghapus satu klip, dengan konfirmasi.
+   *
+   * Konfirmasinya bukan basa-basi: klik kanan adalah gerakan yang mudah
+   * terjadi tanpa sengaja, dan yang dihapus bisa jadi klip yang subtitlenya
+   * sudah disunting berjam-jam.
+   */
+  const hapusKlip = useCallback((clipId, huruf) => {
+    const klip = clips.find((c) => c.clip_id === clipId);
+    if (!klip) return;
+    const nama = (klip.title || klip.hook_text || '').trim().slice(0, 48);
+    // eslint-disable-next-line no-alert
+    if (!window.confirm(
+      `Hapus klip ${huruf}${nama ? ` — "${nama}"` : ''}?\n\n`
+      + `${formatTime(klip.segments[0].start)} · ${Math.round(klip.duration || 0)} detik`)) {
+      return;
+    }
+    editor.removeClip(clipId);
+  }, [clips, editor]);
+
   useEffect(() => { loadFonts(); }, []);
 
   useEffect(() => {
@@ -1125,6 +1145,8 @@ export default function Editor({ project, onBack }) {
                           onSetSegmentBounds={(i, a, b) => selected
                             && editor.setSegmentBounds(selected.clip_id, i, a, b)}
                           onSelectSubtitle={setSelectedLine}
+                          onUpdateSubtitle={(i, patch) => selected
+                            && editor.updateSubtitle(selected.clip_id, i, patch)}
                           selectedLine={selectedLine}
                           speakerColors={style.speaker_colors ?? []}
                           reframeLoading={reframeLoading}
@@ -1139,6 +1161,7 @@ export default function Editor({ project, onBack }) {
               videoRef={videoRef}
               onSeek={seekSource} onSelectClip={selectClip}
               onTrimClip={editor.setSegmentBounds} busy={editor.busy}
+              onRemoveClip={hapusKlip}
               mark={mark}
             />
           )}

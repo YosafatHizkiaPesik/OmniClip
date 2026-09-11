@@ -80,6 +80,8 @@ export default function StaveSystem({
   onSelectClip,
   // Menggeser batas klip langsung dari partitur.
   onTrimClip = null,
+  // Menghapus klip lewat klik kanan pada frasanya.
+  onRemoveClip = null,
   busy = false,
   // Rentang yang sedang ditandai pengguna untuk klip buatan tangan.
   mark = null,
@@ -475,8 +477,39 @@ export default function StaveSystem({
                         const nearEdge = left + w > 94;
                         return (
                           <div key={clip.clip_id} className="stave-phrase"
-                               onClick={(ev) => { ev.stopPropagation(); onSelectClip?.(clip.clip_id); }}
-                               title={`${letter} · ${formatTime(start)} · ${Math.round(end - start)} dtk`}
+                               /* Mengklik sebuah frasa memilih klipnya DAN
+                                  mendarat di detik yang diklik.
+                                  Sebelumnya ia selalu melompat ke awal klip,
+                                  dan karena frasanya menutupi seluruh rentang
+                                  klip, tidak ada satu titik pun di dalam klip
+                                  yang bisa dituju dengan mengklik — termasuk
+                                  ujungnya, tempat orang memeriksa apakah
+                                  kalimat terakhirnya terpotong. */
+                               onClick={(ev) => {
+                                 ev.stopPropagation();
+                                 onSelectClip?.(clip.clip_id);
+                                 const papan = overRefs.current[sys]
+                                   ?? ev.currentTarget.closest('.stave');
+                                 if (!papan || !duration) return;
+                                 const rect = papan.getBoundingClientRect();
+                                 const t = from
+                                   + ((ev.clientX - rect.left) / rect.width) * span;
+                                 onSeek?.(Math.max(start, Math.min(end - 0.05, t)));
+                               }}
+                               /* Klik kanan menghapus klipnya.
+                                  Sebelum ini tidak ada satu pun jalan untuk
+                                  membuang klip yang sudah dibuat — `removeClip`
+                                  ada di dalam editor tapi tidak pernah
+                                  tersambung ke apa pun di layar. Klip buatan
+                                  tangan yang salah tempat karenanya menumpuk
+                                  di atas klip lain, selamanya. */
+                               onContextMenu={(ev) => {
+                                 ev.preventDefault();
+                                 ev.stopPropagation();
+                                 onRemoveClip?.(clip.clip_id, letter);
+                               }}
+                               title={`${letter} · ${formatTime(start)} · ${Math.round(end - start)} dtk`
+                                 + (onRemoveClip ? ' — klik kanan untuk menghapus' : '')}
                                style={{
                                  left: `${left}%`, width: `${w}%`,
                                  background: `color-mix(in srgb, ${pencil(voice)} 24%, transparent)`,

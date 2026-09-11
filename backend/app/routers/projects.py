@@ -43,11 +43,43 @@ async def get_project(video_id: str):
     # Penanda non-ucapan ("[Musik]", "[Tertawa]") dibersihkan saat dibaca, bukan
     # hanya saat analisis baru dibuat, supaya project yang sudah tersimpan ikut
     # membaik tanpa perlu dianalisis ulang.
-    from ..services.clipmodel import (repair_caption_timing,
+    from ..repos import transcripts as tx_repo
+    from ..services.clipmodel import (rebuild_subtitles_for_segments,
+                                      repair_caption_timing,
                                       sanitize_caption_lines, suggest_title)
+
+    # Transkrip dipakai untuk membangun ulang baris yang memang rusak sejak
+    # dibuat. Dibaca sekali, bukan per klip.
+    tersimpan = tx_repo.get_best(vid)
+    kata_video = tersimpan["words"] if tersimpan else []
+
+    def _kalimat_utuh(lines: list[dict]) -> bool:
+        """
+        Apakah baris ini lahir dari cue takarir, bukan dari kata?
+
+        Tandanya satu dan tidak ambigu: sebuah "kata" yang berisi spasi. Itu
+        hanya mungkin terjadi pada takarir resmi kanal, yang berwaktu per-cue —
+        dan baris yang lahir darinya memuat kalimat enam puluh karakter dalam
+        satu setengah detik, yang tidak bisa dibaca siapa pun.
+        """
+        return any(" " in (w.get("w") or "")
+                   for l in lines for w in (l.get("words") or []))
 
     def _lengkapi(c: dict) -> dict:
         lines = sanitize_caption_lines(c.get("subtitles") or [])
+        # Dibangun ulang HANYA bila barisnya memang cue, bukan kata.
+        #
+        # Ini membuang suntingan tangan pada klip itu, jadi syaratnya sengaja
+        # sempit: yang dibangun ulang cuma yang sejak awal tidak pernah bisa
+        # dibaca. Transkripnya sendiri sudah dipecah jadi kata di lapisan
+        # penyimpanan, jadi hasil bangunan ulangnya memakai waktu per kata.
+        if kata_video and c.get("segments") and _kalimat_utuh(lines):
+            try:
+                baru, _ = rebuild_subtitles_for_segments(c["segments"], kata_video)
+                if baru:
+                    lines = sanitize_caption_lines(baru)
+            except Exception:      # membangun ulang tidak boleh menjatuhkan proyek
+                pass
         # Waktu tampil dibetulkan JUGA untuk klip yang sudah tersimpan.
         #
         # Tanpa ini, perbaikan hanya berlaku untuk analisis baru: proyek yang
