@@ -23,6 +23,12 @@ faster-whisper>=1.2.1
 # otomatis memakai mode bilah kabur, tanpa error:
 #   curl -sL -o models/face_detection_yunet_2023mar.onnx \
 #     https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx
+#
+# Pengenal wajah SFace (37 MB) menjawab pertanyaan yang tidak bisa dijawab
+# posisi: SIAPA wajah ini. Tanpa berkas ini nomor orang jatuh ke tempat duduk,
+# yang benar untuk bidikan lebar dan keliru begitu kamera berpindah ke close-up:
+#   curl -sL -o models/face_recognition_sface_2021dec.onnx \
+#     https://github.com/opencv/opencv_zoo/raw/main/models/face_recognition_sface/face_recognition_sface_2021dec.onnx
 opencv-python-headless==4.11.0.86
 
 # Pengenal suara untuk memisahkan narasumber. Menjalankan CAM++ (3D-Speaker)
@@ -45,3 +51,13 @@ google-genai>=0.1.1
 
 # Prasyarat sistem (bukan paket pip): ffmpeg dan ffprobe harus ada di PATH.
 #   Ubuntu/Debian: sudo apt install ffmpeg
+
+# Pembacaan judul klip.
+#
+# piper-tts berjalan di mesin ini (butuh berkas suara 63 MB yang diunduh sekali
+# dari dalam aplikasi). edge-tts memakai suara Microsoft lewat jaringan — itulah
+# suara yang dikenal orang dari kebanyakan alat pembuat klip, tapi antarmukanya
+# tidak resmi dan bisa berhenti bekerja sewaktu-waktu, jadi ia pelengkap, bukan
+# pengganti.
+piper-tts==1.8.0
+edge-tts

@@ -26,8 +26,13 @@ export default function FramePanel({
   selectedFrameId, onSelectFrame,
   faceTrackAvailable = false,
   peopleCount = 0,
-  lockPerson = null,
-  onLockPerson = null,
+  // Siapa yang sedang dituju bingkai PADA DETIK INI, dan cara mengubahnya
+  // mulai dari detik ini. Bukan sakelar sekali untuk seluruh klip: satu klip
+  // podcast berpindah pembicara belasan kali.
+  aimedPerson = null,
+  onAimPerson = null,
+  keyCount = 0,
+  onClearKeys = null,
 }) {
   const frames = layout?.frames ?? [];
   const selected = frames.find((f) => f.id === selectedFrameId) ?? frames[0] ?? null;
@@ -69,28 +74,41 @@ export default function FramePanel({
         </button>
       ))}
 
-      {frameMode === 'smart' && peopleCount > 1 && onLockPerson && (
+      {frameMode === 'smart' && peopleCount > 1 && onAimPerson && (
         <>
           <div style={{ height: '1px', background: 'var(--rule-2)', margin: '4px 0' }} />
-          <div className="mark" style={{ color: 'var(--ink)' }}>Arahkan bingkai</div>
+          <div className="mark" style={{ color: 'var(--ink)' }}>Arahkan bingkai dari detik ini</div>
           <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-            <button className={`chip${lockPerson === null ? ' is-on' : ''}`}
-                    onClick={() => onLockPerson(null)}>
+            <button className={`chip${aimedPerson === null ? ' is-on' : ''}`}
+                    onClick={() => onAimPerson(null)}>
               Otomatis
             </button>
             {Array.from({ length: peopleCount }, (_, i) => (
-              <button key={i} className={`chip${lockPerson === i ? ' is-on' : ''}`}
-                      onClick={() => onLockPerson(i)}>
-                Orang {i + 1}
+              <button key={i} className={`chip${aimedPerson === i ? ' is-on' : ''}`}
+                      onClick={() => onAimPerson(i)}>
+                Wajah {i + 1}
               </button>
             ))}
           </div>
           <p style={{ fontSize: '.72rem', color: 'var(--ink-3)', lineHeight: 1.55, margin: '2px 0 0' }}>
+            Tombol ini memasang <b>tanda</b> di posisi playhead: mulai detik itu
+            bingkai menoleh ke orang yang dipilih, sampai tanda berikutnya. Jadi
+            satu bagian yang meleset bisa dibetulkan tanpa mengambil alih seluruh
+            klip. Tandanya terlihat dan bisa dihapus di lajur <b>Wajah</b> pada
+            linimasa klip. Nomornya diurut dari kiri ke kanan layar — bukan
+            nomor <b>Orang</b> di partitur, yang itu hasil memisahkan suara.
+          </p>
+          {keyCount > 0 && (
+            <button className="btn-secondary" style={{ fontSize: '.75rem', alignSelf: 'start' }}
+                    onClick={() => onClearKeys?.()}>
+              Lepas {keyCount} tanda — kembali otomatis penuh
+            </button>
+          )}
+          <p style={{ fontSize: '.72rem', color: 'var(--ink-3)', lineHeight: 1.55, margin: '2px 0 0' }}>
             <b>Otomatis</b> mencocokkan wajah dengan suara: sistem sudah tahu
             kapan tiap orang bicara, lalu mencari mulut siapa yang ikut bergerak
             saat itu. Ia bisa keliru — mulut yang tertutup mikrofon hampir tidak
-            bergerak di gambar — dan kalau begitu, tunjuk saja orangnya, di sini
-            atau langsung pada nomor di atas video sumber.
+            bergerak di gambar — dan kalau begitu, tunjuk saja orangnya.
           </p>
         </>
       )}

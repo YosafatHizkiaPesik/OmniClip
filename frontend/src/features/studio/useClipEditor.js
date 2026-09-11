@@ -1,5 +1,6 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { apiPost, apiPut } from '../../lib/api';
+import { remapPersonKeys } from './frames';
 
 /**
  * Satu-satunya sumber kebenaran untuk klip yang sedang diedit.
@@ -57,6 +58,11 @@ export function useClipEditor() {
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   const videoIdRef = useRef(null);
+  // Cermin daftar klip untuk dibaca di dalam callback tanpa menjadikannya
+  // dependensi — `recomputeSubtitles` dipanggil dari beberapa tempat dan
+  // menambah `clips` ke dependensinya membuat seluruh rantai dibuat ulang tiap
+  // ketukan penyuntingan.
+  const clipsRef = useRef([]);
 
   const load = useCallback((videoId, incoming) => {
     videoIdRef.current = videoId;
@@ -78,6 +84,11 @@ export function useClipEditor() {
     [clips, selectedId],
   );
 
+  // Satu tempat penyelarasan, bukan di tiap penulis: `load`, `createClip`, dan
+  // `removeClip` juga mengubah daftarnya, dan cermin yang hanya diperbarui di
+  // salah satunya akan basi persis saat dibutuhkan.
+  useEffect(() => { clipsRef.current = clips; }, [clips]);
+
   const updateClip = useCallback((id, patch) => {
     setClips((prev) => prev.map((c) => (c.clip_id === id ? { ...c, ...patch } : c)));
     setDirty(true);
@@ -91,6 +102,22 @@ export function useClipEditor() {
   const recomputeSubtitles = useCallback(async (id, segments) => {
     const videoId = videoIdRef.current;
     if (!videoId) return;
+    // Batas lama dibaca SEBELUM ditimpa: tanda arah bingkai hidup dalam waktu
+    // klip, jadi memindahkannya ke batas baru butuh keduanya.
+    const before = clipsRef.current.find((c) => c.clip_id === id)?.segments ?? null;
+    const keys = clipsRef.current.find((c) => c.clip_id === id)?.person_keys ?? [];
+    /**
+     * Batas klip berubah → tanda arah bingkai ikut pindah.
+     *
+     * Tanda dihitung dari awal klip. Jadi memajukan awalnya dua detik membuat
+     * setiap tanda menunjuk dua detik ke tempat yang salah — tanpa satu pun
+     * tanda terlihat berpindah, sehingga pekerjaan menandai tadi rusak diam-
+     * diam. Yang sebenarnya dimaksud pengguna adalah momen di rekaman, bukan
+     * hitungan dari awal klip, dan itulah yang dipertahankan di sini.
+     */
+    const pindahkan = (next) => (
+      before && keys.length ? { person_keys: remapPersonKeys(keys, before, next) } : {}
+    );
     setBusy(true);
     try {
       const res = await apiPost('/clip-preview', { video_id: videoId, segments });
@@ -100,6 +127,7 @@ export function useClipEditor() {
         duration: res.duration,
         start_seconds: res.segments[0].start,
         end_seconds: res.segments[res.segments.length - 1].end,
+        ...pindahkan(res.segments),
       });
     } catch {
       // Kalau transkrip tidak ada, batas tetap berubah tanpa subtitle baru.
@@ -108,6 +136,7 @@ export function useClipEditor() {
         duration: segments.reduce((a, s) => a + (s.end - s.start), 0),
         start_seconds: segments[0].start,
         end_seconds: segments[segments.length - 1].end,
+        ...pindahkan(segments),
       });
     } finally {
       setBusy(false);
@@ -169,6 +198,42 @@ export function useClipEditor() {
       return next;
     });
     updateClip(id, { subtitles });
+  }, [clips, updateClip]);
+
+  /**
+   * Menggeser atau memanjangkan satu baris subtitle dari linimasa.
+   *
+   * Waktu per KATA ikut bergerak. Sorotan karaoke — di pratinjau maupun di
+   * berkas ASS — dibangun dari `words`, bukan dari `start`/`end` baris; kalau
+   * hanya batas barisnya yang berubah, teksnya pindah tapi sorotannya tertinggal
+   * di tempat lama, dan hasilnya justru lebih kacau daripada sebelum digeser.
+   *
+   * Digeser utuh → semua kata bergeser sejauh yang sama. Dipanjangkan atau
+   * dipendekkan → waktunya diregangkan sebanding, jadi urutan katanya tetap dan
+   * hanya temponya berubah.
+   */
+  const moveSubtitle = useCallback((id, lineIndex, start, end) => {
+    const clip = clips.find((c) => c.clip_id === id);
+    const line = clip?.subtitles?.[lineIndex];
+    if (!line) return;
+
+    const s0 = Number(line.start) || 0;
+    const e0 = Math.max(Number(line.end) || s0, s0 + 0.05);
+    const s1 = Math.max(0, round3(start));
+    const e1 = Math.max(s1 + 0.2, round3(end));
+    if (Math.abs(s1 - s0) < 1e-3 && Math.abs(e1 - e0) < 1e-3) return;
+
+    const k = (e1 - s1) / (e0 - s0);
+    const words = (line.words ?? []).map((w) => ({
+      ...w,
+      s: round3(s1 + ((Number(w.s) || s0) - s0) * k),
+      e: round3(s1 + ((Number(w.e) || e0) - s0) * k),
+    }));
+
+    updateClip(id, {
+      subtitles: clip.subtitles.map((l, i) => (
+        i === lineIndex ? { ...l, start: s1, end: e1, words } : l)),
+    });
   }, [clips, updateClip]);
 
   /**
@@ -297,7 +362,7 @@ export function useClipEditor() {
     clips, selected, selectedId, checked, dirty, busy,
     load, setSelectedId, updateClip, createClip, saveClips,
     nudgeSegment, setSegmentBounds, addSegment, removeSegment, recomputeSubtitles,
-    updateSubtitle, removeSubtitle, autoSpeakers,
+    updateSubtitle, moveSubtitle, removeSubtitle, autoSpeakers,
     toggleChecked, setAllChecked, removeClip,
   };
 }

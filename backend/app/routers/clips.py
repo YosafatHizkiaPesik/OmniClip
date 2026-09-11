@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
-from ..errors import NotFound
+from ..errors import InvalidInput, NotFound
 from ..repos import analyses as analyses_repo
 from ..repos import media as media_repo
 from ..services.jobs import queue
@@ -89,6 +89,49 @@ class FrameLayoutModel(BaseModel):
     frames: List[FrameModel] = Field(default_factory=list, max_length=8)
 
 
+class PersonKeyModel(BaseModel):
+    """
+    Satu tanda di linimasa klip: mulai detik `t`, bingkai menunjuk `person`.
+
+    `person` kosong berarti "kembali ke otomatis mulai di sini", jadi satu
+    bagian yang meleset bisa dibetulkan tanpa mengambil alih sisa klipnya.
+    """
+    t: float = Field(0.0, ge=0)
+    person: Optional[int] = Field(None, ge=0, le=7)
+
+
+class TitleCardModel(BaseModel):
+    """
+    Kartu judul di awal klip.
+
+    `mode`: overlay = judul menutupi klip yang berjalan; freeze = bingkai
+    pertama dibekukan sebagai latar; zoom = sama seperti freeze, gambarnya
+    merayap membesar. Dua yang terakhir menambah panjang klip.
+    """
+    enabled: bool = False
+    text: str = ""
+    mode: str = "freeze"
+    seconds: float = Field(3.0, ge=1.2, le=12.0)
+    voice: bool = True
+    voice_id: str = "piper-news"
+    rate: float = Field(1.05, ge=0.6, le=1.6)
+    size: int = Field(104, ge=28, le=240)
+    color: str = "#FFFFFF"
+    shadow: str = "#000000"
+    # Letak dan lebar kotak judul, dalam persen kanvas. Diseret langsung di atas
+    # pratinjau; disimpan dalam persen supaya satu setelan berlaku sama untuk
+    # kanvas 9:16 maupun 16:9.
+    pos_x: float = Field(50.0, ge=0.0, le=100.0)
+    pos_y: float = Field(50.0, ge=0.0, le=100.0)
+    box_w: float = Field(84.0, ge=20.0, le=100.0)
+    variant: str = "garis"
+    font: str = ""
+    # Panjang kartu yang SEBENARNYA, dari lama bacaannya. Disimpan klien setelah
+    # suaranya dibuat supaya linimasa dan pratinjau memakai angka yang sama
+    # dengan yang nanti dipakai ffmpeg.
+    card_seconds: float = Field(0.0, ge=0.0, le=12.0)
+
+
 class RenderClipRequest(BaseModel):
     # Referensi video, bukan path filesystem: klien tidak menentukan file mana
     # yang dibuka server.
@@ -118,6 +161,8 @@ class RenderClipRequest(BaseModel):
     frame_layout: Optional[FrameLayoutModel] = None
     # Mode ikut-wajah: orang yang ditunjuk pengguna. None = otomatis.
     lock_person: Optional[int] = Field(None, ge=0, le=7)
+    person_keys: List[PersonKeyModel] = Field(default_factory=list)
+    title_card: Optional[TitleCardModel] = None
     # Nomor klip, dipakai untuk menamai berkas hasilnya.
     clip_index: Optional[int] = None
     # Judul dan tagar klip. Judulnya jadi nama berkas hasil; tanpanya semua
@@ -226,6 +271,8 @@ class ReframePlanRequest(BaseModel):
     subtitles: Optional[List[Dict[str, Any]]] = None
     # Orang yang ditunjuk pengguna (indeks, kiri ke kanan). None = otomatis.
     lock_person: Optional[int] = Field(None, ge=0, le=7)
+    # Tanda linimasa: berlaku per rentang, bukan sekali untuk seluruh klip.
+    person_keys: List[PersonKeyModel] = Field(default_factory=list)
 
 
 # Perencanaan reframe memakan beberapa detik per klip, sementara editor
@@ -259,7 +306,8 @@ async def clip_reframe(req: ReframePlanRequest):
     ]
     key = (video_id, req.aspect_ratio,
            tuple((s["start"], s["end"]) for s in segments),
-           tuple(turns), req.lock_person)
+           tuple(turns), req.lock_person,
+           tuple((round(k.t, 3), k.person) for k in req.person_keys))
     if key in _REFRAME_CACHE:
         return _REFRAME_CACHE[key]
 
@@ -276,7 +324,8 @@ async def clip_reframe(req: ReframePlanRequest):
     # dalamnya masih punya ruang untuk bergeser.
     plan = await asyncio.to_thread(plan_reframe, str(source), segments,
                                    aspect_ratio=req.aspect_ratio, track_only=True,
-                                   speaker_turns=turns, lock_person=req.lock_person)
+                                   speaker_turns=turns, lock_person=req.lock_person,
+                                   person_keys=[k.model_dump() for k in req.person_keys])
     if plan is None:
         payload = {"available": False, "reason": "unsupported"}
     else:
@@ -299,13 +348,113 @@ async def clip_reframe(req: ReframePlanRequest):
                  for v in track]
                 for track in plan.people
             ],
+            # Kapan tiap orang BENAR-BENAR terlihat. Jejak di atas menahan
+            # posisi terakhirnya saat wajahnya hilang — perlu, supaya crop tidak
+            # melompat tiap kali kepala menoleh — tapi karena itu ia tidak bisa
+            # dipakai untuk menjawab "apakah dia ada di layar sekarang". Editor
+            # menaruh penanda orang di atas video sumber dari daftar ini, jadi
+            # penandanya menghilang saat orangnya keluar dari bidikan alih-alih
+            # berdiri di atas kursi kosong.
+            "people_seen": plan.people_seen,
             "people_fps": SAMPLE_FPS,
+            # Penutur mana milik wajah mana. Linimasa memakainya untuk menaruh
+            # baris subtitle pada lajur orangnya — tanpa peta ini, nomor
+            # penutur (dari suara) dan nomor wajah (dari gambar) adalah dua
+            # penomoran berbeda yang kebetulan sama-sama angka.
+            "speaker_faces": {str(k): v for k, v in plan.speaker_faces.items()},
         }
 
     if len(_REFRAME_CACHE) >= _REFRAME_CACHE_MAX:
         _REFRAME_CACHE.clear()
     _REFRAME_CACHE[key] = payload
     return payload
+
+
+class TitleVoiceRequest(BaseModel):
+    text: str
+    rate: float = Field(1.05, ge=0.6, le=1.6)
+    voice_id: str = "piper-news"
+
+
+@router.post("/title-voice")
+async def title_voice(req: TitleVoiceRequest):
+    """
+    Membacakan judul dan mengembalikan berkas suaranya.
+
+    Dipisahkan dari render supaya judul bisa DIDENGAR sebelum diputuskan: nada
+    dan tempo pembacaan menentukan berapa lama kartunya menahan layar, dan
+    menunggu satu render penuh untuk mengetahuinya membuat penyetelan mustahil.
+
+    Hasilnya disimpan menurut isi teks dan tempo, jadi menekan tombolnya
+    berkali-kali hanya menjalankan model sekali.
+    """
+    import asyncio
+    import hashlib
+
+    from ..config import VOICE_DIR
+    from ..services import tts
+
+    text = (req.text or "").strip()
+    if not text:
+        raise InvalidInput("Judulnya masih kosong.")
+    spec = tts.voice_by_id(req.voice_id)
+    if spec["engine"] == "piper" and not tts.available():
+        raise NotFound("Suara pembaca judul belum terpasang.")
+    if spec["engine"] == "edge" and not tts.edge_available():
+        raise NotFound("Suara Microsoft tidak tersedia di pemasangan ini.")
+
+    stamp = hashlib.sha1(f"{text}|{req.rate:.2f}|{spec['id']}".encode()).hexdigest()[:16]
+    name = f"judul_{stamp}.wav"
+    path = VOICE_DIR / name
+    if not path.is_file():
+        seconds = await asyncio.to_thread(tts.synthesize, text, path,
+                                          rate=req.rate, voice=spec["id"])
+    else:
+        import wave
+
+        with wave.open(str(path)) as w:
+            seconds = w.getnframes() / float(w.getframerate() or 1)
+
+    return {"url": f"/api/media/title_voice/{name}",
+            "seconds": round(seconds, 3),
+            "card_seconds": round(seconds + 0.55, 3)}
+
+
+@router.get("/title-voice/status")
+async def title_voice_status():
+    """Apakah suara pembaca sudah siap, dan berapa besar bila belum."""
+    from ..services import tts
+
+    return {"available": tts.available() or tts.edge_available(),
+            "local_ready": tts.available(),
+            "voice": tts.VOICE_NAME, "size_mb": 63,
+            "installed": tts.VOICE_PATH.is_file(),
+            "voices": tts.catalogue()}
+
+
+@router.post("/title-voice/install", status_code=202)
+async def title_voice_install():
+    """Mengunduh berkas suara. Tidak pernah terjadi diam-diam di tengah render."""
+    job_id, created = queue.enqueue("tts_voice", {}, dedupe_key="tts_voice")
+    return {"job_id": job_id, "created": created}
+
+
+class RetitleRequest(BaseModel):
+    video_id: str
+    # Bawaannya hanya klip yang judulnya masih heuristik. Menulis ulang semuanya
+    # berarti membuang judul Gemini yang sudah bagus dan sudah disunting tangan.
+    only_weak: bool = True
+
+
+@router.post("/clip-titles", status_code=202)
+async def rewrite_clip_titles(req: RetitleRequest):
+    """Menulis ulang judul dan tagar klip dengan Gemini, tanpa analisis ulang."""
+    video_id = _resolve_video_id(req.video_id)
+    job_id, created = queue.enqueue(
+        "retitle", {"video_id": video_id, "only_weak": req.only_weak},
+        video_id=video_id, dedupe_key=f"retitle:{video_id}",
+    )
+    return {"job_id": job_id, "created": created}
 
 
 @router.post("/clip-preview")
@@ -370,6 +519,8 @@ async def render_clip(req: RenderClipRequest):
             "hashtags": req.hashtags,
             "frame_mode": req.frame_mode,
             "lock_person": req.lock_person,
+            "person_keys": [k.model_dump() for k in req.person_keys],
+            "title_card": (req.title_card.model_dump() if req.title_card else None),
             "frame_layout": (req.frame_layout.model_dump()
                              if req.frame_layout else None),
             "clip_index": req.clip_index,

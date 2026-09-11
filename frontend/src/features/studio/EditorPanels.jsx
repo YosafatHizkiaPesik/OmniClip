@@ -153,7 +153,13 @@ export function TrimPanel({ clip, videoDuration, busy, onNudge, onSetBounds, onA
 /** Panel penyuntingan subtitle per baris. */
 export function SubtitlePanel({ clip, onUpdate, onRemove, style, onAutoSpeakers,
                                speakerCount = 2, speakerConfident = null,
-                               onRedetect = null, redetecting = false }) {
+                               onRedetect = null, redetecting = false,
+                               // Baris yang sedang disorot di linimasa. Dua
+                               // tampilan atas isi yang sama harus menunjuk
+                               // baris yang sama, kalau tidak keduanya justru
+                               // saling membingungkan.
+                               selectedLine = null, onSelectLine = null,
+                               onSeekLine = null }) {
   if (!clip) return null;
   const lines = clip.subtitles ?? [];
 
@@ -180,7 +186,10 @@ export function SubtitlePanel({ clip, onUpdate, onRemove, style, onAutoSpeakers,
     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
       <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
         {lines.length} baris. Perbaiki kata yang salah dengar langsung di sini, dan
-        tekan lingkaran warna untuk menandai siapa yang bicara.
+        tekan lingkaran warna untuk menandai siapa yang bicara. Nomor <b>Orang</b>
+        di sini datang dari memisahkan SUARA — satu orang tetap dihitung meski
+        kameranya sedang tidak menyorotnya. Nomor <b>Wajah</b> pada bingkai lain
+        soal: itu wajah yang terlihat di layar, diurut dari kiri ke kanan.
       </p>
 
       <div style={{
@@ -238,14 +247,32 @@ export function SubtitlePanel({ clip, onUpdate, onRemove, style, onAutoSpeakers,
       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '380px', overflowY: 'auto' }}>
         {lines.map((line, i) => {
           const speaker = line.speaker || 0;
+          const on = selectedLine === i;
           return (
-            <div key={i} style={{
-              display: 'grid', gridTemplateColumns: '52px 22px 1fr 26px', gap: '7px',
-              alignItems: 'center',
-            }}>
-              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>
+            <div key={i}
+                 ref={on ? (el) => el?.scrollIntoView({ block: 'nearest' }) : null}
+                 onPointerDown={() => onSelectLine?.(i)}
+                 style={{
+                   display: 'grid', gridTemplateColumns: '52px 22px 1fr 26px', gap: '7px',
+                   alignItems: 'center',
+                   // Sorotan yang sama dengan yang dipakai linimasa: pengguna
+                   // yang menyeret sebuah baris di bawah harus bisa menemukan
+                   // teksnya di sini tanpa mencari.
+                   background: on ? 'var(--hl-wash)' : 'transparent',
+                   boxShadow: on ? 'inset 0 0 0 1.5px var(--hl)' : 'none',
+                   borderRadius: 'var(--r-sm)',
+                   padding: on ? '3px 4px' : '3px 4px',
+                 }}>
+              <button onClick={() => onSeekLine?.(line.start)}
+                      title="Putar dari baris ini"
+                      style={{
+                        background: 'none', border: 'none', padding: 0, textAlign: 'left',
+                        cursor: onSeekLine ? 'pointer' : 'default',
+                        fontFamily: 'inherit', fontSize: '0.7rem',
+                        color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums',
+                      }}>
                 {line.start.toFixed(1)}s
-              </span>
+              </button>
               <button
                 onClick={() => onUpdate(clip.clip_id, i, { speaker: (speaker + 1) % total })}
                 title={`Orang ${speaker + 1} — klik untuk ganti`}
@@ -456,11 +483,19 @@ function Segmented({ options, value, onChange, columns = 3, size = '0.76rem' }) 
 }
 
 function Swatch({ color, selected, onClick, size = 26, title }) {
+  // Tanpa `onClick` ia hanya keping warna, bukan kendali — dan digambar sebagai
+  // <span>. Sebagai <button> ia dipakai juga di dalam judul Section, yang
+  // sendirinya sebuah <button>: tombol di dalam tombol adalah HTML tidak sah,
+  // dan React memperingatkannya di konsol setiap kali panel Gaya dibuka.
+  const Tag = onClick ? 'button' : 'span';
   return (
-    <button onClick={onClick} title={title || color} aria-label={`Warna ${color}`}
+    <Tag {...(onClick ? { onClick, type: 'button', 'aria-label': `Warna ${color}` } : {})}
+            title={title || color}
             style={{
+              display: 'inline-block',
               width: `${size}px`, height: `${size}px`, borderRadius: '50%',
-              cursor: 'pointer', background: color, padding: 0, flex: 'none',
+              cursor: onClick ? 'pointer' : 'default', background: color,
+              padding: 0, flex: 'none',
               border: selected ? '3px solid var(--accent-cyan)'
                 : '1px solid rgba(255,255,255,0.25)',
               boxShadow: selected ? '0 0 0 2px var(--hl-wash)' : 'none',
@@ -876,6 +911,25 @@ export function StylePanel({
             butuh konteks pembuka.
           </p>
         )}
+      </Section>
+
+      {/* Tanda air.
+          Ikut GAYA, bukan ikut klip: ini nama kanal, dan mengetiknya ulang di
+          tiap klip adalah pekerjaan tanpa guna. Sekali disetel, ia ikut ke
+          setiap klip yang dirender sesudahnya. */}
+      <Section id="tanda-air" title="Tanda air"
+               note={(style?.watermark || '').trim() || 'mati'}
+               openId={openId} setOpenId={setOpenId}>
+        <input value={style?.watermark ?? ''}
+               onChange={(e) => onChange({ ...style, watermark: e.target.value.slice(0, 40) })}
+               placeholder="@namakanal"
+               style={{ ...field, fontSize: '0.85rem' }} />
+        <p style={{ fontSize: '0.68rem', color: 'var(--text-muted)', margin: '6px 0 0', lineHeight: 1.5 }}>
+          Ditulis kecil dan setengah tembus pandang di pojok kanan bawah,
+          sepanjang klip. Cukup untuk menandai klipnya milik siapa saat ia
+          diunggah ulang orang lain, tanpa menutupi gambar. Dikosongkan berarti
+          tidak ada tanda air.
+        </p>
       </Section>
 
       <Section id="rasio" title="Rasio video" note={aspectRatio}

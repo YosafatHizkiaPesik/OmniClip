@@ -102,13 +102,174 @@ def slice_words(words: list[Word], start: float, end: float) -> list[Word]:
     return [w for w in words if w["e"] > start and w["s"] < end]
 
 
+# --- Berapa lama sebuah baris harus bertahan di layar -------------------------
+#
+# Waktu tampil bawaan sebuah baris adalah waktu ucapannya, dan itu ternyata
+# bukan hal yang sama dengan waktu membacanya. Diukur pada 35 baris dari satu
+# klip podcast: 13 di antaranya melaju di atas 17 karakter per detik, dengan
+# persentil ke-90 di 27,9 dan puncak 37,4 — kecepatan yang tidak bisa dibaca
+# siapa pun. Baris terpendeknya hidup 0,32 detik.
+#
+# Dua sebabnya terpisah, dan keduanya perlu jawaban sendiri:
+#
+# 1. Caption otomatis YouTube menutup kata terakhir tepat di awal kata
+#    berikutnya, jadi ekor bunyinya jatuh di luar baris. Kalau kata berikutnya
+#    memang datang seketika, tidak ada yang hilang — baris berikutnya langsung
+#    menggantikan. Tapi kalau ada jeda, layarnya kosong sementara orangnya
+#    masih menyelesaikan kata itu. Itu yang terbaca sebagai "subtitle hilang
+#    duluan".
+# 2. Pemecah baris ikut memotong pada tanda titik, dan ASR menaruh titik di
+#    tempat yang mengejutkan. "Belum." berdiri sendiri sebagai satu baris
+#    selama sepertiga detik — berkedip lewat, bukan terbaca.
+#
+# Jawabannya: gabungkan baris kerdil dengan tetangganya, lalu panjangkan waktu
+# tampil ke dalam jeda yang tersedia. Yang TIDAK diubah adalah waktu kata:
+# sorotan karaoke tetap jatuh persis pada ucapannya. Yang memanjang hanya
+# jendela tampil barisnya.
+
+# Kecepatan baca yang nyaman, karakter per detik. Ukuran subtitle klip vertikal
+# hanya memuat beberapa kata sekaligus dan penonton membacanya sambil menonton
+# gambarnya, bukan sambil berhenti — 15 adalah angka yang dipakai penerbit
+# takarir untuk pemirsa umum, dan lebih lambat dari 17 yang jadi batas atasnya.
+READ_CPS = 15.0
+# Baris di bawah ini berkedip lewat, seberapa pun pendek teksnya.
+MIN_LINE_SECONDS = 0.85
+# Sejauh mana sebuah baris boleh hidup melewati kata terakhirnya. Lebih dari
+# ini dan subtitle tertinggal di layar setelah topiknya berganti.
+MAX_TAIL_SECONDS = 0.6
+# Celah bersih antar dua baris berurutan, supaya pergantiannya terlihat.
+LINE_GAP_SECONDS = 0.06
+
+
+def _merge_runts(lines: list[dict], *, max_words: int, max_chars: int,
+                 max_gap: float) -> list[dict]:
+    """
+    Menyatukan baris yang terlalu pendek untuk sempat dibaca.
+
+    Digabungkan dengan TETANGGA TERDEKAT, bukan selalu yang sebelumnya: baris
+    kerdil paling sering lahir dari titik yang ditaruh ASR di tengah kalimat,
+    dan potongan yang tersisa bisa milik kalimat di kiri maupun di kanan. Yang
+    menentukan adalah mana yang jedanya lebih rapat — itu pertanyaan yang bisa
+    dijawab dari datanya sendiri.
+
+    Penutur tidak pernah dilewati. Menggabungkan ucapan dua orang jadi satu
+    baris membuatnya berwarna satu dan terbaca seolah satu orang mengucapkannya.
+    """
+    if len(lines) < 2:
+        return lines
+
+    # Batas yang dilonggarkan untuk hasil gabungan. Memaksa baris gabungan
+    # tunduk pada batas yang sama dengan baris biasa berarti hampir tidak ada
+    # yang pernah bisa digabung, dan baris kerdilnya tetap berkedip.
+    lebar_kata = max_words + 2
+    lebar_huruf = int(max_chars * 1.5)
+
+    out = [dict(l) for l in lines]
+    i = 0
+    while i < len(out):
+        l = out[i]
+        if l["end"] - l["start"] >= MIN_LINE_SECONDS or len(out) < 2:
+            i += 1
+            continue
+
+        def muat(a: dict, b: dict) -> bool:
+            if (a.get("speaker") or 0) != (b.get("speaker") or 0):
+                return False
+            if b["start"] - a["end"] > max_gap:
+                return False
+            n_kata = len(a.get("words") or []) + len(b.get("words") or [])
+            n_huruf = len(a["text"]) + 1 + len(b["text"])
+            return n_kata <= lebar_kata and n_huruf <= lebar_huruf
+
+        kiri = out[i - 1] if i > 0 else None
+        kanan = out[i + 1] if i + 1 < len(out) else None
+        bisa_kiri = kiri is not None and muat(kiri, l)
+        bisa_kanan = kanan is not None and muat(l, kanan)
+
+        if bisa_kiri and bisa_kanan:
+            # Yang jedanya lebih rapat: di situlah kalimatnya sebenarnya
+            # bersambung.
+            bisa_kanan = (kanan["start"] - l["end"]) < (l["start"] - kiri["end"])
+            bisa_kiri = not bisa_kanan
+
+        if bisa_kiri:
+            a, b, j = kiri, l, i - 1
+        elif bisa_kanan:
+            a, b, j = l, kanan, i
+        else:
+            i += 1
+            continue
+
+        out[j] = {
+            "start": a["start"],
+            "end": b["end"],
+            "text": f"{a['text']} {b['text']}".strip(),
+            "speaker": a.get("speaker") or 0,
+            "words": (a.get("words") or []) + (b.get("words") or []),
+        }
+        del out[j + 1]
+        # Diperiksa ulang dari hasil gabungannya: dua potongan kerdil
+        # berurutan kadang masih kerdil setelah disatukan sekali.
+        i = max(0, j)
+    return out
+
+
+def _apply_dwell(lines: list[dict], limit: float = float("inf")) -> list[dict]:
+    """
+    Memanjangkan waktu tampil tiap baris ke dalam jeda yang tersedia.
+
+    Hanya `end` baris yang bergerak, dan hanya MAJU. Waktu tiap kata tidak
+    disentuh sama sekali, jadi sorotan karaoke tetap jatuh pada ucapannya —
+    yang berubah cuma berapa lama baris itu masih terbaca setelah kata
+    terakhirnya lewat.
+
+    Dijalankan di sini, di tempat barisnya dibentuk, supaya satu angka yang
+    sama dipakai berkas ASS, pratinjau, dan linimasa. Menghitungnya ulang di
+    tiap pemakai adalah cara pratinjau mulai berbohong tentang hasil render.
+    """
+    out = [dict(l) for l in lines]
+    for i, l in enumerate(out):
+        nyaman = max(MIN_LINE_SECONDS, len(l["text"]) / READ_CPS)
+        mau = min(l["start"] + nyaman, l["end"] + MAX_TAIL_SECONDS)
+        # Baris terakhir dipagari ujung segmennya. Tanpa itu ia menjulur
+        # keluar klip — dan pada klip bersambung dari dua menit berbeda,
+        # menjulur berarti menimpa baris pertama segmen berikutnya.
+        batas = (out[i + 1]["start"] - LINE_GAP_SECONDS
+                 if i + 1 < len(out) else limit)
+        l["end"] = round(max(l["end"], min(mau, batas)), 3)
+    return out
+
+
+def repair_caption_timing(lines: list[dict], *, max_words: int = 5,
+                          max_chars: int = 30, max_gap: float = 0.45,
+                          limit: float = float("inf")) -> list[dict]:
+    """
+    Membetulkan waktu tampil baris yang SUDAH ada.
+
+    Sama persis dengan dua tahap terakhir `words_to_caption_lines`, tapi untuk
+    baris yang datang dari analisis lama. Tanpa pintu masuk ini, perbaikan
+    hanya berlaku pada analisis baru dan proyek yang sudah terlanjur ada tetap
+    memakai baris berkedip selamanya.
+
+    Aman dijalankan berulang: kedua tahapnya hanya memanjangkan ke dalam jeda
+    yang memang kosong dan tidak pernah melewati baris berikutnya.
+    """
+    if not lines:
+        return lines
+    out = _merge_runts(lines, max_words=max_words, max_chars=max_chars,
+                       max_gap=max_gap)
+    return _apply_dwell(out, limit)
+
+
 def words_to_caption_lines(words: list[Word], *, max_words: int = 5,
-                           max_chars: int = 30, max_gap: float = 0.45) -> list[dict]:
+                           max_chars: int = 30, max_gap: float = 0.45,
+                           limit: float = float("inf")) -> list[dict]:
     """
     Mengelompokkan kata menjadi baris subtitle pendek ala klip vertikal.
 
     Baris dipecah pada: batas jumlah kata, batas karakter, jeda bicara, atau
-    tanda baca akhir kalimat.
+    tanda baca akhir kalimat. Sesudahnya baris kerdil disatukan dan waktu
+    tampilnya dipanjangkan ke dalam jeda — lihat catatan di atas.
     """
     words = strip_non_speech(words)
     lines: list[dict] = []
@@ -143,7 +304,9 @@ def words_to_caption_lines(words: list[Word], *, max_words: int = 5,
                 or nxt is None):
             flush()
     flush()
-    return lines
+    lines = _merge_runts(lines, max_words=max_words, max_chars=max_chars,
+                         max_gap=max_gap)
+    return _apply_dwell(lines, limit)
 
 
 def rebase_segments(segments: list[dict]) -> list[dict]:
@@ -244,7 +407,8 @@ def rebuild_subtitles_for_segments(
             for w in seg_words
         ]
         all_words.extend(shifted)
-        all_lines.extend(words_to_caption_lines(shifted))
+        all_lines.extend(words_to_caption_lines(
+            shifted, limit=seg["offset"] + seg["duration"]))
 
     return all_lines, all_words
 
@@ -368,6 +532,60 @@ def normalize_hashtags(tags) -> list[str]:
     return out[:12]
 
 
+# Topik yang benar-benar dicari orang, dengan kata pemicunya.
+#
+# Ini BUKAN daftar tagar populer yang ditempel asal — tiap topik hanya ikut bila
+# kata pemicunya sungguh diucapkan di klipnya. Tapi ia menjawab kelemahan nyata
+# dari mengambil kata tersering: kata tersering di percakapan adalah "kasih",
+# "belum", "nanya" — benar-benar diucapkan, dan sama sekali tidak berguna
+# sebagai tagar, karena tidak ada yang mencari #belum. Yang dicari orang adalah
+# NAMA BIDANGNYA, dan nama itu sering tidak pernah disebut di dalam klipnya.
+_TOPIK = {
+    "#finansial": ("uang", "duit", "gaji", "investasi", "saham", "nabung",
+                   "tabungan", "utang", "cicilan", "modal", "untung", "rugi",
+                   "finansial", "keuangan", "miliar", "juta"),
+    "#bisnis": ("bisnis", "usaha", "dagang", "jualan", "omzet", "startup",
+                "brand", "klien", "karyawan", "perusahaan", "pasar"),
+    "#karier": ("kerja", "kantor", "resign", "karier", "atasan", "lamaran",
+                "wawancara", "profesi", "jabatan"),
+    "#pasangan": ("nikah", "menikah", "pacar", "pacaran", "istri", "suami",
+                  "jodoh", "rumahtangga", "pernikahan", "tunangan"),
+    "#keluarga": ("anak", "orangtua", "ibu", "ayah", "keluarga", "bayi",
+                  "mertua", "adik", "kakak"),
+    "#kesehatan": ("dokter", "sakit", "obat", "penyakit", "rumahsakit",
+                   "kesehatan", "diet", "olahraga", "mental", "diabetes"),
+    "#komedi": ("lucu", "ketawa", "komedi", "standup", "lawak", "jokes",
+                "guyon", "receh"),
+    "#kuliner": ("makan", "makanan", "masakan", "restoran", "kuliner", "resep",
+                 "warung", "kopi", "sushi"),
+    "#gaming": ("game", "gaming", "main", "streamer", "esport", "konsol"),
+    "#pendidikan": ("kuliah", "sekolah", "kampus", "belajar", "dosen", "skripsi",
+                    "beasiswa", "ujian"),
+    "#motivasi": ("mimpi", "gagal", "berjuang", "perjuangan", "semangat",
+                  "bangkit", "sukses", "mindset"),
+    "#teknologi": ("teknologi", "aplikasi", "coding", "program", "komputer",
+                   "internet", "digital"),
+}
+
+# Kata yang benar-benar diucapkan tapi tidak pernah jadi tagar berguna.
+# Semuanya kata kerja atau pengisi percakapan; tidak ada yang mencarinya.
+_BUKAN_TAGAR = {
+    "kasih", "belum", "nanya", "bilang", "orang", "banget", "emang", "sebenernya",
+    "sebenarnya", "kayaknya", "mungkin", "soalnya", "makanya", "terus", "udah",
+    "sudah", "pernah", "tetap", "tetep", "masih", "waktu", "sampai", "sampe",
+    "punya", "bikin", "buat", "lihat", "liat", "denger", "dengar", "pikir",
+    "tanya", "jawab", "cerita", "ngomong", "ngomongin", "gimana", "kenapa",
+    "seperti", "misalnya", "contoh", "biasanya", "sekarang", "kemarin", "besok",
+    "hidup", "tahun", "bulan", "harus", "pengen", "pengin", "ingin", "coba",
+    "cobain", "salah", "benar", "bener", "penting", "susah", "gampang", "banyak",
+    "sedikit", "lagi", "dulu", "nanti", "semua", "sendiri", "kadang", "sering",
+    "ternyata", "ngobrol", "obrolan", "teman", "temen", "warna", "cuman",
+    "cuma", "malah", "justru", "padahal", "pokoknya", "intinya", "akhirnya",
+    "awalnya", "biasa", "aneh", "seru", "enak", "bagus", "jelek", "hebat",
+    "stand", "kalau", "berarti", "selain", "sekali", "kelihatan", "keliatan",
+}
+
+
 def suggest_hashtags(text: str, video_title: str = "", channel: str = "",
                      limit: int = 8, duration: float = 0.0) -> list[str]:
     """
@@ -410,24 +628,50 @@ def suggest_hashtags(text: str, video_title: str = "", channel: str = "",
     if 3 <= len(ch) <= 22:
         tags.append(f"#{ch}")
 
-    # Kata dari judul videonya sendiri lebih menggambarkan topik daripada kata
-    # yang sering diucapkan di tengah percakapan — nama tamu, nama acara.
+    # Bidang bahasannya. Ditaruh SEBELUM kata dari judul dan kata tersering,
+    # karena inilah yang benar-benar dicari orang: seseorang mencari #finansial,
+    # tidak ada yang mencari #kasih. Tiap topik hanya ikut bila kata pemicunya
+    # sungguh diucapkan di klip ini, jadi ia tetap tagar yang jujur.
+    lower = (text or "").lower()
+    skor_topik: list[tuple[int, str]] = []
+    for tag, pemicu in _TOPIK.items():
+        n = sum(lower.count(k) for k in pemicu)
+        if n >= 2:
+            skor_topik.append((n, tag))
+    for _n, tag in sorted(skor_topik, reverse=True)[:3]:
+        if tag not in tags:
+            tags.append(tag)
+
+    # Kata dari judul VIDEO SUMBER dipakai hemat, dan hanya yang berbentuk nama.
+    #
+    # Dulu tiga kata pertama diambil apa adanya, jadi setiap klip dari satu
+    # video membawa tagar yang sama persis — "#kabar #yono #pandu" pada klip
+    # yang tidak menyebut Yono sama sekali. Sekarang sebuah nama hanya ikut bila
+    # ia juga disebut DI DALAM klipnya.
     from_title = 0
     for w in re.findall(r"[A-Za-zÀ-ÿ']{4,}", video_title or ""):
-        s = slug(w)
-        if len(s) >= 4 and s not in _STOP and f"#{s}" not in tags:
-            tags.append(f"#{s}")
+        sw = slug(w)
+        if (len(sw) >= 4 and sw not in _STOP and sw not in _BUKAN_TAGAR
+                and f"#{sw}" not in tags and sw in lower):
+            tags.append(f"#{sw}")
             from_title += 1
-        if from_title >= 3:
+        if from_title >= 2:
             break
 
+    # Kata dari klipnya sendiri, dibatasi DUA.
+    #
+    # Ambangnya dinaikkan ke empat sebutan dan jumlahnya dibatasi, karena di
+    # bawah itu yang lolos hampir selalu kata kerja percakapan. Bobot tagar
+    # sekarang ada di daftar topik di atas; kata dari klip hanya menambah
+    # kekhususan, dan lima kata acak justru mengencerkan sinyalnya.
+    dari_klip = 0
     for word, n in counts.most_common(30):
-        # Sekali sebut bukan topik. Kata yang benar-benar jadi bahasan klip
-        # muncul berkali-kali di dalamnya.
-        if n < 3:
+        if n < 4 or dari_klip >= 2:
             break
-        if f"#{word}" not in tags:
-            tags.append(f"#{word}")
+        if word in _BUKAN_TAGAR or f"#{word}" in tags:
+            continue
+        tags.append(f"#{word}")
+        dari_klip += 1
         if len(tags) >= limit:
             break
 

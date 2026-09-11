@@ -11,9 +11,13 @@ import ClipPreview from './ClipPreview';
 import StaveSystem, { rehearsalLetter } from './StaveSystem';
 import { TrimPanel, SubtitlePanel, StylePanel } from './EditorPanels';
 import FrameStage from './FrameStage';
+import ClipTimeline from './ClipTimeline';
 import FramePanel from './FramePanel';
 import TitlePanel from './TitlePanel';
-import { loadFraming, saveFraming, serializeLayout } from './frames';
+import {
+  loadFraming, saveFraming, serializeLayout, clipTimeFor, sourceTimeFor,
+  personKeyAt, withPersonKey,
+} from './frames';
 
 const DEFAULT_STYLE = {
   size: 96, primary: '#FFFFFF', highlight: '#FFE500',
@@ -26,6 +30,9 @@ const DEFAULT_STYLE = {
   // lebarnya. Keduanya diubah dengan menyeret subtitle di pratinjau.
   pos_x: 50, box_w: 84,
   uppercase: true, animation: 'karaoke_pop', font: 'Montserrat',
+  // Tanda air. Ikut gaya, bukan ikut klip: ini nama kanal, dan menuliskannya
+  // ulang di tiap klip adalah pekerjaan yang tidak ada gunanya.
+  watermark: '',
 };
 
 const STYLE_KEY = 'omniclip_caption_style';
@@ -82,10 +89,7 @@ export default function Editor({ project, onBack }) {
   const [frameMode, setFrameMode] = useState(framing.mode);
   const [layout, setLayout] = useState(framing.layout);
   const [selectedFrameId, setSelectedFrameId] = useState(null);
-  // Orang yang ditunjuk pengguna untuk mode ikut-wajah. Disetel ulang tiap
-  // ganti klip: nomor orang datang dari pengelompokan per klip, jadi "orang 2"
-  // di klip lain belum tentu orang yang sama.
-  const [lockPerson, setLockPerson] = useState(null);
+  const [selectedLine, setSelectedLine] = useState(null);
   useEffect(() => { saveFraming(videoId, frameMode, layout); },
     [videoId, frameMode, layout]);
   const [constrained, setConstrained] = useState(true);
@@ -93,6 +97,11 @@ export default function Editor({ project, onBack }) {
   // kalah bagus dari klipnya sendiri.
   const [showHook, setShowHook] = useState(false);
   const [exporting, setExporting] = useState(false);
+  // Unggah ke Drive tepat setelah klipnya jadi. Mati secara bawaan: mengirim
+  // berkas keluar dari komputer harus jadi pilihan yang diambil, bukan yang
+  // kebetulan terjadi karena tombol render ditekan.
+  const [uploadAfter, setUploadAfter] = useState(false);
+  const [googleReady, setGoogleReady] = useState(null);
   const [exportLog, setExportLog] = useState([]);
   // Rencana crop untuk pratinjau — sama persis dengan yang dipakai render.
   const [reframe, setReframe] = useState(null);
@@ -100,12 +109,52 @@ export default function Editor({ project, onBack }) {
   // Penanda masuk/keluar untuk memotong klip sendiri.
   const [mark, setMark] = useState({ in: null, out: null });
   const [redetecting, setRedetecting] = useState(false);
+  const [retitling, setRetitling] = useState(false);
   const [saving, setSaving] = useState(null);
   const [sourceTime, setSourceTime] = useState(0);
 
   const { clips, selected, checked } = editor;
 
+  /**
+   * Tanda linimasa untuk mode ikut-wajah: [{t, person}] dalam waktu KLIP.
+   *
+   * Disimpan PADA KLIPNYA, bukan di state layar ini. Dua akibatnya keduanya
+   * penting: tandanya ikut tersimpan bersama susunan, jadi tidak hilang saat
+   * halaman ditutup; dan tiap klip membawa tandanya sendiri, jadi berpindah
+   * huruf tidak lagi membuang pekerjaan — yang perlu, karena nomor orang
+   * ditentukan per klip dan "orang 2" di klip lain belum tentu orang yang sama.
+   */
+  const personKeys = useMemo(() => selected?.person_keys ?? [], [selected]);
+  const setPersonKeys = useCallback((next) => {
+    if (!selected) return;
+    const value = typeof next === 'function' ? next(selected.person_keys ?? []) : next;
+    editor.updateClip(selected.clip_id, { person_keys: value });
+  }, [selected, editor]);
+
+  /**
+   * Menyunting kartu judul dari mana pun — panel setelan maupun seretan
+   * langsung di atas pratinjau.
+   *
+   * Satu jalan masuk untuk keduanya. Dua jalan berbeda akan berarti dua
+   * gabungan yang sedikit berbeda, dan posisinya akan melompat tiap kali
+   * pengguna berpindah antara menyeret dan mengetik angka.
+   */
+  const patchCard = useCallback((patch) => {
+    if (!selected) return;
+    editor.updateClip(selected.clip_id, {
+      title_card: { ...selected.title_card, ...patch },
+    });
+  }, [selected, editor]);
+
   useEffect(() => { loadFonts(); }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    apiGet('/uploads/google/status')
+      .then((r) => { if (!cancelled) setGoogleReady(!!r.connected); })
+      .catch(() => { if (!cancelled) setGoogleReady(false); });
+    return () => { cancelled = true; };
+  }, []);
 
   // Penyimpanan ditunda: menyeret subtitle memanggil patchStyle tiap frame, dan
   // menulis ke localStorage 60 kali per detik akan tersendat di perangkat lambat.
@@ -156,8 +205,13 @@ export default function Editor({ project, onBack }) {
     ? selected.segments.map((s) => `${s.start.toFixed(2)}-${s.end.toFixed(2)}`).join(',')
     : '';
   const followKey = (layout?.frames ?? []).map((f) => (f.follow ? '1' : '0')).join('');
+  // Apa yang menentukan WAJAH-WAJAHNYA — beda dari apa yang menentukan ke mana
+  // bingkai diarahkan. Hanya perubahan yang pertama yang boleh mengosongkan
+  // linimasa bingkai.
+  const sceneKey = `${videoId}|${segmentKey}|${frameMode}|${aspectRatio}|${followKey}`;
+  const sceneKeyRef = useRef(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { setLockPerson(null); }, [segmentKey]);
+  useEffect(() => { setSelectedLine(null); }, [segmentKey]);
   useEffect(() => {
     let cancelled = false;
     // Jejak wajah juga dibutuhkan oleh susunan sendiri, begitu ada satu bingkai
@@ -170,12 +224,24 @@ export default function Editor({ project, onBack }) {
       setReframe(null);
       return undefined;
     }
+    // Rencana klip SEBELUMNYA dibuang hanya bila yang berubah adalah KLIPNYA.
+    //
+    // Kalau yang berubah cuma tanda arah bingkai, wajah-wajahnya tetap wajah
+    // yang sama — mengosongkan lajur di situ membuat linimasa bingkai lenyap
+    // tepat saat pengguna sedang menyuntingnya, dan tiap tanda terasa seperti
+    // memulai analisis baru. Tapi saat berpindah klip, menahannya berarti
+    // menampilkan orang-orang klip yang barusan ditinggalkan — dan lajur itu
+    // bisa diklik, jadi tanda bisa dipasang berdasarkan gambar yang salah.
+    if (sceneKeyRef.current !== sceneKey) {
+      sceneKeyRef.current = sceneKey;
+      setReframe(null);
+    }
     setReframeLoading(true);
     apiPost('/clip-reframe', {
       video_id: videoId,
       segments: selected.segments,
       aspect_ratio: aspectRatio,
-      lock_person: lockPerson,
+      person_keys: personKeys,
       // Label penutur ikut dikirim: dengan itu server bisa mencocokkan wajah
       // dengan suara, dan crop mengikuti orang yang sedang bicara.
       subtitles: (selected.subtitles ?? []).map((l) => ({
@@ -187,7 +253,7 @@ export default function Editor({ project, onBack }) {
       .finally(() => { if (!cancelled) setReframeLoading(false); });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [videoId, segmentKey, frameMode, aspectRatio, followKey, lockPerson]);
+  }, [videoId, segmentKey, frameMode, aspectRatio, followKey, personKeys]);
 
   // Timecode dibaca dari elemen video pada ~10 Hz. `timeupdate` hanya menyala
   // sekitar 4 Hz dan angkanya terlihat tersendat; membacanya tiap frame dan
@@ -201,30 +267,82 @@ export default function Editor({ project, onBack }) {
         last = v.currentTime;
         setSourceTime(v.currentTime);
       }
+      // Begitu videonya berjalan sendiri, sasaran lompatan tombol panah tidak
+      // berlaku lagi — tekanan berikutnya harus menumpuk pada posisi nyata.
+      if (v && !v.paused) seekTargetRef.current = null;
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, []);
 
+  /**
+   * Apakah sebuah detik masih berada DI DALAM klip yang sedang dipilih.
+   *
+   * Ini yang menentukan pratinjau menampilkan klipnya atau video sumbernya, dan
+   * karena itu juga menentukan subtitle dan kotak ikut-wajah muncul atau tidak.
+   */
+  const insideClip = useCallback((t) => (
+    (selected?.segments ?? []).some((sg) => t >= sg.start - 0.05 && t <= sg.end + 0.05)
+  ), [selected]);
+
+  // Sasaran lompatan terakhir. Menyetel `currentTime` bersifat asinkron: menekan
+  // panah tiga kali cepat membaca `currentTime` yang MASIH LAMA pada tekanan
+  // kedua dan ketiga, sehingga tiga tekanan hanya memundurkan satu langkah.
+  // Itulah "mundurnya cuma sedikit". Dengan sasaran disimpan, tiap tekanan
+  // menumpuk pada tekanan sebelumnya, bukan pada posisi pemutar yang tertinggal.
+  const seekTargetRef = useRef(null);
+
   const seekSource = useCallback((time) => {
     const v = videoRef.current;
     if (!v) return;
-    setConstrained(false);       // jelajah bebas sampai klip dipilih lagi
+    seekTargetRef.current = null;
+    // Menjelajah keluar klip melepaskan pratinjau; masih di dalam klip tidak.
+    setConstrained(insideClip(time));
     v.currentTime = time;
-  }, []);
+  }, [insideClip]);
 
   const selectClip = useCallback((clipId) => {
     editor.setSelectedId(clipId);
+    seekTargetRef.current = null;
     setConstrained(true);
     const clip = clips.find((c) => c.clip_id === clipId);
     const v = videoRef.current;
     if (clip && v) v.currentTime = clip.segments[0].start;
   }, [clips, editor]);
 
-  const commitSegment = useCallback((clipId, segIndex, start, end) => {
-    editor.setSegmentBounds(clipId, segIndex, start, end);
-  }, [editor]);
+  /** Detik keberapa di dalam klip yang sedang dipilih, dari playhead. */
+  const clipNow = useCallback(() => (
+    selected ? clipTimeFor(selected.segments, videoRef.current?.currentTime ?? 0) : 0
+  ), [selected]);
+
+  /** Melompat ke detik tertentu DI DALAM klip. */
+  const seekClip = useCallback((t) => {
+    const v = videoRef.current;
+    if (!v || !selected) return;
+    seekTargetRef.current = null;
+    // Melompat ke dalam klip, jadi pratinjaunya harus kembali menampilkan klip.
+    setConstrained(true);
+    v.currentTime = sourceTimeFor(selected.segments, t);
+  }, [selected]);
+
+  /**
+   * Menunjuk siapa yang harus diikuti bingkai, mulai dari playhead.
+   *
+   * Inilah jawaban untuk klip yang mengambil orang yang sedang diam: pencocokan
+   * otomatis membaca gerak mulut, dan mulut yang tertutup mikrofon hampir tidak
+   * bergerak di gambar. Yang dibutuhkan bukan tebakan yang lebih pintar, tapi
+   * cara membetulkannya — pada detik yang tepat, bukan untuk seluruh klip.
+   */
+  const aimPerson = useCallback((person) => {
+    setPersonKeys((keys) => withPersonKey(keys, clipNow(), person));
+  }, [clipNow]);
+
+  // Siapa yang sedang dituju bingkai. Dibaca dari `sourceTime`, yang sudah
+  // berdenyut ~10 Hz — cukup untuk menyorot tombolnya tanpa loop sendiri.
+  const aimedPerson = useMemo(() => (
+    selected ? personKeyAt(personKeys, clipTimeFor(selected.segments, sourceTime)) : null
+  ), [personKeys, selected, sourceTime]);
 
   /** Menambahkan potongan dari posisi playhead ke klip yang sedang dipilih. */
   const addSegmentAtPlayhead = () => {
@@ -235,14 +353,30 @@ export default function Editor({ project, onBack }) {
     setConstrained(true);
   };
 
-  /** Melompat relatif terhadap posisi sekarang, dipakai panah kiri/kanan. */
+  /**
+   * Melompat relatif terhadap posisi sekarang, dipakai panah kiri/kanan.
+   *
+   * Dua hal yang dulu salah di sini, dan keduanya terasa setiap kali dipakai.
+   *
+   * Pertama, ia SELALU melepaskan pratinjau dari klipnya. Maju satu detik di
+   * tengah klip lalu kehilangan seluruh subtitle dan kotak ikut-wajahnya —
+   * berganti jadi video sumber berbilah kabur — padahal playhead-nya tidak
+   * pernah keluar dari klip itu. Sekarang yang menentukan adalah apakah
+   * sasarannya benar-benar di luar klip.
+   *
+   * Kedua, ia menumpuk pada `v.currentTime`, yang belum berubah saat tombol
+   * ditekan lagi sebelum pencarian sebelumnya selesai.
+   */
   const nudgePlayhead = useCallback((delta) => {
     const v = videoRef.current;
     if (!v) return;
-    setConstrained(false);
-    v.currentTime = Math.max(0, Math.min(duration || v.duration || 0,
-                                         v.currentTime + delta));
-  }, [duration]);
+    const dur = duration || v.duration || 0;
+    const base = seekTargetRef.current ?? v.currentTime;
+    const t = Math.max(0, Math.min(dur, base + delta));
+    seekTargetRef.current = t;
+    setConstrained(insideClip(t));
+    v.currentTime = t;
+  }, [duration, insideClip]);
 
   const togglePlay = useCallback(() => {
     const v = videoRef.current;
@@ -354,6 +488,28 @@ export default function Editor({ project, onBack }) {
     }
   }, [videoId, editor]);
 
+  /** Meminta Gemini menulis ulang judul & tagar klip yang masih heuristik. */
+  const handleRetitle = useCallback(async () => {
+    if (!videoId) return;
+    setRetitling(true);
+    try {
+      const { job_id: jobId } = await apiPost('/clip-titles', { video_id: videoId });
+      const job = await waitForJob(jobId, { interval: 2000 });
+      if (job.status === 'done') {
+        const fresh = await apiGet(`/projects/${videoId}`);
+        setData(fresh);
+        editor.load(videoId, fresh.clips || []);
+      } else {
+        setExportLog([{ name: 'Judul', status: 'failed',
+                        message: job.error || 'Gagal menulis ulang judul.' }]);
+      }
+    } catch (err) {
+      setExportLog([{ name: 'Judul', status: 'failed', message: err.message }]);
+    } finally {
+      setRetitling(false);
+    }
+  }, [videoId, editor]);
+
   const handleSaveClips = useCallback(async () => {
     setSaving('running');
     try {
@@ -380,9 +536,23 @@ export default function Editor({ project, onBack }) {
     aspect_ratio: aspectRatio,
     frame_mode: frameMode,
     frame_layout: frameMode === 'layout' ? serializeLayout(layout) : null,
-    lock_person: frameMode === 'smart' ? lockPerson : null,
+    // Tanda milik KLIP INI, bukan klip yang sedang dibuka: ekspor berjalan
+    // atas semua huruf yang dicentang, dan memakai tanda klip terpilih untuk
+    // semuanya akan mengarahkan bingkai empat belas klip lain ke orang yang
+    // tidak pernah ditunjuk untuk mereka.
+    person_keys: frameMode === 'smart' ? (clip.person_keys ?? []) : [],
+    // Kartu judul dikirim hanya bila pengguna menyalakannya untuk klip INI.
+    // Teks kosong berarti memakai judul klipnya sendiri — dua judul yang sama
+    // adalah kasus paling sering, dan mengetiknya dua kali tidak masuk akal.
+    watermark: (style.watermark || '').trim(),
+    title_card: clip.title_card?.enabled
+      ? {
+        ...clip.title_card,
+        text: (clip.title_card.text || '').trim() || (clip.title || '').trim(),
+      }
+      : null,
     caption_style: style,
-  }), [videoId, aspectRatio, frameMode, layout, lockPerson, style, showHook]);
+  }), [videoId, aspectRatio, frameMode, layout, style, showHook]);
 
   const handleExportSelected = async () => {
     const targets = clips.filter((c) => checked.has(c.clip_id));
@@ -403,6 +573,28 @@ export default function Editor({ project, onBack }) {
           const mode = job.result.frame_mode === 'smart' ? 'ikut wajah' : job.result.frame_mode;
           setExportLog((l) => l.map((e) => (e.name === name
             ? { ...e, status: 'done', message: `Tersimpan · bingkai ${mode}` } : e)));
+
+          // Unggahan diantrekan, bukan ditunggu. Lane unggah lebarnya satu,
+          // jadi klip naik satu per satu berapa pun yang dirender sekaligus —
+          // dan render berikutnya tidak perlu menunggu jaringan.
+          if (uploadAfter) {
+            try {
+              // eslint-disable-next-line no-await-in-loop
+              await apiPost('/uploads', {
+                clip_name: job.result.clip_name,
+                target: 'drive',
+                title: (clip.title || name).trim(),
+                description: (clip.hashtags ?? []).join(' '),
+                tags: clip.hashtags ?? [],
+                privacy: 'private',
+              });
+              setExportLog((l) => l.map((e) => (e.name === name
+                ? { ...e, message: `${e.message} · antre ke Drive` } : e)));
+            } catch (err) {
+              setExportLog((l) => l.map((e) => (e.name === name
+                ? { ...e, message: `${e.message} · gagal antre unggah: ${err.message}` } : e)));
+            }
+          }
         } else {
           setExportLog((l) => l.map((e) => (e.name === name
             ? { ...e, status: 'failed', message: job.error || 'Gagal' } : e)));
@@ -480,6 +672,20 @@ export default function Editor({ project, onBack }) {
                 : <Save size={14} />}
             {saving === 'done' ? 'Tersimpan' : 'Simpan susunan'}
           </button>
+          {/* Unggah otomatis ke Drive. Hanya muncul kalau akunnya memang
+              sudah tersambung — menawarkan tombol yang pasti gagal adalah
+              cara tercepat membuat orang berhenti mempercayainya. */}
+          {googleReady && (
+            <label style={{
+              display: 'flex', alignItems: 'center', gap: '7px', fontSize: '.82rem',
+              cursor: 'pointer', color: 'var(--ink-2)',
+            }} title="Klip yang selesai dirender langsung diantrekan ke Google Drive, satu per satu">
+              <input type="checkbox" checked={uploadAfter}
+                     onChange={(e) => setUploadAfter(e.target.checked)}
+                     style={{ width: '15px', height: '15px' }} />
+              Unggah ke Drive
+            </label>
+          )}
           <button className="btn-primary" disabled={exporting || checked.size === 0}
                   onClick={handleExportSelected}>
             {exporting ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
@@ -528,7 +734,7 @@ export default function Editor({ project, onBack }) {
                     frameMode={frameMode} reframe={reframe} aspectRatio={aspectRatio}
                     layout={layout} onLayoutChange={setLayout}
                     selectedFrameId={selectedFrameId} onSelectFrame={setSelectedFrameId}
-                    lockPerson={lockPerson} onLockPerson={setLockPerson} />
+                    personKeys={personKeys} onLockPerson={aimPerson} />
 
       {/* lubang orkestra */}
       <div className="pit editor-pit" style={{
@@ -539,7 +745,7 @@ export default function Editor({ project, onBack }) {
                      style={{ ...style, showHook }} videoRef={videoRef}
                      constrained={constrained} frameMode={frameMode}
                      reframe={reframe} reframeLoading={reframeLoading}
-                     onStyleChange={patchStyle}
+                     onStyleChange={patchStyle} onCardChange={patchCard}
                      layout={layout} onLayoutChange={setLayout}
                      frameEditing={tab === 'frame'}
                      selectedFrameId={selectedFrameId}
@@ -567,7 +773,24 @@ export default function Editor({ project, onBack }) {
         speakerColors={style.speaker_colors ?? []}
         videoRef={videoRef}
         onSeek={seekSource} onSelectClip={selectClip}
+        onTrimClip={editor.setSegmentBounds} busy={editor.busy}
+        mark={mark}
       />
+
+      {/* ── Linimasa klip terpilih: subtitle, potongan, dan arah bingkai ── */}
+      <ClipTimeline clip={selected} reframe={reframe}
+                    personKeys={personKeys} onPersonKeys={setPersonKeys}
+                    videoRef={videoRef} onSeekClip={seekClip}
+                    onMoveSubtitle={(i, a, b) => selected
+                      && editor.moveSubtitle(selected.clip_id, i, a, b)}
+                    onSetSegmentBounds={(i, a, b) => selected
+                      && editor.setSegmentBounds(selected.clip_id, i, a, b)}
+                    onSelectSubtitle={setSelectedLine}
+                    selectedLine={selectedLine}
+                    speakerColors={style.speaker_colors ?? []}
+                    reframeLoading={reframeLoading}
+                    frameAiming={frameMode === 'smart'}
+                    busy={editor.busy} />
 
       {/* ── Transport ───────────────────────────────────────────────────── */}
       <div className="plate" style={{
@@ -590,28 +813,40 @@ export default function Editor({ project, onBack }) {
           </span>
         </div>
         <span style={{ width: '1px', height: '20px', background: 'var(--rule-2)' }} />
-        <button className="btn-secondary" style={{ fontSize: '.76rem', padding: '7px 10px' }}
-                onClick={() => setMark((m) => ({ ...m, in: videoRef.current?.currentTime ?? 0 }))}>
-          Tandai <kbd style={kbd}>I</kbd>
-        </button>
-        <button className="btn-secondary" style={{ fontSize: '.76rem', padding: '7px 10px' }}
-                onClick={() => setMark((m) => ({ ...m, out: videoRef.current?.currentTime ?? 0 }))}>
-          Tandai <kbd style={kbd}>O</kbd>
-        </button>
-        <span className="tc" style={{ fontSize: '.76rem', color: 'var(--ink-2)' }}>
-          {mark.in === null && mark.out === null
-            ? 'belum ada rentang'
-            : `${mark.in === null ? '…' : formatTime(mark.in)} – ${mark.out === null ? '…' : formatTime(mark.out)}`
-              + (mark.in !== null && mark.out !== null
-                ? ` · ${Math.max(0, mark.out - mark.in).toFixed(1)}s` : '')}
-        </span>
-        <button className="btn-primary" onClick={createFromMarks}
-                disabled={editor.busy || (mark.in !== null && mark.out !== null
-                  && mark.out - mark.in < 1.5)}
-                style={{ fontSize: '.78rem', padding: '7px 11px' }}>
-          {editor.busy ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
-          Huruf baru
-        </button>
+
+        {/* Membuat klip sendiri.
+            Dulu ini dua tombol bernama "Tandai I" dan "Tandai O" berdiri
+            sendiri — nama yang hanya masuk akal kalau seseorang sudah tahu
+            istilah in-point dan out-point dari editor lain. Sekarang ketiganya
+            satu kelompok bernama, dan tiap tombol menyebut apa yang dilakukannya. */}
+        <div className="cutter">
+          <span className="mark cutter-title">Potong sendiri</span>
+          <button className="btn-secondary cutter-btn"
+                  title="Awal klip baru diambil dari posisi playhead sekarang"
+                  onClick={() => setMark((m) => ({ ...m, in: videoRef.current?.currentTime ?? 0 }))}>
+            Mulai di sini <kbd style={kbd}>I</kbd>
+          </button>
+          <button className="btn-secondary cutter-btn"
+                  title="Akhir klip baru diambil dari posisi playhead sekarang"
+                  onClick={() => setMark((m) => ({ ...m, out: videoRef.current?.currentTime ?? 0 }))}>
+            Sampai sini <kbd style={kbd}>O</kbd>
+          </button>
+          <span className="tc cutter-range">
+            {mark.in === null && mark.out === null
+              ? 'tandai awal & akhirnya di rekaman'
+              : `${mark.in === null ? '…' : formatTime(mark.in)} – ${mark.out === null ? '…' : formatTime(mark.out)}`
+                + (mark.in !== null && mark.out !== null
+                  ? ` · ${Math.max(0, mark.out - mark.in).toFixed(1)} dtk` : '')}
+          </span>
+          <button className="btn-primary cutter-btn" onClick={createFromMarks}
+                  title="Membuat klip baru dari rentang yang ditandai"
+                  disabled={editor.busy || (mark.in !== null && mark.out !== null
+                    && mark.out - mark.in < 1.5)}>
+            {editor.busy ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
+            Jadikan klip
+          </button>
+        </div>
+
         <span className="mark" style={{ marginLeft: 'auto' }}>
           ← → 1 dtk · Shift 10 dtk · J K L 5 dtk · Home awal huruf
         </span>
@@ -656,6 +891,21 @@ export default function Editor({ project, onBack }) {
               );
             })}
           </div>
+          {/* Mesin pemilih pasti melewatkan momen: ia menilai dari pola bicara
+              dan kosakata, bukan dari apa yang lucu. Pintu untuk menambah
+              sendiri harus ada DI SINI — di daftar klip — karena di sinilah
+              orang melihat bahwa yang dicarinya tidak ada. */}
+          <button className="btn-secondary" onClick={createFromMarks}
+                  disabled={editor.busy}
+                  style={{
+                    width: '100%', borderRadius: 0, borderWidth: '1px 0 0',
+                    justifyContent: 'flex-start', fontSize: '.78rem',
+                  }}>
+            {editor.busy ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
+            {mark.in !== null || mark.out !== null
+              ? 'Jadikan klip dari rentang bertanda'
+              : 'Klip baru dari posisi playhead'}
+          </button>
         </aside>
 
         {/* lirik + panel */}
@@ -691,6 +941,8 @@ export default function Editor({ project, onBack }) {
               {tab === 'subtitle' && (
                 <SubtitlePanel clip={selected} onUpdate={editor.updateSubtitle}
                                onRemove={editor.removeSubtitle} style={style}
+                               selectedLine={selectedLine} onSelectLine={setSelectedLine}
+                               onSeekLine={seekClip}
                                onAutoSpeakers={editor.autoSpeakers}
                                speakerCount={data.speaker_count || 2}
                                speakerConfident={data.speaker_confident ?? null}
@@ -707,6 +959,7 @@ export default function Editor({ project, onBack }) {
               )}
               {tab === 'title' && (
                 <TitlePanel clip={selected}
+                            onRetitle={handleRetitle} retitling={retitling}
                             onChange={(patch) => selected
                               && editor.updateClip(selected.clip_id, patch)} />
               )}
@@ -717,7 +970,9 @@ export default function Editor({ project, onBack }) {
                             onSelectFrame={setSelectedFrameId}
                             faceTrackAvailable={!!reframe?.people?.length}
                             peopleCount={reframe?.people?.length ?? 0}
-                            lockPerson={lockPerson} onLockPerson={setLockPerson} />
+                            aimedPerson={aimedPerson} onAimPerson={aimPerson}
+                            keyCount={personKeys.length}
+                            onClearKeys={() => setPersonKeys([])} />
               )}
             </div>
           </div>

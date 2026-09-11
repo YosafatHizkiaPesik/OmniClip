@@ -43,11 +43,37 @@ async def get_project(video_id: str):
     # Penanda non-ucapan ("[Musik]", "[Tertawa]") dibersihkan saat dibaca, bukan
     # hanya saat analisis baru dibuat, supaya project yang sudah tersimpan ikut
     # membaik tanpa perlu dianalisis ulang.
-    from ..services.clipmodel import sanitize_caption_lines
-    result = {**result, "clips": [
-        {**c, "subtitles": sanitize_caption_lines(c.get("subtitles") or [])}
-        for c in (result.get("clips") or [])
-    ]}
+    from ..services.clipmodel import (repair_caption_timing,
+                                      sanitize_caption_lines, suggest_title)
+
+    def _lengkapi(c: dict) -> dict:
+        lines = sanitize_caption_lines(c.get("subtitles") or [])
+        # Waktu tampil dibetulkan JUGA untuk klip yang sudah tersimpan.
+        #
+        # Tanpa ini, perbaikan hanya berlaku untuk analisis baru: proyek yang
+        # sudah ada tetap memakai baris berkedip 0,3 detik selamanya, dan
+        # satu-satunya cara memperbaikinya adalah menganalisis ulang seluruh
+        # video. Keduanya hanya MEMANJANGKAN ke dalam jeda yang memang kosong
+        # dan tidak pernah melewati baris berikutnya, jadi menjalankannya
+        # berulang kali pada data yang sama tidak menggeser apa pun lagi.
+        lines = repair_caption_timing(lines)
+        out = {**c, "subtitles": lines}
+        # Judul diisikan bila belum ada.
+        #
+        # Analisis yang tersimpan sebelum fitur judul ada tidak punya judul sama
+        # sekali, dan Gemini pun kadang mengembalikan klip tanpa judul. Dulu itu
+        # hanya berarti nama berkas yang kurang enak; sejak ada kartu judul di
+        # awal klip, judul kosong berarti kartu kosong. Yang diisikan bukan
+        # karangan — ia kalimat dari klip itu sendiri, sama seperti yang dipakai
+        # analisis baru.
+        if not (out.get("title") or "").strip():
+            teks = " ".join((l.get("text") or "") for l in lines)
+            judul = suggest_title(teks)
+            if judul:
+                out["title"] = judul
+        return out
+
+    result = {**result, "clips": [_lengkapi(c) for c in (result.get("clips") or [])]}
 
     local = find_local_video(vid)
     return {

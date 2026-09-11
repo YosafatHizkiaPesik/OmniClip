@@ -46,3 +46,22 @@ export function formatDurationHuman(seconds) {
   }
   return `${secs} dtk`;
 }
+
+/**
+ * Waktu dengan pecahan detik, untuk penggaris linimasa yang diperbesar.
+ *
+ * `formatTime` membulatkan ke detik penuh. Pada perbesaran tinggi seluruh
+ * penggaris lalu membaca "00:12" berulang-ulang di sepuluh tanda berturut-turut
+ * — angka yang benar dan sama sekali tidak berguna, karena yang sedang dicari
+ * justru letak di dalam detik itu.
+ */
+export function formatTimeFine(totalSeconds, decimals = 1) {
+  if (totalSeconds === undefined || totalSeconds === null || isNaN(totalSeconds)) {
+    return decimals > 0 ? `00:00.${'0'.repeat(decimals)}` : '00:00';
+  }
+  if (decimals <= 0) return formatTime(totalSeconds);
+  const t = Math.abs(totalSeconds);
+  const whole = Math.floor(t);
+  const frac = (t - whole).toFixed(decimals).slice(1);   // ".25"
+  return `${formatTime(whole)}${frac}`;
+}

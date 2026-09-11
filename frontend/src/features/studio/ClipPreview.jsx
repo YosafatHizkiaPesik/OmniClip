@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Play, Pause, RotateCcw, Loader2, Move, Maximize2, Minimize2 } from 'lucide-react';
+import { apiPost } from '../../lib/api';
 import { fontStack } from '../../lib/fonts';
+import { CARD_VARIANTS } from './cardStyles';
 import { CANVAS_ASPECT, coverPercent, followX, frameInk } from './frames';
 import { beginRectDrag } from './rectDrag';
 
@@ -57,6 +59,7 @@ export default function ClipPreview({
   selectedFrameId = null,
   onSelectFrame = null,
   onStyleChange = null,    // menggeser/mengubah ukuran subtitle di atas gambar
+  onCardChange = null,     // menggeser/mengubah ukuran JUDUL kartu di atas gambar
 }) {
   const innerRef = useRef(null);
   const videoRef = externalRef ?? innerRef;
@@ -79,6 +82,33 @@ export default function ClipPreview({
   const [dragging, setDragging] = useState(null);   // 'move' | 'size' | null
   const stageRef = useRef(null);
   const [fullscreen, setFullscreen] = useState(false);
+  // Kartu judul sebagai LAPISAN WAKTU tersendiri di depan klip.
+  //
+  // Sebelumnya kartunya digambar di atas detik-detik pertama klip yang sedang
+  // berjalan: judulnya terlihat, tapi videonya jalan terus di belakangnya dan
+  // suaranya tidak dibacakan sama sekali. Itu bukan yang akan dirender — pada
+  // mode foto-diam dan foto-merayap ffmpeg menyambung kartunya DI DEPAN,
+  // sehingga klipnya baru mulai setelah judulnya selesai dibaca.
+  //
+  // `cardLeft` null berarti tidak sedang di kartu. Angka berarti sekian detik
+  // lagi klipnya mulai, dan selama itu videonya ditahan.
+  const [cardLeft, setCardLeft] = useState(null);
+  const [cardBusy, setCardBusy] = useState(false);
+  const cardAudioRef = useRef(null);
+  const cardTimerRef = useRef(null);
+  const [cardDrag, setCardDrag] = useState(null);   // 'move' | 'size' | null
+
+  const card = clip?.title_card;
+  const cardText = ((card?.text || '').trim() || (clip?.title || '').trim());
+  const cardSeconds = Math.max(1.2, Number(card?.card_seconds || card?.seconds || 3));
+  const cardOn = !!card?.enabled && !!cardText;
+  // Hanya dua mode yang benar-benar menahan layar. "Klip langsung jalan"
+  // sengaja tidak: itulah artinya.
+  const cardHolds = cardOn && card?.mode !== 'overlay';
+  // Tanda pengenal bacaan: teks, suara, dan temponya. Begitu salah satunya
+  // berubah, berkas suara yang tersimpan sudah membacakan judul yang lain —
+  // dan memutarnya berarti penonton mendengar judul lama di atas judul baru.
+  const cardSig = `${cardText}|${card?.voice_id || ''}|${card?.rate || 1}`;
 
   const segments = clip?.segments ?? [];
   const offsets = useMemo(() => {
@@ -280,12 +310,105 @@ export default function ClipPreview({
     if (v.currentTime < seg.start - 0.5) v.currentTime = seg.start;
   };
 
+  /** Menghentikan kartu yang sedang berjalan dan membereskan sisanya. */
+  const stopCard = useCallback(() => {
+    if (cardTimerRef.current) {
+      clearTimeout(cardTimerRef.current);
+      cardTimerRef.current = null;
+    }
+    const a = cardAudioRef.current;
+    if (a) { a.pause(); a.currentTime = 0; }
+    setCardLeft(null);
+  }, []);
+
+  // Ganti klip, ganti judul, ganti suara — kartunya berhenti. Membiarkannya
+  // berjalan berarti suara judul klip sebelumnya terus dibacakan di atas klip
+  // yang sekarang.
+  useEffect(() => stopCard, [stopCard]);
+  useEffect(() => { stopCard(); }, [clip?.clip_id, cardSig, stopCard]);
+
+  /**
+   * Menjalankan kartu judul, lalu klipnya.
+   *
+   * Suaranya diambil saat dibutuhkan dan disimpan di klipnya bersama tanda
+   * pengenalnya, jadi menekan putar dua kali tidak membuat dua permintaan.
+   * Kalau pembuatan suaranya gagal — model belum terpasang, jaringan mati —
+   * kartunya tetap menahan layar selama waktunya, tanpa suara. Diam itu jujur;
+   * yang tidak jujur adalah melompati kartunya seolah ia tidak ada.
+   */
+  const runCard = useCallback(async () => {
+    const v = videoRef.current;
+    if (!v) return;
+    v.pause();
+    for (const m of secondaries()) m.pause();
+    if (segments[0]) v.currentTime = segments[0].start;
+    setSegIndex(0);
+    setClipTime(0);
+
+    let detik = cardSeconds;
+    let url = card?.voice_url;
+    if (card?.voice !== false && card?.voice_sig !== cardSig) url = null;
+
+    if (card?.voice !== false && !url && cardText.trim()) {
+      setCardBusy(true);
+      try {
+        const r = await apiPost('/title-voice', {
+          text: cardText, rate: card?.rate ?? 1.05, voice_id: card?.voice_id,
+        });
+        url = r.url;
+        detik = Math.max(1.2, Number(r.card_seconds) || detik);
+        // Disimpan ke klipnya supaya render, linimasa, dan pratinjau semuanya
+        // memakai panjang yang SAMA — panjang bacaan sungguhan, bukan angka
+        // bawaan yang kebetulan tertulis di setelan.
+        onCardChange?.({ card_seconds: r.card_seconds, voice_url: r.url,
+                         voice_sig: cardSig });
+      } catch {
+        url = null;      // kartunya tetap tampil, hanya tanpa suara
+      } finally {
+        setCardBusy(false);
+      }
+    }
+
+    setCardLeft(detik);
+    setPlaying(true);
+
+    const a = cardAudioRef.current;
+    if (url && a) {
+      a.src = url;
+      a.currentTime = 0;
+      try { await a.play(); } catch { /* peramban menahan; kartunya tetap jalan */ }
+    }
+
+    cardTimerRef.current = setTimeout(() => {
+      cardTimerRef.current = null;
+      setCardLeft(null);
+      const vid = videoRef.current;
+      if (!vid) return;
+      vid.play().catch(() => { /* dibatalkan oleh pause berikutnya */ });
+      for (const m of secondaries()) {
+        m.play().catch(() => { /* cermin boleh gagal diam-diam */ });
+      }
+    }, detik * 1000);
+  }, [videoRef, segments, cardSeconds, card?.voice, card?.voice_url,
+      card?.voice_sig, card?.rate, card?.voice_id, cardText, cardSig,
+      onCardChange, secondaries]);
+
   const toggle = () => {
     const v = videoRef.current;
     if (!v) return;
+    // Sedang di kartu judul? Menekan putar berarti membatalkannya dan langsung
+    // masuk ke klipnya — bukan menjeda sesuatu yang tidak sedang berjalan.
+    if (cardLeft !== null) {
+      stopCard();
+      setPlaying(false);
+      return;
+    }
     if (playing) {
       v.pause();
       for (const m of secondaries()) m.pause();
+    } else if (cardHolds && clipTime < 0.25 && !cardBusy) {
+      runCard();
+      return;
     } else {
       const seg = segments[segIndex];
       if (constrained && seg && (v.currentTime < seg.start || v.currentTime > seg.end)) {
@@ -304,9 +427,13 @@ export default function ClipPreview({
   const restart = () => {
     const v = videoRef.current;
     if (!v || !segments[0]) return;
+    stopCard();
     setSegIndex(0);
     v.currentTime = segments[0].start;
     setClipTime(0);
+    // Mengulang dari awal berarti dari awal KARTUNYA, bukan dari detik pertama
+    // klip: kartu adalah bagian dari yang akan ditonton orang.
+    if (cardHolds && !cardBusy) { runCard(); return; }
     v.play().catch(() => { /* dibatalkan oleh pause berikutnya */ });
   };
 
@@ -446,6 +573,108 @@ export default function ClipPreview({
     : (RATIO_BOX[aspectRatio] ?? RATIO_BOX['9:16']);
   const showHook = constrained && clipTime < 3.5 && (clip?.hook_text || '').trim()
     && style?.showHook !== false;
+
+  /**
+   * Kartu judul, digambar di pratinjau seperti yang akan dirender.
+   *
+   * Sebelum ini kartunya hanya ada di setelan dan di berkas hasil — pengguna
+   * menyalakannya lalu tidak melihat apa pun berubah, jadi satu-satunya cara
+   * mengetahui bentuknya adalah merender. Di sini ia muncul di detik-detik awal
+   * klip, dengan teks, ukuran, dan lama yang sama dengan yang dipakai ffmpeg.
+   *
+   * Untuk mode `freeze` dan `zoom` kartunya berdiri di DEPAN klip, jadi di
+   * pratinjau ia menutupi seluruh kanvas dan videonya ditahan — sama seperti
+   * bingkai beku yang nanti disambungkan.
+   */
+  // Mode "klip langsung jalan" memang menumpang di atas klip yang berjalan —
+  // di situ kartunya bukan lapisan waktu, dan `cardLeft` tidak dipakai.
+  const showCard = constrained && cardOn
+    && (cardHolds ? cardLeft !== null : clipTime < cardSeconds);
+
+  /**
+   * Letak dan ukuran judul, dalam satuan yang SAMA dengan yang dipakai render.
+   *
+   * Versi sebelumnya menyatakan ukuran hurufnya dalam `vw` — satuan lebar
+   * JENDELA PERAMBAN, bukan lebar kotak pratinjau. Karena itu judulnya
+   * tergambar besar di kotak kecil dan mendadak "pas" begitu di-layar-penuh-
+   * kan: yang berubah bukan judulnya, melainkan kotak di sekelilingnya.
+   * Subtitle di berkas ini sudah lama memakai perbandingan terhadap tinggi
+   * kotak; kartunya sekarang memakai perbandingan yang sama.
+   */
+  const cardBoxW = Math.max(20, Math.min(100, Number(card?.box_w ?? 84)));
+  const cardBox = {
+    w: cardBoxW,
+    left: Math.max(0, Math.min(100 - cardBoxW,
+      Number(card?.pos_x ?? 50) - cardBoxW / 2)),
+    top: Math.max(6, Math.min(94, Number(card?.pos_y ?? 50))),
+  };
+  const cardStyleSpec = CARD_VARIANTS.find((v) => v.id === (card?.variant || 'garis'))
+    ?? CARD_VARIANTS[0];
+  const cardTextStyle = {
+    display: 'inline-block',
+    color: card?.color || '#FFFFFF',
+    fontWeight: 900,
+    fontFamily: fontStack(style?.font),
+    // Tinggi kotak, bukan lebar jendela. Inilah perbaikannya.
+    fontSize: `${Math.max(9, (Number(card?.size ?? 104) * boxH) / CANVAS_H)}px`,
+    lineHeight: 1.14,
+    textTransform: 'uppercase',
+    letterSpacing: '0.005em',
+    ...cardStyleSpec.css(card?.shadow || '#000000', boxH / CANVAS_H),
+  };
+
+  /**
+   * Menggeser dan mengubah ukuran judul langsung di atas gambar.
+   *
+   * Sengaja memakai perhitungan yang sama persis dengan subtitle: satu
+   * kebiasaan tangan untuk dua hal yang terlihat sama di layar. Nilainya
+   * ditulis dalam satuan kanvas 1920, yaitu satuan yang dikirim ke ffmpeg —
+   * jadi yang terlihat di sini bukan terjemahan dari nilai sebenarnya,
+   * melainkan nilai sebenarnya.
+   */
+  const startCardDrag = useCallback((mode) => (e) => {
+    if (!onCardChange || !boxH || !boxW) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    setCardDrag(mode);
+
+    const x0 = e.clientX;
+    const y0 = e.clientY;
+    const posX0 = Number(card?.pos_x ?? 50);
+    const posY0 = Number(card?.pos_y ?? 50);
+    const size0 = Number(card?.size ?? 104);
+    const boxW0 = cardBoxW;
+
+    const onMove = (ev) => {
+      const dx = ((ev.clientX - x0) / boxW) * 100;
+      const dy = ((ev.clientY - y0) / boxH) * 100;
+      if (mode === 'move') {
+        onCardChange({
+          pos_x: Math.round(Math.max(boxW0 / 2,
+            Math.min(100 - boxW0 / 2, posX0 + dx)) * 10) / 10,
+          pos_y: Math.round(Math.max(6, Math.min(94, posY0 + dy)) * 10) / 10,
+        });
+      } else {
+        // Gagang pojok mengubah DUA hal sekaligus, seperti gagang pojok pada
+        // subtitle: menyeret ke kanan melebarkan kotak pembungkusnya, ke bawah
+        // membesarkan hurufnya. Memisahkannya jadi dua gagang berarti mengubah
+        // ukuran judul selalu butuh dua gerakan.
+        onCardChange({
+          box_w: Math.round(Math.max(20, Math.min(100, boxW0 + dx * 2))),
+          size: Math.round(Math.max(28, Math.min(240,
+            size0 + (dy / 100) * CANVAS_H * 0.55))),
+        });
+      }
+    };
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      setCardDrag(null);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  }, [onCardChange, boxH, boxW, card?.pos_x, card?.pos_y, card?.size, cardBoxW]);
 
   // Geometri crop. Lebar video dilebihkan sebesar rasio sumber terhadap crop,
   // lalu digeser; hasilnya jendela crop persis mengisi kotak pratinjau.
@@ -661,6 +890,74 @@ export default function ClipPreview({
                   ? `Ukuran teks ${style?.size ?? 96}`
                   : `Lebar kotak ${Math.round(style?.box_w ?? 84)}%`}
           </div>
+        )}
+
+        {showCard && boxH > 0 && (
+          <>
+            {/* Latar gelap hanya untuk mode yang MENAHAN layar. Di mode "klip
+                langsung jalan" gambarnya memang harus terus terlihat. */}
+            {cardHolds && (
+              <div style={{
+                position: 'absolute', inset: 0, zIndex: 2,
+                background: 'rgba(0,0,0,0.45)', pointerEvents: 'none',
+              }} />
+            )}
+            <div style={{
+              position: 'absolute', zIndex: 3,
+              left: `${cardBox.left}%`, width: `${cardBox.w}%`,
+              top: `${cardBox.top}%`, transform: 'translateY(-50%)',
+              textAlign: 'center',
+              pointerEvents: onCardChange ? 'auto' : 'none',
+              cursor: onCardChange ? 'move' : 'default',
+              outline: cardDrag ? '1px dashed rgba(255,255,255,.55)' : 'none',
+              outlineOffset: '5px',
+            }}
+                 onPointerDown={onCardChange ? startCardDrag('move') : undefined}>
+              <span style={cardTextStyle}>{cardText}</span>
+              {onCardChange && (
+                <span
+                  onPointerDown={startCardDrag('size')}
+                  title="Seret untuk mengubah ukuran judul"
+                  style={{
+                    position: 'absolute', right: '-7px', bottom: '-7px',
+                    width: '15px', height: '15px', borderRadius: '50%',
+                    background: 'var(--hl)', border: '2px solid #000',
+                    cursor: 'nwse-resize',
+                  }} />
+              )}
+            </div>
+          </>
+        )}
+
+        {showCard && (
+          <div className="tc" style={{
+            position: 'absolute', left: '8px', top: '8px', zIndex: 4,
+            padding: '3px 7px', borderRadius: '6px', pointerEvents: 'none',
+            background: 'rgba(0,0,0,0.72)', color: '#FFE500',
+            fontSize: '0.62rem', fontWeight: 700,
+          }}>
+            {cardBusy
+              ? 'Menyiapkan suara judul…'
+              : `Kartu judul · ${(cardLeft ?? cardSeconds).toFixed(1)}s`}
+          </div>
+        )}
+
+        {/* Pembacaan judul. Elemen tersembunyi, bukan `new Audio()`: dengan
+            elemen di pohon DOM, React membereskannya sendiri saat pratinjau
+            dilepas — dan suara judul tidak bisa tertinggal berbunyi setelah
+            penggunanya berpindah klip. */}
+        <audio ref={cardAudioRef} preload="auto" style={{ display: 'none' }} />
+
+        {/* Tanda air, digambar seperti libass menggambarnya: pojok kanan
+            bawah, kecil, setengah tembus pandang. */}
+        {constrained && (style?.watermark || '').trim() && (
+          <div style={{
+            position: 'absolute', right: '3.5%', bottom: '3.5%', zIndex: 3,
+            color: 'rgba(255,255,255,0.62)', fontWeight: 650,
+            fontFamily: fontStack(style?.font),
+            fontSize: 'clamp(0.5rem, 2.1vw, 0.72rem)',
+            textShadow: '0 1px 3px rgba(0,0,0,0.85)', pointerEvents: 'none',
+          }}>{style.watermark.trim()}</div>
         )}
 
         {showHook && (

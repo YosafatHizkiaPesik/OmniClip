@@ -18,6 +18,7 @@ frontend/*.log
 OmniClip_Storage/local_downloads/*
 OmniClip_Storage/edited_clips/*
 OmniClip_Storage/logs/*
+OmniClip_Storage/title_voice/*
 OmniClip_Storage/*.db
 OmniClip_Storage/*.db-wal
 OmniClip_Storage/*.db-shm
@@ -29,6 +30,13 @@ OmniClip_Storage/google_client_secret.json
 OmniClip_Storage/google_token.json
 !OmniClip_Storage/**/.gitkeep
 backend/models/campplus_sv.onnx
+# Pengenal wajah SFace: 37 MB. Yang membuat nomor orang menunjuk ORANG dan
+# bukan kursi, jadi ia penting — tapi bobot model tetap tidak masuk riwayat git.
+backend/models/face_recognition_sface_2021dec.onnx
+# Suara Piper untuk membacakan judul klip: 63 MB, diunduh sekali saat pertama
+# dipakai. Bobot model tidak masuk riwayat git — YuNet (232 KB) ikut karena
+# kecil dan tanpa itu bingkai otomatis tidak bisa jalan sama sekali.
+backend/models/tts/
 
 # Impeccable: potret pemeriksaan dan mockup keputusan (bukan artefak kirim)
 .impeccable/mocks/

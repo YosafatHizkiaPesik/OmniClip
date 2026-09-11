@@ -20,6 +20,20 @@ def save(*, video_id: str, transcript_id: Optional[int], engine: str,
         return cur.lastrowid
 
 
+def replace_result(analysis_id: int, result: dict) -> None:
+    """
+    Menimpa hasil analisis yang sudah tersimpan.
+
+    Dipakai penulisan ulang judul: yang berubah hanya judul dan tagar, jadi
+    membuat baris analisis baru berarti menduplikat seluruh transkrip klip demi
+    beberapa kalimat — dan meninggalkan versi lama yang membingungkan saat
+    daftar analisis dibaca.
+    """
+    with tx() as conn:
+        conn.execute("UPDATE analyses SET result_json = ? WHERE id = ?",
+                     (json.dumps(result, ensure_ascii=False), analysis_id))
+
+
 def _hydrate(row) -> dict:
     d = dict(row)
     d["params"] = json.loads(d.pop("params_json") or "{}")

@@ -1,7 +1,7 @@
 import React, {
   useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState,
 } from 'react';
-import { clipTimeFor, followX, frameInk } from './frames';
+import { clipTimeFor, followX, frameInk, personAt, personKeyAt } from './frames';
 import { beginRectDrag } from './rectDrag';
 
 /**
@@ -32,9 +32,10 @@ export default function FrameStage({
   segments = null,
   selectedFrameId = null,
   onSelectFrame = null,
-  // Mode ikut-wajah: orang yang ditunjuk pengguna, dan cara mengubahnya.
-  lockPerson = null,
+  // Mode ikut-wajah: cara pengguna menunjuk siapa yang harus diikuti.
   onLockPerson = null,
+  // Tanda linimasa: siapa yang dituju bingkai, per rentang waktu.
+  personKeys = null,
 }) {
   const mirrorRef = useRef(null);
   const boxRef = useRef(null);
@@ -115,22 +116,22 @@ export default function FrameStage({
         // Penanda orang di mode ikut-wajah: ikut bergerak bersama orangnya,
         // supaya yang ditunjuk pengguna adalah orang yang benar-benar dilihatnya
         // di detik itu, bukan posisi rata-ratanya sepanjang klip.
-        const pf = reframe?.people_fps || 8;
-        const si = Math.max(0, Math.round(t * pf));
-        for (const [idx, el] of Object.entries(personRefs.current)) {
+        //
+        // Dan ia MENGHILANG saat orangnya tidak ada di kamera. Versi sebelumnya
+        // menelusuri jejaknya mundur tanpa batas, jadi begitu seseorang pernah
+        // terlihat sekali, penandanya berdiri selamanya di posisi terakhirnya —
+        // yang di rekaman dua kamera berarti "orang 2" mengambang di atas kursi
+        // kosong sepanjang sisa klip.
+        const aimed = personKeyAt(personKeys, t);
+        for (const [key, el] of Object.entries(personRefs.current)) {
           if (!el) continue;
-          const track = reframe?.people?.[Number(idx)];
-          if (!track?.length) continue;
-          let v = null;
-          for (let j = Math.min(si, track.length - 1); j >= 0; j -= 1) {
-            if (track[j] !== null && track[j] !== undefined) { v = track[j]; break; }
-          }
-          if (v !== null) {
-            el.style.left = `${v}%`;
-            el.style.visibility = 'visible';
-          } else {
-            el.style.visibility = 'hidden';
-          }
+          const idx = Number(key);
+          const v = personAt(reframe, idx, t);
+          el.style.visibility = v === null ? 'hidden' : 'visible';
+          if (v !== null) el.style.left = `${v}%`;
+          // Yang sedang dituju bingkai ditandai di sini juga, karena inilah
+          // gambar yang dilihat pengguna saat bertanya "kenapa yang diam?".
+          el.classList.toggle('is-aimed', aimed === idx);
         }
 
         // Kotak bingkai pengikut di dalam susunan sendiri.
@@ -148,7 +149,7 @@ export default function FrameStage({
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [videoRef, reframe, frameMode, layout, segments]);
+  }, [videoRef, reframe, frameMode, layout, segments, personKeys]);
 
 
   /** Menyeret kotak sumber. Aturan gerak dan jangkarnya dibagi dengan
@@ -226,11 +227,9 @@ export default function FrameStage({
             && reframe.people.map((_, i) => (
               <button key={i} type="button"
                       ref={(el) => { personRefs.current[i] = el; }}
-                      onClick={() => onLockPerson(lockPerson === i ? null : i)}
-                      title={lockPerson === i
-                        ? `Lepaskan — kembali otomatis`
-                        : `Arahkan bingkai ke orang ${i + 1}`}
-                      className={`person-pin${lockPerson === i ? ' is-on' : ''}`}>
+                      onClick={() => onLockPerson(i)}
+                      title={`Arahkan bingkai ke wajah ${i + 1} — mulai dari detik ini`}
+                      className="person-pin">
                 {i + 1}
               </button>
             ))}

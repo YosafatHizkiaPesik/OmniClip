@@ -20,7 +20,8 @@ from .routers import videos as videos_router
 from .services.events import broker
 from .services.jobs import queue
 from .services.pipeline import (
-    run_auto_clip, run_diarize, run_download, run_render, run_upload,
+    run_auto_clip, run_diarize, run_download, run_render, run_retitle,
+    run_tts_voice, run_upload,
 )
 
 logging.basicConfig(
@@ -55,7 +56,14 @@ def _log_reframe_status() -> None:
         log.warning("Smart reframe nonaktif: model YuNet tidak ada di %s. "
                     "Lihat requirements.txt untuk perintah unduhnya.", MODEL_PATH)
         return
-    log.info("Smart reframe siap (YuNet)")
+    from .services.reframe import SFACE_PATH
+    if SFACE_PATH.is_file():
+        log.info("Smart reframe siap (YuNet + pengenal wajah SFace)")
+    else:
+        # Bukan peringatan: tanpa pengenal, penomoran orang jatuh ke tempat
+        # duduk — lebih buruk di bidikan dekat, tapi tetap bekerja.
+        log.info("Smart reframe siap (YuNet). Pengenal wajah belum diunduh, "
+                 "nomor orang memakai tempat duduk. Lihat requirements.txt.")
 
 
 @asynccontextmanager
@@ -72,6 +80,8 @@ async def lifespan(app: FastAPI):
     queue.register("auto_clip", run_auto_clip, lane="cpu")
     queue.register("diarize", run_diarize, lane="cpu")
     queue.register("upload", run_upload, lane="upload")
+    queue.register("tts_voice", run_tts_voice, lane="net")
+    queue.register("retitle", run_retitle, lane="net")
     queue.start()
 
     # Smart reframe bersifat opsional dan gagal dengan anggun, jadi ketiadaannya

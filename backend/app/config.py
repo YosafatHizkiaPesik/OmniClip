@@ -17,6 +17,11 @@ DOWNLOAD_DIR = STORAGE_DIR / "local_downloads"
 CLIPS_DIR = STORAGE_DIR / "edited_clips"
 THUMBS_DIR = STORAGE_DIR / "thumbnails"
 LOGS_DIR = STORAGE_DIR / "logs"
+# Pembacaan judul yang sudah disintesis. Disimpan supaya menekan "dengarkan"
+# dua kali tidak berarti menjalankan model dua kali, dan supaya berkasnya bisa
+# disajikan lewat /api/media seperti media lain — bukan lewat jalur baru yang
+# aturan keamanannya harus dipikirkan ulang.
+VOICE_DIR = STORAGE_DIR / "title_voice"
 MODELS_DIR = BACKEND_DIR / "models"
 ASSETS_DIR = Path(__file__).resolve().parent / "assets"
 FONTS_DIR = ASSETS_DIR / "fonts"
@@ -28,9 +33,10 @@ MEDIA_DIRS = {
     "local_downloads": DOWNLOAD_DIR,
     "edited_clips": CLIPS_DIR,
     "thumbnails": THUMBS_DIR,
+    "title_voice": VOICE_DIR,
 }
 
-for _d in (DOWNLOAD_DIR, CLIPS_DIR, THUMBS_DIR, LOGS_DIR, MODELS_DIR):
+for _d in (DOWNLOAD_DIR, CLIPS_DIR, THUMBS_DIR, LOGS_DIR, MODELS_DIR, VOICE_DIR):
     _d.mkdir(parents=True, exist_ok=True)
 
 

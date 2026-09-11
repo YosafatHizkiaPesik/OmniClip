@@ -251,6 +251,150 @@ export function personNear(people, xPct) {
   return best;
 }
 
+/** Waktu klip → waktu video sumber. Kebalikan dari `clipTimeFor`. */
+export function sourceTimeFor(segments, clipTime) {
+  if (!segments?.length) return clipTime;
+  let acc = 0;
+  for (const s of segments) {
+    const len = Math.max(0, s.end - s.start);
+    if (clipTime < acc + len) return s.start + (clipTime - acc);
+    acc += len;
+  }
+  return segments[segments.length - 1].end;
+}
+
+/**
+ * Memindahkan tanda arah bingkai mengikuti batas klip yang baru.
+ *
+ * Tanda hidup dalam waktu KLIP — detik keberapa terhitung dari awal klip. Jadi
+ * begitu awal klipnya digeser dua detik, seluruh tanda menunjuk dua detik ke
+ * tempat yang salah, dan pekerjaan menandai tadi terbuang tanpa satu pun tanda
+ * terlihat hilang. Yang sebenarnya dimaksud pengguna saat menaruh tanda adalah
+ * MOMEN DI REKAMAN, bukan hitungan dari awal klip.
+ *
+ * Karena itu tiap tanda diterjemahkan lewat waktu sumber: dari waktu klip lama
+ * ke detik di rekaman, lalu kembali ke waktu klip yang baru. Tanda yang
+ * momennya sudah tidak ada di dalam klip dibuang — menahannya di tepi berarti
+ * menaruh perintah pada bagian yang sudah tidak dipotong.
+ */
+export function remapPersonKeys(keys, fromSegments, toSegments) {
+  if (!keys?.length || !fromSegments?.length || !toSegments?.length) return keys ?? [];
+  const inside = (t) => toSegments.some((s) => t >= s.start - 1e-6 && t <= s.end + 1e-6);
+  const out = [];
+  for (const k of keys) {
+    const at = sourceTimeFor(fromSegments, Number(k.t) || 0);
+    // Tanda di detik nol klip lama tetap di detik nol: ia berarti "sejak awal",
+    // bukan sebuah momen tertentu di rekaman.
+    if ((Number(k.t) || 0) <= 1e-6) { out.push({ ...k, t: 0 }); continue; }
+    if (!inside(at)) continue;
+    out.push({ ...k, t: Math.max(0, Math.round(clipTimeFor(toSegments, at) * 100) / 100) });
+  }
+  return out
+    .filter((k, i, a) => a.findIndex((o) => Math.abs(o.t - k.t) <= 0.05) === i)
+    .sort((a, b) => a.t - b.t);
+}
+
+/**
+ * Berapa lama posisi seseorang boleh ditahan setelah wajahnya hilang.
+ *
+ * Deteksi wajah berkedip: satu-dua sampel kosong saat kepala menoleh adalah
+ * hal biasa, dan menyembunyikan penandanya tiap kali itu terjadi membuatnya
+ * berkedip-kedip. Tapi menahan tanpa batas — yang dilakukan versi sebelumnya —
+ * meninggalkan penanda "orang 2" berdiri di atas kursi kosong sepanjang klip
+ * setelah orangnya benar-benar keluar dari kamera. Setengah detik memaafkan
+ * kedipan tanpa memalsukan kehadiran.
+ */
+export const PERSON_HOLD = 0.5;
+
+/**
+ * Berapa lama sebuah PIN di atas video boleh bertahan setelah orangnya hilang.
+ *
+ * Jauh lebih pendek dari PERSON_HOLD, dan sengaja. Lajur di linimasa butuh
+ * jeda panjang supaya rentangnya tidak berlubang tiap kali kepala menoleh —
+ * lajur berlubang tidak bisa dibaca. Tapi pin digambar di ATAS gambarnya, dan
+ * pin yang bertahan setengah detik di posisi lamanya adalah nomor yang berdiri
+ * di tempat yang salah — persis keluhan "ada 4 dan 5 berjejer padahal yang
+ * bicara orang ke-3". Dua sampel cukup untuk menambal kedipan deteksi; lebih
+ * dari itu yang tergambar bukan lagi orangnya, melainkan ingatannya.
+ */
+export const PIN_HOLD = 0.25;
+
+/**
+ * Posisi seseorang pada detik tertentu, atau null bila ia memang tidak ada di
+ * layar saat itu.
+ *
+ * Inilah pembacaan yang membedakan "sedang tidak terdeteksi" dari "sudah tidak
+ * di sini": jejaknya ditelusuri mundur, tapi hanya sejauh PERSON_HOLD.
+ */
+export function personAt(reframe, index, t, hold = PIN_HOLD) {
+  const track = reframe?.people?.[index];
+  if (!track?.length) return null;
+  const fps = reframe?.people_fps || 8;
+  const seen = reframe?.people_seen?.[index];
+  const i = Math.max(0, Math.min(track.length - 1, Math.round(t * fps)));
+  const floor = Math.max(0, i - Math.ceil(hold * fps));
+  for (let j = i; j >= floor; j -= 1) {
+    // Kehadiran yang menentukan, bukan celah pada jejaknya: jejak posisi
+    // sengaja menahan nilai terakhir supaya crop tidak melompat, jadi ia tidak
+    // pernah kosong setelah orangnya sekali terlihat.
+    const here = seen ? seen[j] : (track[j] !== null && track[j] !== undefined);
+    if (here) return track[j];
+  }
+  return null;
+}
+
+/**
+ * Rentang waktu di mana seseorang benar-benar terlihat.
+ *
+ * Dipakai lajur bingkai di linimasa: tanpa gambaran ini, menaruh tanda berarti
+ * menebak — pengguna tidak punya cara tahu bahwa orang yang ditunjuknya sedang
+ * tidak ada di kamera pada detik itu.
+ */
+export function personSpans(reframe, index, hold = PERSON_HOLD) {
+  const track = reframe?.people?.[index];
+  if (!track?.length) return [];
+  const fps = reframe?.people_fps || 8;
+  const seen = reframe?.people_seen?.[index];
+  const present = track.map((v, i) => (
+    seen ? !!seen[i] : (v !== null && v !== undefined)));
+  const gap = Math.ceil(hold * fps);
+  const spans = [];
+  let open = null;
+  let missing = 0;
+  present.forEach((here, i) => {
+    if (here) {
+      if (open === null) open = i;
+      missing = 0;
+    } else if (open !== null) {
+      missing += 1;
+      if (missing > gap) {
+        spans.push([open / fps, (i - missing + 1) / fps]);
+        open = null;
+      }
+    }
+  });
+  if (open !== null) spans.push([open / fps, present.length / fps]);
+  return spans.filter(([a, b]) => b > a);
+}
+
+/** Orang yang ditunjuk tanda linimasa pada detik tertentu. */
+export function personKeyAt(keys, t) {
+  if (!keys?.length) return null;
+  let active = null;
+  for (const k of keys) {
+    if (k.t <= t + 1e-6) active = k;
+    else break;
+  }
+  return active ? active.person : null;
+}
+
+/** Menyisipkan tanda baru dan membuang tanda lain pada detik yang sama. */
+export function withPersonKey(keys, t, person) {
+  const at = Math.max(0, Math.round(t * 100) / 100);
+  return [...(keys ?? []).filter((k) => Math.abs(k.t - at) > 0.05), { t: at, person }]
+    .sort((a, b) => a.t - b.t);
+}
+
 /**
  * Posisi mendatar bingkai pengikut pada detik tertentu, dalam persen.
  *

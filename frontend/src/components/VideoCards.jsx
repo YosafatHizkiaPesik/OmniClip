@@ -1,6 +1,6 @@
 import React from 'react';
 import { Play } from 'lucide-react';
-import { formatDurationHuman, formatTime } from '../utils/timeFormat';
+import { formatTime } from '../utils/timeFormat';
 
 /**
  * Kartu video yang dipakai bersama oleh feed dan daftar rekomendasi.
@@ -124,9 +124,12 @@ export function VideoCard({ video, isSelected, onClick }) {
             {video.channel}
           </div>
           <div style={{ fontSize: '0.72rem', color: 'var(--ink-3)', marginTop: '1px', display: 'flex', gap: '6px' }}>
+            {/* Durasi TIDAK diulang di sini: lencana di pojok gambar sudah
+                menyebutkannya, dan menuliskannya dua kali dengan format berbeda
+                ("56:42" dan "56 mnt 42 dtk") membuat keduanya terbaca seperti
+                dua angka yang berbeda. */}
             {video.views > 0 && <span>{formatViews(video.views)} tayangan</span>}
             {formatAge(video.upload_date) && <span>• {formatAge(video.upload_date)}</span>}
-            {video.duration > 0 && <span>• {formatDurationHuman(video.duration)}</span>}
           </div>
         </div>
       </div>

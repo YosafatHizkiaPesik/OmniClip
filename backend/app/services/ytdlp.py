@@ -1,3 +1,4 @@
+import re
 import os
 import json
 import subprocess
@@ -154,6 +155,7 @@ def search_youtube_videos(query: str, limit: int = 20, sort: str = "relevan"):
     })
 
     results = []
+    channels: list[tuple[str, str]] = []
     is_url = query.startswith("http://") or query.startswith("https://")
     sp = SEARCH_SORTS.get(sort)
     if is_url:
@@ -176,6 +178,15 @@ def search_youtube_videos(query: str, limit: int = 20, sort: str = "relevan"):
                     continue
                 video_id = entry.get('id', '')
                 if not video_id:
+                    continue
+                # Kanal (UC…) dan playlist (PL…) ikut terbawa hasil pencarian
+                # YouTube. Keduanya bukan video: kartunya tampil tanpa gambar,
+                # tanpa durasi, dan mengkliknya tidak menuju ke mana-mana.
+                # Id kanal dicatat karena justru itulah jalan ke video terbaru.
+                if _looks_like_channel(video_id):
+                    channels.append((video_id, entry.get('title') or ''))
+                    continue
+                if video_id.startswith('PL') or not entry.get('duration'):
                     continue
                 title = entry.get('title', 'Untitled')
                 url = entry.get('url') or entry.get('webpage_url') or f"https://www.youtube.com/watch?v={video_id}"
@@ -203,7 +214,68 @@ def search_youtube_videos(query: str, limit: int = 20, sort: str = "relevan"):
             # antara "tidak ada hasil" dan "YouTube memblokir kita".
             raise classify_ytdlp_error(e) from e
 
-    return results
+    # "Terbaru" dijawab oleh KANALNYA, bukan oleh pengurutan pencarian.
+    #
+    # Parameter urutan milik YouTube (sp=CAI…) ternyata tetap mencampur
+    # relevansi: mencari "raditya dika" lalu mengurutkan terbaru mengembalikan
+    # video seminggu lalu di posisi pertama, sementara kanalnya sendiri sudah
+    # mengunggah dua video sesudah itu — yang paling baru bahkan tidak ada di
+    # hasil pencarian sama sekali. Tab video sebuah kanal selalu urut dari yang
+    # terbaru, dan mengambilnya cuma butuh setengah detik.
+    if sort == "terbaru" and channels and not is_url:
+        fresh = _channel_latest(channels[0][0], limit)
+        if fresh:
+            seen = {v["id"] for v in fresh}
+            results = fresh + [v for v in results if v["id"] not in seen]
+
+    return results[:limit]
+
+
+def _looks_like_channel(ident: str) -> bool:
+    return ident.startswith("UC") and len(ident) == 24
+
+
+def _channel_latest(channel_id: str, limit: int = 20) -> list:
+    """
+    Video terbaru sebuah kanal, urut dari yang paling baru.
+
+    Dipakai untuk menjawab "terbaru" karena inilah satu-satunya sumber yang
+    benar-benar urut waktu. Pencarian YouTube tidak pernah menjanjikan itu.
+    """
+    opts = _base_opts()
+    opts.update({'extract_flat': 'in_playlist', 'skip_download': True,
+                 'playlistend': max(1, min(50, limit))})
+    url = f"https://www.youtube.com/channel/{channel_id}/videos"
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+    except Exception:
+        # Kanal yang tidak bisa dibaca bukan alasan mengosongkan hasil pencarian.
+        return []
+
+    out = []
+    for e in (info.get('entries') or []):
+        vid = (e or {}).get('id')
+        if not vid or not e.get('duration'):
+            continue
+        out.append({
+            "id": vid,
+            "title": e.get('title') or 'Untitled',
+            "url": f"https://www.youtube.com/watch?v={vid}",
+            "duration": e.get('duration') or 0,
+            # `info["title"]` adalah judul TAB ("Raditya Dika - Videos"),
+            # bukan nama kanalnya. Dipakai hanya sebagai upaya terakhir, dan
+            # akhiran tabnya dibuang.
+            "channel": (e.get('uploader') or e.get('channel')
+                        or (info.get('uploader') or info.get('channel'))
+                        or re.sub(r'\s*-\s*Videos$', '', info.get('title') or '')),
+            "views": e.get('view_count') or 0,
+            "thumbnail": (e.get('thumbnail')
+                          or (e.get('thumbnails', [{}])[-1].get('url') if e.get('thumbnails') else None)
+                          or f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg"),
+            "description": e.get('description') or '',
+        })
+    return out
 
 def _available_resolutions(info: dict) -> list:
     """
@@ -472,6 +544,16 @@ def list_local_downloads():
 # lebih baik kosong daripada menampilkan tanggal yang dikarang.
 UPLOAD_DATE_WORKERS = 8
 
+# Tanggal unggah yang sudah pernah diambil.
+#
+# Tanggal unggah sebuah video tidak pernah berubah, jadi mengambilnya dua kali
+# adalah pemborosan murni — dan pemborosan yang terasa, karena tiap pengambilan
+# berarti membuka halaman videonya. Dengan ini, mencari kata yang sama dua kali
+# atau kembali ke halaman pencarian membuat tanggalnya muncul seketika alih-alih
+# menyusul beberapa detik kemudian.
+_DATE_CACHE: dict[str, dict] = {}
+_DATE_CACHE_MAX = 2000
+
 
 def fetch_upload_dates(video_ids: list[str]) -> dict:
     """Mengambil tanggal unggah beberapa video sekaligus."""
@@ -480,6 +562,11 @@ def fetch_upload_dates(video_ids: list[str]) -> dict:
     ids = [v for v in dict.fromkeys(video_ids) if v][:50]
     if not ids:
         return {}
+
+    cached = {v: _DATE_CACHE[v] for v in ids if v in _DATE_CACHE}
+    ids = [v for v in ids if v not in cached]
+    if not ids:
+        return cached
 
     def one(vid: str):
         opts = _base_opts()
@@ -496,9 +583,13 @@ def fetch_upload_dates(video_ids: list[str]) -> dict:
             # Satu video yang gagal tidak boleh mengosongkan seluruh baris.
             return vid, None
 
-    out = {}
+    out = dict(cached)
     with ThreadPoolExecutor(max_workers=UPLOAD_DATE_WORKERS) as ex:
         for vid, data in ex.map(one, ids):
             if data and data.get("upload_date"):
                 out[vid] = data
+                _DATE_CACHE[vid] = data
+    if len(_DATE_CACHE) > _DATE_CACHE_MAX:
+        for key in list(_DATE_CACHE)[: len(_DATE_CACHE) - _DATE_CACHE_MAX]:
+            _DATE_CACHE.pop(key, None)
     return out

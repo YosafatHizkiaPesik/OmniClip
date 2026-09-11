@@ -230,8 +230,21 @@ a { color: var(--cue); text-underline-offset: 3px; text-decoration-thickness: 1p
 .field:focus { border-color: var(--reh); }
 
 /* ── Sistem balok ──────────────────────────────────────────────────────────── */
-.stave-plate { padding: 4px 0 6px; margin-bottom: 16px; }
-.stave-system { padding: 14px 0 6px; }
+.stave-plate { padding: 0 0 6px; margin-bottom: 16px; }
+.stave-head {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 8px 12px; border-bottom: 1px solid var(--rule-2);
+}
+.stave-scroll { overflow-x: auto; overflow-y: hidden; }
+.stave-inner { position: relative; }
+/* Kolom nama tetap menempel di kiri saat baloknya digulir: tanpa itu,
+   memperbesar berarti kehilangan satu-satunya penanda balok siapa yang
+   sedang dilihat. */
+.stave-scroll .stave-name {
+  position: sticky; left: 0; z-index: 4;
+  background: var(--plate);
+}
+.stave-system { padding: 20px 0 6px; }
 .stave-system + .stave-system { border-top: 1px solid var(--rule-2); }
 
 .stave-ticks {
@@ -262,6 +275,14 @@ a { color: var(--cue); text-underline-offset: 3px; text-decoration-thickness: 1p
   border-left: 1px solid; border-radius: 1px; cursor: pointer;
 }
 .stave-phrase:hover { filter: brightness(.94); }
+/* Pegangan ujung frasa: tempat batas klip diseret langsung di partitur. */
+.phrase-grip {
+  position: absolute; top: 0; bottom: 0; width: 9px;
+  cursor: ew-resize; z-index: 3;
+}
+.phrase-grip--l { left: -4px; }
+.phrase-grip--r { right: -4px; }
+.phrase-grip:hover { background: color-mix(in srgb, var(--reh) 55%, transparent); }
 
 /* Dinamika: simpangan dari garis tengah, bukan gelombang amplitudo. */
 .stave-row--dyn .stave { height: 30px; }
@@ -284,10 +305,202 @@ a { color: var(--cue); text-underline-offset: 3px; text-decoration-thickness: 1p
   border-top: 2px solid var(--hl); border-bottom: 2px solid var(--hl);
   transition: transform .42s cubic-bezier(.16, 1, .3, 1), opacity .2s ease;
 }
+/* Garis main.
+   Sebelumnya ini garis 2px tanpa kepala dan tanpa angka: secara teknis ada,
+   tapi tidak menjawab pertanyaan yang ditanyakan orang saat melihat linimasa —
+   "saya sedang di menit ke berapa". Kepala dan jamnya yang menjawab itu. */
 .playline {
-  position: absolute; top: -3px; bottom: -3px; left: 0; width: 2px;
+  position: absolute; top: -14px; bottom: -3px; left: 0; width: 2px;
+  margin-left: -1px;
   background: var(--reh);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--plate) 60%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--plate) 70%, transparent);
+}
+.playline::before {
+  content: ''; position: absolute; top: 0; left: 50%;
+  transform: translateX(-50%);
+  border-left: 6px solid transparent; border-right: 6px solid transparent;
+  border-top: 8px solid var(--reh);
+}
+.playline-clock {
+  /* Cukup tinggi untuk duduk di baris tanda waktu, tidak lebih: lebih tinggi
+     lagi dan ia terpotong oleh wadah gulir sistemnya. */
+  position: absolute; top: -22px; left: 0; transform: translateX(-50%);
+  padding: 2px 6px; border-radius: var(--r-sm);
+  background: var(--reh); color: var(--reh-ink);
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  font-size: .68rem; font-weight: 700; white-space: nowrap;
+  pointer-events: none;
+}
+/* Rentang yang ditandai pengguna untuk klip buatan tangan. */
+.stave-mark {
+  position: absolute; top: 0; bottom: 0;
+  background: color-mix(in srgb, var(--cue) 12%, transparent);
+  border-left: 2px dashed var(--cue); border-right: 2px dashed var(--cue);
+}
+.stave-mark--open { border-right-style: none; }
+
+/* Membuat klip sendiri: tiga tombol yang hanya masuk akal bersama-sama, jadi
+   digambar sebagai satu kelompok bernama, bukan tiga tombol berdiri sendiri. */
+.cutter {
+  display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
+  padding: 5px 9px 5px 10px;
+  border: 1px solid var(--rule-2); border-radius: var(--r-sm);
+  background: var(--plate-2);
+}
+.cutter-title { color: var(--ink); }
+.cutter-btn { font-size: .76rem; padding: 6px 10px; min-height: 30px; }
+.cutter-range {
+  font-size: .74rem; color: var(--ink-2); min-width: 150px;
+}
+
+/* ── Linimasa satu klip ────────────────────────────────────────────────────── */
+.clip-tl { margin-bottom: 16px; }
+.clip-tl-body {
+  display: grid; grid-template-columns: 92px minmax(0, 1fr);
+  padding: 8px 12px 4px 0;
+}
+.clip-tl-names {
+  display: flex; flex-direction: column;
+  padding-left: 12px; border-right: 2px solid var(--ink);
+}
+.tl-name-spacer { height: 26px; }
+.tl-name {
+  display: flex; align-items: center; margin-bottom: 4px;
+  font-size: .58rem; font-weight: 700; letter-spacing: .07em;
+  text-transform: uppercase; color: var(--ink-2); white-space: nowrap;
+}
+.clip-tl-scroll { overflow-x: auto; overflow-y: hidden; padding: 0 0 4px 8px; }
+.clip-tl-lanes { position: relative; }
+
+.tl-zoom { padding: 4px 7px; min-height: 26px; }
+
+.tl-ruler {
+  position: relative; height: 20px; margin-bottom: 6px;
+  cursor: crosshair; user-select: none;
+}
+.tl-tick {
+  position: absolute; top: 6px; transform: translateX(1px);
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  font-size: .64rem; color: var(--ink-3); pointer-events: none;
+}
+.tl-tick i {
+  position: absolute; left: -1px; top: -6px; width: 1px; height: 5px;
+  background: var(--rule);
+}
+
+.tl-lane {
+  position: relative; height: 30px; margin-bottom: 4px;
+  background: var(--plate-2); border-radius: var(--r-sm);
+  cursor: crosshair;
+}
+.tl-block {
+  position: absolute; top: 3px; bottom: 3px;
+  display: flex; align-items: center; overflow: hidden;
+  border-radius: 1px; cursor: grab; z-index: 2;
+}
+.tl-block--seg {
+  background: color-mix(in srgb, var(--reh) 16%, var(--plate-3));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--reh) 55%, transparent);
+}
+/* Kartu judul: detik-detik yang DITAMBAHKAN di depan klip, bukan rekaman yang
+   dipotong. Biru terhadap merah potongan — dua hal berbeda pada satu sumbu
+   waktu harus terlihat berbeda, dan sumbu ini sudah memakai merah untuk
+   "bagian rekaman yang diambil". */
+.tl-block--card {
+  background: color-mix(in srgb, #3B82F6 22%, var(--plate-3));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #3B82F6 65%, transparent);
+  cursor: default;
+}
+.tl-block--card .tl-block-text { color: #93C5FD; font-weight: 600; }
+.tl-block--sub {
+  background: var(--plate-3); border-left: 3px solid var(--cue);
+  box-shadow: inset 0 0 0 1px var(--rule-2);
+}
+.tl-block--sub.is-on {
+  background: var(--hl-wash);
+  box-shadow: inset 0 0 0 1.5px var(--hl);
+}
+.tl-block--sub:hover { background: var(--plate); }
+/* Baris subtitle bersambungan, jadi blok berikutnya menutupi pegangan kanan
+   blok sebelumnya — pegangan itu ada, tergambar, dan tetap tidak bisa dipegang.
+   Yang sedang disentuh naik ke atas tetangganya supaya ujungnya bisa diraih. */
+.tl-block:hover, .tl-block.is-on { z-index: 6; }
+.tl-block-text {
+  padding: 0 8px; font-size: .68rem; color: var(--ink-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  pointer-events: none;
+}
+.tl-grip {
+  position: absolute; top: 0; bottom: 0; width: 8px;
+  cursor: ew-resize; z-index: 3;
+}
+.tl-grip--l { left: 0; }
+.tl-grip--r { right: 0; }
+.tl-grip:hover { background: color-mix(in srgb, var(--reh) 45%, transparent); }
+
+.tl-lane--frame { background: var(--plate-3); }
+
+/* Arah bingkai: rentang, bukan titik. Tiap potongan membawa nomornya sendiri,
+   jadi mengubah siapa yang diambil di detik tertentu adalah satu klik pada
+   nomor — bukan mengingat tanda mana yang berlaku di situ. */
+.tl-lane--aim { background: var(--plate-2); }
+.tl-block--aim {
+  border-radius: 1px; cursor: default;
+  display: flex; align-items: center; justify-content: flex-start;
+}
+/* Tombolnya menempel di tepi kiri layar selama potongannya masih terlihat.
+   Tanpa itu, memperbesar sampai sepersekian detik berarti tombol potongan yang
+   sedang dilihat tergulir keluar layar — justru pada perbesaran di mana orang
+   paling perlu mengubahnya. Sticky menjepitnya di dalam potongannya sendiri,
+   jadi ia tidak pernah menyeberang ke potongan tetangga. */
+.tl-aim-pick {
+  position: sticky; left: 4px;
+  display: flex; align-items: center; gap: 3px;
+  padding-left: 5px; flex: none; width: max-content;
+}
+.tl-aim-btn {
+  width: 19px; height: 19px; padding: 0; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  font: inherit; font-size: .66rem; font-weight: 750;
+  font-variant-numeric: tabular-nums; line-height: 1;
+  color: var(--ink-2); background: var(--plate-3);
+  border: 1px solid var(--rule); border-radius: 2px; cursor: pointer;
+}
+.tl-aim-btn:hover { border-color: var(--ink-3); color: var(--ink); }
+.tl-aim-btn.is-on { background: var(--ink); border-color: var(--ink); color: var(--plate); }
+.tl-aim-say {
+  padding-left: 4px; font-size: .66rem; font-weight: 650;
+  color: var(--ink-3); white-space: nowrap;
+}
+.tl-aim-btn--x { color: var(--ink-3); }
+.tl-aim-btn--x:hover { background: var(--danger); border-color: var(--danger); color: #fff; }
+/* `overflow: hidden` dari .tl-block DIBATALKAN di sini, dan itu yang membuat
+   tombol menempelnya bekerja: overflow menjadikan potongan ini wadah gulir
+   sendiri, sehingga tombol sticky di dalamnya menempel pada potongannya —
+   bukan pada layar — dan tetap tergulir keluar pandangan. Potongan yang terlalu
+   sempit untuk memuat tombolnya tidak menggambarnya sama sekali di JSX. */
+.tl-block--aim { overflow: visible; }
+.tl-name--aim { color: var(--ink); }
+.tl-cut { font-size: .72rem; padding: 4px 9px; min-height: 26px; flex: none; }
+.tl-seen {
+  position: absolute; top: 8px; bottom: 8px;
+  background: color-mix(in srgb, var(--entry) 34%, transparent);
+  border-radius: 1px; pointer-events: none;
+}
+.tl-head {
+  position: absolute; top: 0; bottom: 0; left: 0; width: 2px;
+  background: var(--reh); pointer-events: none; z-index: 5;
+}
+.tl-head-flag {
+  position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+  border-left: 5px solid transparent; border-right: 5px solid transparent;
+  border-top: 7px solid var(--reh);
+}
+
+.clip-tl-foot {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px; border-top: 1px solid var(--rule-2);
+  font-size: .74rem; line-height: 1.5; color: var(--ink-2);
 }
 
 /* ── Titik penutur ─────────────────────────────────────────────────────────── */
@@ -579,6 +792,13 @@ a { color: var(--cue); text-underline-offset: 3px; text-decoration-thickness: 1p
 .person-pin.is-on {
   background: var(--hl); color: #1A1400; border-color: #fff;
 }
+/* Ke sinilah bingkai sedang menoleh pada detik ini — bukan sepanjang klip.
+   Inilah gambar yang dicari orang saat bertanya "kenapa yang diam yang diambil". */
+.person-pin.is-aimed {
+  background: var(--hl); color: #1A1400; border-color: #fff;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--hl) 45%, transparent),
+              0 2px 8px rgba(0, 0, 0, .5);
+}
 .frame-rect.is-on { box-shadow: 0 0 0 1px rgba(0, 0, 0, .55), inset 0 0 0 2px rgba(255, 255, 255, .6); }
 .frame-rect-tag {
   position: absolute; left: -2px; top: -2px; padding: 2px 6px;
@@ -641,6 +861,16 @@ a { color: var(--cue); text-underline-offset: 3px; text-decoration-thickness: 1p
   }
   .stave-lines { top: 9px; height: 26px; }
   .stave-name { font-size: .58rem; letter-spacing: .06em; }
+
+  /* Linimasa klip: kolom nama menyempit, dan keterangan panjang di kepala
+     pelat dilepas — di lebar jempol ia memakan dua baris sebelum lajurnya
+     sendiri sempat terlihat. */
+  .clip-tl-body { grid-template-columns: 52px minmax(0, 1fr); padding-right: 8px; }
+  .clip-tl-names { padding-left: 8px; }
+  .tl-name { font-size: .5rem; letter-spacing: .04em; }
+  .clip-tl .plate-head > span:nth-child(2) { display: none; }
+  .cutter { width: 100%; }
+  .cutter-range { min-width: 0; flex: 1 1 100%; }
   .btn, .btn-primary, .btn-secondary { min-height: 42px; }
   .field, .search-input { font-size: 16px; }   /* 16px: iOS tidak ikut men-zoom */
   .work-block .actions { width: 100%; }

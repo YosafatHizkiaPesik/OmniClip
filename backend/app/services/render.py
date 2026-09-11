@@ -27,6 +27,7 @@ from ..config import CLIPS_DIR, FONTS_DIR, LOGS_DIR
 from .paths import extract_id_from_filename
 from .reframe import build_reframe_filter, plan_reframe
 from .subtitles import CaptionStyle, HookSpec, build_ass
+from . import titlecard as tc
 
 log = logging.getLogger("omniclip.render")
 
@@ -323,6 +324,10 @@ def render_clip(
     frame_mode: str = "smart",
     frame_layout: Optional[dict] = None,
     lock_person: Optional[int] = None,
+    # Tanda linimasa dari pengguna: [{t, person}] dalam waktu KLIP.
+    person_keys: Optional[list] = None,
+    # Kartu judul di awal klip. Disusun terpisah lalu disambung di sini.
+    title_card: Optional[dict] = None,
     loudnorm: bool = True,
     video_id: str = "",
     title: str = "",
@@ -399,7 +404,8 @@ def render_clip(
             if any(f.get("follow") for f in layout_frames):
                 layout_plan = plan_reframe(str(src), segments,
                                            aspect_ratio=aspect_ratio, track_only=True,
-                                           speaker_turns=speaker_turns)
+                                           speaker_turns=speaker_turns,
+                                           person_keys=person_keys)
                 if layout_plan is not None:
                     face_coverage = layout_plan.face_coverage
                 if layout_plan is not None and not layout_plan.centers:
@@ -429,7 +435,8 @@ def render_clip(
 
         if frame_mode == "smart":
             plan = plan_reframe(str(src), segments, aspect_ratio=aspect_ratio,
-                                speaker_turns=speaker_turns, lock_person=lock_person)
+                                speaker_turns=speaker_turns, lock_person=lock_person,
+                                person_keys=person_keys)
             if plan is not None:
                 face_coverage = plan.face_coverage
             if plan is not None and plan.usable:
@@ -482,6 +489,23 @@ def render_clip(
             fonts = str(FONTS_DIR) if FONTS_DIR.is_dir() else None
             chain.append(f"ass=filename='{ass_arg}'" + (f":fontsdir='{fonts}'" if fonts else ""))
 
+        # --- Kartu judul ------------------------------------------------------
+        # Disiapkan SEBELUM graf dirangkai karena panjangnya menentukan durasi
+        # total, dan durasi total dipakai pelaporan kemajuan.
+        card_spec = tc.TitleCardSpec.from_payload(title_card)
+        # Font kartu mengikuti font subtitle klip kecuali kartunya menyebut
+        # fontnya sendiri. Pratinjau menggambar keduanya dengan font yang sama,
+        # jadi render harus begitu juga — kalau tidak, satu-satunya cara
+        # mengetahui hasilnya adalah dengan merender.
+        if not (title_card or {}).get("font"):
+            card_spec.font = (caption_style or CaptionStyle()).font
+        card = tc.plan_card(card_spec, workdir, out_w, out_h) if card_spec.enabled else None
+        card_notes = list(card.notes) if card else []
+        if card and card_spec.mode == "overlay":
+            # Judul yang menempel di atas klip berjalan hanyalah satu filter ass
+            # lagi di rantai yang sama — tidak ada waktu yang ditambahkan.
+            chain.append(tc.overlay_filter(card, str(FONTS_DIR) if FONTS_DIR.is_dir() else None))
+
         graph = seg_graph
         if layout_graph:
             graph += ";" + layout_graph
@@ -500,6 +524,24 @@ def render_clip(
         if loudnorm:
             graph += f";{alabel}loudnorm=I=-16:TP=-1.5:LRA=11[aout]"
             aout = "[aout]"
+
+        # Kartu yang MENAMBAH waktu disambung paling akhir, sesudah subtitle dan
+        # normalisasi: latarnya diambil dari bingkai pertama aliran yang sudah
+        # jadi, jadi yang dibekukan adalah gambar yang benar-benar akan dilihat
+        # penonton — bukan bingkai mentah 16:9 yang tidak pernah muncul.
+        if card is not None and card.adds_time:
+            wav_index = None
+            if card.wav_path is not None and card.wav_path.is_file():
+                wav_index = len([x for x in inputs if x == "-i"])
+                inputs += ["-i", str(card.wav_path)]
+            fonts_dir = str(FONTS_DIR) if FONTS_DIR.is_dir() else None
+            graph += ";" + tc.video_filters(card, vout, "kartu", "utama",
+                                            out_w, out_h, fontsdir=fonts_dir)
+            graph += ";" + tc.audio_filters(card, wav_index, "kartua")
+            graph += (f";[kartu][kartua][utama]{aout}"
+                      f"concat=n=2:v=1:a=1[vjadi][ajadi]")
+            vout, aout = "[vjadi]", "[ajadi]"
+            total_duration += card.seconds
 
         cmd = ["ffmpeg", "-y", "-hide_banner", "-nostdin", "-loglevel", "error",
                "-progress", "pipe:1", *inputs,

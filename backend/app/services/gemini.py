@@ -21,6 +21,7 @@ import logging
 import time
 from typing import Optional
 
+from .clipmodel import normalize_hashtags
 from .heuristics import Candidate, make_hook_text
 from .transcript import Sentence
 
@@ -327,3 +328,122 @@ def _apply_selections(data: dict, pool: list[Candidate],
             break
 
     return out
+
+
+def rewrite_titles(
+    *,
+    clips: list[dict],
+    video_title: str,
+    api_key: str,
+    models: list[str],
+    model_override: Optional[str] = None,
+) -> tuple[dict[int, dict], Optional[str]]:
+    """
+    Menulis ulang judul dan tagar untuk klip yang sudah ada.
+
+    Terpisah dari `refine_candidates` karena pertanyaannya berbeda. Yang di sana
+    adalah "potongan mana yang layak"; yang di sini "bagaimana potongan ini
+    dijual". Klip yang tidak terpilih Gemini pada analisis awal keluar dengan
+    judul heuristik — sebuah kalimat dari klipnya sendiri: akurat, dan sama
+    sekali tidak memancing. Ini yang membetulkannya, tanpa menganalisis ulang
+    apa pun.
+
+    Mengembalikan ({indeks_klip: {title, hashtags}}, nama_model).
+    """
+    from google import genai
+    from google.genai import types
+
+    schema = types.Schema(
+        type=types.Type.OBJECT,
+        required=["clips"],
+        properties={
+            "clips": types.Schema(
+                type=types.Type.ARRAY,
+                items=types.Schema(
+                    type=types.Type.OBJECT,
+                    required=["index", "title", "hashtags"],
+                    properties={
+                        "index": types.Schema(type=types.Type.INTEGER),
+                        "title": types.Schema(type=types.Type.STRING),
+                        "hashtags": types.Schema(
+                            type=types.Type.ARRAY,
+                            items=types.Schema(type=types.Type.STRING)),
+                    },
+                ),
+            )
+        },
+    )
+
+    bagian = []
+    for c in clips:
+        teks = " ".join((l.get("text") or "") for l in (c.get("subtitles") or []))
+        bagian.append(f"[{c['index']}] {teks[:1500]}")
+
+    prompt = (
+        f"Judul video sumber: {video_title}\n\n"
+        "Untuk TIAP potongan di bawah, tulis satu judul pendek berbahasa Indonesia "
+        "untuk video vertikal, dan 5-8 tagar.\n\n"
+        "Aturan judul:\n"
+        "- Maksimal 60 karakter, tanpa tanda kutip, tanpa nama kanal.\n"
+        "- Harus memancing rasa penasaran TAPI tidak boleh menjanjikan apa pun "
+        "yang tidak ada di potongannya. Judul yang berlebihan membuat penonton "
+        "keluar di detik kelima, dan itu menurunkan videonya.\n"
+        "- Sebut hal paling khas dari potongan itu: angka, nama, klaim, atau "
+        "pertentangan yang benar-benar diucapkan.\n"
+        "- Hindari pembuka basa-basi seperti 'Ternyata', 'Inilah', 'Wajib tahu'.\n\n"
+        "Aturan tagar:\n"
+        "- Huruf kecil, tanpa spasi, diawali #.\n"
+        "- Sebutkan bidang bahasannya (#finansial, #komedi, #pasangan, dan "
+        "sejenisnya), bukan kata kerja percakapan.\n"
+        "- Hanya tagar yang benar-benar nyambung dengan isi potongan.\n\n"
+        "=== POTONGAN ===\n" + "\n\n".join(bagian)
+    )
+
+    config = types.GenerateContentConfig(
+        response_mime_type="application/json",
+        response_schema=schema,
+        temperature=0.75,      # judul butuh keberanian, bukan ketepatan
+        max_output_tokens=max(2048, 260 * len(clips)),
+        system_instruction=SYSTEM_ID,
+    )
+
+    # Batas waktu WAJIB ada di sini.
+    #
+    # Tanpa itu satu panggilan yang tidak pernah dijawab menggantung selamanya:
+    # job-nya berhenti di 20% tanpa pesan galat, lajur `net` ikut tertahan, dan
+    # satu-satunya cara keluar adalah menghidupkan ulang server. Terlihat sendiri
+    # saat menulis fungsi ini — job pertama menggantung lebih dari lima menit.
+    client = genai.Client(
+        api_key=api_key,
+        http_options=types.HttpOptions(timeout=90_000),   # milidetik
+    )
+    if model_override:
+        models = [model_override] + [m for m in models if m != model_override]
+
+    last: Optional[Exception] = None
+    for model in models:
+        try:
+            resp = client.models.generate_content(
+                model=model, contents=prompt, config=config)
+            data = json.loads(resp.text)
+        except Exception as e:      # model penuh, dipensiunkan, atau JSON rusak
+            last = e
+            log.warning("Menulis ulang judul gagal di %s: %s", model, e)
+            continue
+
+        out: dict[int, dict] = {}
+        for row in (data.get("clips") or []):
+            try:
+                idx = int(row["index"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            judul = str(row.get("title") or "").strip().strip('"')[:100]
+            tags = normalize_hashtags(row.get("hashtags") or [])
+            if judul:
+                out[idx] = {"title": judul, "hashtags": tags}
+        if out:
+            return out, model
+
+    if last:
+        raise last
+    raise RuntimeError("Gemini tidak mengembalikan judul apa pun.")

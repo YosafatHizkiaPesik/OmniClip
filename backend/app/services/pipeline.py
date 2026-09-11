@@ -168,6 +168,8 @@ def run_render(ctx: JobContext) -> dict:
         frame_mode=frame_mode,
         frame_layout=ctx.payload.get("frame_layout"),
         lock_person=ctx.payload.get("lock_person"),
+        person_keys=ctx.payload.get("person_keys"),
+        title_card=ctx.payload.get("title_card"),
         video_id=video_id,
         on_progress=on_progress,
         should_cancel=lambda: ctx.cancelled,
@@ -486,6 +488,87 @@ def run_auto_clip(ctx: JobContext) -> dict:
             os.rmdir(tmpdir)
         except OSError:
             pass
+
+
+def run_retitle(ctx: JobContext) -> dict:
+    """
+    payload: {video_id, only_weak}
+
+    Menulis ulang judul dan tagar untuk klip yang sudah ada, tanpa menyentuh
+    batas klip, subtitle, atau apa pun yang lain. Klip yang tidak terpilih
+    Gemini pada analisis awal keluar dengan judul heuristik — kalimat dari
+    klipnya sendiri, akurat dan sama sekali tidak memancing.
+    """
+    from ..config import GEMINI_MODELS, get_env_api_key
+    from ..repos import analyses as analyses_repo
+    from .gemini import rewrite_titles
+
+    video_id = ctx.payload["video_id"]
+    only_weak = bool(ctx.payload.get("only_weak", True))
+
+    key = ctx.payload.get("api_key") or get_env_api_key() or ""
+    if not key:
+        raise RuntimeError("Kunci Gemini belum diisi di Pengaturan.")
+
+    cached = analyses_repo.latest_for_video(video_id)
+    if not cached:
+        raise RuntimeError("Video ini belum punya analisis.")
+    result = cached["result"]
+    clips = result.get("clips") or []
+
+    target = [
+        {**c, "index": i}
+        for i, c in enumerate(clips)
+        if not only_weak or c.get("source") != "gemini" or not (c.get("title") or "").strip()
+    ]
+    if not target:
+        ctx.progress(1.0, stage="done", message="Semua judul sudah ditulis Gemini.")
+        return {"changed": 0}
+
+    ctx.progress(0.2, stage="gemini",
+                 message=f"Menulis ulang {len(target)} judul…")
+    fresh, model = rewrite_titles(
+        clips=target, video_title=result.get("title") or "",
+        api_key=key, models=GEMINI_MODELS,
+        model_override=ctx.payload.get("gemini_model") or None,
+    )
+
+    for idx, row in fresh.items():
+        if 0 <= idx < len(clips):
+            clips[idx]["title"] = row["title"]
+            if row.get("hashtags"):
+                clips[idx]["hashtags"] = row["hashtags"]
+            clips[idx]["title_source"] = "gemini"
+
+    result["clips"] = clips
+    analyses_repo.replace_result(cached["id"], result)
+    ctx.progress(1.0, stage="done",
+                 message=f"{len(fresh)} judul ditulis ulang oleh {model}.")
+    return {"changed": len(fresh), "model": model}
+
+
+def run_tts_voice(ctx: JobContext) -> dict:
+    """
+    Mengunduh suara pembaca judul.
+
+    Berkasnya 63 MB dan hanya perlu sekali. Dijadikan job supaya kemajuannya
+    terlihat dan supaya ia tidak pernah berjalan diam-diam di tengah render —
+    unduhan yang muncul tanpa diminta di tengah pekerjaan lain adalah cara
+    tercepat membuat orang tidak percaya pada alat.
+    """
+    from . import tts
+
+    ctx.progress(0.05, stage="unduh", message="Mengambil suara pembaca judul…")
+    if tts.available():
+        ctx.progress(1.0, stage="done", message="Suara pembaca sudah ada.")
+        return {"available": True, "already": True}
+
+    ok = tts.download_voice(on_progress=lambda name: ctx.progress(
+        0.7, stage="unduh", message=f"{name} selesai diunduh."))
+    if not ok:
+        raise RuntimeError("Gagal mengunduh suara pembaca judul.")
+    ctx.progress(1.0, stage="done", message="Suara pembaca siap dipakai.")
+    return {"available": tts.available()}
 
 
 def run_diarize(ctx: JobContext) -> dict:
