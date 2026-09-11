@@ -103,9 +103,17 @@ export default function Editor({ project, onBack }) {
   const [dockH, setDockH] = useState(() => {
     const tersimpan = Number(localStorage.getItem('omniclip.dockH'));
     if (tersimpan >= DOCK_MIN) return tersimpan;
-    // Bawaannya sepertiga layar, dijepit supaya tetap masuk akal di layar
-    // sangat pendek maupun sangat tinggi.
-    return Math.round(Math.min(340, Math.max(220, window.innerHeight * 0.34)));
+    // Bawaannya 30% layar, dijepit di 190-300 piksel.
+    //
+    // Diturunkan dari 34% setelah diukur: pada layar 690 piksel, panggung dan
+    // kanvas sama-sama terbatas TINGGI, bukan lebar — sumurnya 745 piksel
+    // untuk video selebar 439, jadi 306 piksel menganggur di sisi yang tidak
+    // mengikat. Di keadaan itu satu-satunya cara membesarkan gambar adalah
+    // memberinya tinggi, dan tinggi itu hanya bisa datang dari dok. 190 piksel
+    // masih memuat penggaris, lajur potongan, dan lajur arah bingkai — bagian
+    // yang paling sering dipegang; sisanya digulir, dan siapa pun yang ingin
+    // linimasa lebih tinggi tinggal menariknya sekali.
+    return Math.round(Math.min(300, Math.max(190, window.innerHeight * 0.30)));
   });
 
   const dragDock = useCallback((e) => {
@@ -612,8 +620,7 @@ export default function Editor({ project, onBack }) {
     setSaving('running');
     try {
       await editor.saveClips();
-      setSaving('done');
-      setTimeout(() => setSaving(null), 2500);
+      setSaving(null);
     } catch {
       setSaving('failed');
     }
@@ -782,12 +789,25 @@ export default function Editor({ project, onBack }) {
               Drive
             </label>
           )}
+          {/* Tombol simpan yang menyebut KEADAAN, bukan sekadar kejadian.
+              
+              Sebelumnya ia berkata "Tersimpan" selama 2,5 detik lalu kembali
+              jadi "Simpan" dengan sendirinya — dan dibaca begitu, ia terlihat
+              seperti sakelar yang membatalkan simpanannya sendiri. Padahal
+              editor sudah tahu jawabannya sepanjang waktu lewat `dirty`; yang
+              kurang cuma menampilkannya. Sekarang: ada yang belum tersimpan ->
+              "Simpan" dan bisa ditekan; tidak ada -> "Tersimpan" dan mati,
+              karena memang tidak ada yang perlu dikerjakan. */}
           <button className="btn-secondary" onClick={handleSaveClips}
-                  disabled={saving === 'running'}>
+                  disabled={saving === 'running' || (!editor.dirty && saving !== 'failed')}
+                  title={editor.dirty
+                    ? 'Menyimpan susunan klip — batas, subtitle, judul, dan tanda bingkai — ke penyimpanan lokal'
+                    : 'Semua perubahan sudah tersimpan'}>
             {saving === 'running' ? <Loader2 size={14} className="animate-spin" />
-              : saving === 'done' ? <CheckCircle2 size={14} style={{ color: 'var(--entry)' }} />
-                : <Save size={14} />}
-            {saving === 'done' ? 'Tersimpan' : 'Simpan'}
+              : saving === 'failed' ? <AlertTriangle size={14} style={{ color: 'var(--danger)' }} />
+                : editor.dirty ? <Save size={14} />
+                  : <CheckCircle2 size={14} style={{ color: 'var(--entry)' }} />}
+            {saving === 'failed' ? 'Gagal simpan' : editor.dirty ? 'Simpan' : 'Tersimpan'}
           </button>
           <button className="btn-primary" disabled={exporting || checked.size === 0}
                   onClick={handleExportSelected}>

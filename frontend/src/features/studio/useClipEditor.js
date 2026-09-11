@@ -356,6 +356,12 @@ export function useClipEditor() {
       next.delete(id);
       return next;
     });
+    // Menghapus klip juga perubahan yang belum tersimpan. Satu-satunya
+    // penyunting yang melewatkan penandaan ini — dan begitu tombol simpan
+    // benar-benar membaca `dirty`, kelalaian itu berubah dari tidak berakibat
+    // apa-apa jadi tombol yang berkata "Tersimpan" atas penghapusan yang belum
+    // pernah sampai ke penyimpanan.
+    setDirty(true);
   }, [selectedId]);
 
   return {

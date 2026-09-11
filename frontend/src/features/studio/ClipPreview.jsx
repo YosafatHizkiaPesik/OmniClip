@@ -1042,14 +1042,15 @@ export default function ClipPreview({
 
       <div className="preview-side">
       <div className="preview-controls">
-        <button className="btn-secondary" onClick={toggle} disabled={!src}
-                style={{ padding: '6px 14px' }}>
-          {playing ? <Pause size={14} /> : <Play size={14} />}
+        <button className="btn-secondary preview-btn" onClick={toggle} disabled={!src}
+                title={playing ? 'Jeda' : 'Putar klip dari posisi sekarang'}>
+          {playing ? <Pause size={13} /> : <Play size={13} />}
           {playing ? 'Jeda' : 'Putar'}
         </button>
-        <button className="btn-secondary" onClick={restart} disabled={!src}
-                style={{ padding: '6px 12px' }} aria-label="Ulang dari awal">
-          <RotateCcw size={14} />
+        <button className="btn-secondary preview-btn preview-btn--icon"
+                onClick={restart} disabled={!src}
+                title="Ulang dari awal klip" aria-label="Ulang dari awal">
+          <RotateCcw size={13} />
         </button>
         {/* Dua jam berjalan di layar ini sekaligus, dan tanpa nama keduanya
             tidak bisa dibedakan: yang ini menghitung dari awal KLIP, yang di

@@ -282,7 +282,31 @@ a { color: var(--cue); text-underline-offset: 3px; text-decoration-thickness: 1p
 }
 .phrase-grip--l { left: -4px; }
 .phrase-grip--r { right: -4px; }
-.phrase-grip:hover { background: color-mix(in srgb, var(--reh) 55%, transparent); }
+.phrase-grip:hover, .phrase-grip:active {
+  background: color-mix(in srgb, var(--reh) 55%, transparent);
+}
+
+/* Jam yang muncul selama sebuah ujung frasa diseret.
+   
+   Tanpa ini seretan tidak pernah menyebut angka, dan satu-satunya cara tahu
+   batasnya jatuh di menit ke berapa adalah melepasnya lalu melihat hasilnya —
+   lalu mengulang kalau meleset. Diletakkan di bawah frasa, bukan di atasnya,
+   supaya tidak bertabrakan dengan huruf latihan yang sudah duduk di sana. */
+.phrase-clock {
+  position: absolute; top: calc(100% + 4px); left: 0;
+  opacity: 0; pointer-events: none; white-space: nowrap; z-index: 8;
+  padding: 2px 6px; border-radius: var(--r-sm);
+  background: var(--reh); color: #fff;
+  font-size: .68rem; font-weight: 700;
+  box-shadow: var(--shadow-card);
+}
+/* Frasa yang sedang diseret naik ke atas tetangganya dan kehilangan
+   transisinya: transisi pada geometri membuat seretan tertinggal di belakang
+   jari, yang justru terbaca sebagai "kurang mulus". */
+.stave-phrase.is-dragging {
+  z-index: 7; transition: none;
+  box-shadow: inset 0 0 0 1.5px var(--reh);
+}
 
 /* Dinamika: simpangan dari garis tengah, bukan gelombang amplitudo. */
 .stave-row--dyn .stave { height: 30px; }
@@ -987,14 +1011,14 @@ body.is-studio .app-viewport,
      `--dock-h` dari komponennya.
      
      Angkanya dikalibrasi terhadap pengukuran, bukan dikarang: 160 piksel untuk
-     bilah atas dan bilah studio, 152 piksel untuk kolom kendali di samping
-     kanvas beserta jarak dan padding pelatnya. Taksiran tingginya sengaja
+     bilah atas dan bilah studio, 108 piksel untuk kolom kendali di samping
+     kanvas (74) beserta jarak dan padding pelatnya (34). Taksiran tingginya sengaja
      sedikit murah hati — kalau ia terlalu pelit, kolomnya menyempit lebih dulu
      dan kanvasnya ikut mengecil meski tingginya masih ada. */
   grid-template-columns:
     minmax(0, 1fr)
     clamp(230px,
-          calc((100dvh - 160px - var(--dock-h, 300px)) * 0.5625 + 152px),
+          calc((100dvh - 160px - var(--dock-h, 300px)) * 0.5625 + 108px),
           46%);
 }
 .studio-stage .frame-stage { min-height: 0; }
@@ -1150,13 +1174,22 @@ body.is-studio .app-viewport,
    selesai sekaligus. */
 .studio-stage .clip-preview { flex-direction: row; align-items: stretch; }
 .studio-stage .clip-preview-stage { flex: 1 1 auto; min-width: 0; }
+/* Kolom kendali dipersempit dari 118 ke 74 piksel.
+   
+   Tombolnya melebar penuh mengisi kolom, jadi lebar kolomlah yang menentukan
+   besarnya — dan besar itu dibayar langsung oleh lebar kanvas di sebelahnya,
+   satu-satunya tempat yang benar-benar dipakai menyunting. Putar dan ulang
+   tidak butuh lebar; keduanya sudah dikenali dari ikonnya. */
 .studio-stage .preview-side {
-  flex: none; width: 118px; justify-content: center;
+  flex: none; width: 74px; justify-content: center; gap: 6px;
 }
 .studio-stage .preview-controls {
-  flex-direction: column; align-items: stretch; gap: 7px;
+  flex-direction: column; align-items: stretch; gap: 5px;
 }
 .studio-stage .preview-controls > button { width: 100%; justify-content: center; }
+.studio-stage .preview-controls > span { font-size: .66rem; line-height: 1.3; }
+.preview-btn { padding: 5px 8px; min-height: 28px; font-size: .74rem; gap: 5px; }
+.preview-btn--icon { padding: 5px; }
 .studio-stage .preview-hint {
   white-space: normal; text-align: left; align-items: flex-start;
   font-size: .62rem; line-height: 1.35;

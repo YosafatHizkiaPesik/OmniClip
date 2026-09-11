@@ -37,6 +37,9 @@ function systemCountFor(width, duration) {
   return Math.max(1, Math.min(8, Math.ceil(duration / 900)));   // ~15 menit
 }
 
+/** Klip terpendek yang masih masuk akal, dalam detik. */
+const MIN_KLIP = 1.5;
+
 const TICK_STEPS = [0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800];
 const ZOOMS = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512];
 
@@ -268,27 +271,86 @@ export default function StaveSystem({
     if (!onTrimClip || busy || !duration) return;
     e.preventDefault();
     e.stopPropagation();
-    const board = e.currentTarget.closest('.stave-overlay')
-      ?? e.currentTarget.closest('.stave');
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+
+    const grip = e.currentTarget;
+    const phrase = grip.closest('.stave-phrase');
+    const board = grip.closest('.stave-overlay') ?? grip.closest('.stave');
     const rect = board.getBoundingClientRect();
     const segs = clip.segments;
     const last = segs.length - 1;
     const awal = segs[0].start;
     const akhir = segs[last].end;
+    // Awal halaman tempat frasa ini tergambar. Pada tampilan yang membungkus,
+    // satu jam rekaman dibagi jadi beberapa sistem bertumpuk.
+    const dari = Math.floor((edge === 'start' ? awal : akhir) / span) * span;
     const at = (clientX) => Math.max(0, Math.min(duration,
-      ((clientX - rect.left) / rect.width) * span + (Math.floor(
-        (edge === 'start' ? awal : akhir) / span) * span)));
+      ((clientX - rect.left) / rect.width) * span + dari));
 
+    const jam = phrase?.querySelector('.phrase-clock');
+    const kiri0 = phrase?.style.left;
+    const lebar0 = phrase?.style.width;
     let terakhir = edge === 'start' ? awal : akhir;
-    const onMove = (ev) => { terakhir = at(ev.clientX); };
+    let raf = 0;
+
+    /**
+     * Menggambar frasa pada posisi seretan SEKARANG.
+     *
+     * Sebelum ini tidak ada satu pun yang bergerak selama diseret: posisinya
+     * cuma dicatat di sebuah variabel, dan frasanya melompat ke tempat barunya
+     * setelah tetikus dilepas. Itu yang terbaca sebagai "kurang mulus", dan
+     * itu pula sebabnya tidak ada cara mengetahui sudah sampai di mana —
+     * karena memang tidak ada yang menunjukkannya.
+     *
+     * Ditulis langsung ke DOM, bukan lewat state React: satu seretan
+     * menghasilkan puluhan kejadian per detik, dan me-render ulang seluruh
+     * partitur di tiap kejadian akan membuat seretan yang barusan diperbaiki
+     * terasa berat lagi. Dijepit ke rAF supaya paling banyak satu gambar per
+     * bingkai layar.
+     */
+    const gambar = () => {
+      raf = 0;
+      if (!phrase) return;
+      const s = edge === 'start' ? Math.min(terakhir, akhir - MIN_KLIP) : awal;
+      const en = edge === 'end' ? Math.max(terakhir, awal + MIN_KLIP) : akhir;
+      const a = Math.max(s, dari);
+      const b = Math.min(en, dari + span);
+      phrase.style.left = `${((a - dari) / span) * 100}%`;
+      phrase.style.width = `${Math.max(0.6, ((b - a) / span) * 100)}%`;
+      if (jam) {
+        jam.textContent =
+          `${formatTime(s)} → ${formatTime(en)} · ${Math.round(en - s)} dtk`;
+      }
+    };
+
+    phrase?.classList.add('is-dragging');
+    if (jam) jam.style.opacity = '1';
+    gambar();
+
+    const onMove = (ev) => {
+      terakhir = at(ev.clientX);
+      if (!raf) raf = requestAnimationFrame(gambar);
+    };
     const onUp = () => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
+      if (raf) cancelAnimationFrame(raf);
+      phrase?.classList.remove('is-dragging');
+      if (jam) jam.style.opacity = '';
+      // Geometri yang ditulis tangan dikembalikan sebelum menyerahkan
+      // hasilnya: kalau seretannya ditolak karena terlalu pendek, React tidak
+      // akan menggambar ulang apa pun, dan frasanya akan tertinggal di tempat
+      // yang tidak pernah benar-benar jadi batas klipnya.
+      if (phrase) {
+        phrase.style.left = kiri0 ?? '';
+        phrase.style.width = lebar0 ?? '';
+      }
       if (edge === 'start' && Math.abs(terakhir - awal) > 0.15) {
-        onTrimClip(clip.clip_id, 0, Math.min(terakhir, segs[0].end - 1.5), segs[0].end);
+        onTrimClip(clip.clip_id, 0, Math.min(terakhir, segs[0].end - MIN_KLIP),
+                   segs[0].end);
       } else if (edge === 'end' && Math.abs(terakhir - akhir) > 0.15) {
         onTrimClip(clip.clip_id, last, segs[last].start,
-                   Math.max(terakhir, segs[last].start + 1.5));
+                   Math.max(terakhir, segs[last].start + MIN_KLIP));
       }
     };
     window.addEventListener('pointermove', onMove);
@@ -428,6 +490,11 @@ export default function StaveSystem({
                                     transform: clip.clip_id === selectedId ? 'scale(1.14)' : 'none',
                                     transition: 'transform .18s cubic-bezier(.16,1,.3,1)',
                                   }}>{letter}</span>
+                            {/* Pembacaan waktu selama diseret. Ada sepanjang
+                                waktu tapi tak terlihat, supaya seretan tidak
+                                perlu menyisipkan elemen baru ke DOM — dan
+                                isinya ditulis lewat ref, bukan state. */}
+                            <span className="phrase-clock tc" />
                             {/* Pegangan di kedua ujung frasa. Hanya digambar
                                 pada frasa yang benar-benar mulai dan berakhir
                                 di sistem ini: menyeret ujung yang terpotong
