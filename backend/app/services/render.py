@@ -392,6 +392,20 @@ def render_clip(
         # bercabang, jadi ia disusun terpisah dan menghasilkan label barunya
         # sendiri yang lalu dipakai rantai sisanya.
         layout_graph = ""
+        # Giliran bicara, dari subtitle yang sudah memuat label penutur hasil
+        # diarisasi. Waktunya sudah relatif terhadap klip, sama dengan waktu
+        # sampel deteksi wajah, jadi keduanya bisa langsung dibandingkan.
+        #
+        # Disusun SEBELUM percabangan tata letak. Sebelumnya ia dibuat di
+        # bawahnya padahal cabang tata letak sudah memakainya, yang berarti
+        # setiap bingkai pengikut di susunan buatan pengguna menabrak
+        # UnboundLocalError — bukan salah bingkai, melainkan gagal merender.
+        speaker_turns = [
+            (float(l["start"]), float(l["end"]), int(l["speaker"]))
+            for l in (subtitles or [])
+            if l.get("speaker") is not None and l.get("end") is not None
+        ]
+
         if frame_mode == "layout" and frame_layout and frame_layout.get("frames"):
             from .media import probe as _probe
             info = _probe(src)
@@ -423,15 +437,6 @@ def render_clip(
             )
             if layout_graph:
                 frame_used = "layout"
-
-        # Giliran bicara, dari subtitle yang sudah memuat label penutur hasil
-        # diarisasi. Waktunya sudah relatif terhadap klip, sama dengan waktu
-        # sampel deteksi wajah, jadi keduanya bisa langsung dibandingkan.
-        speaker_turns = [
-            (float(l["start"]), float(l["end"]), int(l["speaker"]))
-            for l in (subtitles or [])
-            if l.get("speaker") is not None and l.get("end") is not None
-        ]
 
         if frame_mode == "smart":
             plan = plan_reframe(str(src), segments, aspect_ratio=aspect_ratio,

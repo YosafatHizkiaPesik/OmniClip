@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft, Menu, X, Scissors, Type, Palette, Download, Loader2, CheckCircle2,
-  AlertTriangle, Crop, Plus, Trash2, Play, Save, Tag,
+  AlertTriangle, Crop, Plus, Trash2, Play, Save, Tag, Undo2, Redo2,
 } from 'lucide-react';
 import { apiGet, apiPost, downloadToDisk } from '../../lib/api';
 import { loadFonts } from '../../lib/fonts';
@@ -504,6 +504,8 @@ export default function Editor({ project, onBack }) {
     v.currentTime = t;
   }, [duration, insideClip]);
 
+  const saveRef = useRef(null);
+
   const togglePlay = useCallback(() => {
     const v = videoRef.current;
     if (!v) return;
@@ -530,7 +532,30 @@ export default function Editor({ project, onBack }) {
       const typing = el instanceof HTMLElement
         && (el.isContentEditable
           || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName));
-      if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (typing) return;
+
+      // Ctrl/Cmd ditangani LEBIH DULU. Penjaga sebelumnya memulangkan setiap
+      // kombinasi bertombol pengubah, yang berarti Ctrl+Z tidak pernah sampai
+      // ke sini sama sekali — bukan urung yang gagal, melainkan urung yang
+      // tidak pernah ada.
+      if (e.ctrlKey || e.metaKey) {
+        const k = e.key.toLowerCase();
+        if (k === 'z' && !e.shiftKey) {
+          e.preventDefault();
+          editor.undo();
+        } else if ((k === 'z' && e.shiftKey) || k === 'y') {
+          e.preventDefault();
+          editor.redo();
+        } else if (k === 's') {
+          e.preventDefault();
+          // Lewat ref, bukan sebutan langsung: penangannya baru dibuat jauh di
+          // bawah efek ini, dan menyebutnya di daftar dependensi akan menabrak
+          // TDZ saat render pertama.
+          if (editor.dirty) saveRef.current?.();
+        }
+        return;
+      }
+      if (e.altKey) return;
 
       const step = e.shiftKey ? 10 : 1;
       switch (e.key) {
@@ -576,7 +601,7 @@ export default function Editor({ project, onBack }) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [togglePlay, nudgePlayhead, seekSource, selected]);
+  }, [togglePlay, nudgePlayhead, seekSource, selected, editor]);
 
   /** Membuat klip dari penanda masuk/keluar, atau dari posisi playhead. */
   const createFromMarks = useCallback(async () => {
@@ -645,6 +670,7 @@ export default function Editor({ project, onBack }) {
       setSaving('failed');
     }
   }, [editor]);
+  saveRef.current = handleSaveClips;
 
   const renderPayload = useCallback((clip) => ({
     source_path: videoId,
@@ -818,6 +844,21 @@ export default function Editor({ project, onBack }) {
               kurang cuma menampilkannya. Sekarang: ada yang belum tersimpan ->
               "Simpan" dan bisa ditekan; tidak ada -> "Tersimpan" dan mati,
               karena memang tidak ada yang perlu dikerjakan. */}
+          {/* Urung dan ulang, terlihat sebagai tombol.
+              
+              Pintasannya sendiri sudah cukup bagi yang tahu pintasannya ada;
+              tombolnya di sini untuk yang tidak. Judulnya menyebutkan
+              pintasannya, jadi keduanya saling mengajarkan. */}
+          <button className="btn-secondary" onClick={editor.undo}
+                  disabled={!editor.canUndo}
+                  title="Urungkan suntingan terakhir (Ctrl+Z)">
+            <Undo2 size={14} />
+          </button>
+          <button className="btn-secondary" onClick={editor.redo}
+                  disabled={!editor.canRedo}
+                  title="Ulangi yang diurungkan (Ctrl+Shift+Z)">
+            <Redo2 size={14} />
+          </button>
           <button className="btn-secondary" onClick={handleSaveClips}
                   disabled={saving === 'running' || (!editor.dirty && saving !== 'failed')}
                   title={editor.dirty

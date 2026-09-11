@@ -207,7 +207,19 @@ export function SubtitlePanel({ clip, onUpdate, onRemove, style, onAutoSpeakers,
 
   const palette = style?.speaker_colors ?? DEFAULT_SPEAKER_COLORS;
   const colorOf = (i) => palette[i] ?? style?.primary ?? '#FFFFFF';
-  const total = Math.max(2, Math.min(8, speakerCount || 2));
+  // Langit-langit nomor orang TIDAK dikunci ke jumlah hasil deteksi.
+  //
+  // Sebelumnya ia persis sama dengan `speakerCount`, jadi ketika pemisahan
+  // suara menjawab "2", tombol nomor hanya berputar 1-2 dan orang ketiga
+  // sampai kelima tidak bisa ditandai sama sekali — bahkan secara manual.
+  // Itu membuat satu-satunya jalan keluar dari tebakan yang meleset ikut
+  // tertutup oleh tebakan itu sendiri.
+  //
+  // Sekarang selalu ada satu slot cadangan di atas nomor tertinggi yang sudah
+  // terpakai, jadi orang keempat dan kelima bisa dicapai hanya dengan terus
+  // mengklik, tanpa mendeteksi ulang lebih dulu.
+  const usedMax = lines.reduce((m, l) => Math.max(m, l.speaker || 0), 0);
+  const total = Math.min(8, Math.max(2, speakerCount || 2, usedMax + 1) + 1);
   const tally = lines.reduce((acc, l) => {
     const i = l.speaker || 0;
     acc[i] = (acc[i] || 0) + 1;
@@ -308,7 +320,7 @@ export function SubtitlePanel({ clip, onUpdate, onRemove, style, onAutoSpeakers,
               </button>
               <button
                 onClick={() => onUpdate(clip.clip_id, i, { speaker: (speaker + 1) % total })}
-                title={`Orang ${speaker + 1} — klik untuk ganti`}
+                title={`Orang ${speaker + 1} — klik untuk ganti (sampai ${total})`}
                 aria-label="Ganti penanda pembicara"
                 style={{
                   width: '20px', height: '20px', borderRadius: '50%', cursor: 'pointer',

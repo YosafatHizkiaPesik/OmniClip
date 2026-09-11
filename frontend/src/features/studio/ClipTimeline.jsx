@@ -325,11 +325,39 @@ export default function ClipTimeline({
     });
   }, [width, duration]);
 
+  // Tingkat zoom dicerminkan ke ref supaya beberapa kejadian roda dalam satu
+  // bingkai tetap menumpuk. Dibaca dari state, ketiganya akan melihat nilai
+  // lama yang sama dan hanya satu langkah yang jadi — gulir cepat lalu terasa
+  // seperti tidak menanggapi.
+  const zoomRef = useRef(zoom);
+  zoomRef.current = zoom;
+
   const zoomStep = useCallback((dir) => {
-    const i = ZOOMS.indexOf(zoom);
+    const cur = zoomRef.current;
+    const i = ZOOMS.indexOf(cur);
     const j = Math.max(0, Math.min(ZOOMS.length - 1, (i < 0 ? 0 : i) + dir));
-    if (ZOOMS[j] !== zoom) setZoomAround(ZOOMS[j]);
-  }, [zoom, setZoomAround]);
+    if (ZOOMS[j] === cur) return;
+    zoomRef.current = ZOOMS[j];
+    setZoomAround(ZOOMS[j]);
+  }, [setZoomAround]);
+
+  // Ctrl + roda tetikus memperbesar dan memperkecil di sini juga.
+  //
+  // Penyimak asli dengan passive:false, bukan onWheel React: wheel bersifat
+  // pasif secara bawaan, dan penangan pasif tidak boleh memanggil
+  // preventDefault — tanpa itu Ctrl+roda memperbesar seluruh halaman peramban
+  // alih-alih linimasanya.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return undefined;
+    const onWheel = (e) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      zoomStep(e.deltaY < 0 ? 1 : -1);
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [zoomStep]);
 
   /* ── Arah bingkai sebagai potongan ─────────────────────────────────────
      Inilah bentuk yang sebenarnya dicari: bukan deretan titik, melainkan

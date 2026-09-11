@@ -389,10 +389,17 @@ export default function StaveSystem({
   const step = TICK_STEPS.find((x) => (x / span) * drawW >= 68) ?? 1800;
   const dec = step >= 1 ? 0 : 1;
 
+  // Sama seperti di linimasa klip: tingkat zoom dicerminkan ke ref supaya
+  // beberapa kejadian roda dalam satu bingkai menumpuk, bukan saling menimpa.
+  const levelRef = useRef(zoom);
+  levelRef.current = zoom;
+
   const zoomStep = (dir) => {
-    const i = ZOOMS.indexOf(zoom);
+    const cur = levelRef.current;
+    const i = ZOOMS.indexOf(cur);
     const j = Math.max(0, Math.min(ZOOMS.length - 1, (i < 0 ? 0 : i) + dir));
-    if (ZOOMS[j] === zoom) return;
+    if (ZOOMS[j] === cur) return;
+    levelRef.current = ZOOMS[j];
     setZoom(ZOOMS[j]);
     // Dijangkarkan pada garis main, sama seperti linimasa klip: memperbesar
     // yang melompat ke awal rekaman adalah kebalikan dari yang diminta.
@@ -405,6 +412,26 @@ export default function StaveSystem({
       });
     });
   };
+
+  // Ctrl + roda tetikus memperbesar dan memperkecil.
+  //
+  // Dipasang sebagai penyimak asli, bukan lewat onWheel React: peramban
+  // memperlakukan wheel sebagai pasif secara bawaan, dan penangan pasif tidak
+  // boleh memanggil preventDefault — tanpa itu Ctrl+roda memperbesar seluruh
+  // halaman peramban, bukan linimasanya.
+  const zoomRef = useRef(zoomStep);
+  zoomRef.current = zoomStep;
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return undefined;
+    const onWheel = (e) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      zoomRef.current(e.deltaY < 0 ? 1 : -1);
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
 
   return (
     <div ref={wrapRef} className="plate stave-plate">

@@ -52,7 +52,7 @@ function retimeWords(line, text) {
 }
 
 export function useClipEditor() {
-  const [clips, setClips] = useState([]);
+  const [clips, setClipsRaw] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [checked, setChecked] = useState(() => new Set());
   const [dirty, setDirty] = useState(false);
@@ -64,6 +64,50 @@ export function useClipEditor() {
   // ketukan penyuntingan.
   const clipsRef = useRef([]);
 
+  // --- Riwayat untuk urung/ulang -------------------------------------------
+  //
+  // Dibungkus di SINI, bukan ditambahkan di tiap pemanggil. Setiap penyunting
+  // di berkas ini sudah memanggil `setClips`, jadi satu pembungkus menangkap
+  // semuanya sekaligus — dan yang lebih penting, penyunting yang ditambahkan
+  // nanti ikut tercatat tanpa perlu diingat.
+  //
+  // Yang dicatat hanya daftar klip. Posisi playhead, zoom, dan klip mana yang
+  // sedang dipilih sengaja TIDAK masuk: kalau ikut tercatat, Ctrl+Z pertama
+  // hanya akan memindahkan kursor dan terasa seperti tidak berfungsi.
+  const past = useRef([]);
+  const future = useRef([]);
+  const [historyTick, setHistoryTick] = useState(0);
+  const HISTORY_LIMIT = 80;
+
+  const setClips = useCallback((updater) => {
+    past.current.push(clipsRef.current);
+    if (past.current.length > HISTORY_LIMIT) past.current.shift();
+    future.current = [];
+    setHistoryTick((n) => n + 1);
+    setClipsRaw(updater);
+  }, []);
+
+  const undo = useCallback(() => {
+    if (!past.current.length) return false;
+    future.current.push(clipsRef.current);
+    setClipsRaw(past.current.pop());
+    setDirty(true);
+    setHistoryTick((n) => n + 1);
+    return true;
+  }, []);
+
+  const redo = useCallback(() => {
+    if (!future.current.length) return false;
+    past.current.push(clipsRef.current);
+    setClipsRaw(future.current.pop());
+    setDirty(true);
+    setHistoryTick((n) => n + 1);
+    return true;
+  }, []);
+
+  const canUndo = past.current.length > 0;
+  const canRedo = future.current.length > 0;
+
   const load = useCallback((videoId, incoming) => {
     videoIdRef.current = videoId;
     const prepared = (incoming || []).map((c, i) => ({
@@ -73,7 +117,12 @@ export function useClipEditor() {
         ? c.segments.map((s) => ({ ...s }))
         : [{ start: c.start_seconds, end: c.end_seconds }],
     }));
-    setClips(prepared);
+    // Memuat proyek bukan suntingan: kalau ia masuk riwayat, Ctrl+Z pertama
+    // akan mengosongkan seluruh daftar klip.
+    setClipsRaw(prepared);
+    past.current = [];
+    future.current = [];
+    setHistoryTick((n) => n + 1);
     setSelectedId(prepared[0]?.clip_id ?? null);
     setChecked(new Set(prepared.map((c) => c.clip_id)));
     setDirty(false);
@@ -366,6 +415,7 @@ export function useClipEditor() {
 
   return {
     clips, selected, selectedId, checked, dirty, busy,
+    undo, redo, canUndo, canRedo, historyTick,
     load, setSelectedId, updateClip, createClip, saveClips,
     nudgeSegment, setSegmentBounds, addSegment, removeSegment, recomputeSubtitles,
     updateSubtitle, moveSubtitle, removeSubtitle, autoSpeakers,

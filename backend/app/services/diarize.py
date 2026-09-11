@@ -75,15 +75,49 @@ WINDOW_BREAK_GAP = 1.6
 # orang pun tidak bisa mengatakannya.
 MAX_SPEAKERS = 8
 
-# Ambang penerimaan, dinyatakan sebagai SELISIH kemiripan: rata-rata kemiripan
-# di dalam kelompok terlemah dikurangi rata-rata kemiripan antar kelompok.
+# Selisih kemiripan: rata-rata kemiripan DI DALAM kelompok dikurangi rata-rata
+# kemiripan ANTAR kelompok. Angkanya bisa dibandingkan langsung dengan
+# kalibrasi model — sekitar 0,70 untuk orang yang sama pada jendela sepanjang
+# ini, sekitar 0,25 untuk orang berbeda.
 #
-# Ukuran ini dipilih menggantikan skor siluet karena siluet menjawab pertanyaan
-# yang salah — ia mengukur seberapa bulat bentuk kelompoknya, sementara yang
-# ingin diketahui adalah seberapa jauh dua suara berbeda. Diukur pada podcast
-# dua orang, siluetnya hanya 0,25 (terlihat seperti kegagalan) padahal
-# selisihnya +0,11 dan pemisahannya benar saat diperiksa terhadap transkrip.
+# Versi sebelumnya memakai kelompok TERLEMAH lawan pasangan TERDEKAT
+# (`min(dalam) - max(antar)`), dan itu keliru dengan cara yang mahal: jumlah
+# pasangan antar-kelompok tumbuh kuadratik (k=2 punya satu pasang, k=5 punya
+# sepuluh), sehingga `max(antar)` hampir pasti naik setiap kali k bertambah
+# sementara `min(dalam)` hampir pasti turun. Ukuran itu karena itu TIDAK PERNAH
+# bisa memilih k besar, apa pun isi rekamannya.
+#
+# Terukur pada podcast yang judulnya menyebut empat nama: ukuran lama memberi
+# +0,074 di k=2 lalu jatuh ke -0,013 di k=4, sehingga sistem menjawab "2
+# narasumber" untuk video berisi empat orang. Ukuran rata-rata pada rekaman
+# yang sama memuncak justru di k=4 (0,238 lawan 0,151 di k=2).
 MIN_SEPARATION = 0.06
+
+# Seberapa runtut label itu dalam waktu, dibandingkan label acak berproporsi
+# sama. Giliran bicara sungguhan berlangsung beberapa jendela berturut-turut;
+# pengelompokan derau berpindah-pindah tiap jendela.
+#
+# Ini pembanding yang sepenuhnya BEBAS dari ukuran kemiripan di atas — ia tidak
+# melihat embedding sama sekali, hanya urutan labelnya — jadi ketika keduanya
+# menunjuk k yang sama, kesepakatan itu berarti. Pada podcast empat nama tadi,
+# keduanya sama-sama memuncak di k=4.
+#
+# Acuan acaknya dihitung, bukan disimulasikan: untuk label bebas dengan
+# proporsi p, peluang dua tetangga berbeda adalah 1 - sum(p^2), jadi panjang
+# giliran yang diharapkan adalah kebalikannya.
+MIN_COHERENCE = 1.35
+
+# Nilai gabungan = pemisahan x keruntutan. Ambang bawahnya diukur terhadap
+# kontrol negatif: rekaman stand-up satu orang memberi 0,064 (keruntutan hanya
+# 1,08x, nyaris acak), sedangkan tiga rekaman banyak-orang memberi 0,318,
+# 0,494, dan 0,690. Celahnya lebar; 0,15 duduk di dalamnya dengan jarak aman ke
+# kedua sisi.
+MIN_QUALITY = 0.15
+
+# Penutur tidak ditambah hanya karena nilainya naik setitik. Tanpa syarat ini,
+# rekaman dua orang terpilih sebagai tiga orang dengan selisih nilai 3% — beda
+# yang tidak berarti apa-apa. Dengan 12%, ketiga rekaman uji terjawab benar.
+K_MARGIN = 0.12
 
 _session = None
 _banks: Optional[np.ndarray] = None
@@ -95,10 +129,22 @@ class Diarization:
     labels: list[int]          # satu label per span yang diminta
     speaker_count: int
     separation: float          # selisih kemiripan dalam-kelompok vs antar-kelompok
+    coherence: float = 0.0     # keruntutan waktu, kelipatan acuan acak
+    quality: float = 0.0       # pemisahan x keruntutan
+    requested: Optional[int] = None   # jumlah yang diminta pengguna, bila ada
 
     @property
     def confident(self) -> bool:
-        return self.speaker_count > 1 and self.separation >= MIN_SEPARATION
+        """
+        Layak dipercaya bila DUA ukuran yang saling bebas sama-sama lulus.
+
+        Bukan penjaga yang membatalkan hasil — labelnya tetap dikembalikan dan
+        tetap bisa disunting. Ini hanya menentukan apakah antarmuka menuliskan
+        "terdeteksi 4 narasumber" atau "± 4 narasumber".
+        """
+        return (self.speaker_count > 1
+                and self.quality >= MIN_QUALITY
+                and self.coherence >= MIN_COHERENCE)
 
 
 # --- Fitur --------------------------------------------------------------------
@@ -350,8 +396,10 @@ def _separation(x: np.ndarray, labels: np.ndarray, k: int) -> float:
     terukur — sekitar 0,70 untuk orang yang sama pada jendela sepanjang ini,
     dan sekitar 0,25 untuk orang berbeda.
 
-    Yang diambil adalah kelompok TERLEMAH, bukan reratanya: satu kelompok yang
-    isinya campuran sudah cukup untuk membuat pewarnaan per penutur menyesatkan.
+    Rata-rata lawan rata-rata. Alasan lengkapnya ada di catatan MIN_SEPARATION:
+    memakai kelompok terlemah lawan pasangan terdekat membuat ukuran ini
+    mustahil memilih lebih dari dua penutur, karena jumlah pasangan yang
+    dimaksimalkan bertambah kuadratik terhadap k.
     """
     if k < 2:
         return 0.0
@@ -364,7 +412,43 @@ def _separation(x: np.ndarray, labels: np.ndarray, k: int) -> float:
         withins.append(float(sim[np.triu_indices(len(sim), 1)].mean()))
     crosses = [float((x[labels == a] @ x[labels == b].T).mean())
                for a in range(k) for b in range(a + 1, k)]
-    return round(min(withins) - max(crosses), 4)
+    if not crosses:
+        return 0.0
+    return round(float(np.mean(withins)) - float(np.mean(crosses)), 4)
+
+
+def _coherence(labels: np.ndarray, k: int) -> float:
+    """
+    Panjang giliran rata-rata, dibagi panjang yang akan muncul dari label acak
+    berproporsi sama.
+
+    Nilai 1,0 berarti labelnya tidak lebih runtut daripada lemparan dadu — yang
+    persis seperti apa pengelompokan derau terlihat. Terukur: rekaman satu
+    orang yang dipaksa jadi lima kelompok memberi 1,08; rekaman banyak orang
+    yang benar memberi 1,9 sampai 2,8.
+    """
+    n = int(labels.size)
+    if n < 2 or k < 2:
+        return 0.0
+    lengths: list[int] = []
+    run = 1
+    for a, b in zip(labels[:-1], labels[1:]):
+        if a == b:
+            run += 1
+        else:
+            lengths.append(run)
+            run = 1
+    lengths.append(run)
+    share = np.bincount(labels, minlength=k) / n
+    expected = 1.0 / max(1e-9, 1.0 - float((share ** 2).sum()))
+    return round(float(np.mean(lengths)) / expected, 3)
+
+
+def _quality(x: np.ndarray, labels: np.ndarray, k: int) -> tuple[float, float, float]:
+    """Mengembalikan (nilai gabungan, pemisahan, keruntutan)."""
+    sep = _separation(x, labels, k)
+    coh = _coherence(labels, k)
+    return round(sep * coh, 4), sep, coh
 
 
 def _smooth(labels: np.ndarray, k: int, window: int = 3) -> np.ndarray:
@@ -451,53 +535,60 @@ def analyze_speakers(wav_path: str, spans: list[tuple[float, float]], *,
     centered = centered / np.maximum(norms, 1e-8)
 
     # Pilihan otomatis SELALU dihitung, bahkan ketika pengguna sudah menyebut
-    # jumlahnya. Ia dipakai sebagai pembanding, bukan pengganti.
-    auto_k, auto_labels, auto_score = 1, np.zeros(len(x), dtype=int), 0.0
+    # jumlahnya — dipakai untuk melaporkan, bukan untuk membantah.
+    #
+    # Tangganya serakah dan menaik: k bertambah hanya selama tiap penambahan
+    # memperbaiki nilai lebih dari K_MARGIN. Itu yang menjaga rekaman dua orang
+    # tidak terpeleset jadi tiga karena kenaikan nilai 3%, sekaligus
+    # membiarkan rekaman empat orang naik sampai empat (kenaikannya +61% lalu
+    # +22%).
+    auto_k, auto_labels = 1, np.zeros(len(x), dtype=int)
+    auto_score, auto_sep, auto_coh = 0.0, 0.0, 0.0
     for k in range(2, min(max_speakers, len(x) // 3) + 1):
         cand, _ = _kmeans(centered, k)
         if len(np.unique(cand)) < k:
             continue
-        gap = _separation(x, cand, k)
-        # Kelompok yang lebih banyak hampir selalu menurunkan selisih, jadi
-        # jumlah penutur bertambah hanya bila penambahannya benar-benar
-        # tidak merusak pemisahan.
-        if gap > auto_score + 1e-9:
-            auto_k, auto_labels, auto_score = k, cand, gap
+        value, sep, coh = _quality(x, cand, k)
+        if value > auto_score * (1.0 + K_MARGIN):
+            auto_k, auto_labels = k, cand
+            auto_score, auto_sep, auto_coh = value, sep, coh
 
     if speakers and speakers >= 2:
+        # Jumlah yang disebut pengguna DITURUTI.
+        #
+        # Versi sebelumnya memeriksanya dan diam-diam menggantinya ketika
+        # pemisahannya dinilai kurang. Niatnya melindungi — label yang buruk
+        # tetap terlihat seperti label — tapi akibatnya lebih buruk daripada
+        # yang dicegah: pengguna yang menghitung sendiri orang di layar
+        # memasukkan angkanya, sistem menjawab dengan angka lain tanpa
+        # mengatakan apa-apa yang terbaca, dan panel subtitle lalu hanya
+        # menawarkan sebanyak itu nomor untuk dipilih. Pengguna kehilangan
+        # jalan otomatis DAN jalan manual sekaligus.
+        #
+        # Yang tersisa dari niat itu tetap dipertahankan, tapi sebagai
+        # keterangan, bukan sebagai penolakan: `quality`, `coherence`, dan
+        # `confident` ikut dikembalikan, dan antarmuka menuliskan "±" ketika
+        # hasilnya lemah. Keputusannya tetap milik pengguna.
         chosen_k = max(2, min(speakers, max_speakers, len(x) // 3))
         labels, _ = _kmeans(centered, chosen_k)
-        score = _separation(x, labels, chosen_k)
-
-        # Jumlah yang diminta pengguna DIPERIKSA, tidak sekadar dituruti.
-        #
-        # Ini kegagalan yang paling mahal di seluruh berkas ini, karena ia tidak
-        # terlihat sebagai kegagalan. Terukur pada podcast lima orang: diminta
-        # lima, k-means memang mengembalikan lima kelompok — tapi selisihnya
-        # -0,080, artinya kelompoknya lebih buruk daripada pembagian acak.
-        # Labelnya tetap dipasang, tersimpan, dan diwarnai di layar, sehingga
-        # yang dilihat pengguna adalah warna penutur yang sepenuhnya derau dan
-        # harus dibetulkan satu per satu dengan tangan. Pilihan otomatis pada
-        # rekaman yang sama memberi dua penutur dengan selisih +0,074 — lemah,
-        # tapi benar.
-        #
-        # Lima orang di ruangan bukan berarti lima suara yang bisa dipisahkan:
-        # yang bisa dipisahkan adalah yang warna suaranya cukup berbeda dan
-        # cukup sering bicara. Kalau jumlah yang diminta tidak sanggup
-        # dipisahkan, yang dikembalikan adalah pemisahan terbaik yang sungguh
-        # ada — bukan angka yang diminta.
-        if score < MIN_SEPARATION and auto_score > score:
-            log.info("Diminta %d penutur (selisih %.3f) tapi suaranya tidak "
-                     "terpisah sejauh itu — memakai %d penutur (selisih %.3f)",
+        score, sep, coh = _quality(x, labels, chosen_k)
+        if chosen_k != auto_k:
+            log.info("Diminta %d penutur (nilai %.3f); tebakan otomatis %d "
+                     "(nilai %.3f) — yang diminta yang dipakai",
                      chosen_k, score, auto_k, auto_score)
-            chosen_k, labels, score = auto_k, auto_labels, auto_score
     else:
-        chosen_k, labels, score = auto_k, auto_labels, auto_score
+        chosen_k, labels = auto_k, auto_labels
+        score, sep, coh = auto_score, auto_sep, auto_coh
 
-    if chosen_k < 2 or score < MIN_SEPARATION:
-        log.info("Pemisahan suara lemah (selisih %.3f) — dianggap satu penutur", score)
+    # Satu-satunya keadaan yang masih membatalkan pemisahan adalah ketika
+    # pengguna TIDAK menyebut jumlah dan tebakan otomatisnya sendiri lemah.
+    if chosen_k < 2 or (not speakers and (score < MIN_QUALITY
+                                          or coh < MIN_COHERENCE)):
+        log.info("Pemisahan suara lemah (pisah %.3f, runtut %.2fx) — "
+                 "dianggap satu penutur", sep, coh)
         return Diarization(labels=[0] * len(spans), speaker_count=1,
-                           separation=score)
+                           separation=sep, coherence=coh, quality=score,
+                           requested=speakers)
 
     # Dihaluskan di ranah JENDELA lebih dulu, saat urutannya masih berurut
     # waktu: satu jendela nyasar di tengah giliran orang lain adalah derau, dan
@@ -526,6 +617,8 @@ def analyze_speakers(wav_path: str, spans: list[tuple[float, float]], *,
 
     smoothed = _smooth(np.asarray(out), chosen_k).tolist()
     switches = sum(1 for a, b in zip(smoothed, smoothed[1:]) if a != b)
-    log.info("Pemisahan penutur: %d orang, selisih %.3f, %d jendela, %d pergantian",
-             chosen_k, score, len(covers), switches)
-    return Diarization(labels=smoothed, speaker_count=chosen_k, separation=score)
+    log.info("Pemisahan penutur: %d orang, pisah %.3f, runtut %.2fx, nilai %.3f, "
+             "%d jendela, %d pergantian",
+             chosen_k, sep, coh, score, len(covers), switches)
+    return Diarization(labels=smoothed, speaker_count=chosen_k, separation=sep,
+                       coherence=coh, quality=score, requested=speakers)
