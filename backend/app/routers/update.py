@@ -45,5 +45,5 @@ async def pasang():
         raise AppError(f"Sudah memakai versi terbaru ({__version__}).",
                        code="UPDATE_SUDAH_TERBARU", status=409)
 
-    job_id = queue.enqueue("update", {}, dedupe_key="update:pasang")
-    return {"job_id": job_id, "versi": info["versi_terbaru"]}
+    job_id, dibuat = queue.enqueue("update", {}, dedupe_key="update:pasang")
+    return {"job_id": job_id, "created": dibuat, "versi": info["versi_terbaru"]}

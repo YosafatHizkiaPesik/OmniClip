@@ -17,7 +17,7 @@ yang isinya mengaku versi lama akan membuat setiap aplikasi menawarkan
 pembaruan yang sama berulang-ulang, selamanya.
 """
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 
 
 def sebagai_tuple(v: str) -> tuple[int, ...]:

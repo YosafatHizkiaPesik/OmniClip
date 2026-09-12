@@ -212,6 +212,12 @@ rem Penolong pemasangan OmniClip. Menunggu aplikasi mati, menukar folder,
 rem lalu menjalankan yang baru. Folder lama hanya DIGANTI NAMA: bila langkah
 rem terakhir gagal, yang lama masih utuh di sebelahnya.
 setlocal
+rem Port TIDAK diwariskan. Aplikasi yang sedang berjalan menuliskan port
+rem pilihannya ke lingkungan, dan penolong ini mewarisinya. Kalau diteruskan,
+rem aplikasi baru dipaksa memakai port yang barangkali belum sempat dilepas
+rem sistem - lalu mati saat start, tepat pada saat pengguna paling tidak bisa
+rem menebak apa yang terjadi. Dilepas, ia memilih port kosong sendiri.
+set OMNICLIP_PORT=
 echo Menunggu OmniClip menutup...
 for /l %%i in (1,1,120) do (
   tasklist /fi "PID eq {pid}" 2>nul | find "{pid}" >nul || goto :tukar
@@ -244,6 +250,8 @@ exit /b 0
     p = temp / "pasang.sh"
     p.write_text(f'''#!/bin/sh
 # Penolong pemasangan OmniClip. Lihat catatan di app/services/updater.py.
+# Port tidak diwariskan; lihat catatan pada versi Windows di atas.
+unset OMNICLIP_PORT
 echo "Menunggu OmniClip menutup..."
 i=0
 while kill -0 {pid} 2>/dev/null; do
