@@ -48,8 +48,25 @@ def _warn_low_memory() -> None:
 if __name__ == "__main__":
     import uvicorn
 
+    from app.config import HOST, PORT
+
     _prefer_self_for_oom()
     _warn_low_memory()
 
-    # Aplikasi lokal satu pengguna: jangan pernah dengar di 0.0.0.0.
-    uvicorn.run("app.main:app", host="127.0.0.1", port=8000, reload=False)
+    # Bawaannya tetap 127.0.0.1: hanya komputer ini. Untuk Cloudflare Tunnel
+    # nilai ini TIDAK perlu diubah — `cloudflared` menyambung dari dalam mesin,
+    # sehingga tidak ada port yang terbuka ke jaringan sama sekali. OMNICLIP_HOST
+    # hanya dipakai bila Anda memang ingin dijangkau dari LAN atau Tailscale.
+    if HOST not in ("127.0.0.1", "::1", "localhost"):
+        print(f"[OmniClip] Mendengar di {HOST}:{PORT} — bukan hanya komputer ini.",
+              file=sys.stderr)
+
+    uvicorn.run(
+        "app.main:app", host=HOST, port=PORT, reload=False,
+        # Di balik terowongan, alamat peer selalu 127.0.0.1 dan skemanya selalu
+        # http. Tanpa dua baris ini backend mengira sambungannya tidak aman,
+        # lalu menerbitkan cookie sesi tanpa flag Secure. Dipercaya hanya dari
+        # loopback, karena hanya dari sanalah `cloudflared` menyambung.
+        proxy_headers=True,
+        forwarded_allow_ips="127.0.0.1",
+    )

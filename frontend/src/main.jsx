@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import './index.css';
 import App from './App.jsx';
+import AuthGate from './components/AuthGate.jsx';
 import Home from './routes/Home.jsx';
 import Watch from './routes/Watch.jsx';
 import Studio from './routes/Studio.jsx';
@@ -14,6 +15,7 @@ import ProfileTab from './components/ProfileTab.jsx';
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <BrowserRouter>
+      <AuthGate>
       <Routes>
         <Route path="/" element={<App />}>
           <Route index element={<Home />} />
@@ -28,6 +30,7 @@ createRoot(document.getElementById('root')).render(
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>
+      </AuthGate>
     </BrowserRouter>
   </StrictMode>,
 );

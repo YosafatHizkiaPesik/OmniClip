@@ -150,31 +150,54 @@ bukaan mulut sebagai sumber jangkar kedua.
 
 ## 4. Online, hanya untuk yang diberi akses
 
-Belum dimulai. Yang sudah disepakati:
+**Sisi aplikasinya sudah selesai** (12 September 2026). Langkah-langkah
+menyalakannya ada di `PANDUAN-AKSES-JARAK-JAUH.md`.
 
-- Di-host di layanan **gratis**, bisa dibuka dari semua perangkat.
-- Hanya pemilik dan orang yang sengaja diberi tahu yang bisa mengakses.
+Yang sudah dikerjakan dan diuji:
 
-Hal yang perlu diputuskan saat mengerjakannya, dan sebaiknya diputuskan
-sebelum menulis kode:
+- **Gerbang kata sandi.** Satu middleware di depan seluruh `/api`, bawaannya
+  tertutup — jalur terbuka harus disebut namanya di `auth.OPEN_PATHS`. Turunan
+  PBKDF2-SHA256 bergaram, sesi berupa cookie ber-HMAC sehingga backend boleh
+  dimulai ulang tanpa melempar keluar HP yang sedang dipakai, dan mengganti
+  kata sandi mencabut seluruh sesi lama seketika. Terkunci 5 menit setelah 8
+  percobaan gagal.
+- **Frontend disajikan backend.** Bila `frontend/dist` ada, seluruh aplikasi
+  hidup di satu port: satu asal, satu terowongan, CORS tidak lagi ikut bermain.
+- **Kunci AI pindah ke basis data.** Dulu hanya ditulis ke `os.environ` proses,
+  jadi hilang setiap restart dan satu-satunya penyimpanan sebenarnya adalah
+  `backend/.env` — berkas yang tidak bisa disunting dari HP. Sekarang ada form
+  yang menyimpan, menampilkan asal kunci (`db` atau `env`), dan menghapus.
+  Pilihan model ikut pindah ke server, karena `localStorage` tidak mengikuti
+  pengguna ke perangkat lain.
+- **Pemulihan kata sandi** lewat `backend/reset_password.py`.
+- **Tidak diindeks:** `X-Robots-Tag: noindex`, `robots.txt` melarang semuanya.
 
-1. **Yang mana yang dionlinekan.** Aplikasi ini memuat unduhan video, render
-   ffmpeg, dan model ONNX. Hosting gratis biasanya tidak punya CPU, RAM, atau
-   ruang penyimpanan untuk itu. Kemungkinan besar yang di-host hanya
-   antarmukanya, sementara pekerjaan berat tetap di mesin sendiri lewat
-   terowongan (mis. Cloudflare Tunnel) — itu juga yang paling murah.
-2. **Cara membatasi akses.** Pilihan paling sederhana yang tetap aman:
-   satu kata sandi bersama, atau daftar email yang diizinkan.
-3. **Hal yang tidak boleh ikut terbuka.** `backend/.env` berisi `GEMINI_API_KEY`,
-   dan `OmniClip_Storage/google_client_secret.json` serta `google_token.json`
-   masing-masing cukup untuk mengunggah ke kanal YouTube pemilik. Ketiganya
-   sudah diabaikan git dan berizin 600; saat dionlinekan, ketiganya tidak boleh
-   ikut ter-deploy dan tidak boleh bisa dibaca lewat jaringan.
-4. **CORS dan alamat bind.** Sekarang backend sengaja hanya mendengar di
-   `127.0.0.1` dan CORS-nya dikunci ke `localhost:5173`. Keduanya harus diubah
-   dengan sadar, bukan dilonggarkan jadi `*`.
+Yang diuji, bukan diasumsikan:
 
----
+| uji | hasil |
+|---|---|
+| `/api/settings` tanpa sesi | 401 |
+| `/api/media/...` dan `/api/uploads/...` tanpa sesi | 401 |
+| sesi bertahan setelah backend dimulai ulang | ya |
+| ganti kata sandi -> cookie lama | 401 |
+| `../backend/.env` lewat rute SPA dan lewat `/api/media`, `/api/file` | tidak ada yang bocor |
+| layar masuk di peramban, 1280px dan 390px | lolos, tanpa galat konsol |
+
+### Yang belum
+
+1. **Domain.** Terowongan beralamat tetap dan Cloudflare Access hanya bisa
+   dipasang pada domain yang dikendalikan di Cloudflare: ± Rp 170.000/tahun.
+   Terowongan cepat tanpa domain tidak bisa dipasangi Access, jadi bukan
+   pilihan.
+2. **Tampilan untuk layar HP.** Rute mobile lolos potret, tapi studio ini
+   dirancang untuk layar lebar dan belum pernah benar-benar dipakai menyunting
+   dari HP.
+3. **Cookies YouTube belum bisa dipasang dari antarmuka** — masih lewat
+   variabel lingkungan `OMNICLIP_COOKIES_FILE`. Ini yang paling mungkin
+   dibutuhkan justru saat sedang jauh dari komputernya.
+4. **Komputer harus menyala.** Kalau ini jadi penghalang, barulah VPS masuk
+   hitungan (Hetzner 2 inti ± Rp 60–68 ribu/bulan) — dengan catatan unduhan
+   YouTube dari IP pusat data jauh lebih sering diblokir.
 
 ## Catatan cara kerja yang terbukti mahal kalau dilanggar
 

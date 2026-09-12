@@ -46,13 +46,21 @@ async function toApiError(res) {
 async function request(path, options = {}) {
   let res;
   try {
-    res = await fetch(`${BASE}${path}`, options);
+    // credentials same-origin: cookie sesi ikut terkirim. Ini bawaan fetch
+    // modern, ditulis eksplisit karena gerbang masuk bergantung padanya.
+    res = await fetch(`${BASE}${path}`, { credentials: 'same-origin', ...options });
   } catch (err) {
     if (err.name === 'AbortError') throw err;
     throw new ApiError(
       'Tidak dapat menghubungi server. Pastikan backend berjalan di port 8000.',
       { code: 'NETWORK' },
     );
+  }
+  if (res.status === 401) {
+    // Sesi berakhir di tengah pemakaian — cookie kedaluwarsa, atau kata sandi
+    // diganti dari perangkat lain. Tanpa pemberitahuan ini, gejalanya adalah
+    // setiap tombol berhenti bekerja tanpa alasan yang terlihat.
+    window.dispatchEvent(new CustomEvent('omniclip:auth-required'));
   }
   if (!res.ok) throw await toApiError(res);
   if (res.status === 204) return null;
@@ -107,7 +115,7 @@ export function fileUrl(category, fileName) {
  * Rutinitas ini sebelumnya disalin-tempel di 4 komponen.
  */
 export async function downloadToDisk(category, fileName) {
-  const res = await fetch(fileUrl(category, fileName));
+  const res = await fetch(fileUrl(category, fileName), { credentials: 'same-origin' });
   if (!res.ok) throw await toApiError(res);
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);

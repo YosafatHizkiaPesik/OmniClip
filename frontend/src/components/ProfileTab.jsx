@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import {
-  KeyRound, Loader2, Sun, Moon, Settings, Eye, EyeOff, Info,
+  KeyRound, Loader2, Sun, Moon, Eye, EyeOff, Info,
   CheckCircle2, AlertTriangle, Cookie, Sparkles, Scissors, Mic,
+  Trash2,
 } from 'lucide-react';
-import { apiGet, apiPost } from '../lib/api';
+import { apiDelete, apiGet, apiPost } from '../lib/api';
 import GoogleAccountCard from './GoogleAccountCard';
+import SecurityCard from './SecurityCard';
 
 // Bagian pada satu lembar bergaris, bukan kartu di atas kartu. Tumpukan kartu
 // ikon+judul+teks sebagai struktur halaman adalah wadah paling malas yang ada,
@@ -42,6 +44,7 @@ export default function ProfileTab() {
   // bersama setiap permintaan auto-clip.
   const [models, setModels] = useState(null);
   const [model, setModel] = useState(() => localStorage.getItem('omniclip_gemini_model') || '');
+  const [deletingKey, setDeletingKey] = useState(false);
   const [modelsError, setModelsError] = useState(null);
   // Preferensi pengklipan. Dulu tinggal di halaman tonton, yang membuat layar
   // itu penuh pilihan yang harus dibaca ulang setiap membuka video padahal
@@ -55,8 +58,17 @@ export default function ProfileTab() {
 
   const loadSettings = async () => {
     try {
-      setSettings(await apiGet('/settings'));
+      const next = await apiGet('/settings');
+      setSettings(next);
       setSettingsError(null);
+      // Pilihan model tinggal di server sekarang. Dulu ia hanya di localStorage,
+      // yang berarti memilih model di laptop tidak berpengaruh apa pun saat
+      // aplikasi yang sama dibuka dari HP.
+      if (next.ai_model !== undefined) {
+        setModel(next.ai_model || '');
+        if (next.ai_model) localStorage.setItem('omniclip_gemini_model', next.ai_model);
+        else localStorage.removeItem('omniclip_gemini_model');
+      }
     } catch (err) {
       setSettingsError(err.message);
     }
@@ -95,6 +107,10 @@ export default function ProfileTab() {
     setModel(value);
     if (value) localStorage.setItem('omniclip_gemini_model', value);
     else localStorage.removeItem('omniclip_gemini_model');
+    // Disimpan juga di server supaya berlaku di semua perangkat. Kegagalannya
+    // tidak perlu mengganggu: salinan di peramban ini sudah cukup untuk
+    // permintaan yang dikirim dari sini.
+    apiPost('/settings/model', { model: value }).catch(() => {});
   };
 
   useEffect(() => {
@@ -107,9 +123,10 @@ export default function ProfileTab() {
     setSavingKey(true);
     setFeedback(null);
     try {
-      await apiPost('/settings/api-key', { api_key: apiKey.trim() });
+      const res = await apiPost('/settings/api-key',
+        { api_key: apiKey.trim(), provider: settings?.ai_provider || 'gemini' });
       setApiKey('');
-      setFeedback({ kind: 'ok', text: 'API Key Gemini tersimpan untuk sesi ini.' });
+      setFeedback({ kind: 'ok', text: res.message || 'API key tersimpan.' });
       loadSettings();
     } catch (err) {
       setFeedback({ kind: 'error', text: err.message });
@@ -117,6 +134,25 @@ export default function ProfileTab() {
       setSavingKey(false);
     }
   };
+
+  const handleDeleteApiKey = async () => {
+    setDeletingKey(true);
+    setFeedback(null);
+    try {
+      const res = await apiDelete('/settings/api-key');
+      setFeedback({ kind: 'ok', text: res.message || 'API key dihapus.' });
+      loadSettings();
+    } catch (err) {
+      setFeedback({ kind: 'error', text: err.message });
+    } finally {
+      setDeletingKey(false);
+    }
+  };
+
+  const provider = settings?.providers?.find((p) => p.id === settings.ai_provider)
+    || settings?.providers?.[0]
+    || { id: 'gemini', label: 'Google Gemini',
+         key_url: 'https://aistudio.google.com/app/apikey' };
 
   return (
     <div className="page" style={{ maxWidth: '780px' }}>
@@ -328,16 +364,22 @@ export default function ProfileTab() {
       <div style={card}>
         <div style={sectionTitle}>
           <KeyRound size={18} style={{ color: 'var(--reh)' }} />
-          Gemini API Key
+          API key AI
         </div>
         <p style={helpText}>
           Opsional. Tanpa API key, OmniClip tetap memotong klip memakai mesin heuristik
-          lokal berbasis transkrip asli. Dengan API key, Gemini ikut menyusun ulang
-          peringkat dan judul klip. Ambil kunci gratis di{' '}
-          <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer"
+          lokal berbasis transkrip asli. Dengan API key, {provider.label} ikut menyusun
+          ulang peringkat dan judul klip. Ambil kunci gratis di{' '}
+          <a href={provider.key_url} target="_blank" rel="noreferrer"
              style={{ color: 'var(--reh)' }}>
-            aistudio.google.com
+            {new URL(provider.key_url).host}
           </a>.
+        </p>
+        <p style={{ ...helpText, marginTop: '8px' }}>
+          Kunci disimpan di basis data komputer ini dan tetap ada setelah backend
+          dimulai ulang — jadi tidak perlu lagi menyunting <code>backend/.env</code>
+          lewat terminal, yang memang tidak bisa dilakukan dari HP. Kunci tidak
+          pernah dikirim ke mana pun selain {provider.label}.
         </p>
 
         {settings && (
@@ -346,6 +388,11 @@ export default function ProfileTab() {
               <>
                 <CheckCircle2 size={15} style={{ color: 'var(--entry)' }} />
                 Tersimpan (berakhiran <code>{settings.gemini_api_key_last4}</code>)
+                {settings.gemini_api_key_source === 'env' && (
+                  <span style={{ color: 'var(--text-muted)' }}>
+                    — dari <code>backend/.env</code>
+                  </span>
+                )}
               </>
             ) : (
               <>
@@ -398,6 +445,22 @@ export default function ProfileTab() {
           </button>
         </div>
 
+        {settings?.gemini_api_key_set && settings.gemini_api_key_source !== 'env' && (
+          <button
+            onClick={handleDeleteApiKey}
+            disabled={deletingKey}
+            style={{
+              marginTop: '10px', display: 'flex', alignItems: 'center', gap: '7px',
+              background: 'none', border: 'none', padding: '4px 0', cursor: 'pointer',
+              fontSize: '0.78rem', fontWeight: 700, fontFamily: 'inherit',
+              color: 'var(--danger)', opacity: deletingKey ? 0.5 : 1,
+            }}
+          >
+            {deletingKey ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+            Hapus kunci ini
+          </button>
+        )}
+
         {feedback && (
           <div style={{
             ...helpText,
@@ -434,6 +497,8 @@ export default function ProfileTab() {
           </div>
         )}
       </div>
+
+      <SecurityCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
 
       <GoogleAccountCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
 

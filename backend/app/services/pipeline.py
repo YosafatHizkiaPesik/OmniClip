@@ -235,7 +235,9 @@ def run_auto_clip(ctx: JobContext) -> dict:
     import tempfile
     from pathlib import Path
 
-    from ..config import GEMINI_MODELS, MAX_TRANSCRIPT_CHARS, get_env_api_key
+    from ..config import (
+        GEMINI_MODELS, MAX_TRANSCRIPT_CHARS, get_api_key, get_model_override,
+    )
     from ..repos import analyses as analyses_repo
     from ..repos import transcripts as tx_repo
     from .clipmodel import build_clip_payload
@@ -410,7 +412,7 @@ def run_auto_clip(ctx: JobContext) -> dict:
         ctx.check_cancelled()
 
         # --- 5. Penajaman oleh Gemini (opsional) -----------------------------
-        api_key = ctx.payload.get("api_key") or get_env_api_key()
+        api_key = ctx.payload.get("api_key") or get_api_key()
         if use_gemini and api_key and candidates:
             _stage_progress(ctx, "gemini", 0.2, "Menyusun ulang peringkat dengan Gemini…")
             try:
@@ -420,7 +422,8 @@ def run_auto_clip(ctx: JobContext) -> dict:
                     api_key=api_key, models=GEMINI_MODELS, max_clips=max_clips,
                     max_chars=MAX_TRANSCRIPT_CHARS,
                     max_seconds=preset["max"],
-                    model_override=ctx.payload.get("gemini_model") or None,
+                    model_override=(ctx.payload.get("gemini_model")
+                                    or get_model_override() or None),
                 )
                 candidates = validate_and_snap(candidates, sentences, duration,
                                                max_duration=preset["max"])
@@ -483,7 +486,8 @@ def run_auto_clip(ctx: JobContext) -> dict:
             # Model yang DIMINTA pengguna. Bila berbeda dari `model`, artinya
             # pilihannya gagal (biasanya 429 kuota habis pada model pro) dan
             # sistem memakai cadangan — itu harus terlihat, bukan disembunyikan.
-            "model_requested": ctx.payload.get("gemini_model") or None,
+            "model_requested": (ctx.payload.get("gemini_model")
+                                or get_model_override() or None),
             "speaker_count": speaker_count,
             "speaker_confident": speaker_conf,
             "speaker_score": speaker_score,
@@ -519,14 +523,14 @@ def run_retitle(ctx: JobContext) -> dict:
     Gemini pada analisis awal keluar dengan judul heuristik — kalimat dari
     klipnya sendiri, akurat dan sama sekali tidak memancing.
     """
-    from ..config import GEMINI_MODELS, get_env_api_key
+    from ..config import GEMINI_MODELS, get_api_key, get_model_override
     from ..repos import analyses as analyses_repo
     from .gemini import rewrite_titles
 
     video_id = ctx.payload["video_id"]
     only_weak = bool(ctx.payload.get("only_weak", True))
 
-    key = ctx.payload.get("api_key") or get_env_api_key() or ""
+    key = ctx.payload.get("api_key") or get_api_key() or ""
     if not key:
         raise RuntimeError("Kunci Gemini belum diisi di Pengaturan.")
 
@@ -550,7 +554,8 @@ def run_retitle(ctx: JobContext) -> dict:
     fresh, model = rewrite_titles(
         clips=target, video_title=result.get("title") or "",
         api_key=key, models=GEMINI_MODELS,
-        model_override=ctx.payload.get("gemini_model") or None,
+        model_override=(ctx.payload.get("gemini_model")
+                        or get_model_override() or None),
     )
 
     for idx, row in fresh.items():

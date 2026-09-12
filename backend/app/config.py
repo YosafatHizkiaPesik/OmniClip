@@ -84,15 +84,74 @@ GEMINI_MODELS = [
 MAX_TRANSCRIPT_CHARS = int(os.getenv("OMNICLIP_MAX_TRANSCRIPT_CHARS", "350000"))
 
 
-# --- CORS ---------------------------------------------------------------------
+# --- Jaringan -----------------------------------------------------------------
+# Bawaannya tetap 127.0.0.1. Membukanya adalah keputusan yang harus diketik
+# sendiri, bukan sesuatu yang terjadi karena sebuah berkas konfigurasi berubah.
+#
+# Untuk Cloudflare Tunnel, HOST tidak perlu diubah sama sekali: `cloudflared`
+# menyambung dari DALAM mesin ke 127.0.0.1, sehingga tidak ada satu port pun
+# yang terbuka ke jaringan. Lihat PANDUAN-AKSES-JARAK-JAUH.md.
+HOST = os.getenv("OMNICLIP_HOST", "127.0.0.1").strip()
+PORT = int(os.getenv("OMNICLIP_PORT", "8000"))
+
+# Asal yang boleh memanggil API dari peramban.
+#
+# Setelah frontend disajikan oleh backend yang sama (lihat app/main.py), asal
+# permintaan sama dengan asal halaman dan CORS tidak lagi ikut bermain — itulah
+# sebabnya jalur Cloudflare tidak butuh tambahan apa pun di sini. Daftar ini
+# tinggal untuk mode pengembangan, saat UI masih hidup di Vite port 5173.
 ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    *[o.strip() for o in os.getenv("OMNICLIP_ORIGINS", "").split(",") if o.strip()],
 ]
 
+# Direktori hasil `npm run build`. Bila ada, backend menyajikannya di "/" dan
+# seluruh aplikasi hidup di satu port — satu asal, satu terowongan.
+FRONTEND_DIST = PROJECT_DIR / "frontend" / "dist"
 
-def get_env_api_key() -> str:
+
+def get_api_key() -> str:
+    """
+    Kunci AI yang berlaku.
+
+    Basis data lebih dulu, `.env` sebagai cadangan. Urutannya begitu karena
+    basis data adalah satu-satunya dari keduanya yang bisa diisi dari HP —
+    dan ketika keduanya terisi, yang dimasukkan lewat antarmuka adalah yang
+    lebih baru dan lebih disengaja.
+    """
+    try:
+        from .repos import settings as settings_repo
+        value = settings_repo.get("ai.api_key").strip()
+        if value:
+            return value
+    except Exception:  # basis data belum siap saat impor paling awal
+        pass
     return os.environ.get("GEMINI_API_KEY", "").strip()
+
+
+# Nama lama. Sudah bukan "env" saja, tapi dipakai di beberapa tempat.
+get_env_api_key = get_api_key
+
+
+def get_api_key_source() -> str:
+    """`db` | `env` | `` — supaya antarmuka bisa mengatakan dari mana asalnya."""
+    try:
+        from .repos import settings as settings_repo
+        if settings_repo.get("ai.api_key").strip():
+            return "db"
+    except Exception:
+        pass
+    return "env" if os.environ.get("GEMINI_API_KEY", "").strip() else ""
+
+
+def get_model_override() -> str:
+    """Model yang dipilih pengguna, tersimpan di server agar ikut ke HP."""
+    try:
+        from .repos import settings as settings_repo
+        return settings_repo.get("ai.model").strip()
+    except Exception:
+        return ""
 
 
 def get_cookies_file() -> str:
