@@ -217,7 +217,11 @@ kata kuning, tanda air di tempatnya. SFace terunduh sendiri di tengah analisis.
    antarmuka.
 4. **Tidak ada pembersihan otomatis.** Terukur: 3,8 GB per bulan, dan 82%-nya
    video sumber yang sebenarnya bisa dibuang setelah klipnya jadi.
-5. **Pembaruan masih manual** — unduh dan ekstrak ulang.
+5. ~~Pembaruan masih manual~~ — **selesai.** Aplikasi mengecek GitHub
+   Releases, dan bisa mengunduh serta memasang sendiri lewat proses penolong
+   yang menukar folder setelah aplikasi tertutup. Diuji dengan membangun bundel
+   0.9.0 dan membiarkannya memperbarui diri ke 1.0.0: unduh 319 MB, tukar,
+   buka kembali, ~60 detik. Rilis pertama: **v1.0.1**.
 
 ### Yang tetap berguna dari rencana hosting
 

@@ -10,9 +10,13 @@ Tersedia untuk **Windows** dan **Linux**.
 
 ## Untuk pengguna
 
-1. Unduh `OmniClip-windows.zip` (atau `OmniClip-linux.tar.gz`) dari halaman
-   **Releases**.
-2. Ekstrak ke mana saja — Desktop, Documents, diska mana pun.
+1. Unduh — tautan ini selalu menunjuk versi terbaru, tanpa perlu akun GitHub:
+
+   - Windows: <https://github.com/YosafatHizkiaPesik/OmniClip/releases/latest/download/OmniClip-windows.zip>
+   - Linux: <https://github.com/YosafatHizkiaPesik/OmniClip/releases/latest/download/OmniClip-linux.tar.gz>
+
+2. Ekstrak ke mana saja — Desktop, Documents, diska mana pun. **Jangan** ke
+   Program Files: pembaruan otomatis butuh folder yang bisa Anda tulis sendiri.
 3. Jalankan `OmniClip.exe` (Windows) atau `./OmniClip` (Linux).
 
 Sebuah jendela hitam terbuka dan menuliskan alamatnya, lalu peramban terbuka
@@ -30,6 +34,25 @@ Beberapa model diunduh sendiri, sekali seumur pemasangan:
 | CAM++ | 27 MB | membedakan suara per orang |
 | Whisper | ± 150 MB | menyalin ucapan, hanya untuk video yang tidak punya subtitle di YouTube |
 | Piper | 63 MB | membacakan judul, hanya bila dipakai |
+
+### Memperbarui
+
+Aplikasi menanyakan sendiri ke GitHub apakah ada versi baru. Kalau ada, muncul
+pita kecil di kepala halaman — klik, lalu **Pengaturan → Pembaruan aplikasi →
+Unduh dan pasang**.
+
+Yang terjadi setelah itu: berkasnya diunduh, diperiksa, lalu aplikasi menutup
+sendiri dan terbuka kembali pada versi baru. Klip, setelan, API key, dan model
+yang sudah diunduh tidak tersentuh — semuanya tinggal di folder terpisah.
+
+Kalau tombol **Unduh dan pasang** tidak muncul padahal ada versi baru,
+alasannya tertulis di situ. Yang paling sering: aplikasi dipasang di folder
+yang tidak bisa ditulis. Pindahkan ke Documents, lalu coba lagi.
+
+Menukar folder dikerjakan proses penolong yang menunggu aplikasi benar-benar
+mati — sebuah `.exe` yang sedang berjalan tidak bisa menimpa dirinya sendiri.
+Folder lama tidak dihapus melainkan diganti nama dulu, jadi kalau langkah
+terakhir gagal, yang lama masih utuh di sebelahnya.
 
 ### Di mana berkas saya disimpan
 
@@ -93,8 +116,15 @@ Ini jalur yang dipakai. Repositori ini publik, jadi menit GitHub Actions gratis
 tanpa batas.
 
 ```bash
-git tag v1.0.0 && git push --tags
+# 1. naikkan nomor di backend/app/version.py
+# 2. tag dengan angka yang SAMA PERSIS
+git tag v1.0.2 && git push --tags
 ```
+
+Alur build menolak tag yang tidak cocok dengan `app/version.py`. Itu bukan
+kerewelan: rilis `v1.0.2` yang isinya mengaku `1.0.1` akan membuat setiap
+pemasangan menawarkan pembaruan yang sama, memasangnya, lalu menawarkannya
+lagi — selamanya.
 
 Beberapa menit kemudian, `.exe` Windows dan `.tar.gz` Linux muncul di halaman
 Releases. Alurnya ada di `.github/workflows/bangun-aplikasi.yml`, dan bisa juga
