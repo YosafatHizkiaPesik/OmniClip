@@ -19,7 +19,7 @@ from .routers import projects as projects_router
 from .routers import settings as settings_router
 from .routers import uploads as uploads_router
 from .routers import videos as videos_router
-from .services import auth
+from .services import auth, cf_access
 from .services.events import broker
 from .services.jobs import queue
 from .services.pipeline import (
@@ -156,11 +156,17 @@ async def gerbang(request: Request, call_next):
             and path not in auth.OPEN_PATHS
             and auth.auth_required()
             and not auth.valid_session(request.cookies.get(auth.COOKIE_NAME))):
-        return JSONResponse(
-            status_code=401,
-            content={"code": "AUTH_REQUIRED",
-                     "message": "Sesi berakhir. Masuk lagi dengan kata sandi."},
-        )
+        # Cloudflare Access sudah meminta Anda masuk dengan Google sebelum
+        # permintaan sampai ke sini. Bila buktinya sah, itu diterima sebagai
+        # sesi — masuk dua kali untuk membuka satu aplikasi adalah pintu kedua
+        # yang cepat atau lambat dimatikan orang.
+        email, _ = await cf_access.verify(request)
+        if not email:
+            return JSONResponse(
+                status_code=401,
+                content={"code": "AUTH_REQUIRED",
+                         "message": "Sesi berakhir. Masuk lagi dengan kata sandi."},
+            )
 
     response = await call_next(request)
     # Aplikasi ini tidak pernah pantas muncul di hasil pencarian, dan begitu ia

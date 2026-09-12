@@ -88,18 +88,46 @@ Kalau baris kedua menjawab `200`, gerbangnya belum menyala. Berhenti di sini.
 
 ## Bagian 2 — Cloudflare Tunnel
 
-### Biayanya
+### Domain: mana yang murah
+
+Domain adalah satu-satunya yang berbayar, dan ia **wajib** — terowongan
+beralamat tetap dan Cloudflare Access hanya bisa dipasang pada domain yang
+nameserver-nya Anda arahkan ke Cloudflare.
+
+Yang **tidak** wajib: membelinya dari Cloudflare. Cloudflare menerima domain
+dari registrar mana pun; yang diubah hanya nameserver-nya. Jadi belilah di
+tempat termurah.
+
+| pilihan | perkiraan harga | catatan |
+|---|---|---|
+| **`.my.id`** di registrar Indonesia (Rumahweb, DomaiNesia, Niagahoster, Jagoan Hosting) | **± Rp 15.000–30.000/tahun** | Paling murah, dan **perpanjangannya tetap murah**. Butuh KTP/NPWP saat daftar. Pilihan terbaik. |
+| `.web.id` | ± Rp 25.000–55.000/tahun | Sama-sama lokal, sedikit lebih mahal |
+| `.xyz` di Porkbun/Namecheap | ± US$1–3 tahun pertama, **US$12–15 perpanjangan** | Murah sekali di awal, mahal seterusnya |
+| `.com` di Cloudflare Registrar | ± US$10,44/tahun ≈ Rp 170.000 | Harga modal tanpa markup, harga tetap tiap tahun |
+
+**Saran: `.my.id`.** Alamat seperti `omniclip.namaanda.my.id` tidak perlu
+terlihat profesional — tidak ada yang akan melihatnya kecuali Anda dan orang
+yang Anda undang, dan halamannya menolak diindeks mesin pencari.
+
+> Harga di atas berlaku saat dokumen ini ditulis (September 2026). Periksa lagi
+> saat membeli, terutama harga **perpanjangan** — bukan harga tahun pertama.
+
+**Yang harus dihindari:** penyedia domain gratis semacam Freenom (`.tk`, `.ml`)
+— domainnya rutin ditarik kembali tanpa pemberitahuan, dan kehilangan domain
+berarti kehilangan alamat OmniClip Anda.
+
+Setelah membeli, di dasbor registrar ganti nameserver-nya ke dua alamat yang
+diberikan Cloudflare saat Anda menambahkan domain itu (Cloudflare → Add a site
+→ paket **Free**). Perubahan nameserver butuh beberapa jam sampai berlaku.
+
+### Sisanya gratis
 
 | barang | harga |
 |---|---|
 | `cloudflared` | gratis, sumber terbuka |
 | Cloudflare Tunnel | gratis |
-| Cloudflare Access (Zero Trust) | gratis sampai 50 pengguna |
-| **Nama domain** | **± US$10,44/tahun ≈ Rp 170.000** di Cloudflare Registrar (harga modal, tanpa markup). TLD murah seperti `.xyz` bisa di bawah Rp 50.000 tahun pertama. |
-
-Domain adalah satu-satunya yang berbayar, dan ia **wajib**: terowongan dengan
-alamat tetap dan Cloudflare Access hanya bisa dipasang pada domain yang Anda
-kendalikan di Cloudflare.
+| Cloudflare Access, termasuk masuk dengan Google | gratis sampai 50 pengguna |
+| Cloudflare paket Free (DNS + proxy) | gratis |
 
 > **Terowongan cepat (`cloudflared tunnel --url`) memang tanpa domain dan tanpa
 > biaya — dan tidak boleh dipakai di sini.** Alamatnya berubah tiap restart,
@@ -163,22 +191,78 @@ cloudflared tunnel run omniclip          # untuk mencoba
 sudo cloudflared service install         # supaya hidup sendiri saat booting
 ```
 
-### 2f. Pasang pintunya — Cloudflare Access
+### 2f. Pasang pintunya — Cloudflare Access, dengan masuk lewat Google
 
 **Jangan lewati bagian ini.** Tanpa Access, alamat `https://omniclip.domain-anda.com`
 terbuka untuk seluruh internet, dan satu-satunya yang menjaganya adalah kata
 sandi OmniClip.
 
-Di dasbor Cloudflare → **Zero Trust → Access → Applications → Add an application
-→ Self-hosted**:
+**Inilah tempat "masuk dengan Google" berada.** Tidak perlu kode apa pun di
+OmniClip: Cloudflare yang memegang tombolnya, dan OmniClip menerima hasilnya.
 
-- Domain aplikasi: `omniclip.domain-anda.com`
-- Kebijakan: **Allow**, dengan aturan *Emails* → daftar email yang boleh masuk
-- Metode masuk: **One-time PIN** (kode lewat email — tanpa perlu akun apa pun)
+**1. Pasang Google sebagai penyedia identitas.**
+Zero Trust → **Settings → Authentication → Login methods → Add new → Google**.
+Ikuti langkahnya; Cloudflare memandu pembuatan OAuth client di Google Cloud
+Console dan memberi tahu persis redirect URI mana yang harus ditempel.
 
-Setelah ini, pengunjung diminta emailnya lebih dulu, dapat kode, baru sampai ke
-layar masuk OmniClip. Dua lapis, dan lapisan luar tidak pernah membiarkan orang
-asing menyentuh aplikasi sama sekali.
+> Kalau ingin lebih cepat, lewati langkah ini dan pakai **One-time PIN** —
+> Cloudflare mengirim kode ke email, tanpa akun apa pun. Bisa diganti ke Google
+> kapan saja.
+
+**2. Buat aplikasinya.**
+Zero Trust → **Access → Applications → Add an application → Self-hosted**:
+
+- Application domain: `omniclip.domain-anda.com`
+- Identity providers: **Google** (centang)
+- Policy: **Allow**, aturan *Emails* → `yosafathizkiapesik@gmail.com`, ditambah
+  email siapa pun yang Anda beri akses
+
+**3. Salin tag AUD-nya.**
+Di halaman aplikasi yang baru dibuat, bagian **Overview**, ada
+**Application Audience (AUD) Tag** — deretan panjang huruf dan angka. Salin.
+
+**4. Beri tahu OmniClip, supaya tidak minta masuk dua kali.**
+
+```bash
+OMNICLIP_AUTH=on \
+OMNICLIP_CF_ACCESS_TEAM=nama-tim-anda \
+OMNICLIP_CF_ACCESS_AUD=<tag-aud-yang-tadi-disalin> \
+venv/bin/python run.py
+```
+
+`nama-tim-anda` adalah bagian depan alamat tim Anda: kalau tim Anda
+`yosafat.cloudflareaccess.com`, isinya `yosafat`.
+
+Setelah ini, membuka OmniClip dari luar berarti: klik **Sign in with Google** →
+selesai. Layar kata sandi OmniClip tidak muncul lagi dari alamat itu.
+
+Opsional, pagar kedua di sisi Anda sendiri:
+
+```bash
+OMNICLIP_CF_ACCESS_EMAILS=yosafathizkiapesik@gmail.com,teman@contoh.com
+```
+
+Kalau diisi, dua daftar harus sepakat — berguna kalau kebijakan Access suatu
+saat tidak sengaja dilonggarkan.
+
+**Cara OmniClip memeriksanya** (bukan sekadar percaya header):
+
+- tanda tangan RS256 token dicocokkan dengan kunci publik tim Anda,
+- `aud` harus **sama persis** dengan tag aplikasi Anda — tanpa ini, token sah
+  dari aplikasi Access siapa pun di internet akan diterima,
+- `iss` harus tim Anda, dan `exp` belum lewat,
+- header hanya dipercaya bila permintaannya datang dari terowongan di mesin ini.
+
+Kesebelas kasusnya bisa dijalankan ulang kapan saja:
+
+```bash
+cd backend && venv/bin/python uji_cf_access.py
+```
+
+**Kalau ternyata masih diminta kata sandi**, buka **Pengaturan → Kata sandi &
+akses**. Di sana tertulis alasannya — `aud` yang keliru terlihat persis seperti
+nama tim yang keliru, dan tanpa keterangan itu keduanya hanya tampak sebagai
+"tidak berhasil".
 
 ### 2g. Uji dari luar
 
@@ -186,8 +270,13 @@ Buka `https://omniclip.domain-anda.com` dari HP **dengan data seluler, bukan
 wifi rumah**. Ini satu-satunya pengujian yang berarti — lewat wifi rumah, HP
 bisa saja sampai lewat jaringan lokal dan Anda tidak menguji apa pun.
 
-Yang harus terjadi berurutan: halaman email Cloudflare → kode → layar "OmniClip
-terkunci" → kata sandi → aplikasi.
+Yang harus terjadi: halaman Cloudflare → **Sign in with Google** → langsung
+masuk ke aplikasi. **Tanpa** layar "OmniClip terkunci" — kalau layar itu masih
+muncul, berarti `OMNICLIP_CF_ACCESS_TEAM` atau `OMNICLIP_CF_ACCESS_AUD` belum
+benar; alasan persisnya tertulis di Pengaturan → Kata sandi & akses.
+
+Coba juga dari email yang **tidak** ada di kebijakan Access: harus ditolak
+Cloudflare sebelum menyentuh OmniClip sama sekali.
 
 ---
 
@@ -218,7 +307,25 @@ jaringan, tapi berarti siapa pun yang memakai komputer ini bisa membacanya.
 
 ---
 
-## Bagian 4 — Lupa kata sandi
+## Bagian 4 — Lalu kata sandi OmniClip masih untuk apa?
+
+Tiga hal, dan ketiganya tetap berlaku setelah Google terpasang:
+
+1. **Membuka dari komputer ini.** Di `localhost` tidak ada Cloudflare sama
+   sekali, jadi tidak ada identitas Google yang bisa diperiksa.
+2. **Jaring pengaman saat Cloudflare salah setel.** Kebijakan Access yang
+   keliru, atau terowongan yang menunjuk ke tempat yang salah, adalah kegagalan
+   yang jauh lebih mungkin daripada kata sandi yang tertebak. Saat itu terjadi,
+   kata sandi adalah yang tersisa.
+3. **Saat Access belum dipasang.** Selama masa itu ia satu-satunya penjaga.
+
+Yang tidak dilakukannya: ia **tidak** meminta Anda masuk dua kali. Begitu
+Cloudflare Access disetel dengan benar, layar kata sandi tidak muncul lagi dari
+alamat publik itu.
+
+---
+
+## Bagian 5 — Lupa kata sandi
 
 Tidak ada pemulihan lewat email; tidak ada email di sini. Pemulihannya dari
 terminal komputer ini:
@@ -237,7 +344,7 @@ jalankan sekali tanpa variabel itu, pasang kata sandinya, lalu nyalakan lagi.
 
 ---
 
-## Bagian 5 — Risiko yang jujur
+## Bagian 6 — Risiko yang jujur
 
 ### Cloudflare, bukan YouTube, yang paling mungkin menegur
 
@@ -285,7 +392,10 @@ melarang semuanya), jadi ia tidak akan muncul di hasil pencarian siapa pun.
 cd frontend && npm run build
 
 # backend
-cd backend && OMNICLIP_AUTH=on venv/bin/python run.py
+cd backend && OMNICLIP_AUTH=on \
+  OMNICLIP_CF_ACCESS_TEAM=nama-tim-anda \
+  OMNICLIP_CF_ACCESS_AUD=tag-aud-aplikasi \
+  venv/bin/python run.py
 
 # terowongan (kalau belum dipasang sebagai service)
 cloudflared tunnel run omniclip

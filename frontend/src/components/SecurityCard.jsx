@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Lock, Loader2, LogOut, CheckCircle2, AlertTriangle, Info, Eye, EyeOff,
+  Lock, Loader2, LogOut, CheckCircle2, AlertTriangle, Info, Eye, EyeOff, Cloud,
 } from 'lucide-react';
 import { apiDelete, apiGet, apiPost } from '../lib/api';
 
@@ -23,6 +23,7 @@ export default function SecurityCard({ card, sectionTitle, helpText }) {
   const load = () => apiGet('/auth/status').then(setStatus).catch(() => setStatus(null));
   useEffect(() => { load(); }, []);
 
+  const cf = status?.cloudflare;
   const minLength = status?.min_length || 8;
   const has = !!status?.has_password;
   const ready = next.length >= minLength && next === confirm && (!has || current.length > 0);
@@ -77,6 +78,28 @@ export default function SecurityCard({ card, sectionTitle, helpText }) {
         Cloudflare — tanpa itu, siapa pun yang tahu alamatnya bisa memakai
         semuanya.
       </p>
+
+      {cf?.configured && (
+        <div style={{ ...helpText, marginTop: '12px', padding: '11px 13px',
+                      borderRadius: 'var(--radius-md)',
+                      border: '1px solid var(--border-color)',
+                      display: 'flex', gap: '9px', alignItems: 'flex-start' }}>
+          <Cloud size={16} style={{ color: 'var(--reh)', flexShrink: 0, marginTop: '2px' }} />
+          <div>
+            <div style={{ fontWeight: 700, color: 'var(--text-primary)', marginBottom: '3px' }}>
+              Cloudflare Access — tim <code>{cf.team}</code>
+            </div>
+            {cf.email ? (
+              <>Masuk sebagai <strong>{cf.email}</strong> lewat Google. Kata sandi di
+                bawah tidak diminta selama Anda datang dari alamat Cloudflare.</>
+            ) : (
+              <>Disetel, tapi permintaan ini tidak membawa identitas Access —{' '}
+                <span style={{ color: 'var(--text-muted)' }}>{cf.reason}</span>.
+                Wajar kalau Anda sedang membuka dari komputer ini langsung.</>
+            )}
+          </div>
+        </div>
+      )}
 
       {status && (
         <div style={{ ...helpText, marginTop: '10px', display: 'flex',
@@ -149,6 +172,8 @@ export default function SecurityCard({ card, sectionTitle, helpText }) {
       <p style={{ ...helpText, marginTop: '12px' }}>
         Mengganti kata sandi mencabut sesi di semua perangkat lain — itulah cara
         mengeluarkan HP yang hilang atau orang yang tidak lagi perlu akses.
+        {cf?.configured && ' Tidak mencabut akses Cloudflare Access: itu dicabut '
+          + 'dengan menghapus email dari kebijakan Access.'}
       </p>
     </div>
   );

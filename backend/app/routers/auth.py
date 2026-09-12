@@ -6,7 +6,7 @@ from fastapi import APIRouter, Request, Response
 from pydantic import BaseModel, Field
 
 from ..errors import AppError
-from ..services import auth
+from ..services import auth, cf_access
 
 log = logging.getLogger("omniclip.auth")
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -63,12 +63,27 @@ def _set_cookie(response: Response, request: Request) -> None:
 @router.get("/status")
 async def status(request: Request):
     token = request.cookies.get(auth.COOKIE_NAME)
+    by_password = auth.valid_session(token)
+
+    # `reason` ada supaya salah setel Cloudflare bisa dibaca, bukan ditebak.
+    # Tanpa itu gejalanya hanya "diminta kata sandi terus", yang tidak menunjuk
+    # ke mana pun — dan aud yang keliru terlihat persis seperti tim yang keliru.
+    email, reason = await cf_access.verify(request)
+
     return {
         "required": auth.auth_required(),
         "has_password": auth.has_password(),
-        "authenticated": not auth.auth_required() or auth.valid_session(token),
+        "authenticated": not auth.auth_required() or by_password or bool(email),
+        "via": "cloudflare" if (email and not by_password) else
+               ("password" if by_password else None),
         "mode": auth.auth_mode(),
         "min_length": MIN_LENGTH,
+        "cloudflare": {
+            "configured": cf_access.configured(),
+            "team": cf_access.team(),
+            "email": email,
+            "reason": reason,
+        },
     }
 
 
