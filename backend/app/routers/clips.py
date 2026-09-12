@@ -84,8 +84,16 @@ class CaptionStyleModel(BaseModel):
     box_w: Optional[float] = None
     # Warna per penutur, diindeks langsung: [0] orang pertama, [1] kedua, dst.
     speaker_colors: Optional[List[str]] = None
+    # --- Tanda air: gayanya sendiri, bukan pinjaman dari subtitle ------------
+    wm_font: Optional[str] = None
+    wm_size: Optional[int] = Field(None, ge=8, le=400)
+    wm_color: Optional[str] = None
+    wm_opacity: Optional[float] = Field(None, ge=0.0, le=1.0)
+    wm_x: Optional[float] = Field(None, ge=0.0, le=100.0)
+    wm_y: Optional[float] = Field(None, ge=0.0, le=100.0)
+    wm_outline: Optional[int] = Field(None, ge=0, le=16)
 
-    @field_validator("primary", "highlight")
+    @field_validator("primary", "highlight", "wm_color")
     @classmethod
     def _cek_warna(cls, v):
         return _warna(v)

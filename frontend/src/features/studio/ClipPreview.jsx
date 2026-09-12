@@ -24,8 +24,19 @@ const RATIO_BOX = {
 const CANVAS_H = 1920;
 
 // Sama persis dengan WARNA_BAWAAN di backend/app/services/subtitles.py.
+// Kalibrasi CSS -> libass. Dipakai subtitle DAN tanda air, karena keduanya
+// memakai satuan yang sama di berkas ASS.
+const ASS_FONT_RATIO = 0.521 / 0.756;
+
 const WARNA_BAWAAN = ['#FFFFFF', '#7CFFB2', '#FFB3C7', '#B39DFF',
                       '#FFD166', '#5BC8FF', '#FF9F1C', '#B8FF3A'];
+
+function hexAlpha(hex, opacity) {
+  const c = String(hex || '').trim().replace('#', '');
+  if (c.length !== 6) return `rgba(255,255,255,${opacity})`;
+  const n = parseInt(c, 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${opacity})`;
+}
 
 function padPalette(warna) {
   const out = [...(warna ?? [])];
@@ -525,6 +536,8 @@ export default function ClipPreview({
     // yaitu kotak subtitle itu sendiri — karena tingginya bergantung pada
     // berapa baris yang terbentuk, dan itu hanya diketahui setelah dirender.
     const captionRect = e.currentTarget.parentElement?.getBoundingClientRect();
+    const startWmX = style?.wm_x ?? 92;
+    const startWmY = style?.wm_y ?? 95;
     const startMargin = style?.margin_v ?? 300;
     const startPosX = style?.pos_x ?? 50;
     const startSize = style?.size ?? 96;
@@ -543,6 +556,19 @@ export default function ClipPreview({
     const onMove = (ev) => {
       const dy = (ev.clientY - y0) * perPx;
       const dx = ((ev.clientX - x0) / boxW) * 100;   // piksel layar -> persen lebar
+
+      if (mode === 'wm-move') {
+        // Tanda air digeser dalam PERSEN kedua sumbu, bukan lewat margin:
+        // ia tidak berjangkar ke tepi mana pun, jadi tidak ada tepi yang
+        // menjadi acuan. Dijepit 1% dari tiap sisi supaya tidak bisa
+        // diseret sampai keluar bingkai dan hilang.
+        const dyPct = ((ev.clientY - y0) / boxH) * 100;
+        onStyleChange({
+          wm_x: Math.round(Math.max(1, Math.min(99, startWmX + dx)) * 10) / 10,
+          wm_y: Math.round(Math.max(1, Math.min(99, startWmY + dyPct)) * 10) / 10,
+        });
+        return;
+      }
 
       if (mode === 'move') {
         // Dua sumbu sekaligus. Jangkar bawah: menyeret ke bawah mengecilkan
@@ -1020,13 +1046,29 @@ export default function ClipPreview({
         {/* Tanda air, digambar seperti libass menggambarnya: pojok kanan
             bawah, kecil, setengah tembus pandang. */}
         {constrained && (style?.watermark || '').trim() && (
-          <div style={{
-            position: 'absolute', right: '3.5%', bottom: '3.5%', zIndex: 3,
-            color: 'rgba(255,255,255,0.62)', fontWeight: 650,
-            fontFamily: fontStack(style?.font),
-            fontSize: 'clamp(0.5rem, 2.1vw, 0.72rem)',
-            textShadow: '0 1px 3px rgba(0,0,0,0.85)', pointerEvents: 'none',
-          }}>{style.watermark.trim()}</div>
+          <div
+            onPointerDown={onStyleChange ? startDrag('wm-move') : undefined}
+            title={onStyleChange ? 'Seret untuk memindahkan tanda air' : undefined}
+            style={{
+              position: 'absolute', zIndex: 3,
+              // Titik yang disimpan adalah TITIK TENGAH teksnya, sama seperti
+              // \pos pada berkas ASS — jadi satu pasang angka cukup untuk
+              // menaruhnya di mana pun, termasuk di tengah gambar.
+              left: `${style?.wm_x ?? 92}%`, top: `${style?.wm_y ?? 95}%`,
+              transform: 'translate(-50%, -50%)',
+              whiteSpace: 'nowrap',
+              color: hexAlpha(style?.wm_color ?? '#FFFFFF', style?.wm_opacity ?? 0.62),
+              fontWeight: 650,
+              fontFamily: fontStack((style?.wm_font || '').trim() || style?.font),
+              fontSize: `${Math.max(6, (style?.wm_size ?? 34) * (boxH / CANVAS_H)
+                * ASS_FONT_RATIO)}px`,
+              WebkitTextStroke: `${Math.max(0, (style?.wm_outline ?? 2)
+                * (boxH / CANVAS_H) * 1.6)}px rgba(0,0,0,0.5)`,
+              paintOrder: 'stroke fill',
+              pointerEvents: onStyleChange ? 'auto' : 'none',
+              cursor: onStyleChange ? (dragging === 'wm-move' ? 'grabbing' : 'grab') : 'default',
+              userSelect: 'none', touchAction: 'none',
+            }}>{style.watermark.trim()}</div>
         )}
 
         {showHook && (
@@ -1181,7 +1223,6 @@ export function CaptionOverlay({
   // Yang disamakan adalah pratinjau ke libass, bukan sebaliknya: hasil render
   // adalah produknya, dan mengubah sisi itu akan mengubah semua video yang
   // sudah pernah dibuat.
-  const ASS_FONT_RATIO = 0.521 / 0.756;
   const fontPx = Math.max(9, (style?.size ?? 96) * scale * ASS_FONT_RATIO);
   const marginPx = (style?.margin_v ?? 300) * scale;
   // Garis luar libass diukur dari tepi glyph ke luar; -webkit-text-stroke

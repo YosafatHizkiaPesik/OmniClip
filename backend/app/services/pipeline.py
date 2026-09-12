@@ -130,6 +130,16 @@ def run_render(ctx: JobContext) -> dict:
         box_w=max(20.0, min(100.0, float(style_in.get("box_w", 84.0)))),
         speaker_colors=tuple(style_in.get("speaker_colors")
                              or ("#FFFFFF", "#7CFFB2", "#FFB3C7", "#B39DFF")),
+        # Tanda air. Font kosong berarti ikut font subtitle — itu yang
+        # diharapkan saat pengguna belum menyentuh setelan ini sama sekali.
+        wm_font=(style_in.get("wm_font") if style_in.get("wm_font") in FONT_FAMILIES
+                 else ""),
+        wm_size=max(8, min(400, int(style_in.get("wm_size") or 34))),
+        wm_color=style_in.get("wm_color") or "#FFFFFF",
+        wm_opacity=max(0.0, min(1.0, float(style_in.get("wm_opacity", 0.62)))),
+        wm_x=max(0.0, min(100.0, float(style_in.get("wm_x", 92.0)))),
+        wm_y=max(0.0, min(100.0, float(style_in.get("wm_y", 95.0)))),
+        wm_outline=max(0, min(16, int(style_in.get("wm_outline", 2)))),
     )
 
     total = sum(float(s["end"]) - float(s["start"]) for s in segments)

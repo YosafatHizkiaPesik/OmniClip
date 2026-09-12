@@ -73,6 +73,24 @@ class CaptionStyle:
     max_words_per_line: int = 5
     max_chars_per_line: int = 22
 
+    # --- Tanda air -----------------------------------------------------------
+    #
+    # Punya gayanya sendiri, terpisah dari subtitle. Dulu ia meminjam font
+    # subtitle dan dipaku di pojok kanan bawah dengan ukuran, warna, dan
+    # ketembusan yang tidak bisa disentuh — cukup untuk menandai kepemilikan,
+    # tapi tidak cukup untuk sebuah kanal yang punya warna dan huruf sendiri.
+    #
+    # `wm_font` kosong berarti ikut font subtitle. Posisinya dalam PERSEN
+    # kanvas dan menunjuk TITIK TENGAH teksnya, sama seperti pos_x subtitle,
+    # supaya angka yang sama berarti hal yang sama di kedua tempat.
+    wm_font: str = ""
+    wm_size: int = 34
+    wm_color: str = "#FFFFFF"
+    wm_opacity: float = 0.62
+    wm_x: float = 92.0
+    wm_y: float = 95.0
+    wm_outline: int = 2
+
 
 @dataclass
 class HookSpec:
@@ -103,6 +121,20 @@ def hex_to_ass(color: str) -> str:
         return "&H00FFFFFF&"
     r, g, b = c[0:2], c[2:4], c[4:6]
     return f"&H00{b}{g}{r}".upper() + "&"
+
+
+def hex_to_ass_alpha(color: str, opacity: float) -> str:
+    """
+    '#RRGGBB' + ketembusan -> '&HAABBGGRR&'.
+
+    Di ASS, AA adalah KETIDAKTAMPAKAN, bukan ketampakan: 00 berarti pekat dan
+    FF berarti hilang sama sekali. Membalik keduanya adalah kekeliruan yang
+    hasilnya justru terlihat masuk akal — tanda air yang diminta samar keluar
+    pekat — jadi pembalikannya dikerjakan di satu tempat saja, di sini.
+    """
+    dasar = hex_to_ass(color)          # &H00BBGGRR&
+    aa = int(round((1.0 - max(0.0, min(1.0, opacity))) * 255))
+    return f"&H{aa:02X}{dasar[4:]}"
 
 
 def _ts(seconds: float) -> str:
@@ -264,6 +296,8 @@ def build_ass(
 
     primary = hex_to_ass(st.primary)
     highlight = hex_to_ass(st.highlight)
+    wm_font = st.wm_font.strip() or st.font
+    wm_warna = hex_to_ass_alpha(st.wm_color, st.wm_opacity)
     speaker_ass = [hex_to_ass(c) for c in _lengkapi_warna(st.speaker_colors)]
     hook_color = hex_to_ass(hook.color) if hook else "&H0000E5FF&"
     align = ALIGNMENT.get(st.position, 2)
@@ -288,7 +322,7 @@ YCbCr Matrix: TV.709
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Caption,{st.font},{st.size},{primary},&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,{st.outline_px},{st.shadow_px},{align},{margin_l},{margin_r},{st.margin_v},1
 Style: Hook,{st.font},{hook.size if hook else 64},{hook_color},&H000000FF,&H00000000,&HB4000000,-1,0,0,0,100,100,0,0,3,0,0,8,100,100,150,1
-Style: Mark,{st.font},34,&H60FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,0,3,40,40,40,1
+Style: Mark,{wm_font},{st.wm_size},{wm_warna},&H000000FF,&H80000000,&H00000000,0,0,0,0,100,100,0,0,1,{st.wm_outline},0,5,0,0,0,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -378,9 +412,15 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
     # --- Watermark -------------------------------------------------------------
     if watermark.strip() and clip_duration > 0:
+        # Alignment 5 (tengah-tengah) + \pos: titik yang diberikan adalah
+        # TITIK TENGAH teksnya, jadi satu pasang angka cukup untuk menaruhnya
+        # di mana pun — termasuk di tengah gambar, yang tidak bisa dicapai oleh
+        # sembilan jangkar sudut.
+        wx = int(round(max(0.0, min(100.0, st.wm_x)) / 100.0 * w))
+        wy = int(round(max(0.0, min(100.0, st.wm_y)) / 100.0 * h))
         events.append(
             f"Dialogue: 0,{_ts(0)},{_ts(clip_duration)},Mark,,0,0,0,,"
-            f"{escape_ass(watermark.strip())}"
+            rf"{{\pos({wx},{wy})}}{escape_ass(watermark.strip())}"
         )
 
     return head + "\n".join(events) + "\n"

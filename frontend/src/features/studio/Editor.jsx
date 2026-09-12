@@ -34,6 +34,11 @@ const DEFAULT_STYLE = {
   // Tanda air. Ikut gaya, bukan ikut klip: ini nama kanal, dan menuliskannya
   // ulang di tiap klip adalah pekerjaan yang tidak ada gunanya.
   watermark: '',
+  // Tanda air punya gaya sendiri, tidak meminjam dari subtitle. Font kosong
+  // berarti "ikut font subtitle"; posisinya persen kanvas dan menunjuk titik
+  // TENGAH teksnya, sama seperti pos_x subtitle.
+  wm_font: '', wm_size: 34, wm_color: '#FFFFFF', wm_opacity: 0.62,
+  wm_x: 92, wm_y: 95, wm_outline: 2,
 };
 
 const STYLE_KEY = 'omniclip_caption_style';
@@ -59,7 +64,7 @@ const HEX = /^#[0-9A-Fa-f]{6}$/;
  */
 function bersihkanWarna(gaya) {
   const out = { ...gaya };
-  for (const k of ['primary', 'highlight']) {
+  for (const k of ['primary', 'highlight', 'wm_color']) {
     if (typeof out[k] === 'string' && !HEX.test(out[k].trim())) out[k] = DEFAULT_STYLE[k];
   }
   if (Array.isArray(out.speaker_colors)) {

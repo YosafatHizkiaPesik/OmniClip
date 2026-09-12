@@ -982,12 +982,84 @@ export function StylePanel({
                onChange={(e) => onChange({ ...style, watermark: e.target.value.slice(0, 40) })}
                placeholder="@namakanal"
                style={{ ...field, fontSize: '0.85rem' }} />
-        <p style={{ fontSize: '0.68rem', color: 'var(--text-muted)', margin: '6px 0 0', lineHeight: 1.5 }}>
-          Ditulis kecil dan setengah tembus pandang di pojok kanan bawah,
-          sepanjang klip. Cukup untuk menandai klipnya milik siapa saat ia
-          diunggah ulang orang lain, tanpa menutupi gambar. Dikosongkan berarti
-          tidak ada tanda air.
+        <p style={{ fontSize: '0.68rem', color: 'var(--text-muted)', margin: '6px 0 10px', lineHeight: 1.5 }}>
+          Tampil sepanjang klip. Cukup untuk menandai klipnya milik siapa saat
+          ia diunggah ulang orang lain. Dikosongkan berarti tidak ada tanda air.
+          <br /><strong>Bisa diseret langsung di pratinjau.</strong>
         </p>
+
+        {(style?.watermark || '').trim() && (
+          <>
+            <div style={{ ...label, marginBottom: '6px' }}>Font</div>
+            <select value={style?.wm_font ?? ''}
+                    onChange={(e) => onChange({ ...style, wm_font: e.target.value })}
+                    style={{ ...field, fontSize: '0.82rem', marginBottom: '10px' }}>
+              <option value="">Ikut font subtitle</option>
+              {fonts.map((f) => (
+                <option key={f.family} value={f.family}>{f.label ?? f.family}</option>
+              ))}
+            </select>
+
+            <div style={{ ...label, marginBottom: '6px' }}>Warna</div>
+            <div style={{ marginBottom: '10px' }}>
+              <ColorPicker value={style?.wm_color ?? '#FFFFFF'}
+                           onChange={(c) => onChange({ ...style, wm_color: c })} />
+            </div>
+
+            <div style={{ ...label, marginBottom: '4px' }}>
+              Ukuran — {style?.wm_size ?? 34}
+            </div>
+            <input type="range" min="12" max="160" step="2"
+                   value={style?.wm_size ?? 34}
+                   onChange={(e) => onChange({ ...style, wm_size: Number(e.target.value) })}
+                   style={{ width: '100%', marginBottom: '10px' }} />
+
+            <div style={{ ...label, marginBottom: '4px' }}>
+              Tembus pandang — {Math.round((style?.wm_opacity ?? 0.62) * 100)}%
+            </div>
+            <input type="range" min="5" max="100" step="5"
+                   value={Math.round((style?.wm_opacity ?? 0.62) * 100)}
+                   onChange={(e) => onChange({ ...style, wm_opacity: Number(e.target.value) / 100 })}
+                   style={{ width: '100%', marginBottom: '10px' }} />
+
+            <div style={{ ...label, marginBottom: '4px' }}>
+              Garis luar — {style?.wm_outline ?? 2}
+            </div>
+            <input type="range" min="0" max="10" step="1"
+                   value={style?.wm_outline ?? 2}
+                   onChange={(e) => onChange({ ...style, wm_outline: Number(e.target.value) })}
+                   style={{ width: '100%', marginBottom: '10px' }} />
+
+            {/* Sembilan sudut sebagai jalan pintas. Menyeret di pratinjau tetap
+                yang paling cepat, tapi sudut yang persis sulit dikenai dengan
+                tangan — dan pojok adalah tempat tanda air paling sering ditaruh. */}
+            <div style={{ ...label, marginBottom: '6px' }}>Tempat cepat</div>
+            <div style={{
+              display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '4px',
+              marginBottom: '8px',
+            }}>
+              {[[8, 8], [50, 8], [92, 8],
+                [8, 50], [50, 50], [92, 50],
+                [8, 92], [50, 92], [92, 92]].map(([x, y]) => {
+                const on = Math.abs((style?.wm_x ?? 92) - x) < 3
+                  && Math.abs((style?.wm_y ?? 95) - y) < 4;
+                return (
+                  <button key={`${x}-${y}`}
+                          onClick={() => onChange({ ...style, wm_x: x, wm_y: y })}
+                          title={`Taruh di ${x}% , ${y}%`}
+                          style={{
+                            height: '26px', cursor: 'pointer', borderRadius: '4px',
+                            border: on ? '2px solid var(--accent-cyan)' : '1px solid var(--border-color)',
+                            background: on ? 'var(--hl-wash)' : 'transparent',
+                          }} />
+                );
+              })}
+            </div>
+            <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+              Sekarang di {Math.round(style?.wm_x ?? 92)}% , {Math.round(style?.wm_y ?? 95)}%
+            </div>
+          </>
+        )}
       </Section>
 
       <Section id="rasio" title="Rasio video" note={aspectRatio}
