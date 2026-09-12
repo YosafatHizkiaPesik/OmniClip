@@ -196,11 +196,18 @@ def _bongkar(arsip: Path, tujuan: Path) -> Path:
     return folder
 
 
-def _tulis_penolong(temp: Path, pid: int, lama: Path, baru: Path) -> Path:
+def _tulis_penolong(temp: Path, pid: int, lama: Path, baru: Path,
+                    panggung: Path) -> Path:
     """
     Skrip yang menukar folder setelah aplikasi mati.
 
-    Ia tinggal di folder sementara, bukan di dalam folder yang ditukar.
+    Ia tinggal di folder sementara, bukan di dalam folder yang ditukar maupun
+    di panggung — keduanya lenyap di tengah pekerjaannya, dan cmd membaca
+    berkas .bat baris demi baris selama dijalankan.
+
+    Segala sesuatunya dicatat ke `pasang.log` di sebelah skrip ini. Tanpa itu,
+    kegagalan hanya meninggalkan satu baris di jendela yang lalu tertutup, dan
+    satu-satunya yang bisa dilaporkan pengguna adalah "gagal".
     """
     exe = "OmniClip.exe" if sys.platform == "win32" else "OmniClip"
     cadangan = lama.with_name(lama.name + f"-lama-{int(time.time())}")
@@ -210,7 +217,7 @@ def _tulis_penolong(temp: Path, pid: int, lama: Path, baru: Path) -> Path:
         p.write_text(f'''@echo off
 rem Penolong pemasangan OmniClip. Menunggu aplikasi mati, menukar folder,
 rem lalu menjalankan yang baru. Folder lama hanya DIGANTI NAMA: bila langkah
-rem terakhir gagal, yang lama masih utuh di sebelahnya.
+rem terakhir gagal, yang lama masih utuh di sebelahnya dan dikembalikan.
 setlocal
 rem Port TIDAK diwariskan. Aplikasi yang sedang berjalan menuliskan port
 rem pilihannya ke lingkungan, dan penolong ini mewarisinya. Kalau diteruskan,
@@ -218,30 +225,58 @@ rem aplikasi baru dipaksa memakai port yang barangkali belum sempat dilepas
 rem sistem - lalu mati saat start, tepat pada saat pengguna paling tidak bisa
 rem menebak apa yang terjadi. Dilepas, ia memilih port kosong sendiri.
 set OMNICLIP_PORT=
+set "LOG=%~dp0pasang.log"
+echo === OmniClip: pemasangan %date% %time% >"%LOG%"
+echo Lama    : {lama} >>"%LOG%"
+echo Baru    : {baru} >>"%LOG%"
+echo Cadangan: {cadangan} >>"%LOG%"
+
 echo Menunggu OmniClip menutup...
 for /l %%i in (1,1,120) do (
   tasklist /fi "PID eq {pid}" 2>nul | find "{pid}" >nul || goto :tukar
   timeout /t 1 /nobreak >nul
 )
+echo GAGAL: proses {pid} tidak menutup dalam 120 detik. >>"%LOG%"
 echo OmniClip tidak menutup. Pemasangan dibatalkan.
+echo Rincian: %LOG%
 pause
 exit /b 1
 
 :tukar
-move "{lama}" "{cadangan}" >nul 2>&1
+echo [1/3] Menyingkirkan versi lama... >>"%LOG%"
+move "{lama}" "{cadangan}" >>"%LOG%" 2>&1
 if errorlevel 1 (
-  echo Tidak bisa memindahkan folder lama. Pemasangan dibatalkan.
+  echo GAGAL: folder lama tidak bisa dipindahkan. Mungkin masih terbuka. >>"%LOG%"
+  echo Tidak bisa memindahkan folder lama. Versi lama masih utuh.
+  echo Rincian: %LOG%
   pause
   exit /b 1
 )
-move "{baru}" "{lama}" >nul 2>&1
-if errorlevel 1 (
-  echo Pemasangan gagal. Mengembalikan versi lama...
-  move "{cadangan}" "{lama}" >nul 2>&1
+
+echo [2/3] Memasang versi baru... >>"%LOG%"
+move "{baru}" "{lama}" >>"%LOG%" 2>&1
+if not errorlevel 1 goto :beres
+
+rem Cadangan bila `move` menolak: paling sering karena berkas yang baru
+rem dibongkar masih dipegang pemindai antivirus. Robocopy mencoba ulang
+rem alih-alih menyerah pada percobaan pertama.
+echo move ditolak; mencoba robocopy... >>"%LOG%"
+robocopy "{baru}" "{lama}" /E /MOVE /R:3 /W:2 /NFL /NDL /NJH /NJS /NP >>"%LOG%" 2>&1
+if errorlevel 8 (
+  echo GAGAL: versi baru tidak bisa dipasang. Mengembalikan yang lama. >>"%LOG%"
+  rmdir /s /q "{lama}" >nul 2>&1
+  move "{cadangan}" "{lama}" >>"%LOG%" 2>&1
+  echo Pemasangan gagal. Versi lama sudah dikembalikan.
+  echo Rincian: %LOG%
   pause
   exit /b 1
 )
+
+:beres
+echo [3/3] Membersihkan... >>"%LOG%"
 rmdir /s /q "{cadangan}" >nul 2>&1
+rmdir /s /q "{panggung}" >nul 2>&1
+echo Selesai. >>"%LOG%"
 start "" "{lama}\\{exe}"
 exit /b 0
 ''', encoding="utf-8")
@@ -252,20 +287,25 @@ exit /b 0
 # Penolong pemasangan OmniClip. Lihat catatan di app/services/updater.py.
 # Port tidak diwariskan; lihat catatan pada versi Windows di atas.
 unset OMNICLIP_PORT
+LOG="$(dirname "$0")/pasang.log"
+echo "=== OmniClip: pemasangan $(date)" >"$LOG"
 echo "Menunggu OmniClip menutup..."
 i=0
 while kill -0 {pid} 2>/dev/null; do
   i=$((i+1))
-  [ "$i" -gt 120 ] && {{ echo "OmniClip tidak menutup. Dibatalkan."; exit 1; }}
+  [ "$i" -gt 120 ] && {{ echo "GAGAL: proses {pid} tidak menutup." >>"$LOG"; exit 1; }}
   sleep 1
 done
-mv "{lama}" "{cadangan}" || {{ echo "Tidak bisa memindahkan folder lama."; exit 1; }}
-if ! mv "{baru}" "{lama}"; then
-  echo "Pemasangan gagal. Mengembalikan versi lama..."
+mv "{lama}" "{cadangan}" >>"$LOG" 2>&1 || {{
+  echo "GAGAL: folder lama tidak bisa dipindahkan." >>"$LOG"; exit 1; }}
+if ! mv "{baru}" "{lama}" >>"$LOG" 2>&1; then
+  echo "GAGAL memasang; mengembalikan versi lama." >>"$LOG"
+  rm -rf "{lama}"
   mv "{cadangan}" "{lama}"
   exit 1
 fi
-rm -rf "{cadangan}"
+rm -rf "{cadangan}" "{panggung}"
+echo "Selesai." >>"$LOG"
 exec "{lama}/{exe}"
 ''', encoding="utf-8")
     p.chmod(0o755)
@@ -288,13 +328,50 @@ def pasang(ctx) -> dict:
     if not info["url_unduh"]:
         raise RuntimeError(info["galat"] or "Rilis terbaru tidak punya berkas untuk sistem ini.")
 
-    temp = Path(tempfile.mkdtemp(prefix="omniclip_update_"))
-    arsip = temp / _nama_aset()
+    # Panggung dibuat DI SEBELAH folder aplikasi, bukan di %TEMP%.
+    #
+    # Penolong menukar folder dengan `move`, dan `move` di cmd tidak bisa
+    # memindahkan sebuah DIREKTORI ke volume lain — ia gagal dengan "cannot
+    # move the file to a different disk drive". Selama panggungnya di %TEMP%
+    # (biasanya C:) sedangkan aplikasinya dipasang di D: atau cakram lepasan,
+    # pemasangan pasti gagal di langkah terakhir lalu mengembalikan versi lama.
+    #
+    # Di Linux ini tidak pernah terlihat: `mv` di sana diam-diam menyalin bila
+    # lintas berkas-sistem. Karena itu uji ujung-ke-ujung di Linux meloloskannya.
+    #
+    # Induk folder aplikasi sudah dipastikan bisa ditulis oleh `bisa_memasang()`
+    # di atas, jadi panggung di sini aman — dan penukarannya jadi penggantian
+    # nama seketika, bukan penyalinan 300 MB.
+    lama = folder_aplikasi()
+    temp = Path(tempfile.mkdtemp(prefix="omniclip_update_"))   # hanya untuk skrip
+    panggung = lama.parent / f".omniclip-pembaruan-{os.getpid()}"
+    shutil.rmtree(panggung, ignore_errors=True)
+    panggung.mkdir(parents=True)
+
+    arsip = panggung / _nama_aset()
     total = info["ukuran"]
 
     ctx.progress(0.02, stage="unduh",
                  message=f"Mengunduh OmniClip {info['versi_terbaru']}…")
 
+    try:
+        baru = _unduh_dan_bongkar(ctx, info, arsip, panggung, total)
+    except BaseException:
+        # Panggung ada di sebelah aplikasi, bukan di %TEMP% yang disapu
+        # sistem. Gagal tanpa membersihkan berarti 300 MB tertinggal di situ
+        # setiap kali seseorang mencoba lalu koneksinya putus.
+        shutil.rmtree(panggung, ignore_errors=True)
+        shutil.rmtree(temp, ignore_errors=True)
+        raise
+
+    ctx.progress(0.95, stage="siap", message="Menyiapkan pemasangan…")
+    penolong = _tulis_penolong(temp, os.getpid(), lama, baru, panggung)
+    return _jalankan_penolong(ctx, info, temp, penolong)
+
+
+def _unduh_dan_bongkar(ctx, info: dict, arsip: Path, panggung: Path,
+                       total: int) -> Path:
+    """Mengunduh arsip rilis lalu membongkarnya; mengembalikan folder baru."""
     req = urllib.request.Request(
         info["url_unduh"], headers={"User-Agent": f"OmniClip/{__version__}"})
     with urllib.request.urlopen(req, timeout=UNDUH_TIMEOUT) as r, open(arsip, "wb") as f:
@@ -312,12 +389,13 @@ def pasang(ctx) -> dict:
         raise RuntimeError("Unduhan tidak lengkap. Coba lagi.")
 
     ctx.progress(0.82, stage="periksa", message="Memeriksa berkas…")
-    baru = _bongkar(arsip, temp / "isi")
+    baru = _bongkar(arsip, panggung / "isi")
+    arsip.unlink(missing_ok=True)      # 245 MB yang tidak dibutuhkan lagi
+    return baru
 
-    ctx.progress(0.95, stage="siap", message="Menyiapkan pemasangan…")
-    lama = folder_aplikasi()
-    penolong = _tulis_penolong(temp, os.getpid(), lama, baru)
 
+def _jalankan_penolong(ctx, info: dict, temp: Path, penolong: Path) -> dict:
+    """Menyalakan skrip penukar folder, lalu menutup aplikasi ini."""
     log.info("Pembaruan %s siap dipasang; menjalankan penolong %s",
              info["versi_terbaru"], penolong)
 
