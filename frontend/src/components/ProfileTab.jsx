@@ -7,6 +7,7 @@ import {
 import { apiDelete, apiGet, apiPost } from '../lib/api';
 import GoogleAccountCard from './GoogleAccountCard';
 import SecurityCard from './SecurityCard';
+import UpdateCard from './UpdateCard';
 
 // Bagian pada satu lembar bergaris, bukan kartu di atas kartu. Tumpukan kartu
 // ikon+judul+teks sebagai struktur halaman adalah wadah paling malas yang ada,
@@ -45,6 +46,9 @@ export default function ProfileTab() {
   const [models, setModels] = useState(null);
   const [model, setModel] = useState(() => localStorage.getItem('omniclip_gemini_model') || '');
   const [deletingKey, setDeletingKey] = useState(false);
+  // Versi datang dari backend: satu sumber, bukan angka yang ditulis ulang
+  // di sini dan diam-diam tertinggal saat versinya naik.
+  const [versiApp, setVersiApp] = useState('');
   const [modelsError, setModelsError] = useState(null);
   // Preferensi pengklipan. Dulu tinggal di halaman tonton, yang membuat layar
   // itu penuh pilihan yang harus dibaca ulang setiap membuka video padahal
@@ -75,6 +79,10 @@ export default function ProfileTab() {
   };
 
   useEffect(() => { loadSettings(); }, []);
+
+  useEffect(() => {
+    apiGet('/health').then((r) => setVersiApp(r.versi || '')).catch(() => {});
+  }, []);
 
   // Daftar model diambil dari API, bukan dari daftar tetap: model dipensiunkan
   // tanpa pemberitahuan, dan itu persis yang membuat penajaman AI diam-diam
@@ -498,6 +506,8 @@ export default function ProfileTab() {
         )}
       </div>
 
+      <UpdateCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
+
       <SecurityCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
 
       <GoogleAccountCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
@@ -509,7 +519,7 @@ export default function ProfileTab() {
           Tentang
         </div>
         <div style={{ ...helpText, display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '6px 16px', marginTop: '8px' }}>
-          <span style={{ color: 'var(--text-muted)' }}>Versi</span><span>OmniClip AI 3.1</span>
+          <span style={{ color: 'var(--text-muted)' }}>Versi</span><span>OmniClip {versiApp || '…'}</span>
           <span style={{ color: 'var(--text-muted)' }}>Mode</span><span>Lokal — semua file dan riwayat disimpan di komputer ini</span>
           <span style={{ color: 'var(--text-muted)' }}>Penyimpanan</span><span><code>OmniClip_Storage/</code></span>
         </div>

@@ -17,11 +17,14 @@ from .routers import jobs as jobs_router
 from .routers import media as media_router
 from .routers import projects as projects_router
 from .routers import settings as settings_router
+from .routers import update as update_router
 from .routers import uploads as uploads_router
 from .routers import videos as videos_router
 from .services import auth, cf_access
 from .services.events import broker
 from .services.jobs import queue
+from .services.updater import pasang as run_update
+from .version import __version__
 from .services.pipeline import (
     run_auto_clip, run_diarize, run_download, run_render, run_retitle,
     run_tts_voice, run_upload,
@@ -87,6 +90,7 @@ async def lifespan(app: FastAPI):
     queue.register("upload", run_upload, lane="upload")
     queue.register("tts_voice", run_tts_voice, lane="net")
     queue.register("retitle", run_retitle, lane="net")
+    queue.register("update", run_update, lane="net")
     queue.start()
 
     # Smart reframe bersifat opsional dan gagal dengan anggun, jadi ketiadaannya
@@ -94,7 +98,7 @@ async def lifespan(app: FastAPI):
     # diam-diam selalu memakai bilah kabur. Karena itu statusnya dilaporkan
     # sekali saat startup.
     _log_reframe_status()
-    log.info("OmniClip backend siap")
+    log.info("OmniClip %s siap", __version__)
 
     try:
         yield
@@ -105,7 +109,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="OmniClip AI Backend Engine",
-    version="3.2",
+    version=__version__,
     description="Backend lokal untuk pencarian & unduhan YouTube, auto-clipping, dan render FFmpeg",
     lifespan=lifespan,
 )
@@ -128,11 +132,12 @@ app.include_router(clips_router.router)
 app.include_router(media_router.router)
 app.include_router(projects_router.router)
 app.include_router(uploads_router.router)
+app.include_router(update_router.router)
 
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "app": "OmniClip AI Engine v3.2"}
+    return {"status": "ok", "app": "OmniClip AI Engine", "versi": __version__}
 
 
 # --- Gerbang -------------------------------------------------------------------

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
-  Search, Download, SlidersHorizontal, Film, Music4, Menu, X,
+  Search, Download, SlidersHorizontal, Film, Music4, Menu, X, ArrowDownToLine,
 } from 'lucide-react';
 import ErrorBoundary from './components/ErrorBoundary';
 import { apiGet } from './lib/api';
@@ -38,6 +38,10 @@ function isEditorPath(pathname) {
  */
 export default function App() {
   const [engine, setEngine] = useState(null);
+  // Pembaruan yang tersedia harus terlihat tanpa membuka Pengaturan — orang
+  // tidak membuka halaman setelan untuk memeriksa sesuatu yang tidak mereka
+  // tahu ada.
+  const [pembaruan, setPembaruan] = useState(null);
   const navigate = useNavigate();
   // Kunci penahan galat: berpindah halaman harus menghapus galat sebelumnya,
   // bukan menyisakan pesan rusak dari rute yang sudah ditinggalkan.
@@ -53,6 +57,14 @@ export default function App() {
   useEffect(() => {
     const savedTheme = localStorage.getItem('omniclip_theme') || 'light';
     document.documentElement.setAttribute('data-theme', savedTheme);
+  }, []);
+
+  // Sekali saat aplikasi dibuka. Jawabannya di-cache backend enam jam, jadi
+  // berpindah halaman tidak berarti bertanya ulang ke GitHub.
+  useEffect(() => {
+    apiGet('/update')
+      .then((u) => { if (u?.ada_pembaruan) setPembaruan(u); })
+      .catch(() => {});
   }, []);
 
   // Label mesin dibaca dari pengaturan sungguhan, bukan ditulis permanen.
@@ -78,6 +90,22 @@ export default function App() {
         <span className="brand-badge">Auto-clipper</span>
 
         <div className="header-meta">
+          {pembaruan && (
+            <button
+              onClick={() => navigate('/settings')}
+              title={`Versi ${pembaruan.versi_terbaru} tersedia`}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '6px',
+                padding: '5px 10px', marginRight: '12px', cursor: 'pointer',
+                borderRadius: '999px', fontFamily: 'inherit',
+                fontSize: '0.74rem', fontWeight: 800,
+                color: 'var(--reh)', background: 'var(--hl-wash)',
+                border: '1px solid var(--border-active)',
+              }}>
+              <ArrowDownToLine size={13} />
+              Versi {pembaruan.versi_terbaru}
+            </button>
+          )}
           <span>
             Mesin{' '}
             <b>

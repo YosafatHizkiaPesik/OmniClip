@@ -62,6 +62,22 @@ jobs:
         shell: bash
         run: test -f frontend/dist/index.html
 
+      # Tag dan app/version.py harus menyebut angka yang sama. Kalau tidak,
+      # rilis v1.0.1 akan berisi aplikasi yang mengaku 1.0.0 — dan setiap
+      # pemasangan akan menawarkan pembaruan yang sama, memasangnya, lalu
+      # menawarkannya lagi, selamanya.
+      - name: Cocokkan tag dengan nomor versi
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          BERKAS=$(grep -oP '__version__\s*=\s*"\K[^"]+' backend/app/version.py)
+          echo "tag=$TAG  version.py=$BERKAS"
+          if [ "$TAG" != "$BERKAS" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME tidak cocok dengan app/version.py ($BERKAS)."
+            exit 1
+          fi
+
       - name: Pasang dependensi Python
         working-directory: backend
         run: |
