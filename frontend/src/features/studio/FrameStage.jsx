@@ -145,11 +145,35 @@ export default function FrameStage({
         // yang di rekaman dua kamera berarti "orang 2" mengambang di atas kursi
         // kosong sepanjang sisa klip.
         const aimed = personKeyAt(personKeys, t);
+        // Siapa yang terlihat TEPAT sekarang, dan di mana. Dihitung sekali
+        // per bingkai, bukan per penanda.
+        const fps = reframe?.people_fps || 8;
+        const si = Math.max(0, Math.round(t * fps));
+        const segar = (reframe?.people ?? []).map((_, i) => {
+          const lane = reframe?.people_seen?.[i];
+          return lane ? !!lane[Math.min(si, lane.length - 1)] : true;
+        });
+        const segarPos = (reframe?.people ?? [])
+          .map((tr, i) => (segar[i] ? tr[Math.min(si, tr.length - 1)] : null))
+          .filter((x) => x !== null && x !== undefined);
+
         for (const [key, el] of Object.entries(personRefs.current)) {
           if (!el) continue;
           const idx = Number(key);
           const v = personAt(reframe, idx, t);
-          el.style.visibility = v === null ? 'hidden' : 'visible';
+          // Penanda yang posisinya sudah basi disembunyikan bila ia jatuh
+          // menimpa penanda orang lain yang sedang benar-benar terlihat.
+          //
+          // `personAt` sengaja menahan posisi terakhir selama seperempat detik
+          // supaya penandanya tidak berkedip tiap kali deteksi meleset satu
+          // bingkai. Harganya: orang yang baru saja keluar dari kamera masih
+          // digambar di tempat lamanya — dan kalau orang lain sekarang berdiri
+          // di situ, yang terlihat adalah dua nomor bertumpuk di satu wajah.
+          // Itu terbaca sebagai "nomornya tertumpuk", padahal penomorannya
+          // sendiri tidak pernah memberi satu nomor ke dua orang sekaligus.
+          const tertimpa = v !== null && !segar[idx]
+            && segarPos.some((x) => Math.abs(x - v) < 4);
+          el.style.visibility = (v === null || tertimpa) ? 'hidden' : 'visible';
           if (v !== null) el.style.left = `${v}%`;
           // Yang sedang dituju bingkai ditandai di sini juga, karena inilah
           // gambar yang dilihat pengguna saat bertanya "kenapa yang diam?".
