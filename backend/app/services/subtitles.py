@@ -14,8 +14,11 @@ Hook juga ditulis sebagai event ASS, bukan drawtext. Ini menghilangkan seluruh
 masalah escaping drawtext dan memberi word-wrap gratis.
 """
 
+import logging
 from dataclasses import dataclass
 from typing import Literal, Optional
+
+log = logging.getLogger("omniclip.subtitles")
 
 Position = Literal["top", "middle", "bottom"]
 
@@ -58,7 +61,15 @@ class CaptionStyle:
     #
     # Nilai bawaan menaruh putih di posisi pertama, jadi video satu narasumber
     # tetap tampil persis seperti sebelum fitur ini ada.
-    speaker_colors: tuple[str, ...] = ("#FFFFFF", "#7CFFB2", "#FFB3C7", "#B39DFF")
+    # Delapan, sama persis dengan daftar di antarmuka.
+    #
+    # Dulu hanya empat di sini dan delapan di sana, dan selisihnya terlihat
+    # persis pada video berpenutur lima: orang kelima berwarna emas di editor
+    # dan putih di video. Gaya tersimpan milik pengguna bahkan bisa lebih
+    # pendek lagi — `_lengkapi_warna` di bawah menambalnya dari daftar ini,
+    # supaya palet yang kependekan tidak pernah berubah jadi putih diam-diam.
+    speaker_colors: tuple[str, ...] = ("#FFFFFF", "#7CFFB2", "#FFB3C7", "#B39DFF",
+                                       "#FFD166", "#5BC8FF", "#FF9F1C", "#B8FF3A")
     max_words_per_line: int = 5
     max_chars_per_line: int = 22
 
@@ -78,9 +89,17 @@ ALIGNMENT = {"bottom": 2, "middle": 5, "top": 8}
 def hex_to_ass(color: str) -> str:
     """
     '#RRGGBB' -> '&HBBGGRR&'. ASS memakai urutan byte terbalik.
+
+    Nilai yang tidak terbaca dikembalikan sebagai putih, TAPI dicatat ke log.
+    Diamnya versi sebelumnya mahal: satu preset di antarmuka menyimpan
+    `var(--danger)` sebagai warna sorotan — sah di peramban, tidak berarti
+    apa-apa bagi ffmpeg — dan seluruh subtitle keluar putih di hasil render
+    sementara pratinjau menampilkannya merah. Tidak ada satu pun pesan yang
+    menunjukkan ada yang salah, jadi yang terlihat hanyalah "warnanya beda".
     """
-    c = color.lstrip("#")
-    if len(c) != 6:
+    c = (color or "").strip().lstrip("#")
+    if len(c) != 6 or any(ch not in "0123456789abcdefABCDEF" for ch in c):
+        log.warning("Warna tidak terbaca: %r — dipakai putih", color)
         return "&H00FFFFFF&"
     r, g, b = c[0:2], c[2:4], c[4:6]
     return f"&H00{b}{g}{r}".upper() + "&"
@@ -205,6 +224,25 @@ def _spread(tokens: list[str], line: dict) -> list[dict]:
     return out
 
 
+WARNA_BAWAAN = ("#FFFFFF", "#7CFFB2", "#FFB3C7", "#B39DFF",
+                "#FFD166", "#5BC8FF", "#FF9F1C", "#B8FF3A")
+
+
+def _lengkapi_warna(warna) -> tuple[str, ...]:
+    """
+    Menambal palet yang kependekan, bukan membiarkannya jadi putih.
+
+    Gaya tersimpan pengguna bisa berasal dari versi lama yang cuma punya tiga
+    warna. Dengan lima penutur, dua orang terakhir lalu jatuh ke warna dasar —
+    putih — sementara editor menampilkannya berwarna. Perbedaan itu tidak
+    pernah terlihat sebagai kesalahan, cuma sebagai "warnanya beda".
+    """
+    keluar = list(warna or ())
+    for i in range(len(keluar), len(WARNA_BAWAAN)):
+        keluar.append(WARNA_BAWAAN[i])
+    return tuple(keluar)
+
+
 def build_ass(
     *,
     lines: list[dict],
@@ -226,7 +264,7 @@ def build_ass(
 
     primary = hex_to_ass(st.primary)
     highlight = hex_to_ass(st.highlight)
-    speaker_ass = [hex_to_ass(c) for c in st.speaker_colors]
+    speaker_ass = [hex_to_ass(c) for c in _lengkapi_warna(st.speaker_colors)]
     hook_color = hex_to_ass(hook.color) if hook else "&H0000E5FF&"
     align = ALIGNMENT.get(st.position, 2)
 
@@ -286,8 +324,23 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 if 0 <= sp < len(speaker_ass) else primary)
         base_tag = "" if base == primary else f"{{\\c{base}}}"
 
-        if st.animation in KARAOKE and words:
+        # Sorotan per kata TIDAK lagi terikat pada animasi masuk.
+        #
+        # Dulu hanya mode `karaoke_*` yang menyorot kata, sedangkan pratinjau
+        # menyorotnya pada mode apa pun. Akibatnya preset seperti "Papan"
+        # (animasi `pop_in`) terlihat mengikuti ucapan kata demi kata di editor
+        # lalu keluar sebagai blok diam di video — yang dibaca pengguna sebagai
+        # "animasinya hilang". Keduanya memang dua hal yang berbeda: satu
+        # mengatur cara BARIS masuk, satu lagi cara KATA disorot, dan tidak ada
+        # alasan memilih salah satunya.
+        #
+        # Pantulan kata tetap khusus `karaoke_pop`, sama seperti di pratinjau.
+        if st.animation not in ("none", "block") and words:
             bounce = st.animation == "karaoke_pop"
+            masuk = _entry_tag(st.animation, play_res=play_res,
+                               margin_v=st.margin_v, align=align,
+                               center_x=int(round(center / 100.0 * w)),
+                               budget=max(0.2, float(words[0]["e"]) - float(words[0]["s"])))
             for idx, word in enumerate(words):
                 start = word["s"]
                 end = words[idx + 1]["s"] if idx + 1 < len(words) else line["end"]
@@ -307,7 +360,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                         parts.append(token)
                 events.append(
                     f"Dialogue: 0,{_ts(start)},{_ts(end)},Caption,,0,0,0,,"
-                    f"{base_tag}{' '.join(parts)}"
+                    # Animasi masuk hanya pada kejadian PERTAMA baris itu.
+                    # Menaruhnya di tiap kata berarti barisnya memantul ulang
+                    # setiap kali sorotan berpindah.
+                    f"{masuk if idx == 0 else ''}{base_tag}{' '.join(parts)}"
                 )
         else:
             text = raw_text.upper() if st.uppercase else raw_text

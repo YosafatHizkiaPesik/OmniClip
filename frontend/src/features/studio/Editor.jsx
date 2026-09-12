@@ -45,10 +45,37 @@ const STYLE_KEY = 'omniclip_caption_style';
  * bukan sekali per klip. Tanpa ini, tiap kali editor dibuka semuanya kembali ke
  * bawaan dan seluruh penyetelan harus diulang.
  */
+const HEX = /^#[0-9A-Fa-f]{6}$/;
+
+/**
+ * Membuang warna yang tidak bisa dipakai ffmpeg dari gaya tersimpan.
+ *
+ * Sebuah preset pernah menyimpan `var(--danger)` sebagai warna sorotan. Nilai
+ * itu ikut tersimpan di peramban dan bertahan di sana meski presetnya sudah
+ * dibetulkan. Sejak server menolak warna yang bukan heksadesimal — dan memang
+ * harus menolaknya, supaya kekeliruan begini tidak lagi lolos jadi "putih
+ * diam-diam" — gaya lama itu akan membuat render GAGAL, bukan sekadar salah
+ * warna. Jadi dibersihkan saat dimuat, sekali, tanpa pengguna perlu tahu.
+ */
+function bersihkanWarna(gaya) {
+  const out = { ...gaya };
+  for (const k of ['primary', 'highlight']) {
+    if (typeof out[k] === 'string' && !HEX.test(out[k].trim())) out[k] = DEFAULT_STYLE[k];
+  }
+  if (Array.isArray(out.speaker_colors)) {
+    out.speaker_colors = out.speaker_colors.map(
+      (c, i) => (typeof c === 'string' && HEX.test(c.trim())
+        ? c.trim() : (DEFAULT_STYLE.speaker_colors[i] ?? '#FFFFFF')),
+    );
+  }
+  return out;
+}
+
 function loadStoredStyle() {
   try {
     const raw = JSON.parse(localStorage.getItem(STYLE_KEY) || 'null');
-    return raw && typeof raw === 'object' ? { ...DEFAULT_STYLE, ...raw } : DEFAULT_STYLE;
+    return raw && typeof raw === 'object'
+      ? bersihkanWarna({ ...DEFAULT_STYLE, ...raw }) : DEFAULT_STYLE;
   } catch {
     return DEFAULT_STYLE;
   }

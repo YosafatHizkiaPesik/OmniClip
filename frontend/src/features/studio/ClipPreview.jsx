@@ -23,6 +23,16 @@ const RATIO_BOX = {
 // nilai/1920 berlaku untuk SEMUA rasio, jadi pratinjau bisa memakai satu rumus.
 const CANVAS_H = 1920;
 
+// Sama persis dengan WARNA_BAWAAN di backend/app/services/subtitles.py.
+const WARNA_BAWAAN = ['#FFFFFF', '#7CFFB2', '#FFB3C7', '#B39DFF',
+                      '#FFD166', '#5BC8FF', '#FF9F1C', '#B8FF3A'];
+
+function padPalette(warna) {
+  const out = [...(warna ?? [])];
+  for (let i = out.length; i < WARNA_BAWAAN.length; i += 1) out.push(WARNA_BAWAAN[i]);
+  return out;
+}
+
 /** m:dd — satuan yang sama dengan yang tertulis di bilah transport. */
 function clockTime(seconds) {
   const t = Math.max(0, Number(seconds) || 0);
@@ -480,6 +490,9 @@ export default function ClipPreview({
   const activeWordIndex = useMemo(() => {
     const w = activeLine?.words;
     if (!w?.length) return -1;
+    // Mode tanpa animasi memang tidak menyorot kata, di sini maupun di ASS.
+    const anim = style?.animation ?? 'karaoke_pop';
+    if (anim === 'none' || anim === 'block') return -1;
     // Sorotan bertahan sampai kata BERIKUTNYA mulai, bukan sampai kata ini
     // selesai — aturan yang sama dengan yang dipakai berkas ASS, tempat tiap
     // kejadian berakhir tepat saat kejadian berikutnya dimulai. Dengan aturan
@@ -490,7 +503,7 @@ export default function ClipPreview({
       if (clipTime >= w[i].s) return i;
     }
     return -1;
-  }, [activeLine, clipTime]);
+  }, [activeLine, clipTime, style?.animation]);
 
   /**
    * Menggeser dan mengubah ukuran subtitle langsung di atas gambar.
@@ -1139,7 +1152,11 @@ export function CaptionOverlay({
   // Diindeks langsung: palette[0] milik orang pertama. Versi sebelumnya
   // melewati indeks 0 dan memaksa orang pertama memakai `primary`, sehingga
   // warnanya tidak bisa disetel sendiri.
-  const palette = style?.speaker_colors ?? [];
+  // Palet ditambal dari daftar bawaan, bukan dibiarkan jatuh ke warna dasar.
+  // Gaya tersimpan bisa berasal dari versi lama yang cuma punya tiga warna,
+  // dan tanpa tambalan orang keempat ke atas jadi putih di sini sementara
+  // hasil render memberinya warna — atau sebaliknya. Satu aturan, dua tempat.
+  const palette = padPalette(style?.speaker_colors);
   const sp = line.speaker || 0;
   const speakerColor = palette[sp] ?? style?.primary ?? '#FFFFFF';
 

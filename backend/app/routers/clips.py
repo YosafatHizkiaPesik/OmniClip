@@ -1,9 +1,10 @@
 """Analisis auto-clip dan render klip."""
 
+import re
 from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import APIRouter
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from ..errors import InvalidInput, NotFound
 from ..repos import analyses as analyses_repo
@@ -42,6 +43,27 @@ class SegmentModel(BaseModel):
     end: float
 
 
+_HEX = re.compile(r"^#[0-9A-Fa-f]{6}$")
+
+
+def _warna(v: Optional[str]) -> Optional[str]:
+    """
+    Warna harus heksadesimal, dan penolakannya harus terdengar.
+
+    Dulu nilai apa pun diterima lalu diubah diam-diam jadi putih jauh di
+    dalam penyusun ASS. Satu preset di antarmuka mengirim `var(--danger)`,
+    dan akibatnya seluruh subtitle keluar putih di video sementara pratinjau
+    menampilkannya merah — tanpa galat, jadi yang terlihat cuma "warnanya
+    beda". Ditolak di sini, kekeliruan yang sama tidak bisa lagi lolos diam-diam.
+    """
+    if v is None:
+        return None
+    v = v.strip()
+    if not _HEX.match(v):
+        raise ValueError(f"warna harus berbentuk #RRGGBB, bukan {v!r}")
+    return v.upper()
+
+
 class CaptionStyleModel(BaseModel):
     """Gaya teks dari UI. Semua nilai di sini benar-benar sampai ke ffmpeg."""
     size: Optional[int] = None
@@ -62,6 +84,16 @@ class CaptionStyleModel(BaseModel):
     box_w: Optional[float] = None
     # Warna per penutur, diindeks langsung: [0] orang pertama, [1] kedua, dst.
     speaker_colors: Optional[List[str]] = None
+
+    @field_validator("primary", "highlight")
+    @classmethod
+    def _cek_warna(cls, v):
+        return _warna(v)
+
+    @field_validator("speaker_colors")
+    @classmethod
+    def _cek_palet(cls, v):
+        return None if v is None else [_warna(x) for x in v]
 
 
 class FrameRectModel(BaseModel):

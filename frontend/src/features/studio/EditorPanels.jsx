@@ -441,7 +441,11 @@ const STYLE_PRESETS = [
   },
   {
     id: 'papan', label: 'Papan', hint: 'Blok tebal, sangat mencolok',
-    patch: { size: 88, primary: '#FFFFFF', highlight: 'var(--danger)', font: 'Archivo Black',
+    // Warna DITULIS sebagai heksadesimal, bukan sebagai var(--danger).
+    // Nilai preset ini dikirim apa adanya ke ffmpeg, dan variabel CSS tidak
+    // berarti apa-apa di sana — sah di peramban, putih di video, tanpa satu
+    // pun pesan yang menunjukkan ada yang salah.
+    patch: { size: 88, primary: '#FFFFFF', highlight: '#FF4D5E', font: 'Archivo Black',
              uppercase: true, animation: 'pop_in', position: 'bottom', outline_px: 9 },
   },
   {
