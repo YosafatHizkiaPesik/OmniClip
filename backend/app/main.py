@@ -63,10 +63,11 @@ def _log_reframe_status() -> None:
     if SFACE_PATH.is_file():
         log.info("Smart reframe siap (YuNet + pengenal wajah SFace)")
     else:
-        # Bukan peringatan: tanpa pengenal, penomoran orang jatuh ke tempat
-        # duduk — lebih buruk di bidikan dekat, tapi tetap bekerja.
-        log.info("Smart reframe siap (YuNet). Pengenal wajah belum diunduh, "
-                 "nomor orang memakai tempat duduk. Lihat requirements.txt.")
+        # Bukan peringatan: berkasnya diambil sendiri saat pertama dibutuhkan,
+        # dan bila unduhannya gagal penomoran orang jatuh ke tempat duduk —
+        # lebih buruk di bidikan dekat, tapi tetap bekerja.
+        log.info("Smart reframe siap (YuNet). Pengenal wajah (37 MB) akan "
+                 "diunduh sendiri saat klip pertama dianalisis.")
 
 
 @asynccontextmanager

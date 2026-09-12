@@ -17,6 +17,7 @@ cabang bersarang di parser rekursif ffmpeg — rapuh dan lambat.
 
 import logging
 import math
+import os
 import subprocess
 from collections import OrderedDict
 from dataclasses import dataclass, field
@@ -24,6 +25,7 @@ from pathlib import Path
 from typing import Optional
 
 from ..config import MODELS_DIR
+from .paths import ffpath
 
 log = logging.getLogger("omniclip.reframe")
 
@@ -43,6 +45,43 @@ MODEL_PATH = MODELS_DIR / "face_detection_yunet_2023mar.onnx"
 # 23 ms per wajah, jadi sidik diambil per JEJAK, bukan per wajah per sampel —
 # satu jejak sudah berarti satu orang yang sama sepanjang ia terlihat.
 SFACE_PATH = MODELS_DIR / "face_recognition_sface_2021dec.onnx"
+SFACE_URL = ("https://github.com/opencv/opencv_zoo/raw/main/models/"
+             "face_recognition_sface/face_recognition_sface_2021dec.onnx")
+
+
+def _pastikan_sface() -> bool:
+    """
+    Mengunduh pengenal wajah saat pertama dipakai. 37 MB, sekali seumur
+    pemasangan.
+
+    Dulu berkas ini hanya bisa didapat lewat perintah curl yang tertulis di
+    requirements.txt — cukup saat satu-satunya pengguna adalah orang yang
+    menulis kodenya. Begitu OmniClip dibagikan sebagai aplikasi, "ada perintah
+    di sebuah berkas teks" berarti pengenal wajah tidak akan pernah menyala di
+    komputer siapa pun, dan penomoran orang selamanya memakai tempat duduk.
+    Modelnya terlalu besar untuk ikut dibundel, jadi ia diambil seperti model
+    penutur: sendiri, sekali, saat pertama dibutuhkan.
+    """
+    if SFACE_PATH.is_file() and SFACE_PATH.stat().st_size > 1_000_000:
+        return True
+    import urllib.request
+    tmp = SFACE_PATH.with_suffix(".part")
+    try:
+        log.info("Mengunduh model pengenal wajah (37 MB)…")
+        SFACE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with urllib.request.urlopen(SFACE_URL, timeout=180) as r, open(tmp, "wb") as f:
+            while chunk := r.read(1 << 20):
+                f.write(chunk)
+        os.replace(tmp, SFACE_PATH)
+        log.info("Model pengenal wajah siap.")
+        return True
+    except Exception as e:                       # jaringan mati, disk penuh, dst.
+        log.warning("Gagal mengunduh pengenal wajah: %s", str(e)[:200])
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
+        return False
 
 # Ambang kemiripan kosinus dua wajah dianggap orang yang sama. 0,363 adalah
 # angka yang disarankan penulis SFace, dan pada rekaman uji hasilnya memang
@@ -676,7 +715,7 @@ def _detect_centers(src: Path, segments: list[dict], source_w: int, source_h: in
     # jalan. Menjatuhkan seluruh render karena satu berkas tambahan tidak ada
     # bukan pertukaran yang benar.
     recognizer = None
-    if SFACE_PATH.is_file():
+    if _pastikan_sface():
         try:
             recognizer = cv2.FaceRecognizerSF.create(str(SFACE_PATH), "")
         except Exception as e:
@@ -2224,7 +2263,7 @@ def build_reframe_filter(plan: ReframePlan, cmd_path: Path,
     h = crop_h or plan.crop_h
     track = plan.x_track(w, person)
     cmd_path.write_text(plan.to_sendcmd(name=name, track=track), encoding="utf-8")
-    arg = str(cmd_path).replace("\\", "/").replace(":", r"\:")
+    arg = ffpath(cmd_path)
     chain = (
         f"sendcmd=f='{arg}',"
         f"crop@{name}=w={w}:h={h}:x={track[0][1]}:y={crop_y}"

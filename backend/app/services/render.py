@@ -26,6 +26,7 @@ from dataclasses import replace
 from ..config import CLIPS_DIR, FONTS_DIR, LOGS_DIR
 from .paths import extract_id_from_filename
 from .reframe import build_reframe_filter, plan_reframe
+from .paths import ffpath
 from .subtitles import CaptionStyle, HookSpec, build_ass
 from . import titlecard as tc
 
@@ -495,8 +496,8 @@ def render_clip(
                 ),
                 encoding="utf-8",
             )
-            ass_arg = str(ass_path).replace("\\", "/").replace(":", r"\:")
-            fonts = str(FONTS_DIR) if FONTS_DIR.is_dir() else None
+            ass_arg = ffpath(ass_path)
+            fonts = ffpath(FONTS_DIR) if FONTS_DIR.is_dir() else None
             chain.append(f"ass=filename='{ass_arg}'" + (f":fontsdir='{fonts}'" if fonts else ""))
 
         # --- Kartu judul ------------------------------------------------------
@@ -544,7 +545,7 @@ def render_clip(
             if card.wav_path is not None and card.wav_path.is_file():
                 wav_index = len([x for x in inputs if x == "-i"])
                 inputs += ["-i", str(card.wav_path)]
-            fonts_dir = str(FONTS_DIR) if FONTS_DIR.is_dir() else None
+            fonts_dir = ffpath(FONTS_DIR) if FONTS_DIR.is_dir() else None
             graph += ";" + tc.video_filters(card, vout, "kartu", "utama",
                                             out_w, out_h, fontsdir=fonts_dir)
             graph += ";" + tc.audio_filters(card, wav_index, "kartua")

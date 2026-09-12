@@ -148,56 +148,83 @@ bukaan mulut sebagai sumber jangkar kedua.
 
 ---
 
-## 4. Online, hanya untuk yang diberi akses
+## 4. Dipakai di mana saja — sebagai aplikasi desktop
 
-**Sisi aplikasinya sudah selesai** (12 September 2026). Langkah-langkah
-menyalakannya ada di `PANDUAN-AKSES-JARAK-JAUH.md`.
+**Arahnya berubah 12 September 2026.** Rencana hosting ditinggalkan: tidak ada
+anggaran untuk domain, VPS, maupun mini PC selama clipping belum menghasilkan,
+dan laptop tidak boleh dijadikan server. Bentuknya sekarang **satu aplikasi yang
+dijalankan tiap orang di komputernya sendiri**, dengan penyimpanan
+sendiri-sendiri. Lihat `PANDUAN-APLIKASI-DESKTOP.md`.
 
-Yang sudah dikerjakan dan diuji:
+`.apk` tidak dikerjakan, dan alasannya terukur: keempat dependensi inti punya
+**nol** wheel Android (ctranslate2, onnxruntime, opencv, av), sementara Windows
+punya semuanya. Tiap satu harus dikompilasi silang dari sumber untuk
+`aarch64-linux-android`, dan `ffmpeg-kit` — satu-satunya jalur ffmpeg praktis di
+Android — sudah diarsipkan pengembangnya.
 
-- **Gerbang kata sandi.** Satu middleware di depan seluruh `/api`, bawaannya
-  tertutup — jalur terbuka harus disebut namanya di `auth.OPEN_PATHS`. Turunan
-  PBKDF2-SHA256 bergaram, sesi berupa cookie ber-HMAC sehingga backend boleh
-  dimulai ulang tanpa melempar keluar HP yang sedang dipakai, dan mengganti
-  kata sandi mencabut seluruh sesi lama seketika. Terkunci 5 menit setelah 8
-  percobaan gagal.
-- **Frontend disajikan backend.** Bila `frontend/dist` ada, seluruh aplikasi
-  hidup di satu port: satu asal, satu terowongan, CORS tidak lagi ikut bermain.
-- **Kunci AI pindah ke basis data.** Dulu hanya ditulis ke `os.environ` proses,
-  jadi hilang setiap restart dan satu-satunya penyimpanan sebenarnya adalah
-  `backend/.env` — berkas yang tidak bisa disunting dari HP. Sekarang ada form
-  yang menyimpan, menampilkan asal kunci (`db` atau `env`), dan menghapus.
-  Pilihan model ikut pindah ke server, karena `localStorage` tidak mengikuti
-  pengguna ke perangkat lain.
-- **Pemulihan kata sandi** lewat `backend/reset_password.py`.
-- **Tidak diindeks:** `X-Robots-Tag: noindex`, `robots.txt` melarang semuanya.
+### Sudah selesai dan diuji
 
-Yang diuji, bukan diasumsikan:
+- **Bundel PyInstaller** (`backend/omniclip.spec`), satu-folder, ± 770 MB
+  terpasang. Peluncur `omniclip_app.py` memilih port kosong sendiri dan membuka
+  peramban.
+- **Penyimpanan pindah ke folder pengguna** saat terbungkus
+  (`%LOCALAPPDATA%\OmniClip`), supaya memperbarui aplikasi tidak menghapus klip.
+  `OMNICLIP_STORAGE` menimpa keduanya.
+- **ffmpeg statis dibundel**, ditaruh di depan `PATH` — satu baris, bukan
+  sebelas suntingan di tempat pemanggilan, dan yt-dlp ikut menemukannya.
+- **SFace mengunduh dirinya sendiri.** Dulu hanya bisa didapat lewat perintah
+  curl di requirements.txt: cukup saat satu-satunya pengguna adalah penulis
+  kodenya, dan berarti pengenal wajah tidak akan pernah menyala di komputer
+  siapa pun begitu aplikasinya dibagikan.
+- **`--periksa`**: bundel memeriksa dirinya sendiri — 16 pustaka, berkas
+  bundelan, ffmpeg beserta 7 filter dan 2 encoder yang dipakai, detektor wajah,
+  migrasi basis data, dan satu subtitle yang benar-benar dibakar. CI
+  menggagalkan build kalau ada yang kurang.
+- **GitHub Actions** membangun `.exe` Windows dan `.tar.gz` Linux pada tiap tag.
+  Gratis tanpa batas karena repo publik, dan itu satu-satunya cara: PyInstaller
+  tidak bisa membangun untuk sistem lain.
 
-| uji | hasil |
-|---|---|
-| `/api/settings` tanpa sesi | 401 |
-| `/api/media/...` dan `/api/uploads/...` tanpa sesi | 401 |
-| sesi bertahan setelah backend dimulai ulang | ya |
-| ganti kata sandi -> cookie lama | 401 |
-| `../backend/.env` lewat rute SPA dan lewat `/api/media`, `/api/file` | tidak ada yang bocor |
-| layar masuk di peramban, 1280px dan 390px | lolos, tanpa galat konsol |
+### Cacat Windows yang ditemukan dan diperbaiki
+
+`fontsdir` masuk ke filtergraph ffmpeg **tanpa disiapkan**. Parser filtergraph
+memperlakukan `:` sebagai pemisah opsi, dan di Windows nilainya berbentuk
+`C:\Program Files\...`. Dibuktikan dengan folder ber-titik-dua di Linux:
+
+```
+Could not create a libass track when reading file 'uji/OmniClip/fonts'
+```
+
+Bukan font yang keliru — **setiap render bersubtitle gagal**, hanya di Windows.
+Tiga tempat menyusun path untuk filtergraph dengan tiga salinan kode yang tidak
+sama, dan salinan `fontsdir` tidak pernah mendapat perlakuan itu sama sekali.
+Sekarang ketiganya memakai `services/paths.ffpath()`.
+
+### Bukti bundel Linux, menyeluruh
+
+Dijalankan terhadap pustaka video asli: render 12 detik selesai dalam 15 detik,
+1080x1920 h264 30fps, AAC 48kHz stereo. Bingkai diperiksa dengan mata — reframe
+mengikuti orang yang bicara, subtitle terbakar dengan font bundelan, sorotan
+kata kuning, tanda air di tempatnya. SFace terunduh sendiri di tengah analisis.
 
 ### Yang belum
 
-1. **Domain.** Terowongan beralamat tetap dan Cloudflare Access hanya bisa
-   dipasang pada domain yang dikendalikan di Cloudflare: ± Rp 170.000/tahun.
-   Terowongan cepat tanpa domain tidak bisa dipasangi Access, jadi bukan
-   pilihan.
-2. **Tampilan untuk layar HP.** Rute mobile lolos potret, tapi studio ini
-   dirancang untuk layar lebar dan belum pernah benar-benar dipakai menyunting
-   dari HP.
-3. **Cookies YouTube belum bisa dipasang dari antarmuka** — masih lewat
-   variabel lingkungan `OMNICLIP_COOKIES_FILE`. Ini yang paling mungkin
-   dibutuhkan justru saat sedang jauh dari komputernya.
-4. **Komputer harus menyala.** Kalau ini jadi penghalang, barulah VPS masuk
-   hitungan (Hetzner 2 inti ± Rp 60–68 ribu/bulan) — dengan catatan unduhan
-   YouTube dari IP pusat data jauh lebih sering diblokir.
+1. **Belum ada build Windows yang pernah dijalankan.** Semua bukti di atas dari
+   Linux. `--periksa` di CI Windows adalah pengganti yang jujur, tapi bukan
+   pengganti orang yang benar-benar membukanya.
+2. **Tidak bertanda tangan digital.** Windows Defender akan menahan aplikasinya
+   dengan "More info -> Run anyway". Sertifikat penandatangan kode berbayar.
+3. **Cookies YouTube masih lewat variabel lingkungan**, belum bisa dipasang dari
+   antarmuka.
+4. **Tidak ada pembersihan otomatis.** Terukur: 3,8 GB per bulan, dan 82%-nya
+   video sumber yang sebenarnya bisa dibuang setelah klipnya jadi.
+5. **Pembaruan masih manual** — unduh dan ekstrak ulang.
+
+### Yang tetap berguna dari rencana hosting
+
+Gerbang kata sandi dan pemeriksaan identitas Cloudflare Access tetap ada dan
+tetap dipakai: gerbang itulah yang membuat "buka dari HP lewat Wi-Fi rumah"
+aman, tanpa domain dan tanpa biaya. `PANDUAN-AKSES-JARAK-JAUH.md` tetap berlaku
+kalau suatu saat ada anggaran untuk domain.
 
 ## Catatan cara kerja yang terbukti mahal kalau dilanggar
 

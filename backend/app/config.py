@@ -2,6 +2,7 @@
 
 import os
 import shutil
+import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -9,10 +10,43 @@ from dotenv import load_dotenv
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 PROJECT_DIR = BACKEND_DIR.parent
 
-load_dotenv(BACKEND_DIR / ".env")
+# --- Dijalankan dari sumber, atau sebagai aplikasi terbungkus? ----------------
+#
+# Perbedaannya bukan kosmetik. Saat dibungkus, folder aplikasi bisa berada di
+# tempat yang tidak boleh ditulis (Program Files), dan yang lebih penting: ia
+# DITIMPA setiap kali aplikasi diperbarui. Menyimpan klip di sana berarti
+# memperbarui aplikasi menghapus pekerjaan penggunanya.
+
+FROZEN = bool(getattr(sys, "frozen", False))
+# PyInstaller menaruh berkas data di sini; saat dijalankan dari sumber, tidak ada.
+BUNDLE_DIR = Path(getattr(sys, "_MEIPASS", BACKEND_DIR))
+
+
+def _user_data_dir() -> Path:
+    """Tempat data pengguna menurut kebiasaan tiap sistem."""
+    if sys.platform == "win32":
+        base = os.environ.get("LOCALAPPDATA") or (Path.home() / "AppData" / "Local")
+    elif sys.platform == "darwin":
+        base = Path.home() / "Library" / "Application Support"
+    else:
+        base = os.environ.get("XDG_DATA_HOME") or (Path.home() / ".local" / "share")
+    return Path(base) / "OmniClip"
+
 
 # --- Path ---------------------------------------------------------------------
-STORAGE_DIR = PROJECT_DIR / "OmniClip_Storage"
+# OMNICLIP_STORAGE menang atas keduanya: satu-satunya cara memindahkan seluruh
+# penyimpanan ke diska lain tanpa menyentuh kode.
+_storage_env = os.getenv("OMNICLIP_STORAGE", "").strip()
+if _storage_env:
+    STORAGE_DIR = Path(_storage_env).expanduser().resolve()
+elif FROZEN:
+    STORAGE_DIR = _user_data_dir()
+else:
+    STORAGE_DIR = PROJECT_DIR / "OmniClip_Storage"
+
+# .env dibaca dari penyimpanan pengguna saat terbungkus — folder aplikasi bukan
+# tempat yang bisa ditulis, dan isinya hilang saat aplikasi diperbarui.
+load_dotenv(STORAGE_DIR / ".env" if FROZEN else BACKEND_DIR / ".env")
 DOWNLOAD_DIR = STORAGE_DIR / "local_downloads"
 CLIPS_DIR = STORAGE_DIR / "edited_clips"
 THUMBS_DIR = STORAGE_DIR / "thumbnails"
@@ -22,9 +56,16 @@ LOGS_DIR = STORAGE_DIR / "logs"
 # disajikan lewat /api/media seperti media lain — bukan lewat jalur baru yang
 # aturan keamanannya harus dipikirkan ulang.
 VOICE_DIR = STORAGE_DIR / "title_voice"
-MODELS_DIR = BACKEND_DIR / "models"
-ASSETS_DIR = Path(__file__).resolve().parent / "assets"
+# Model diunduh saat pertama dipakai, jadi foldernya harus bisa ditulis. Saat
+# terbungkus itu berarti penyimpanan pengguna, bukan folder aplikasi.
+MODELS_DIR = (STORAGE_DIR / "models") if FROZEN else (BACKEND_DIR / "models")
+# Font dan aset lain hanya dibaca, jadi ia tinggal di dalam bundel.
+ASSETS_DIR = (BUNDLE_DIR / "app" / "assets") if FROZEN \
+    else (Path(__file__).resolve().parent / "assets")
 FONTS_DIR = ASSETS_DIR / "fonts"
+# Model kecil yang ikut dibundel (YuNet, 232 KB) disalin sekali ke folder yang
+# bisa ditulis, supaya seluruh kode hanya perlu tahu satu tempat mencari model.
+BUNDLED_MODELS_DIR = (BUNDLE_DIR / "models") if FROZEN else None
 
 DB_PATH = STORAGE_DIR / "omniclip.db"
 
@@ -38,6 +79,12 @@ MEDIA_DIRS = {
 
 for _d in (DOWNLOAD_DIR, CLIPS_DIR, THUMBS_DIR, LOGS_DIR, MODELS_DIR, VOICE_DIR):
     _d.mkdir(parents=True, exist_ok=True)
+
+if BUNDLED_MODELS_DIR and BUNDLED_MODELS_DIR.is_dir():
+    for _m in BUNDLED_MODELS_DIR.glob("*.onnx"):
+        _target = MODELS_DIR / _m.name
+        if not _target.exists():
+            shutil.copy2(_m, _target)
 
 
 # --- Job queue ----------------------------------------------------------------
@@ -108,7 +155,8 @@ ALLOWED_ORIGINS = [
 
 # Direktori hasil `npm run build`. Bila ada, backend menyajikannya di "/" dan
 # seluruh aplikasi hidup di satu port — satu asal, satu terowongan.
-FRONTEND_DIST = PROJECT_DIR / "frontend" / "dist"
+FRONTEND_DIST = (BUNDLE_DIR / "frontend_dist") if FROZEN \
+    else (PROJECT_DIR / "frontend" / "dist")
 
 
 def get_api_key() -> str:
@@ -159,8 +207,25 @@ def get_cookies_file() -> str:
     return path if path and os.path.exists(path) else ""
 
 
+def use_bundled_ffmpeg() -> Path | None:
+    """
+    Menaruh ffmpeg bundelan di depan PATH.
+
+    Dilakukan lewat PATH, bukan dengan mengganti string "ffmpeg" di sebelas
+    tempat pemanggilan: cara ini juga membuat yt-dlp menemukannya, dan yt-dlp
+    mencari ffmpeg dengan caranya sendiri yang tidak bisa kita arahkan.
+    """
+    folder = BUNDLE_DIR / "bin"
+    exe = folder / ("ffmpeg.exe" if sys.platform == "win32" else "ffmpeg")
+    if not exe.is_file():
+        return None
+    os.environ["PATH"] = str(folder) + os.pathsep + os.environ.get("PATH", "")
+    return folder
+
+
 def require_ffmpeg() -> None:
     """Gagal cepat saat startup, bukan di tengah render pertama."""
+    use_bundled_ffmpeg()
     missing = [b for b in ("ffmpeg", "ffprobe") if not shutil.which(b)]
     if missing:
         raise RuntimeError(

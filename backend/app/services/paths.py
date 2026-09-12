@@ -109,3 +109,24 @@ def resolve_source_reference(source: str) -> tuple[str | None, Path | None]:
             "Referensi video harus berupa ID/URL YouTube atau nama file yang sudah diunduh."
         )
     return video_id, find_local_video(video_id)
+
+
+def ffpath(path) -> str:
+    r"""
+    Menyiapkan sebuah path untuk dipakai DI DALAM filtergraph ffmpeg.
+
+    Parser filtergraph memperlakukan ":" sebagai pemisah opsi dan "\" sebagai
+    escape, dan path Windows penuh keduanya: C:\Users\nama\... . Tanpa
+    penyiapan ini, titik dua setelah huruf diska mengakhiri opsinya dan sisanya
+    dibaca sebagai opsi lain yang tidak dikenal.
+
+    Kesalahannya tidak selalu berupa galat. Untuk `fontsdir`, ffmpeg yang tidak
+    bisa membaca nilainya meneruskan tanpa fontsdir sama sekali — libass lalu
+    jatuh ke font teks badan lewat fontconfig, dan hasil render berhenti cocok
+    dengan pratinjau. Diam, dan baru terlihat setelah videonya jadi.
+
+    Dulu ini disalin di tiga tempat dengan tiga salinan yang tidak sama; satu di
+    antaranya, `fontsdir`, tidak pernah mendapat perlakuan ini sama sekali. Di
+    Linux ketiganya tampak benar, karena path Linux tidak punya ":" maupun "\".
+    """
+    return str(path).replace("\\", "/").replace(":", r"\:")

@@ -19,6 +19,11 @@ frontend/*.log
 /*.mp4
 
 # Media Storage
+# Bobot model yang diunduh aplikasi saat pertama dipakai. Saat OmniClip
+# dijalankan sebagai aplikasi terbungkus, foldernya pindah ke sini karena
+# folder aplikasi tidak bisa ditulis.
+OmniClip_Storage/models/
+OmniClip_Storage/.env
 OmniClip_Storage/local_downloads/*
 OmniClip_Storage/edited_clips/*
 OmniClip_Storage/logs/*
@@ -45,3 +50,11 @@ backend/models/tts/
 # Impeccable: potret pemeriksaan dan mockup keputusan (bukan artefak kirim)
 .impeccable/mocks/
 frontend/.impeccable/review/
+
+# Aplikasi desktop: artefak pembungkusan.
+#
+# backend/bin/ berisi ffmpeg dan ffprobe statis (160 MB) yang diunduh
+# tools/ambil_ffmpeg.py. Ia bagian dari HASIL build, bukan dari sumbernya.
+backend/bin/
+backend/build/
+backend/dist/

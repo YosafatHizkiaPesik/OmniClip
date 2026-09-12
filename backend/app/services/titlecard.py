@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import Optional
 
 from .subtitles import escape_ass, hex_to_ass
+from .paths import ffpath
 
 log = logging.getLogger("omniclip.titlecard")
 
@@ -315,7 +316,7 @@ def overlay_filter(plan: CardPlan, fontsdir: Optional[str] = None) -> str:
 def _ass_arg(path: Optional[Path], fontsdir: Optional[str]) -> str:
     if path is None:
         return "null"
-    arg = str(path).replace("\\", "/").replace(":", r"\:")
+    arg = ffpath(path)
     out = f"ass=filename='{arg}'"
     if fontsdir:
         out += f":fontsdir='{fontsdir}'"
