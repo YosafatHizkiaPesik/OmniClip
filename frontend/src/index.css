@@ -1258,3 +1258,13 @@ body.is-studio .app-viewport,
 @media (max-width: 860px) {
   .studio-stage .frame-stage { width: 100%; }
 }
+
+/* Kartu unduhan: tombol putar baru muncul saat kartunya disentuh kursor.
+   Di perangkat sentuh tidak ada hover, jadi seluruh sampulnya sendiri yang
+   bisa ditekan — bukan hanya lingkaran putarnya. */
+.unduhan-kartu:hover {
+  border-color: var(--accent-cyan);
+}
+.unduhan-kartu:hover .thumb-play {
+  opacity: 1;
+}

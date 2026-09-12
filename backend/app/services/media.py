@@ -173,3 +173,42 @@ def waveform_peaks(src: str | Path, *, bins: int = 2000,
     if acc_count and len(peaks) < bins:
         peaks.append(min(255, acc_peak * 255 // 32768))
     return peaks
+
+
+def poster_frame(src: str | Path, dest: str | Path, *,
+                 at: float | None = None, width: int = 480) -> bool:
+    """
+    Satu bingkai dari sebuah video, untuk dipakai sebagai sampul di daftar.
+
+    Diambil dari berkasnya sendiri, bukan dari thumbnail YouTube: halaman
+    Unduhan justru menampilkan apa yang tersedia tanpa internet, jadi sampul
+    yang harus diambil dari jaringan akan kosong persis ketika daftar itu
+    paling berguna. Bingkai lokal juga jujur — ia memperlihatkan isi berkas
+    yang benar-benar ada di cakram.
+
+    Dicari mundur dari `at`: bingkai pertama video kerap hitam atau bumper
+    kanal, jadi pemanggil memberi titik di tengah durasi.
+    """
+    dest = Path(dest)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    detik = max(0.0, float(at if at is not None else 10.0))
+
+    # -ss sebelum -i: pencarian keyframe, cukup untuk gambar diam dan jauh
+    # lebih cepat daripada mendekode dari awal pada berkas satu jam.
+    cmd = ["ffmpeg", "-y", "-hide_banner", "-nostdin", "-loglevel", "error",
+           "-ss", f"{detik:.2f}", "-i", str(src), "-frames:v", "1",
+           "-vf", f"scale={int(width)}:-2:flags=bilinear",
+           "-q:v", "4", str(dest)]
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        if r.returncode != 0 or not dest.is_file():
+            # Pencarian bisa melewati akhir berkas bila durasinya salah baca;
+            # coba sekali lagi dari awal sebelum menyerah.
+            if detik > 0:
+                return poster_frame(src, dest, at=0.0, width=width)
+            log.warning("Sampul gagal dibuat untuk %s: %s", src, (r.stderr or "")[-300:])
+            return False
+        return True
+    except subprocess.TimeoutExpired:
+        log.warning("Sampul timeout untuk %s", src)
+        return False

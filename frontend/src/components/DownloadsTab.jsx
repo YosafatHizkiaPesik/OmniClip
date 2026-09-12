@@ -16,6 +16,102 @@ function formatDate(timestamp) {
   });
 }
 
+/**
+ * Judul yang terbaca untuk berkas tanpa baris database.
+ *
+ * Unduhan lama — dibuat sebelum ada database — tidak punya judul tersimpan.
+ * Nama berkasnya masih memuatnya, hanya dengan garis bawah sebagai spasi dan
+ * ID YouTube menempel di ekor. Yang dibuang cuma itu; tidak ada yang dikarang.
+ */
+function judulDariNama(fileName) {
+  return String(fileName || '')
+    .replace(/\.[a-z0-9]{2,4}$/i, '')        // ekstensi
+    .replace(/[_-][A-Za-z0-9_-]{11}$/, '')   // ID YouTube di ekor
+    .replace(/_/g, ' ')
+    .trim() || fileName;
+}
+
+function formatDuration(seconds) {
+  if (!seconds || seconds <= 0) return null;
+  const t = Math.round(seconds);
+  const j = Math.floor(t / 3600);
+  const m = Math.floor((t % 3600) / 60);
+  const d = t % 60;
+  const pad = (n) => String(n).padStart(2, '0');
+  return j ? `${j}:${pad(m)}:${pad(d)}` : `${m}:${pad(d)}`;
+}
+
+/**
+ * Sampul satu berkas unduhan.
+ *
+ * Dibuat dari bingkai berkasnya sendiri di server, jadi ia tetap muncul tanpa
+ * internet — yang penting justru di halaman ini. Selama gambarnya belum
+ * datang, yang tampil adalah bidang kosong dengan ikon, bukan pergeseran tata
+ * letak: tinggi kartu sudah dikunci oleh aspect-ratio.
+ */
+function Thumb({ item }) {
+  const [state, setState] = useState(item.thumb_url ? 'loading' : 'none');
+  const audio = item.type === 'audio';
+  const durasi = formatDuration(item.duration);
+
+  return (
+    <div style={{
+      position: 'relative', width: '100%', aspectRatio: '16 / 9',
+      background: audio ? 'rgba(255,8,68,0.10)' : 'var(--plate-3, rgba(255,255,255,0.04))',
+      borderRadius: '10px', overflow: 'hidden', flexShrink: 0,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+    }}>
+      {state !== 'ok' && (
+        audio
+          ? <Music size={30} style={{ color: 'var(--accent-pink)' }} />
+          : <Film size={30} style={{ color: 'var(--text-muted)' }} />
+      )}
+      {item.thumb_url && state !== 'error' && (
+        <img
+          src={item.thumb_url}
+          alt=""
+          loading="lazy"
+          onLoad={() => setState('ok')}
+          onError={() => setState('error')}
+          style={{
+            position: 'absolute', inset: 0, width: '100%', height: '100%',
+            objectFit: 'cover', opacity: state === 'ok' ? 1 : 0,
+            transition: 'opacity 0.25s ease',
+          }}
+        />
+      )}
+
+      {/* Tombol putar muncul di atas gambar */}
+      <div className="thumb-play" style={{
+        position: 'absolute', inset: 0, display: 'flex',
+        alignItems: 'center', justifyContent: 'center',
+        background: 'rgba(0,0,0,0.28)', opacity: 0, transition: 'opacity 0.15s ease',
+      }}>
+        <div style={{
+          width: '42px', height: '42px', borderRadius: '50%', background: 'rgba(0,0,0,0.62)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          border: '1.5px solid rgba(255,255,255,0.85)',
+        }}><Play size={17} style={{ color: '#fff', marginLeft: '2px' }} /></div>
+      </div>
+
+      {durasi && (
+        <span style={{
+          position: 'absolute', right: '6px', bottom: '6px',
+          padding: '1px 6px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 700,
+          background: 'rgba(0,0,0,0.78)', color: '#fff', letterSpacing: '0.02em',
+        }}>{durasi}</span>
+      )}
+      {item.resolution && (
+        <span style={{
+          position: 'absolute', left: '6px', bottom: '6px',
+          padding: '1px 6px', borderRadius: '4px', fontSize: '0.68rem', fontWeight: 700,
+          background: 'rgba(0,0,0,0.68)', color: 'var(--accent-cyan)',
+        }}>{item.resolution}</span>
+      )}
+    </div>
+  );
+}
+
 // Video Player Modal
 function VideoPlayerModal({ item, onClose }) {
   const src = `${item.web_url}`;
@@ -135,7 +231,12 @@ export default function DownloadsTab() {
   // Filter + Search
   const filtered = downloads.filter(d => {
     const matchFilter = filter === 'all' || d.type === filter;
-    const matchSearch = !searchQuery || d.file_name.toLowerCase().includes(searchQuery.toLowerCase());
+    // Judul dan kanal ikut dicari, bukan hanya nama berkas: sejak kartunya
+    // menampilkan judul asli, mencari kata yang terbaca di layar tapi tidak
+    // ada di nama berkas akan terasa seperti pencarian yang rusak.
+    const q = searchQuery.toLowerCase();
+    const matchSearch = !q || [d.file_name, d.title, d.channel]
+      .some((v) => (v || '').toLowerCase().includes(q));
     return matchFilter && matchSearch;
   });
 
@@ -245,88 +346,105 @@ export default function DownloadsTab() {
           </p>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          {filtered.map((item) => (
-            <div
-              key={item.file_name}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '12px',
-                background: selectedItems.has(item.file_name) ? 'var(--hl-wash)' : 'var(--bg-card)',
-                border: selectedItems.has(item.file_name) ? '1px solid var(--hl-wash)' : '1px solid var(--border-color)',
-                borderRadius: '12px', padding: '12px 14px',
-                transition: 'all 0.15s ease',
-              }}
-            >
-              {/* Checkbox */}
+        <div style={{
+          display: 'grid', gap: '14px',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))',
+        }}>
+          {filtered.map((item) => {
+            const dipilih = selectedItems.has(item.file_name);
+            return (
               <div
-                onClick={() => toggleSelect(item.file_name)}
+                key={item.file_name}
+                className="unduhan-kartu"
                 style={{
-                  width: '18px', height: '18px', borderRadius: '4px', cursor: 'pointer', flexShrink: 0,
-                  border: selectedItems.has(item.file_name) ? '2px solid var(--accent-cyan)' : '2px solid var(--border-color)',
-                  background: selectedItems.has(item.file_name) ? 'var(--accent-cyan)' : 'transparent',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  display: 'flex', flexDirection: 'column', gap: '9px',
+                  background: dipilih ? 'var(--hl-wash)' : 'var(--bg-card)',
+                  border: `1px solid ${dipilih ? 'var(--accent-cyan)' : 'var(--border-color)'}`,
+                  borderRadius: '14px', padding: '9px',
+                  transition: 'border-color 0.15s ease, background 0.15s ease',
                 }}
               >
-                {selectedItems.has(item.file_name) && <CheckCircle size={12} style={{ color: '#000' }} />}
-              </div>
+                <div style={{ position: 'relative', cursor: 'pointer' }}
+                     onClick={() => setPreviewItem(item)}>
+                  <Thumb item={item} />
+                  {/* Kotak pilih di atas sampul: kartunya kini digerakkan oleh
+                      gambar, jadi kendali pilih ikut ke sana. */}
+                  <div
+                    onClick={(e) => { e.stopPropagation(); toggleSelect(item.file_name); }}
+                    title={dipilih ? 'Batal pilih' : 'Pilih'}
+                    style={{
+                      position: 'absolute', top: '6px', left: '6px',
+                      width: '22px', height: '22px', borderRadius: '6px', cursor: 'pointer',
+                      border: `2px solid ${dipilih ? 'var(--accent-cyan)' : 'rgba(255,255,255,0.75)'}`,
+                      background: dipilih ? 'var(--accent-cyan)' : 'rgba(0,0,0,0.45)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}
+                  >
+                    {dipilih && <CheckCircle size={13} style={{ color: '#000' }} />}
+                  </div>
+                </div>
 
-              {/* Icon */}
-              <div style={{
-                width: '44px', height: '44px', borderRadius: '10px', flexShrink: 0,
-                background: item.type === 'audio' ? 'rgba(255,8,68,0.12)' : 'var(--hl-wash)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                color: item.type === 'audio' ? 'var(--accent-pink)' : 'var(--accent-cyan)',
-              }}>
-                {item.type === 'audio' ? <Music size={22} /> : <Film size={22} />}
-              </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div
+                    title={item.file_name}
+                    style={{
+                      fontWeight: 680, fontSize: '0.84rem', color: 'var(--ink)',
+                      lineHeight: 1.32, display: '-webkit-box', WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                      overflowWrap: 'anywhere',
+                    }}
+                  >{item.title || judulDariNama(item.file_name)}</div>
+                  {item.channel && (
+                    <div style={{
+                      fontSize: '0.74rem', color: 'var(--text-secondary)', marginTop: '3px',
+                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                    }}>{item.channel}</div>
+                  )}
+                  <div style={{
+                    fontSize: '0.71rem', color: 'var(--text-muted, var(--text-secondary))',
+                    marginTop: '4px', display: 'flex', gap: '6px', flexWrap: 'wrap',
+                  }}>
+                    <span>{formatBytes(item.file_size)}</span>
+                    <span>•</span>
+                    <span style={{
+                      textTransform: 'uppercase', fontWeight: 700,
+                      color: item.type === 'audio' ? 'var(--accent-pink)' : 'var(--accent-cyan)',
+                    }}>{item.type}</span>
+                    <span>•</span>
+                    <span>{formatDate(item.created_at)}</span>
+                  </div>
+                </div>
 
-              {/* Info */}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{
-                  fontWeight: 660, fontSize: '0.88rem', color: 'var(--ink)',
-                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
-                }}>{item.file_name}</div>
-                <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '2px', display: 'flex', gap: '8px' }}>
-                  <span>{formatBytes(item.file_size)}</span>
-                  <span>•</span>
-                  <span style={{ textTransform: 'uppercase', color: item.type === 'audio' ? 'var(--accent-pink)' : 'var(--accent-cyan)' }}>{item.type}</span>
-                  <span>•</span>
-                  <span>{formatDate(item.created_at)}</span>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <button
+                    onClick={() => setPreviewItem(item)}
+                    className="btn-secondary"
+                    style={{ flex: 1, padding: '6px', fontSize: '0.76rem', justifyContent: 'center' }}
+                    title="Putar"
+                  ><Play size={13} /></button>
+                  <button
+                    onClick={() => handleProxyDownload(item.file_name)}
+                    className="btn-secondary"
+                    style={{ flex: 1, padding: '6px', fontSize: '0.76rem', justifyContent: 'center',
+                             color: 'var(--accent-cyan)', borderColor: 'var(--hl-wash)' }}
+                    title="Simpan ke perangkat"
+                  ><Download size={13} /></button>
+                  <button
+                    onClick={() => handleDelete(item.file_name)}
+                    disabled={deleting === item.file_name}
+                    className="btn-secondary"
+                    style={{ flex: 1, padding: '6px', fontSize: '0.76rem', justifyContent: 'center',
+                             color: 'var(--danger)', borderColor: 'rgba(239,68,68,0.25)' }}
+                    title="Hapus"
+                  >
+                    {deleting === item.file_name
+                      ? <Loader2 size={13} className="animate-spin" />
+                      : <Trash2 size={13} />}
+                  </button>
                 </div>
               </div>
-
-              {/* Action Buttons */}
-              <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
-                <button
-                  onClick={() => setPreviewItem(item)}
-                  className="btn-secondary"
-                  style={{ padding: '6px 10px', fontSize: '0.78rem' }}
-                  title="Putar"
-                >
-                  <Play size={13} />
-                </button>
-                <button
-                  onClick={() => handleProxyDownload(item.file_name)}
-                  className="btn-secondary"
-                  style={{ padding: '6px 10px', fontSize: '0.78rem', color: 'var(--accent-cyan)', borderColor: 'var(--hl-wash)' }}
-                  title="Simpan ke perangkat"
-                >
-                  <Download size={13} />
-                </button>
-                <button
-                  onClick={() => handleDelete(item.file_name)}
-                  disabled={deleting === item.file_name}
-                  className="btn-secondary"
-                  style={{ padding: '6px 10px', fontSize: '0.78rem', color: 'var(--danger)', borderColor: 'rgba(239,68,68,0.25)' }}
-                  title="Hapus"
-                >
-                  {deleting === item.file_name
-                    ? <Loader2 size={13} className="animate-spin" />
-                    : <Trash2 size={13} />}
-                </button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

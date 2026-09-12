@@ -2,12 +2,16 @@
 
 import asyncio
 import random
+from urllib.parse import quote
 
 from fastapi import APIRouter, Query
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
+from ..config import THUMBS_DIR
 from ..errors import AppError, NotFound
 from ..repos import media as media_repo
+from ..services.media import poster_frame, probe
 from ..services.jobs import queue
 from ..services.paths import extract_youtube_id, find_local_video, safe_media_path
 from ..services.ytdlp import (
@@ -161,6 +165,10 @@ async def downloads():
     files = list_local_downloads()
     for f in files:
         f["web_url"] = f"/api/media/local_downloads/{f['file_name']}"
+        # Sampul dibuat saat diminta, bukan sekarang: membuat empat puluh
+        # bingkai di dalam satu request akan menahan daftarnya berdetik-detik.
+        f["thumb_url"] = (f"/api/downloads/{quote(f['file_name'])}/thumb"
+                          if f.get("type") != "audio" else None)
         meta = by_name.get(f["file_name"])
         if meta:
             f.update({
@@ -171,7 +179,38 @@ async def downloads():
                 "resolution": f"{meta['height']}p" if meta["height"] else None,
                 "duration": meta["duration"],
             })
+            # Judul dan kanal asli, supaya kartunya terbaca sebagai video —
+            # bukan sebagai nama berkas dengan garis bawah.
+            video = media_repo.get_video(meta["video_id"]) if meta["video_id"] else None
+            if video:
+                f.update({"title": video.get("title"),
+                          "channel": video.get("channel")})
     return files
+
+
+@router.get("/downloads/{filename}/thumb")
+async def download_thumb(filename: str):
+    """
+    Sampul sebuah berkas unduhan, dibuat sekali lalu disimpan.
+
+    Bingkai diambil dari seperempat durasi: awal video sering hitam atau berisi
+    bumper kanal, dan sampul hitam tidak memberi tahu apa pun tentang isinya.
+    """
+    path = safe_media_path("local_downloads", filename)
+    cache = THUMBS_DIR / f"{path.stem}.jpg"
+
+    if not cache.is_file():
+        info = await asyncio.to_thread(probe, path)
+        durasi = float(info.get("duration") or 0)
+        if not info.get("width"):
+            raise NotFound("Berkas ini tidak punya gambar.")
+        titik = durasi * 0.25 if durasi > 4 else 0.0
+        ok = await asyncio.to_thread(poster_frame, path, cache, at=titik)
+        if not ok:
+            raise NotFound("Sampul gagal dibuat.")
+
+    return FileResponse(path=cache, media_type="image/jpeg",
+                        headers={"Cache-Control": "public, max-age=86400"})
 
 
 @router.delete("/downloads/{filename}")

@@ -27,6 +27,7 @@ OmniClip_Storage/.env
 OmniClip_Storage/local_downloads/*
 OmniClip_Storage/edited_clips/*
 OmniClip_Storage/logs/*
+OmniClip_Storage/thumbnails/*
 OmniClip_Storage/title_voice/*
 OmniClip_Storage/*.db
 OmniClip_Storage/*.db-wal

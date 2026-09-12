@@ -12,7 +12,9 @@ from fastapi import APIRouter, Query
 
 from ..errors import AppError, NotFound
 from ..repos import analyses as analyses_repo
+from ..repos import jobs as jobs_repo
 from ..repos import projects as projects_repo
+from ..services.jobs import queue
 from ..services.paths import extract_youtube_id, find_local_video
 
 router = APIRouter(prefix="/api", tags=["projects"])
@@ -122,9 +124,26 @@ async def get_project(video_id: str):
 
 @router.delete("/projects/{video_id}")
 async def delete_project(video_id: str):
+    """
+    Hapus satu kartu Partitur sampai benar-benar hilang.
+
+    Kartunya disusun dari dua sumber — `analyses` dan `jobs` — jadi membuang
+    analisisnya saja tidak cukup: baris job yang tertinggal membangun kembali
+    kartu yang sama pada pemuatan berikutnya, berlabel "Gagal". Itu juga alasan
+    kartu yang MEMANG gagal dulu tidak bisa dihapus sama sekali; kartu seperti
+    itu tidak punya analisis, hanya job.
+
+    Job yang masih berjalan dibatalkan lebih dulu, supaya pekerjaannya berhenti
+    alih-alih terus memakai CPU untuk sesuatu yang barisnya sudah tidak ada.
+    """
     vid = _resolve(video_id)
+
+    for job_id in await asyncio.to_thread(jobs_repo.ids_for_video, vid, only_active=True):
+        queue.cancel(job_id)
+
     await asyncio.to_thread(analyses_repo.delete_for_video, vid)
-    return {"success": True, "video_id": vid}
+    jobs_dihapus = await asyncio.to_thread(jobs_repo.delete_for_video, vid)
+    return {"success": True, "video_id": vid, "jobs_dihapus": jobs_dihapus}
 
 
 @router.get("/videos/{video_id}/waveform")

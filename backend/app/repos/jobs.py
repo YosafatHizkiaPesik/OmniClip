@@ -160,3 +160,28 @@ def active() -> list[dict]:
         f"SELECT * FROM jobs WHERE status IN {ACTIVE} ORDER BY created_at"
     ).fetchall()
     return [_row_to_dict(r) for r in rows]
+
+
+def ids_for_video(video_id: str, *, type_: str = "auto_clip",
+                  only_active: bool = False) -> list[str]:
+    """Id job milik satu video — dipakai untuk membatalkannya sebelum dihapus."""
+    sql = "SELECT id FROM jobs WHERE type = ? AND video_id = ?"
+    if only_active:
+        sql += f" AND status IN {ACTIVE}"
+    rows = get_conn().execute(sql, (type_, video_id)).fetchall()
+    return [r["id"] for r in rows]
+
+
+def delete_for_video(video_id: str, *, type_: str = "auto_clip") -> int:
+    """
+    Buang jejak job satu video.
+
+    Halaman Partitur menyusun kartunya dari `analyses` DAN `jobs`, jadi
+    menghapus analisis saja membuat kartunya terbit kembali begitu daftar
+    dimuat ulang — kali ini berlabel "Gagal", karena yang tersisa hanyalah
+    baris job. Job anak ikut terhapus lewat ON DELETE CASCADE.
+    """
+    with tx() as conn:
+        cur = conn.execute("DELETE FROM jobs WHERE type = ? AND video_id = ?",
+                           (type_, video_id))
+        return cur.rowcount
