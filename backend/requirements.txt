@@ -39,9 +39,28 @@ opencv-python-headless==4.11.0.86
 # Bila unduhan gagal, pemisahan narasumber dilewati tanpa menjatuhkan pipeline.
 onnxruntime>=1.17,<2
 
+# --- Hitungan bingkai dan audio ---
+# Selama ini numpy ikut masuk hanya sebagai dependensi opencv dan
+# faster-whisper. Ia dipakai langsung di hampir seluruh kode analisis, jadi
+# menggantungkannya pada paket lain berarti sebuah pembaruan di paket itu bisa
+# mencabutnya tanpa satu baris pun berubah di sini.
+numpy>=1.26,<3
+
 # --- AI (opsional) ---
 # Tanpa API key, pemilihan klip tetap berjalan memakai mesin heuristik lokal.
 google-genai>=0.1.1
+
+# --- Unggah ke YouTube dan Google Drive ---
+# Keduanya sempat dihapus dari berkas ini bersama lapisan Drive palsu yang lama,
+# lalu jalur unggah yang sungguhan ditulis tanpa mengembalikan deklarasinya.
+# Akibatnya tidak pernah terlihat di sini — paketnya masih tertinggal di venv
+# pengembangan — dan baru muncul saat aplikasi dibangun di mesin bersih:
+# tombol "Unggah ke YouTube" gagal dengan ModuleNotFoundError pada siapa pun
+# yang meng-clone repo ini.
+#
+# google-auth-httplib2 dan httplib2 ikut sebagai dependensi keduanya.
+google-api-python-client>=2.100
+google-auth-oauthlib>=1.2
 
 # --- Font subtitle ---
 # Font display dibundel di app/assets/fonts (semuanya SIL OFL) dan diteruskan ke
