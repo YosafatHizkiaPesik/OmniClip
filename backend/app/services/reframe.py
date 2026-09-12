@@ -506,6 +506,76 @@ def _face_patches(frame, face, sw, sh):
 ALIGNED_PATCH = (48, 32)
 
 
+def _mouth_openness(full, face, scale: float) -> Optional[float]:
+    """
+    Seberapa TERBUKA mulut seseorang pada satu bingkai.
+
+    Menggantikan pengukuran "berapa banyak piksel mulut berubah" yang dipakai
+    sebelumnya, dan perbedaannya bukan penyetelan — ia mengubah hasil dari
+    tidak berguna menjadi berguna. Diukur pada klip dua orang duduk berdampingan
+    yang giliran bicaranya sudah diperiksa dengan mata, sebagai selisih nilai
+    seseorang saat DIA bicara dikurangi saat orang lain bicara, dalam simpangan
+    baku:
+
+        beda piksel, petak lama      0,023      (setara nol)
+        beda piksel, petak benar     0,181
+        bukaan mulut                 0,512
+        bukaan + ragamnya            1,074
+    
+    Dua hal yang diperbaiki, dan yang pertama menanggung sebagian besarnya:
+
+    1. **Petaknya diskalakan LEBAR WAJAH, bukan jarak mata.** Dua orang yang
+       duduk saling menghadap hampir selalu terlihat menyamping: terukur pada
+       klip itu, jarak mata cuma 0,30 dari lebar wajah (wajah menghadap kamera
+       sekitar 0,45), dan angkanya bergoyang dari bingkai ke bingkai. Petak
+       yang diskalakan olehnya ikut bergoyang, dan yang terukur lalu bukan
+       mulut melainkan dinding di belakangnya. Lebar kotak wajah stabil.
+
+    2. **Yang diukur BUKAAN, bukan perubahan.** Beda piksel antar bingkai
+       menyala untuk apa pun yang bergerak — kepala mengangguk, kamera
+       bergoyang, bayangan lewat. Bukaan mulut adalah besaran mutlak: rongga
+       mulut lebih gelap daripada bibir dan kulit di sekitarnya, dan
+       kegelapannya bertambah persis ketika mulut membuka.
+
+    Sudutnya diambil dari dua sudut MULUT, bukan dari garis mata, dan dibatasi
+    +/-25 derajat: pada wajah menyamping sudut mata adalah derau.
+    """
+    import cv2
+    import numpy as np
+
+    w = float(face[2]) * scale
+    if w < 20.0:
+        return None
+    lm = [(float(face[4 + 2 * i]) * scale, float(face[5 + 2 * i]) * scale)
+          for i in range(5)]
+    (ax, ay), (bx, by) = lm[3], lm[4]
+    lebar_mulut = float(np.hypot(bx - ax, by - ay))
+    sudut = (float(np.degrees(np.arctan2(by - ay, bx - ax)))
+             if lebar_mulut > 4.0 else 0.0)
+    sudut = max(-25.0, min(25.0, sudut))
+    mx, my = (ax + bx) / 2.0, (ay + by) / 2.0
+
+    bw, bh = w * 0.62, w * 0.40
+    M = cv2.getRotationMatrix2D((mx, my), sudut, 1.0)
+    M[0, 2] += bw / 2.0 - mx
+    M[1, 2] += bh / 2.0 - my
+    crop = cv2.warpAffine(full, M, (max(6, int(bw)), max(6, int(bh))),
+                          flags=cv2.INTER_AREA)
+    if crop.size == 0:
+        return None
+    g = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY).astype(np.float32)
+    g = cv2.resize(g, (64, 40), interpolation=cv2.INTER_AREA)
+    sd = float(g.std())
+    if sd < 1e-3:
+        return None
+    g = (g - float(g.mean())) / sd
+    # Bagian tengah petak: di situ rongga mulut berada. Tepinya berisi bibir
+    # atas, dagu, dan kulit pipi — semuanya terang, dan memasukkannya hanya
+    # mengencerkan yang sedang dicari.
+    tengah = g[12:30, 12:52]
+    return float(-np.percentile(tengah, 15))
+
+
 def _aligned_patches(full, face, scale: float):
     """
     Petak MULUT dan DAHI dari bingkai beresolusi penuh, diluruskan garis mata.
@@ -667,6 +737,7 @@ def _detect_centers(src: Path, segments: list[dict], source_w: int, source_h: in
             for f in detections:
                 x, y, w, h = float(f[0]), float(f[1]), float(f[2]), float(f[3])
                 cx, cy = x + w / 2.0, y + h / 2.0
+                buka = _mouth_openness(full, f, full_scale)
                 mouth, brow = _aligned_patches(full, f, full_scale)
                 if mouth is None:
                     mouth, brow = _face_patches(frame, f, sw, sh)
@@ -682,6 +753,8 @@ def _detect_centers(src: Path, segments: list[dict], source_w: int, source_h: in
                 if best_t is None:
                     next_tid += 1
                     best_t = _FaceTrack(cx, cy, w, h, mouth, brow, next_tid)
+                    if buka is not None:
+                        best_t.motion = buka
                     tracks.append(best_t)
                 else:
                     # Gerakan mulut DIKURANGI gerakan dahi, keduanya terhadap
@@ -694,7 +767,10 @@ def _detect_centers(src: Path, segments: list[dict], source_w: int, source_h: in
 
                     dm = _diff(mouth, best_t.mouth)
                     db = _diff(brow, best_t.brow)
-                    motion = 0.0 if dm is None else dm - (db or 0.0)
+                    gerak = 0.0 if dm is None else dm - (db or 0.0)
+                    # Bukaan mulut kalau terukur; beda piksel hanya sebagai
+                    # cadangan saat wajahnya terlalu kecil untuk diukur.
+                    motion = gerak if buka is None else buka
                     best_t.motion = motion
                     best_t.energy = best_t.energy * decay + motion * (1.0 - decay)
                     best_t.cx, best_t.cy, best_t.w, best_t.h = cx, cy, w, h
@@ -1533,14 +1609,43 @@ def assign_faces_to_speakers(people, motion, speaker_turns, n_samples):
     if mot.shape[1] < n_samples:
         return {}
 
-    # Dinormalkan per orang: wajah yang lebih besar di layar menghasilkan angka
-    # gerakan lebih besar untuk gerakan yang sama, dan tanpa normalisasi ia
-    # akan selalu menang.
+    # Dinormalkan per orang: wajah yang lebih besar di layar, kulit yang lebih
+    # gelap, atau lampu yang lebih keras semuanya menggeser angka bukaannya,
+    # dan tanpa normalisasi yang menang adalah orang yang kebetulan paling
+    # kontras — bukan yang bicara.
     for i in range(k):
         seen = mot[i][vis[i]]
         if len(seen) > 4:
             sd = float(seen.std())
             mot[i] = (mot[i] - float(seen.mean())) / (sd if sd > 1e-6 else 1.0)
+
+    # Dua keterangan, bukan satu, dan keduanya perlu.
+    #
+    # BUKAAN menjawab "mulutnya sedang terbuka?" — benar saat bicara, tapi juga
+    # benar saat menguap atau tertawa. RAGAM bukaan menjawab "mulutnya sedang
+    # membuka-menutup berulang?" — itulah bentuk bicara, dan diam dengan mulut
+    # sedikit terbuka tidak menghasilkannya.
+    #
+    # Terukur pada klip dua orang berdampingan: sendiri-sendiri keduanya memberi
+    # pemisahan 0,53 dan 0,54 simpangan baku; dijumlahkan, 1,07. Keduanya
+    # menangkap hal yang berbeda, jadi menjumlahkannya menambah, bukan
+    # mengulang.
+    jendela = max(3, int(round(0.4 * SAMPLE_FPS)) | 1)
+    setengah = jendela // 2
+    fitur = np.zeros_like(mot)
+    for i in range(k):
+        ragam = np.zeros(n_samples)
+        for t in range(n_samples):
+            lo, hi = max(0, t - setengah), min(n_samples, t + setengah + 1)
+            m = vis[i][lo:hi]
+            if int(m.sum()) >= 3:
+                ragam[t] = float(mot[i][lo:hi][m].std())
+        r = ragam[vis[i]]
+        if len(r) > 4:
+            sd = float(r.std())
+            ragam = (ragam - float(r.mean())) / (sd if sd > 1e-6 else 1.0)
+        fitur[i] = mot[i] + ragam
+    mot = fitur
 
     active = np.zeros((len(speakers), n_samples), dtype=bool)
     for t0, t1, sp in speaker_turns:

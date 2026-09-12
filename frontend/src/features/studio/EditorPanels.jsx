@@ -218,8 +218,17 @@ export function SubtitlePanel({ clip, onUpdate, onRemove, style, onAutoSpeakers,
   // Sekarang selalu ada satu slot cadangan di atas nomor tertinggi yang sudah
   // terpakai, jadi orang keempat dan kelima bisa dicapai hanya dengan terus
   // mengklik, tanpa mendeteksi ulang lebih dulu.
+  // Langit-langitnya adalah jumlah penutur yang benar-benar terdeteksi.
+  //
+  // Versi sebelumnya menambahkan satu slot cadangan di atas nomor tertinggi
+  // yang sudah terpakai, supaya orang keempat dan kelima bisa dicapai ketika
+  // pemisahan suara masih terkunci di dua. Sejak jumlah yang diminta pengguna
+  // dituruti, cadangan itu berubah jadi cacat: video berpenutur lima
+  // menawarkan nomor sampai tujuh, dan dua nomor terakhir tidak menunjuk
+  // siapa pun. Kalau jumlahnya memang kurang, yang benar adalah mendeteksi
+  // ulang dengan angka yang tepat — bukan menambah nomor hantu di sini.
   const usedMax = lines.reduce((m, l) => Math.max(m, l.speaker || 0), 0);
-  const total = Math.min(8, Math.max(2, speakerCount || 2, usedMax + 1) + 1);
+  const total = Math.min(8, Math.max(2, speakerCount || 2, usedMax + 1));
   const tally = lines.reduce((acc, l) => {
     const i = l.speaker || 0;
     acc[i] = (acc[i] || 0) + 1;
