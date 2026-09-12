@@ -46,7 +46,22 @@ SCOPES = [
     "https://www.googleapis.com/auth/userinfo.email",
 ]
 
-REDIRECT_URI = "http://127.0.0.1:8000/api/uploads/google/callback"
+def redirect_uri() -> str:
+    """
+    Alamat yang dituju Google setelah pengguna memberi izin.
+
+    Dulu dipatok ke port 8000. Itu benar selama aplikasi dijalankan dari sumber,
+    yang memang selalu memakai 8000 — dan salah begitu ia jadi aplikasi desktop:
+    peluncurnya mencari port kosong sendiri, jadi di komputer yang port 8000-nya
+    sudah terpakai, Google akan mengantar pengguna ke alamat yang tidak ada
+    apa-apanya. Gejalanya halaman kosong setelah menekan "izinkan", tanpa
+    petunjuk apa pun bahwa yang salah adalah nomor port.
+
+    Alamat ini juga yang harus didaftarkan pengguna di Google Cloud Console,
+    jadi ia ditampilkan apa adanya di halaman Pengaturan.
+    """
+    from ..config import PORT
+    return f"http://127.0.0.1:{PORT}/api/uploads/google/callback"
 
 # Nama folder yang dibuat sendiri di Drive bila pengguna tidak memilih tujuan.
 DRIVE_FOLDER_NAME = "OmniClip"
@@ -134,7 +149,7 @@ def status() -> dict:
         "client_configured": client_configured(),
         "connected": creds is not None,
         "email": _stored_email() if creds else "",
-        "redirect_uri": REDIRECT_URI,
+        "redirect_uri": redirect_uri(),
         "scopes": SCOPES,
     }
 
@@ -147,7 +162,7 @@ def begin_authorization() -> str:
     from google_auth_oauthlib.flow import Flow
 
     flow = Flow.from_client_secrets_file(
-        str(CLIENT_SECRET_PATH), scopes=SCOPES, redirect_uri=REDIRECT_URI)
+        str(CLIENT_SECRET_PATH), scopes=SCOPES, redirect_uri=redirect_uri())
     # access_type=offline + prompt=consent memaksa Google mengirim refresh
     # token. Tanpa keduanya, izin kedua dan seterusnya datang tanpa refresh
     # token dan sambungannya putus diam-diam sejam kemudian.

@@ -226,12 +226,17 @@ def periksa() -> int:
 
 
 def main() -> int:
+    # Port dipilih SEBELUM app.config diimpor, lalu dikembalikan ke lingkungan.
+    # Urutannya penting: config membaca OMNICLIP_PORT sekali saat diimpor, dan
+    # alamat pengalihan OAuth Google disusun dari nilai itu. Kalau port dipilih
+    # sesudahnya, aplikasi berjalan di 8001 sementara Google diberi tahu 8000.
+    host = os.getenv("OMNICLIP_HOST", "127.0.0.1").strip()
+    port = int(os.getenv("OMNICLIP_PORT", "0")) or _port_kosong(PORT_AWAL, PORT_DICOBA)
+    os.environ["OMNICLIP_PORT"] = str(port)
+
     # Impor ditunda sampai di sini supaya pesan galat konfigurasi muncul setelah
     # sambutan di bawah, bukan sebagai tumpukan traceback sebelum apa pun.
     from app.config import STORAGE_DIR, use_bundled_ffmpeg
-
-    host = os.getenv("OMNICLIP_HOST", "127.0.0.1").strip()
-    port = int(os.getenv("OMNICLIP_PORT", "0")) or _port_kosong(PORT_AWAL, PORT_DICOBA)
     url = f"http://{'127.0.0.1' if host in ('0.0.0.0', '::') else host}:{port}"
 
     bundled = use_bundled_ffmpeg()
