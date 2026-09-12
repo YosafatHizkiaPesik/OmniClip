@@ -468,6 +468,223 @@ def _smooth(labels: np.ndarray, k: int, window: int = 3) -> np.ndarray:
     return out
 
 
+# Berapa banyak jendela bertambatan yang dibutuhkan sebelum suara seseorang
+# boleh dimodelkan. Di bawah ini, reratanya ditentukan oleh satu-dua potongan
+# yang kebetulan, dan model yang lahir darinya menarik semua orang kepadanya.
+MIN_ANCHORS = 4
+
+# Seberapa jauh jendela harus lebih dekat ke satu model suara daripada ke model
+# terdekat berikutnya sebelum labelnya dipercaya.
+MIN_VOICE_MARGIN = 0.04
+
+# Seberapa benar model suara harus menebak potongan yang TIDAK dipakai
+# membuatnya, sebelum labelnya boleh menggantikan hasil pengelompokan biasa.
+#
+# Ini penjaga yang paling penting di seluruh fungsi ini, dan alasannya terukur.
+# Jangkar visual tidak selalu bersih: kamera juga memotong ke orang yang
+# menyimak, dan bukaan mulut bisa keliru. Ketika jangkarnya tercemar, model
+# suara kedua orang saling meleleh — dan label yang lahir darinya terlihat
+# meyakinkan justru karena ia dibangun dari bukti yang sama yang dipakai
+# menilainya.
+#
+# Uji silang memutus lingkaran itu: model dibangun dari separuh jangkar, lalu
+# ditanyai separuh yang belum pernah dilihatnya. Diukur pada empat rekaman —
+# podcast dua orang berpotong close-up lulus dengan 90%, sementara rekaman meja
+# statis dan podcast yang wajahnya jarang sendirian hanya 50-58%, nyaris
+# setara tebakan acak untuk dua orang. Ambang 0,70 memisahkan keduanya, dan
+# yang tidak lulus kembali memakai pengelompokan suara seperti biasa.
+MIN_HOLDOUT_ACCURACY = 0.70
+
+# Berapa potongan uji minimal supaya angka di atas berarti sesuatu. Dengan
+# empat potongan, satu tebakan beruntung sudah memindahkan akurasinya 25 poin.
+MIN_HOLDOUT_SAMPLES = 8
+
+
+def label_from_evidence(wav_path: str, spans: list[tuple[float, float]],
+                        span_person: list, n_people: int) -> Optional[Diarization]:
+    """
+    Memberi label penutur dari SUARA, tapi diajari oleh GAMBAR.
+
+    Ini membalik urutan yang dipakai `analyze_speakers`. Di sana pengelompokan
+    suara berdiri sendiri, menebak sekaligus ada berapa orang dan siapa bicara
+    kapan, lalu wajah dicocokkan belakangan. Dua tebakan bertumpuk, dan yang
+    pertama rapuh: diukur pada rekaman taman berisi lima orang, kurva nilainya
+    datar dari k=2 sampai k=8 (0,19 sampai 0,24) tanpa puncak, dan k=4
+    diterima dengan selisih 0,0002 atas k=3 — jumlah penuturnya praktis
+    ditentukan lemparan koin.
+
+    Di sini gambar yang menjawab lebih dulu. Ketika layar hanya memuat satu
+    wajah, penyuntingnya sendiri sudah mengatakan siapa yang bicara; ketika
+    beberapa wajah terlihat, bukaan mulut yang menjawab. Potongan suara pada
+    saat-saat itu menjadi CONTOH BERLABEL, dan dari contoh itu disusun satu
+    model suara per orang. Sisa rekaman — termasuk saat penuturnya tidak
+    terlihat kamera sama sekali — dilabeli dengan mencari model terdekat.
+
+    Hasilnya bukan cuma lebih tepat, tapi juga lebih berguna: labelnya ADALAH
+    nomor orang. Warna subtitle dan nomor wajah tidak perlu dicocokkan lagi
+    karena keduanya memang satu hal yang sama.
+
+    `span_person[i]` berisi (orang, keyakinan) atau None untuk tiap span.
+    Mengembalikan None bila jangkarnya terlalu sedikit untuk dipercaya —
+    pemanggil lalu memakai `analyze_speakers` seperti biasa.
+    """
+    if not spans or n_people < 2 or _get_session() is None:
+        return None
+
+    windows = _build_windows(spans)
+    vectors: list[np.ndarray] = []
+    covers: list[list[int]] = []
+    try:
+        with wave.open(wav_path, "rb") as wf:
+            if wf.getframerate() != SAMPLE_RATE or wf.getnchannels() != 1:
+                return None
+            for pieces, touched in windows:
+                audio = _window_audio(wf, pieces)
+                if audio is None:
+                    continue
+                vec = _embed(kaldi_fbank(audio))
+                if vec is not None:
+                    vectors.append(vec)
+                    covers.append(touched)
+    except (OSError, wave.Error) as e:
+        log.warning("Gagal membaca audio untuk penambatan wajah: %s", e)
+        return None
+    if len(vectors) < 8:
+        return None
+
+    x = np.vstack(vectors)
+    centered = x - x.mean(axis=0)
+    centered = centered / np.maximum(np.linalg.norm(centered, axis=1, keepdims=True), 1e-8)
+
+    # Bukti per jendela: suara terbanyak dari span yang disentuhnya, ditimbang
+    # keyakinannya. Satu jendela bisa menyeberangi batas kalimat, jadi tidak
+    # ada satu jawaban yang otomatis benar.
+    jangkar: dict[int, list[int]] = {}
+    for pos, touched in enumerate(covers):
+        suara: dict[int, float] = {}
+        for i in touched:
+            bukti = span_person[i] if i < len(span_person) else None
+            if bukti is None:
+                continue
+            orang, yakin = int(bukti[0]), float(bukti[1])
+            suara[orang] = suara.get(orang, 0.0) + max(0.0, yakin)
+        if not suara:
+            continue
+        menang = max(suara, key=suara.get)
+        # Bukti yang terbelah tidak dipakai: jendela yang separuhnya menunjuk
+        # orang lain adalah jendela yang memuat pergantian giliran.
+        if suara[menang] < 0.6 * sum(suara.values()):
+            continue
+        jangkar.setdefault(menang, []).append(pos)
+
+    model = {orang: pos for orang, pos in jangkar.items() if len(pos) >= MIN_ANCHORS}
+    if len(model) < 2:
+        log.info("Hanya %d dari %d orang punya cukup jangkar suara "
+                 "(%s dari %d jendela) — penambatan dilewati",
+                 len(model), n_people,
+                 {o: len(v) for o, v in sorted(jangkar.items())}, len(covers))
+        return None
+
+    # --- Model menguji dirinya sendiri sebelum dipercaya ---------------------
+    def _pusat(pilihan: dict):
+        keluar = {}
+        for o, pos in pilihan.items():
+            if len(pos) < 2:
+                continue
+            v = centered[pos].mean(axis=0)
+            keluar[o] = v / max(1e-9, float(np.linalg.norm(v)))
+        return keluar
+
+    latih = {o: pos[0::2] for o, pos in model.items()}
+    uji = {o: pos[1::2] for o, pos in model.items()}
+    p_latih = _pusat(latih)
+    if len(p_latih) >= 2:
+        urut_l = sorted(p_latih)
+        ML = np.stack([p_latih[o] for o in urut_l])
+        benar = jumlah = 0
+        for o, pos in uji.items():
+            if o not in p_latih:
+                continue
+            for i in pos:
+                jumlah += 1
+                benar += int(urut_l[int(np.argmax(centered[i] @ ML.T))] == o)
+        akurasi = benar / jumlah if jumlah else 0.0
+        # Uji yang tidak bisa dijalankan BUKAN uji yang lulus.
+        #
+        # Versi pertama penjaga ini hanya menolak bila sampel ujinya cukup
+        # banyak, dan diam-diam meluluskan sisanya — termasuk satu klip yang
+        # menebak 1 dari 5 dengan benar. Padahal jangkar sesedikit itu justru
+        # tanda bahwa modelnya memang belum layak dipercaya.
+        if jumlah < MIN_HOLDOUT_SAMPLES:
+            log.info("Jangkar terlalu sedikit untuk diuji silang (%d potongan) "
+                     "— penambatan dilewati", jumlah)
+            return None
+        if akurasi < MIN_HOLDOUT_ACCURACY:
+            log.info("Model suara gagal menebak potongan yang tak dilatihkan "
+                     "(%d/%d = %.0f%%) — penambatan dilewati, kembali ke "
+                     "pengelompokan suara", benar, jumlah, 100 * akurasi)
+            return None
+        log.info("Model suara lulus uji silang: %d/%d = %.0f%%",
+                 benar, jumlah, 100 * akurasi)
+    else:
+        log.info("Kurang dari dua orang punya jangkar terpisah — penambatan dilewati")
+        return None
+
+    pusat = {}
+    for orang, pos in model.items():
+        v = centered[pos].mean(axis=0)
+        pusat[orang] = v / max(1e-9, float(np.linalg.norm(v)))
+    orang_urut = sorted(pusat)
+    M = np.stack([pusat[o] for o in orang_urut])
+
+    # Seberapa jauh model-model itu satu sama lain. Kalau dua orang menghasilkan
+    # model yang nyaris sama, yang terjadi bukan dua suara melainkan satu suara
+    # yang jangkarnya tercemar — dan melabeli seluruh rekaman dengan model
+    # seperti itu hanya memindahkan kekeliruan ke mana-mana.
+    iu = np.triu_indices(len(M), 1)
+    jauh = float((1.0 - (M @ M.T)[iu]).min()) if len(M) > 1 else 0.0
+    if jauh < 0.10:
+        log.info("Model suara antar orang terlalu mirip (jarak %.3f) — "
+                 "penambatan dilewati", jauh)
+        return None
+
+    sim = centered @ M.T
+    pilih = sim.argmax(axis=1)
+    urut = np.sort(sim, axis=1)
+    margin = urut[:, -1] - urut[:, -2] if sim.shape[1] > 1 else np.ones(len(sim))
+
+    # Suara terbanyak per span, hanya dari jendela yang pilihannya cukup tegas.
+    votes = [{} for _ in spans]
+    for pos, touched in enumerate(covers):
+        if margin[pos] < MIN_VOICE_MARGIN:
+            continue
+        orang = orang_urut[int(pilih[pos])]
+        for i in touched:
+            votes[i][orang] = votes[i].get(orang, 0) + 1
+
+    out: list[int] = []
+    terakhir = orang_urut[0]
+    for tally in votes:
+        if tally:
+            terakhir = max(tally, key=tally.get)
+        out.append(int(terakhir))
+
+    k = max(out) + 1
+    smoothed = _smooth(np.asarray(out), k).tolist()
+    ganti = sum(1 for a, b in zip(smoothed, smoothed[1:]) if a != b)
+    # Mutu diukur di ranah JENDELA, tempat embedding-nya hidup. `smoothed`
+    # panjangnya sepanjang daftar span, dan memakainya di sini akan
+    # menyandingkan dua deret yang panjangnya berbeda.
+    label_jendela = np.array([orang_urut[int(i)] for i in pilih])
+    sep = (_separation(x, label_jendela, k)
+           if len(set(label_jendela.tolist())) > 1 else 0.0)
+    coh = _coherence(np.asarray(smoothed), k)
+    log.info("Penutur ditambatkan ke wajah: %d orang bermodel, jarak antar model "
+             "%.3f, %d jendela, %d pergantian", len(model), jauh, len(covers), ganti)
+    return Diarization(labels=smoothed, speaker_count=k, separation=sep,
+                       coherence=coh, quality=round(sep * coh, 4), requested=None)
+
+
 def analyze_speakers(wav_path: str, spans: list[tuple[float, float]], *,
                      speakers: Optional[int] = None,
                      max_speakers: int = MAX_SPEAKERS,

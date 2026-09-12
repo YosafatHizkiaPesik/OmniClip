@@ -1571,6 +1571,85 @@ def _centers_from_speakers(centers, people, mapping, speaker_turns, n,
     return out, subject
 
 
+# Seberapa jauh bukaan mulut seseorang harus mengungguli yang lain sebelum
+# bidikan berisi banyak orang boleh dipakai sebagai bukti siapa yang bicara.
+#
+# Diukur pada bidikan dua orang yang giliran bicaranya diperiksa dengan mata:
+# pada sepertiga baris dengan selisih tertinggi, pilihan visualnya sepakat 90%
+# dengan diarisasi; pada sepertiga terendah cuma 27%. Selisihnya sendiri yang
+# menentukan layak-tidaknya dipercaya, bukan nilai mutlaknya.
+MOUTH_EVIDENCE_MARGIN = 0.8
+
+
+def speaking_evidence(people, motion, seen, n_samples):
+    """
+    Siapa yang terlihat SEDANG BICARA pada tiap sampel, beserta keyakinannya.
+
+    Dua sumber bukti, dan keduanya perlu karena masing-masing buta di tempat
+    yang satunya melihat:
+
+    1. **Hanya satu wajah di layar.** Penyuntingnya sendiri yang menjawab —
+       rekaman yang dipotong rapi memotong ke orang yang bicara. Bukti
+       terkuat yang ada, dan tidak butuh menebak apa pun dari gambar.
+    2. **Beberapa wajah sekaligus.** Di situ sumber pertama diam, dan yang
+       dipakai bukaan mulut: siapa yang mulutnya paling terbuka dan paling
+       sering membuka-menutup.
+
+    Terukur pada empat rekaman, keduanya memang saling menutup. Podcast yang
+    berpotong close-up memberi 177 dan 73 detik "sendirian di layar" untuk dua
+    orangnya; rekaman meja statis memberi 1,4 detik saja — tapi di sanalah
+    kedua wajah justru selalu terlihat bersamaan, tempat sumber kedua bekerja.
+
+    Mengembalikan daftar sepanjang `n_samples` berisi (orang, keyakinan) atau
+    None bila tidak ada bukti yang layak.
+    """
+    import numpy as np
+
+    k = len(people)
+    if k < 1 or n_samples < 1:
+        return [None] * max(0, n_samples)
+
+    mot = np.array([m[:n_samples] for m in motion], dtype=np.float64)
+    vis = np.array([[bool(v) for v in s[:n_samples]] for s in seen])
+    for i in range(k):
+        v = mot[i][vis[i]]
+        if len(v) > 4:
+            sd = float(v.std())
+            mot[i] = (mot[i] - float(v.mean())) / (sd if sd > 1e-6 else 1.0)
+
+    jendela = max(3, int(round(0.4 * SAMPLE_FPS)) | 1)
+    setengah = jendela // 2
+    nilai = np.full((k, n_samples), -np.inf)
+    for i in range(k):
+        for t in range(n_samples):
+            if not vis[i][t]:
+                continue
+            lo, hi = max(0, t - setengah), min(n_samples, t + setengah + 1)
+            m = vis[i][lo:hi]
+            if int(m.sum()) < 3:
+                continue
+            nilai[i][t] = float(mot[i][t] + mot[i][lo:hi][m].std())
+
+    keluar: list = []
+    hadir = vis.sum(axis=0)
+    for t in range(n_samples):
+        if hadir[t] == 1:
+            keluar.append((int(np.argmax(vis[:, t])), 1.0))
+            continue
+        if hadir[t] < 2:
+            keluar.append(None)
+            continue
+        kolom = nilai[:, t]
+        jadi = [x for x in kolom if np.isfinite(x)]
+        if len(jadi) < 2:
+            keluar.append(None)
+            continue
+        best = int(np.argmax(kolom))
+        selisih = float(kolom[best] - sorted(jadi)[-2])
+        keluar.append((best, selisih) if selisih >= MOUTH_EVIDENCE_MARGIN else None)
+    return keluar
+
+
 def assign_faces_to_speakers(people, motion, speaker_turns, n_samples):
     """
     Mencocokkan WAJAH dengan PENUTUR, memakai suara sebagai wasit.

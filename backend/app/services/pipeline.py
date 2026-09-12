@@ -3,6 +3,7 @@
 import logging
 import os
 import tempfile
+from typing import Optional
 
 from ..errors import AppError, RenderError
 from ..repos import media as media_repo
@@ -361,7 +362,7 @@ def run_auto_clip(ctx: JobContext) -> dict:
         if ctx.payload.get("diarize", True) and sentences:
             try:
                 _stage_progress(ctx, "analyze", 0.3, "Memperkirakan jumlah narasumber…")
-                from .diarize import analyze_speakers
+                from .diarize import analyze_speakers, label_from_evidence
                 wav = need_audio()
                 dia = analyze_speakers(
                     wav, [(x["s"], x["e"]) for x in sentences],
@@ -580,6 +581,90 @@ def run_tts_voice(ctx: JobContext) -> dict:
     return {"available": tts.available()}
 
 
+# Berapa klip yang dipindai wajahnya untuk mengumpulkan jangkar.
+#
+# Bukan semuanya: memindai sembilan belas klip berarti menunggu belasan menit
+# untuk pekerjaan yang selama ini selesai dalam dua. Delapan sudah memberi
+# 85 sampai 134 potongan bertambatan pada rekaman uji — cukup banyak untuk
+# membentuk model suara dan masih menyisakan separuhnya untuk mengujinya.
+MAX_ANCHOR_CLIPS = 8
+
+
+def _bukti_wajah(source, result: dict, sentences: list, ctx) -> Optional[dict]:
+    """
+    Mengumpulkan bukti "siapa yang terlihat bicara" dari beberapa klip.
+
+    Bukti dikembalikan per KALIMAT dalam linimasa video, bukan per klip, supaya
+    bisa langsung dipakai melabeli seluruh rekaman — termasuk bagian yang tidak
+    pernah masuk klip mana pun.
+    """
+    from collections import Counter
+
+    from .reframe import SAMPLE_FPS, plan_reframe, speaking_evidence
+
+    klip = [c for c in (result.get("clips") or [])
+            if len({l.get("speaker", 0) for l in (c.get("subtitles") or [])}) > 1]
+    if not klip:
+        klip = list(result.get("clips") or [])
+    klip = klip[:MAX_ANCHOR_CLIPS]
+    if not klip:
+        return None
+
+    # Kalimat diurut waktu sekali, lalu dicari dengan bisect — mencocokkan tiap
+    # sampel ke kalimatnya secara linear akan berarti jutaan perbandingan.
+    import bisect
+    awal = [float(s["s"]) for s in sentences]
+
+    suara: dict[int, Counter] = {}
+    n_orang = 0
+    for i, c in enumerate(klip):
+        ctx.check_cancelled()
+        ctx.progress(0.20 + 0.22 * i / max(1, len(klip)), stage="faces",
+                     message=f"Memindai wajah klip {i + 1} dari {len(klip)}…")
+        try:
+            rencana = plan_reframe(str(source), c["segments"], aspect_ratio="9:16",
+                                   track_only=True)
+        except Exception as e:                       # noqa: BLE001
+            log.info("Pemindaian wajah klip %s gagal: %s", c.get("index"), e)
+            continue
+        if rencana is None or not rencana.people:
+            continue
+        n = len(rencana.people[0])
+        n_orang = max(n_orang, len(rencana.people))
+        ev = speaking_evidence(rencana.people, rencana.people_motion,
+                               rencana.people_seen, n)
+        # Sampel klip -> detik sumber. Klip bisa tersusun dari beberapa potongan.
+        batas, jalan = [], 0.0
+        for seg in c["segments"]:
+            batas.append((jalan, jalan + float(seg["end"]) - float(seg["start"]),
+                          float(seg["start"])))
+            jalan = batas[-1][1]
+        for t, e in enumerate(ev):
+            if e is None:
+                continue
+            tk = t / SAMPLE_FPS
+            for lo, hi, mulai in batas:
+                if lo <= tk < hi:
+                    detik = mulai + (tk - lo)
+                    j = bisect.bisect_right(awal, detik) - 1
+                    if 0 <= j < len(sentences) and detik <= float(sentences[j]["e"]) + 0.3:
+                        suara.setdefault(j, Counter())[int(e[0])] += float(e[1])
+                    break
+
+    if len(suara) < 8 or n_orang < 2:
+        log.info("Bukti wajah terlalu sedikit (%d kalimat) — penambatan dilewati",
+                 len(suara))
+        return None
+
+    span = [None] * len(sentences)
+    for j, c in suara.items():
+        menang = max(c, key=c.get)
+        span[j] = (menang, c[menang] / max(1e-9, sum(c.values())))
+    log.info("Bukti wajah terkumpul untuk %d dari %d kalimat, %d orang",
+             len(suara), len(sentences), n_orang)
+    return {"span": span, "orang": n_orang}
+
+
 def run_diarize(ctx: JobContext) -> dict:
     """
     payload: {video_id, speakers}
@@ -596,7 +681,7 @@ def run_diarize(ctx: JobContext) -> dict:
     from ..repos import analyses as analyses_repo
     from ..repos import transcripts as tx_repo
     from .clipmodel import rebuild_subtitles_for_segments, strip_non_speech
-    from .diarize import analyze_speakers
+    from .diarize import analyze_speakers, label_from_evidence
     from .media import extract_audio_wav
 
     video_id = ctx.payload["video_id"]
@@ -629,9 +714,29 @@ def run_diarize(ctx: JobContext) -> dict:
 
         label = (f"Memisahkan {speakers} narasumber…" if speakers
                  else "Memperkirakan jumlah narasumber…")
-        ctx.progress(0.25, stage="diarize", message=label)
-        dia = analyze_speakers(audio_path, [(s["s"], s["e"]) for s in sentences],
-                               speakers=speakers)
+        spans = [(s["s"], s["e"]) for s in sentences]
+
+        # --- Jalur pertama: tambatkan suara ke wajah -------------------------
+        #
+        # Dicoba lebih dulu karena ia menjawab dua pertanyaan sekaligus. Label
+        # yang dihasilkannya ADALAH nomor orang, jadi warna subtitle dan nomor
+        # wajah berhenti menjadi dua penomoran berbeda yang kebetulan sama-sama
+        # angka. Ia menolak dirinya sendiri bila modelnya gagal uji silang, dan
+        # saat itu terjadi jalur lama di bawah yang berjalan.
+        dia = None
+        if speakers is None:
+            ctx.progress(0.20, stage="faces",
+                         message="Mencari siapa yang terlihat bicara…")
+            bukti = _bukti_wajah(source, cached["result"], sentences, ctx)
+            if bukti:
+                ctx.progress(0.45, stage="diarize",
+                             message="Menambatkan suara ke wajah…")
+                dia = label_from_evidence(audio_path, spans, bukti["span"],
+                                          bukti["orang"])
+
+        if dia is None:
+            ctx.progress(0.55, stage="diarize", message=label)
+            dia = analyze_speakers(audio_path, spans, speakers=speakers)
 
         ctx.progress(0.85, stage="apply", message="Menerapkan penanda ke subtitle…")
         # Label menempel pada KATA, bukan pada baris subtitle: batas baris bisa

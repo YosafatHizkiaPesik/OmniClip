@@ -123,8 +123,28 @@ dipakai untuk mencegah tabrakan nomor.
 
 ### c. Memasangkan suara dengan wajah
 
-Sudah ada dan sudah membaik (lihat poin 1), tapi 78% belum cukup untuk
-"tanpa pembetulan manual".
+Sejak 12 September ada jalur baru: **suara ditambatkan ke wajah**. Ketika layar
+hanya memuat satu wajah, penyuntingnya sendiri sudah mengatakan siapa yang
+bicara; ketika beberapa wajah terlihat, bukaan mulut yang menjawab. Potongan
+suara pada saat-saat itu jadi contoh berlabel, dan dari situ disusun satu model
+suara per orang untuk melabeli seluruh rekaman. Labelnya **adalah** nomor orang,
+jadi warna subtitle dan nomor wajah berhenti jadi dua penomoran yang berbeda.
+
+Metodenya menguji dirinya sendiri sebelum dipakai: model dibangun dari separuh
+jangkar, lalu ditanyai separuh yang belum pernah dilihatnya. Lulus di atas 70%,
+dipakai; di bawahnya, sistem kembali ke pengelompokan suara biasa.
+
+| rekaman | jangkar | uji silang | hasil |
+|---|---|---|---|
+| podcast dua orang berpotong close-up | 126 kalimat | **84%** | dipakai, nomor penutur = nomor wajah |
+| rekaman meja statis lima orang | 199 kalimat | 60% | ditolak, kembali ke cara lama |
+
+**Yang masih kurang:** rekaman berkamera diam yang tidak pernah memotong ke satu
+orang. Di sana jangkar "satu wajah di layar" hampir tidak ada (terukur 1,4 detik
+untuk enam klip), jadi yang tersisa hanya bukaan mulut — dan bukaan mulut saja
+menghasilkan jangkar yang tercemar reaksi penyimak. Arah yang belum dicoba:
+model deteksi penutur aktif sungguhan (TalkNet/SyncNet ONNX) untuk menggantikan
+bukaan mulut sebagai sumber jangkar kedua.
 
 ---
 
