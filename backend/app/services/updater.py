@@ -233,7 +233,7 @@ echo Cadangan: {cadangan} >>"%LOG%"
 
 echo Menunggu OmniClip menutup...
 for /l %%i in (1,1,120) do (
-  tasklist /fi "PID eq {pid}" 2>nul | find "{pid}" >nul || goto :tukar
+  tasklist /fi "PID eq {pid}" 2>nul | find "{pid}" >nul || goto :tenang
   timeout /t 1 /nobreak >nul
 )
 echo GAGAL: proses {pid} tidak menutup dalam 120 detik. >>"%LOG%"
@@ -242,16 +242,71 @@ echo Rincian: %LOG%
 pause
 exit /b 1
 
+:tenang
+rem Hilangnya PID bukan berarti foldernya sudah bebas.
+rem
+rem ffmpeg.exe dan ffprobe.exe tinggal DI DALAM folder aplikasi, dan keduanya
+rem dijalankan sebagai anak dari OmniClip. Proses induk boleh sudah mati
+rem sementara anaknya masih menulis sebuah klip - dan Windows menolak
+rem memindahkan folder yang salah satu berkasnya sedang dijalankan. Pemindai
+rem antivirus juga memegang berkas yang baru saja ditutup, beberapa detik.
+echo Menunggu berkas dilepas... >>"%LOG%"
+timeout /t 3 /nobreak >nul
+
+rem Hentikan ffmpeg/ffprobe yang berjalan DARI FOLDER INI saja.
+rem
+rem Keduanya tinggal di dalam folder aplikasi dan dijalankan sebagai anak
+rem OmniClip; `os._exit()` tidak mematikan anak, jadi satu render yang belum
+rem selesai tetap memegang foldernya. Disaring berdasarkan letak berkasnya,
+rem bukan namanya: ffmpeg milik aplikasi lain di komputer ini tidak tersentuh,
+rem dan cmd yang sedang menjalankan skrip ini juga tidak.
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-Process -Name ffmpeg,ffprobe -ErrorAction SilentlyContinue | Where-Object {{ $_.Path -like '{lama}\\*' }} | Stop-Process -Force -ErrorAction SilentlyContinue" >>"%LOG%" 2>&1
+timeout /t 2 /nobreak >nul
+
 :tukar
 echo [1/3] Menyingkirkan versi lama... >>"%LOG%"
+set /a coba=0
+
+:coba_singkirkan
 move "{lama}" "{cadangan}" >>"%LOG%" 2>&1
-if errorlevel 1 (
-  echo GAGAL: folder lama tidak bisa dipindahkan. Mungkin masih terbuka. >>"%LOG%"
-  echo Tidak bisa memindahkan folder lama. Versi lama masih utuh.
-  echo Rincian: %LOG%
+if not errorlevel 1 goto :pasang_baru
+set /a coba+=1
+echo   percobaan %coba% ditolak, menunggu 2 detik... >>"%LOG%"
+if %coba% lss 30 (
+  timeout /t 2 /nobreak >nul
+  goto :coba_singkirkan
+)
+echo Menukar folder ditolak terus. Mencatat keadaan lalu mencoba cara lain. >>"%LOG%"
+tasklist /fi "IMAGENAME eq ffmpeg.exe" >>"%LOG%" 2>&1
+tasklist /fi "IMAGENAME eq ffprobe.exe" >>"%LOG%" 2>&1
+tasklist /fi "IMAGENAME eq OmniClip.exe" >>"%LOG%" 2>&1
+
+rem Jalan terakhir: pasang DI TEMPAT, tanpa menukar folder sama sekali.
+rem
+rem Menukar folder lebih disukai karena bisa dibatalkan - yang lama tinggal
+rem dikembalikan namanya. Tapi ia menuntut sesuatu yang kadang memang tidak
+rem bisa didapat di Windows: hak memindahkan seluruh direktori. Menyalin isi
+rem yang baru menimpa yang lama hanya menuntut hak menulis per berkas, dan itu
+rem jauh lebih mudah dipenuhi. Tanpa /PURGE: berkas sisa versi lama dibiarkan
+rem menganggur, sebab menghapus di sini berarti kegagalan di tengah jalan
+rem meninggalkan pemasangan yang tidak utuh dan tanpa cadangan.
+echo Memasang di tempat (menyalin menimpa folder lama)... >>"%LOG%"
+robocopy "{baru}" "{lama}" /E /IS /R:2 /W:2 /NFL /NDL /NJH /NJS /NP >>"%LOG%" 2>&1
+if errorlevel 8 (
+  echo GAGAL: memasang di tempat juga ditolak. >>"%LOG%"
+  echo.
+  echo Pemasangan gagal. Versi lama masih utuh dan bisa dipakai seperti biasa.
+  echo Ada program lain yang memegang folder aplikasi.
+  echo Rincian lengkap ada di: %LOG%
   pause
   exit /b 1
 )
+echo Selesai lewat pemasangan di tempat. >>"%LOG%"
+rmdir /s /q "{panggung}" >nul 2>&1
+start "" "{lama}\\{exe}"
+exit /b 0
+
+:pasang_baru
 
 echo [2/3] Memasang versi baru... >>"%LOG%"
 move "{baru}" "{lama}" >>"%LOG%" 2>&1
