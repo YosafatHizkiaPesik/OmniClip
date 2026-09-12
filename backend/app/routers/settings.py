@@ -32,7 +32,6 @@ PROVIDERS = {
         "id": "gemini",
         "label": "Google Gemini",
         "key_url": "https://aistudio.google.com/app/apikey",
-        "key_prefix": "AIza",
         "note": "Tingkat gratis tersedia. Dipakai untuk memilih klip dan menulis judul.",
     },
 }
@@ -120,20 +119,77 @@ async def set_api_key(req: ApiKeyRequest):
         raise AppError("API key tidak boleh memuat spasi atau baris baru.",
                        code="AI_KEY_INVALID", status=422)
 
-    prefix = PROVIDERS[provider]["key_prefix"]
-    if prefix and not key.startswith(prefix):
-        # Menolak lebih awal, bukan membiarkan setiap analisis gagal nanti
-        # dengan pesan dari Google yang tidak menunjuk ke ladang isian ini.
-        raise AppError(
-            f"Sepertinya bukan API key {PROVIDERS[provider]['label']} — "
-            f"kunci yang benar diawali \"{prefix}\".",
-            code="AI_KEY_INVALID", status=422)
+    # Kuncinya DICOBA, bukan ditebak bentuknya.
+    #
+    # Versi pertama menolak apa pun yang tidak diawali "AIza", karena itulah
+    # bentuk kunci AI Studio yang saya kenal. Google menerbitkan format lain —
+    # ada kunci sah yang diawali "AQ." — dan pemeriksaan itu menolaknya mentah
+    # mentah sambil menuduh penggunanya salah menempel. Menebak bentuk rahasia
+    # milik layanan lain memang selalu menua buruk: bentuknya bisa berubah kapan
+    # saja tanpa memberi tahu siapa pun.
+    #
+    # Yang benar adalah bertanya kepada Google. Sekali panggilan daftar model
+    # sudah cukup, dan bonusnya: kunci yang sah tapi kuotanya mati atau API-nya
+    # belum diaktifkan ikut ketahuan di sini, bukan nanti saat analisis pertama.
+    galat = await _uji_kunci(key)
+    if galat:
+        raise AppError(galat, code="AI_KEY_INVALID", status=422)
 
     settings_repo.set_value("ai.provider", provider)
     settings_repo.set_value("ai.api_key", key)
     log.info("API key %s dipasang (berakhiran %s).", provider, key[-4:])
     return {"status": "ok",
-            "message": "API key tersimpan dan tetap ada setelah backend dimulai ulang."}
+            "message": "API key diuji ke Google dan tersimpan. Tetap ada setelah "
+                       "aplikasi ditutup."}
+
+
+async def _uji_kunci(key: str) -> str | None:
+    """
+    Menanyakan kunci ini ke Google. None berarti dipakai.
+
+    Diklasifikasi dari KODE STATUS, bukan dari teks galatnya. Versi pertama
+    mencocokkan teks, dan itu langsung meleset: kunci "AIza" yang keliru dijawab
+    Google dengan 400 "API key not valid", sedangkan kunci "AQ." yang keliru
+    dijawab 401 "invalid authentication credentials" — kalimat yang sama sekali
+    berbeda untuk kesalahan yang sama. Kunci palsu pun lolos tersimpan.
+
+    Kegagalan tanpa kode status sengaja TIDAK menolak kunci. Aplikasi ini
+    berjalan di komputer orang, sering tanpa sambungan yang bisa diandalkan,
+    dan menolak menyimpan kunci yang benar hanya karena wifi sedang mati adalah
+    kegagalan yang lebih menjengkelkan daripada kunci keliru yang baru ketahuan
+    saat analisis pertama.
+    """
+    import asyncio
+
+    def _coba() -> str | None:
+        from google import genai
+        # Klien dipegang di variabel selama pemanggilan: dilepas terlalu cepat,
+        # ia menutup dirinya sendiri dan galatnya menyamar jadi "client closed".
+        client = genai.Client(api_key=key)
+        next(iter(client.models.list()), None)
+        return None
+
+    try:
+        return await asyncio.to_thread(_coba)
+    except Exception as e:
+        kode = getattr(e, "code", None)
+        if kode in (400, 401):
+            return ("Google tidak mengenali kunci ini. Periksa apakah seluruhnya "
+                    "tersalin, tanpa spasi atau baris terpotong di ujung.")
+        if kode == 403:
+            return ("Kunci ini dikenali Google tapi belum diizinkan memakai "
+                    "Gemini API. Buka aistudio.google.com dan pastikan kuncinya "
+                    "dibuat untuk Generative Language API.")
+        if kode == 429:
+            return ("Kunci ini sah tapi kuotanya sedang habis. Coba lagi nanti, "
+                    "atau pakai kunci lain.")
+        if kode is not None:
+            return f"Google menolak kunci ini (kode {kode}). Coba lagi sebentar lagi."
+        # Tidak ada kode status sama sekali: jaringan, DNS, proxy, sertifikat.
+        # Bukan urusan kuncinya.
+        log.warning("Kunci tidak bisa diuji, tidak ada kode status dari Google: %s",
+                    str(e)[:200])
+        return None
 
 
 @router.delete("/api-key")
