@@ -70,6 +70,16 @@ class CaptionStyle:
     # supaya palet yang kependekan tidak pernah berubah jadi putih diam-diam.
     speaker_colors: tuple[str, ...] = ("#FFFFFF", "#7CFFB2", "#FFB3C7", "#B39DFF",
                                        "#FFD166", "#5BC8FF", "#FF9F1C", "#B8FF3A")
+    # Mematikan pewarnaan per penutur tanpa menghapus paletnya.
+    #
+    # Menebak siapa bicara kapan adalah bagian paling rapuh dari seluruh alur
+    # ini, dan ketika ia meleset hasilnya bukan sekadar kurang tepat — warna
+    # subtitle berganti-ganti di tengah kalimat orang yang sama, yang jauh
+    # lebih mengganggu daripada satu warna untuk semuanya. Mematikannya di
+    # sini membuat setiap baris memakai `primary`, jadi temanya sama sepanjang
+    # klip, sementara palet dan label penuturnya tetap tersimpan untuk
+    # dinyalakan lagi kalau deteksinya diperbaiki.
+    per_speaker_colors: bool = True
     max_words_per_line: int = 5
     max_chars_per_line: int = 22
 
@@ -355,7 +365,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         # warnanya sendiri; kata yang sedang diucapkan tetap memakai highlight.
         sp = int(line.get("speaker") or 0)
         base = (speaker_ass[sp]
-                if 0 <= sp < len(speaker_ass) else primary)
+                if st.per_speaker_colors and 0 <= sp < len(speaker_ass)
+                else primary)
         base_tag = "" if base == primary else f"{{\\c{base}}}"
 
         # Sorotan per kata TIDAK lagi terikat pada animasi masuk.

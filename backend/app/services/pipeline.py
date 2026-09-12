@@ -130,6 +130,8 @@ def run_render(ctx: JobContext) -> dict:
         box_w=max(20.0, min(100.0, float(style_in.get("box_w", 84.0)))),
         speaker_colors=tuple(style_in.get("speaker_colors")
                              or ("#FFFFFF", "#7CFFB2", "#FFB3C7", "#B39DFF")),
+        # Bawaannya tetap menyala, jadi gaya lama tidak berubah artinya.
+        per_speaker_colors=bool(style_in.get("per_speaker_colors", True)),
         # Tanda air. Font kosong berarti ikut font subtitle — itu yang
         # diharapkan saat pengguna belum menyentuh setelan ini sama sekali.
         wm_font=(style_in.get("wm_font") if style_in.get("wm_font") in FONT_FAMILIES

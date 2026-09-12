@@ -8,7 +8,11 @@ dan satu-satunya penyimpanan sebenarnya adalah `backend/.env` — berkas yang
 hanya bisa diedit dari terminal komputer ini.
 """
 
+import asyncio
 import logging
+import os
+import sys
+from pathlib import Path
 
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
@@ -218,3 +222,100 @@ async def set_model(req: ModelRequest):
     else:
         settings_repo.delete("ai.model")
     return {"status": "ok", "model": value}
+
+
+# --- Lokasi penyimpanan -------------------------------------------------------
+
+class PenyimpananRequest(BaseModel):
+    folder: str = Field(..., description="Folder tujuan penyimpanan")
+
+
+def _ringkas_penyimpanan() -> dict:
+    import shutil as _sh
+    from .. import config as cfg
+
+    sekarang = cfg.STORAGE_DIR
+    try:
+        _, _, sisa = _sh.disk_usage(sekarang)
+    except OSError:
+        sisa = 0
+
+    # Saran hanya diberikan saat terbungkus: dari kode sumber, penyimpanan
+    # memang sudah berada di dalam repositori dan tidak ada yang perlu pindah.
+    saran = ""
+    if cfg.FROZEN:
+        calon = Path(sys.executable).resolve().parent.parent / "OmniClip-Data"
+        if calon.resolve() != sekarang.resolve():
+            saran = str(calon)
+
+    return {
+        "folder": str(sekarang),
+        "sisa_ruang": sisa,
+        "dari_sumber": not cfg.FROZEN,
+        "saran": saran,
+        "dikunci_env": bool(os.getenv("OMNICLIP_STORAGE", "").strip()),
+        "menunggu_pindah": (cfg._user_data_dir() / "pindah-dari.txt").is_file(),
+    }
+
+
+@router.get("/penyimpanan")
+async def lihat_penyimpanan():
+    """Di mana klip dan unduhan disimpan sekarang."""
+    return await asyncio.to_thread(_ringkas_penyimpanan)
+
+
+@router.post("/penyimpanan")
+async def pindah_penyimpanan(req: PenyimpananRequest):
+    """
+    Menunjuk folder penyimpanan yang baru.
+
+    Pemindahannya TIDAK dikerjakan di sini. Basis data sedang terbuka oleh
+    proses ini, dan memindahkan berkas SQLite yang sedang dipakai adalah cara
+    yang rapi untuk merusaknya. Yang ditulis di sini hanya dua berkas penunjuk;
+    perpindahannya terjadi saat aplikasi dijalankan berikutnya, sebelum satu
+    koneksi pun dibuka.
+    """
+    from .. import config as cfg
+
+    if os.getenv("OMNICLIP_STORAGE", "").strip():
+        raise AppError("Lokasi penyimpanan sedang dipaksa lewat OMNICLIP_STORAGE.",
+                       code="STORAGE_LOCKED", status=409)
+    if not cfg.FROZEN:
+        raise AppError("Dijalankan dari kode sumber — penyimpanan mengikuti folder proyek.",
+                       code="STORAGE_FROM_SOURCE", status=409)
+
+    tujuan = Path(req.folder.strip()).expanduser()
+    if not str(tujuan).strip():
+        raise AppError("Folder tujuan kosong.", code="STORAGE_EMPTY", status=422)
+    if not cfg._bisa_ditulis(tujuan):
+        raise AppError(f"Folder {tujuan} tidak bisa ditulis.",
+                       code="STORAGE_NOT_WRITABLE", status=422)
+    if tujuan.resolve() == cfg.STORAGE_DIR.resolve():
+        return {"status": "ok", "folder": str(tujuan), "perlu_restart": False}
+
+    data = cfg._user_data_dir()
+    data.mkdir(parents=True, exist_ok=True)
+    (data / "lokasi-penyimpanan.txt").write_text(str(tujuan.resolve()), encoding="utf-8")
+    (data / "pindah-dari.txt").write_text(str(cfg.STORAGE_DIR.resolve()), encoding="utf-8")
+    log.info("Penyimpanan akan dipindahkan ke %s saat aplikasi dijalankan lagi.", tujuan)
+    return {"status": "ok", "folder": str(tujuan.resolve()), "perlu_restart": True}
+
+
+@router.post("/penyimpanan/buka")
+async def buka_penyimpanan():
+    """Membuka folder penyimpanan di pengelola berkas sistem."""
+    import subprocess
+    from .. import config as cfg
+
+    folder = str(cfg.STORAGE_DIR)
+    try:
+        if sys.platform == "win32":
+            os.startfile(folder)                     # noqa: S606
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", folder], close_fds=True)
+        else:
+            subprocess.Popen(["xdg-open", folder], close_fds=True)
+    except OSError as e:
+        raise AppError(f"Tidak bisa membuka folder: {e}",
+                       code="STORAGE_OPEN_FAILED", status=500) from e
+    return {"status": "ok", "folder": folder}

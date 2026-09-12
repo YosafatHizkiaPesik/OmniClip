@@ -340,6 +340,25 @@ export default function ClipPreview({
     // kalimatnya terpotong.
     if (v.paused) return;
 
+    // Mundur ke segmen SEBELUMNYA dikenali, bukan dilawan.
+    //
+    // `segIndex` dulu hanya pernah maju — disetel ke 0 atau ke segmen
+    // berikutnya, tidak pernah ke belakang. Padahal memundurkan video bisa
+    // mendaratkan playhead di segmen mana pun. Yang terjadi kemudian: penjaga
+    // di bawah melihat waktu yang "sebelum awal segmen ini", lalu menyeretnya
+    // maju ke awal segmen yang dianggapnya aktif — setiap denyut, berkali-kali
+    // dalam sedetik. Yang dilihat pengguna adalah gambar yang mengulang-ulang
+    // dirinya dengan cepat dan tidak bisa dimundurkan.
+    //
+    // Diperiksa lebih dulu daripada kedua penjaga di bawah, karena keduanya
+    // menghitung dari `seg` yang justru sedang salah.
+    const di = segments.findIndex((g) => v.currentTime >= g.start - 0.05
+                                      && v.currentTime < g.end);
+    if (di !== -1 && di !== segIndex) {
+      setSegIndex(di);
+      return;
+    }
+
     if (v.currentTime >= seg.end - 0.03) {
       const next = segIndex + 1;
       if (next < segments.length) {
@@ -353,7 +372,9 @@ export default function ClipPreview({
       }
       return;
     }
-    if (v.currentTime < seg.start - 0.5) v.currentTime = seg.start;
+    // Hanya berlaku bila waktunya di luar SELURUH segmen — kalau ia masih di
+    // dalam salah satunya, cabang di atas sudah memindahkan segmen aktifnya.
+    if (di === -1 && v.currentTime < seg.start - 0.5) v.currentTime = seg.start;
   };
 
   /** Menghentikan kartu yang sedang berjalan dan membereskan sisanya. */
@@ -1155,12 +1176,14 @@ export default function ClipPreview({
           seperempat tingginya untuk kalimat yang sudah dibaca sekali dan tidak
           pernah dibaca lagi adalah pertukaran yang salah. Kalimat penuhnya
           pindah ke tooltip, tempat ia tetap ada saat benar-benar dicari. */}
-      {onStyleChange && shownLine && (
-        <span className="preview-hint"
-              title="Subtitle bisa diseret langsung di atas gambar: seret untuk memindahkan, batang kiri/kanan untuk melebar-sempitkan kotaknya, bulatan di pojok kanan-bawah untuk memperbesar seluruhnya sekaligus.">
-          <Move size={11} />
-        </span>
-      )}
+      {/* Petunjuk seret DIHAPUS.
+          Dulu di sini ada ikon panah-empat-arah 11 piksel dengan `cursor:
+          help`, yang tooltipnya menerangkan subtitle bisa diseret di atas
+          gambar. Pemilik aplikasinya sendiri tidak bisa menebak itu apa dan
+          mengira ia tombol yang rusak — sebuah petunjuk yang harus ditebak
+          lebih dulu bukan petunjuk, ia bagian dari teka-tekinya. Yang
+          diterangkannya juga terungkap sendiri: subtitle di pratinjau memang
+          langsung bisa ditarik, dan orang menemukannya dengan menariknya. */}
       </div>
     </div>
   );
@@ -1200,7 +1223,13 @@ export function CaptionOverlay({
   // hasil render memberinya warna — atau sebaliknya. Satu aturan, dua tempat.
   const palette = padPalette(style?.speaker_colors);
   const sp = line.speaker || 0;
-  const speakerColor = palette[sp] ?? style?.primary ?? '#FFFFFF';
+  // Mode "satu warna untuk seluruh klip" dihormati DI SINI juga, bukan hanya
+  // saat render. Kalau tidak, mematikannya mengubah video tapi tidak mengubah
+  // pratinjau — dan pratinjau yang tidak sama dengan hasilnya adalah cacat
+  // yang lebih buruk daripada fitur yang tidak ada.
+  const speakerColor = style?.per_speaker_colors === false
+    ? (style?.primary ?? '#FFFFFF')
+    : (palette[sp] ?? style?.primary ?? '#FFFFFF');
 
   const age = clipTime - line.start;
   const entry = ghost || anim === 'none' ? {} : lineEntryStyle(anim, age);

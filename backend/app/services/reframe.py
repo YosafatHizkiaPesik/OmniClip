@@ -459,7 +459,7 @@ class _FaceTrack:
     """
 
     __slots__ = ("cx", "cy", "w", "h", "mouth", "brow", "energy", "motion",
-                 "misses", "tid", "emb", "emb_n", "emb_at")
+                 "misses", "tid", "emb", "emb_n", "emb_at", "tajam", "yakin")
 
     def __init__(self, cx, cy, w, h, mouth, brow, tid=0):
         self.cx = cx
@@ -478,6 +478,36 @@ class _FaceTrack:
         self.emb = None
         self.emb_n = 0
         self.emb_at = -10**9
+        # Ketajaman dan keyakinan detektor, dihaluskan sepanjang jejak.
+        # Dipakai untuk membedakan orangnya dari PANTULANNYA di kaca.
+        self.tajam = 0.0
+        self.yakin = 0.0
+
+
+def _ketajaman(frame, f, sw: int, sh: int) -> float:
+    """
+    Seberapa tajam petak wajah ini, lewat ragam Laplacian.
+
+    Ini yang memisahkan orangnya dari bayangannya di kaca. Sebuah pantulan
+    adalah wajah sungguhan bagi detektor — bentuknya benar, proporsinya benar,
+    dan kalau kebetulan lebih besar di layar ia menang atas orang aslinya.
+    Yang TIDAK pernah sama adalah ketajamannya: kaca menyebarkan cahaya, jadi
+    tepi pantulan selalu lebih lembut dan kontrasnya lebih rendah daripada
+    wajah yang dipantulkannya, di bingkai yang sama dan pencahayaan yang sama.
+
+    Nilainya tidak dipakai sebagai ambang mutlak — apa yang "tajam" berbeda
+    antara kamera ponsel dan kamera studio. Ia hanya dibandingkan antar wajah
+    di dalam satu bingkai, di tempat pemilihannya.
+    """
+    import cv2
+
+    x, y, w, h = float(f[0]), float(f[1]), float(f[2]), float(f[3])
+    x0, y0 = max(0, int(x)), max(0, int(y))
+    x1, y1 = min(sw, int(x + w)), min(sh, int(y + h))
+    if x1 - x0 < 8 or y1 - y0 < 8:
+        return 0.0
+    abu = cv2.cvtColor(frame[y0:y1, x0:x1], cv2.COLOR_BGR2GRAY)
+    return float(cv2.Laplacian(abu, cv2.CV_64F).var())
 
 
 def _crop_patch(frame, cx, cy, pw, ph, sw, sh):
@@ -780,6 +810,9 @@ def _detect_centers(src: Path, segments: list[dict], source_w: int, source_h: in
                 mouth, brow = _aligned_patches(full, f, full_scale)
                 if mouth is None:
                     mouth, brow = _face_patches(frame, f, sw, sh)
+                tajam = _ketajaman(frame, f, sw, sh)
+                # Elemen terakhir keluaran YuNet adalah skor keyakinannya.
+                yakin = float(f[-1]) if len(f) >= 15 else 1.0
 
                 best_t, best_d = None, max_dist
                 for t in tracks:
@@ -792,6 +825,7 @@ def _detect_centers(src: Path, segments: list[dict], source_w: int, source_h: in
                 if best_t is None:
                     next_tid += 1
                     best_t = _FaceTrack(cx, cy, w, h, mouth, brow, next_tid)
+                    best_t.tajam, best_t.yakin = tajam, yakin
                     if buka is not None:
                         best_t.motion = buka
                     tracks.append(best_t)
@@ -812,6 +846,10 @@ def _detect_centers(src: Path, segments: list[dict], source_w: int, source_h: in
                     motion = gerak if buka is None else buka
                     best_t.motion = motion
                     best_t.energy = best_t.energy * decay + motion * (1.0 - decay)
+                    # Dihaluskan: satu bingkai buram karena orangnya bergerak
+                    # tidak boleh membuatnya dikira pantulan.
+                    best_t.tajam = 0.7 * best_t.tajam + 0.3 * tajam
+                    best_t.yakin = 0.7 * best_t.yakin + 0.3 * yakin
                     best_t.cx, best_t.cy, best_t.w, best_t.h = cx, cy, w, h
                     best_t.mouth, best_t.brow = mouth, brow
                 best_t.misses = 0
@@ -876,6 +914,11 @@ def _detect_centers(src: Path, segments: list[dict], source_w: int, source_h: in
             best = None
             if matched:
                 best_score = -1e9
+                # Ketajaman tertinggi di BINGKAI INI jadi pembanding, bukan
+                # ambang tetap: apa yang tajam di kamera studio berbeda dari
+                # kamera ponsel, tapi di dalam satu bingkai wajah asli selalu
+                # lebih tajam daripada pantulannya di kaca.
+                tajam_puncak = max((t.tajam for t in matched), default=0.0)
                 for t in matched:
                     area = (t.w * t.h) / (sw * sh)
                     # Suku kontinuitas inilah yang mencegah crop melompat
@@ -884,7 +927,18 @@ def _detect_centers(src: Path, segments: list[dict], source_w: int, source_h: in
                     penalty = 0.0
                     if prev_center is not None and not is_cut:
                         penalty = 0.6 * abs(t.cx - prev_center / scale_back) / sw
-                    score = area - penalty
+                    # Bobot mutu: pantulan kaca dihukum, wajah asli tidak.
+                    #
+                    # Pantulan adalah wajah sungguhan bagi detektor, jadi
+                    # luas + kontinuitas saja bisa memenangkannya — persis yang
+                    # terjadi ketika orangnya menggerakkan tangan dan wajah
+                    # aslinya sesaat terhalang atau mengecil. Dikalikan, bukan
+                    # dikurangi, supaya pengaruhnya sebanding dengan besar
+                    # wajahnya dan tidak pernah membuat skor jadi negatif.
+                    rel = (t.tajam / tajam_puncak) if tajam_puncak > 1e-6 else 1.0
+                    mutu = 0.40 + 0.60 * min(1.0, rel)
+                    mutu *= 0.75 + 0.25 * min(1.0, max(0.0, t.yakin))
+                    score = area * mutu - penalty
                     if score > best_score:
                         best_score, best = score, t.cx
 

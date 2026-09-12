@@ -7,6 +7,7 @@ import {
 import { apiDelete, apiGet, apiPost } from '../lib/api';
 import GoogleAccountCard from './GoogleAccountCard';
 import SecurityCard from './SecurityCard';
+import StorageCard from './StorageCard';
 import UpdateCard from './UpdateCard';
 
 // Bagian pada satu lembar bergaris, bukan kartu di atas kartu. Tumpukan kartu
@@ -507,6 +508,8 @@ export default function ProfileTab() {
       </div>
 
       <UpdateCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
+
+      <StorageCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
 
       <SecurityCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
 

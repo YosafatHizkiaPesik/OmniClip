@@ -22,7 +22,16 @@ router = APIRouter(prefix="/api", tags=["clips"])
 
 class AutoClipRequest(BaseModel):
     video_id: str = Field(..., description="ID atau URL YouTube")
-    quality: str = "720p"
+    # "Terbaik", bukan "720p".
+    #
+    # Bawaan lama adalah plafon kualitas SELURUH hasil, diam-diam. Frontend
+    # tidak pernah mengirim field ini, jadi nilai inilah yang selalu dipakai —
+    # dan pipeline yang di bawahnya sudah menulis "auto-clip SELALU mengambil
+    # yang terbaik kecuali diminta lain" hanya melihat "720p" dan menurutinya.
+    # Keluarannya 1080x1920, sedangkan jendela 9:16 dari sumber 720p cuma
+    # 405x720: diregangkan 2,67x, dan tidak ada filter yang bisa mengembalikan
+    # detail yang tidak pernah terekam.
+    quality: str = "Terbaik"
     whisper_model: str = "base"
     # 0 = biarkan sistem menghitungnya dari durasi video. Angka tetap 8 dulu
     # memperlakukan podcast dua jam sama dengan video sepuluh menit.
@@ -84,6 +93,8 @@ class CaptionStyleModel(BaseModel):
     box_w: Optional[float] = None
     # Warna per penutur, diindeks langsung: [0] orang pertama, [1] kedua, dst.
     speaker_colors: Optional[List[str]] = None
+    # False = satu warna untuk seluruh klip, apa pun tebakan penuturnya.
+    per_speaker_colors: Optional[bool] = None
     # --- Tanda air: gayanya sendiri, bukan pinjaman dari subtitle ------------
     wm_font: Optional[str] = None
     wm_size: Optional[int] = Field(None, ge=8, le=400)

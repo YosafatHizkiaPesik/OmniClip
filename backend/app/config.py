@@ -36,13 +36,115 @@ def _user_data_dir() -> Path:
 # --- Path ---------------------------------------------------------------------
 # OMNICLIP_STORAGE menang atas keduanya: satu-satunya cara memindahkan seluruh
 # penyimpanan ke diska lain tanpa menyentuh kode.
-_storage_env = os.getenv("OMNICLIP_STORAGE", "").strip()
-if _storage_env:
-    STORAGE_DIR = Path(_storage_env).expanduser().resolve()
-elif FROZEN:
-    STORAGE_DIR = _user_data_dir()
-else:
-    STORAGE_DIR = PROJECT_DIR / "OmniClip_Storage"
+def _bisa_ditulis(d: Path) -> bool:
+    """Apakah direktori ini benar-benar bisa ditulis? Dicoba, bukan ditebak."""
+    try:
+        d.mkdir(parents=True, exist_ok=True)
+        uji = d / f".omniclip-uji-{os.getpid()}"
+        uji.touch()
+        uji.unlink()
+        return True
+    except OSError:
+        return False
+
+
+def _berkas_penunjuk() -> Path:
+    """
+    Tempat lokasi penyimpanan pilihan pengguna dicatat.
+
+    Ia HARUS di luar penyimpanan itu sendiri — berkas yang menyebutkan di mana
+    penyimpanan berada tidak bisa ikut tinggal di dalamnya. Folder data sistem
+    adalah satu-satunya tempat yang selalu ada dan tidak ikut ditukar saat
+    aplikasi diperbarui.
+    """
+    return _user_data_dir() / "lokasi-penyimpanan.txt"
+
+
+def _storage_terpilih() -> Path:
+    """
+    Di mana klip, unduhan, dan basis data tinggal.
+
+    Urutannya dipilih supaya tidak ada pengguna lama yang datanya tiba-tiba
+    hilang dari pandangan:
+
+    1. `OMNICLIP_STORAGE` — paksaan penuh, untuk pengujian dan pemasangan khusus.
+    2. Berkas penunjuk — pilihan pengguna lewat Pengaturan.
+    3. Penyimpanan lama yang SUDAH BERISI basis data — dipertahankan apa adanya.
+       Tanpa aturan ini, mengubah bawaan akan membuat pengguna yang memperbarui
+       aplikasinya membuka folder kosong dan mengira seluruh kerjanya lenyap.
+    4. `OmniClip-Data` di sebelah folder aplikasi — bawaan untuk pemasangan baru.
+       Di SEBELAH, bukan di dalam: folder aplikasi ditukar seluruhnya setiap kali
+       aplikasi memperbarui dirinya, jadi apa pun di dalamnya akan ikut hilang.
+    5. Folder data sistem, bila induk aplikasi ternyata tidak bisa ditulis
+       (misalnya dipasang di Program Files).
+    """
+    env = os.getenv("OMNICLIP_STORAGE", "").strip()
+    if env:
+        return Path(env).expanduser().resolve()
+
+    if not FROZEN:
+        return PROJECT_DIR / "OmniClip_Storage"
+
+    try:
+        penunjuk = _berkas_penunjuk()
+        if penunjuk.is_file():
+            pilihan = Path(penunjuk.read_text(encoding="utf-8").strip()).expanduser()
+            if str(pilihan) and _bisa_ditulis(pilihan):
+                return pilihan.resolve()
+    except OSError:
+        pass
+
+    lama = _user_data_dir()
+    if (lama / "omniclip.db").is_file():
+        return lama
+
+    sebelah = Path(sys.executable).resolve().parent.parent / "OmniClip-Data"
+    return sebelah.resolve() if _bisa_ditulis(sebelah) else lama
+
+
+def _pindahkan_bila_diminta(tujuan: Path) -> None:
+    """
+    Memindahkan isi penyimpanan lama ke lokasi baru, sekali, saat startup.
+
+    Dikerjakan DI SINI dan bukan lewat permintaan HTTP karena basis datanya
+    ikut pindah: memindahkan berkas SQLite yang sedang terbuka adalah cara
+    yang rapi untuk merusaknya. Pada titik ini belum ada satu pun koneksi yang
+    dibuka — `db.py` mengimpor modul ini, bukan sebaliknya.
+
+    Berkas dipindahkan satu per satu dan yang sudah ada di tujuan dilewati,
+    jadi pemindahan yang terputus di tengah bisa dilanjutkan dengan menjalankan
+    aplikasinya lagi. Yang asal tidak pernah dihapus selain per-berkas yang
+    sudah berhasil pindah.
+    """
+    penanda = _user_data_dir() / "pindah-dari.txt"
+    if not penanda.is_file():
+        return
+    try:
+        asal = Path(penanda.read_text(encoding="utf-8").strip())
+        if asal.resolve() != tujuan.resolve() and asal.is_dir():
+            tujuan.mkdir(parents=True, exist_ok=True)
+            for item in asal.rglob("*"):
+                if item.is_dir():
+                    continue
+                rel = item.relative_to(asal)
+                akhir = tujuan / rel
+                if akhir.exists():
+                    continue
+                akhir.parent.mkdir(parents=True, exist_ok=True)
+                shutil.move(str(item), str(akhir))
+    except (OSError, ValueError):
+        # Pemindahan yang gagal tidak boleh menghalangi aplikasi menyala; yang
+        # belum pindah tetap ada di tempat lama dan penandanya dibiarkan supaya
+        # percobaan berikutnya melanjutkannya.
+        return
+    try:
+        penanda.unlink()
+    except OSError:
+        pass
+
+
+STORAGE_DIR = _storage_terpilih()
+_pindahkan_bila_diminta(STORAGE_DIR)
 
 # .env dibaca dari penyimpanan pengguna saat terbungkus — folder aplikasi bukan
 # tempat yang bisa ditulis, dan isinya hilang saat aplikasi diperbarui.

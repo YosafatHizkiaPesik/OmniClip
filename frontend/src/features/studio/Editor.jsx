@@ -26,6 +26,9 @@ const DEFAULT_STYLE = {
   // narasumber tampil persis seperti sebelum warna per orang ada.
   speaker_colors: ['#FFFFFF', '#7CFFB2', '#FFB3C7', '#B39DFF',
                    '#FFD166', '#5BC8FF', '#FF9F1C', '#B8FF3A'],
+  // false = satu warna sepanjang klip, untuk video yang tebakan penuturnya
+  // meleset. Palet di atas tetap tersimpan saat dimatikan.
+  per_speaker_colors: true,
   position: 'bottom', margin_v: 300, outline_px: 7,
   // Penempatan mendatar dalam persen lebar kanvas: titik tengah kotak teks dan
   // lebarnya. Keduanya diubah dengan menyeret subtitle di pratinjau.

@@ -308,7 +308,10 @@ export function SubtitlePanel({ clip, onUpdate, onRemove, style, onAutoSpeakers,
                  onPointerDown={() => onSelectLine?.(i)}
                  style={{
                    display: 'grid', gridTemplateColumns: '52px 22px 1fr 26px', gap: '7px',
-                   alignItems: 'center',
+                   // Rata ATAS, bukan tengah: kotak teksnya kini tumbuh ke
+                   // bawah mengikuti panjang kalimat, dan waktu serta penanda
+                   // penuturnya harus tetap sebaris dengan baris pertamanya.
+                   alignItems: 'start',
                    // Sorotan yang sama dengan yang dipakai linimasa: pengguna
                    // yang menyeret sebuah baris di bawah harus bisa menemukan
                    // teksnya di sini tanpa mencari.
@@ -324,6 +327,7 @@ export function SubtitlePanel({ clip, onUpdate, onRemove, style, onAutoSpeakers,
                         cursor: onSeekLine ? 'pointer' : 'default',
                         fontFamily: 'inherit', fontSize: '0.7rem',
                         color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums',
+                        paddingTop: '9px',
                       }}>
                 {line.start.toFixed(1)}s
               </button>
@@ -337,11 +341,27 @@ export function SubtitlePanel({ clip, onUpdate, onRemove, style, onAutoSpeakers,
                   padding: 0, fontSize: '0.6rem', fontWeight: 900, color: '#00121a',
                 }}
               >{speaker + 1}</button>
-              <input
+              {/* Textarea, bukan input satu baris.
+                  Kalimat subtitle rutin melewati enam puluh karakter,
+                  sedangkan kolomnya selebar sisa kisi — jadi dengan <input>
+                  sebagian besar kalimat tidak pernah terlihat utuh, dan
+                  menyunting kata di tengah berarti menggeser isi kotak dulu
+                  untuk mencari tempatnya. Tingginya menyesuaikan isi, jadi
+                  baris pendek tetap setinggi satu baris. */}
+              <textarea
                 value={line.text}
-                onChange={(e) => onUpdate(clip.clip_id, i, { text: e.target.value })}
+                rows={1}
+                ref={(el) => { if (el) { el.style.height = 'auto';
+                                         el.style.height = `${el.scrollHeight}px`; } }}
+                onChange={(e) => {
+                  e.target.style.height = 'auto';
+                  e.target.style.height = `${e.target.scrollHeight}px`;
+                  onUpdate(clip.clip_id, i, { text: e.target.value });
+                }}
                 style={{
                   ...field, fontSize: '0.8rem', padding: '7px 9px',
+                  resize: 'none', overflow: 'hidden', lineHeight: 1.4,
+                  fontFamily: 'inherit', minHeight: '32px',
                   // Warna penutur dipakai di kotak isian supaya menandai satu
                   // baris terlihat hasilnya saat itu juga — tapi hanya bila ia
                   // lolos kontras di atas pelat. Warna subtitle dipilih untuk
@@ -720,6 +740,9 @@ export function StylePanel({
   );
   const speakers = Math.max(1, Math.min(8, speakerCount || 1));
   const palette = style.speaker_colors ?? DEFAULT_SPEAKER_COLORS;
+  // Tak disetel = menyala, supaya gaya yang sudah tersimpan tidak
+  // berubah artinya begitu bendera ini ada.
+  const seragam = style.per_speaker_colors === false;
   const fontLabel = fonts.find((f) => f.family === style.font)?.label ?? style.font;
 
   return (
@@ -791,11 +814,38 @@ export function StylePanel({
           <div style={{ ...label, marginBottom: '6px' }}>
             Warna per narasumber
           </div>
+          {/* Sakelar keluar.
+              Menebak siapa bicara kapan adalah bagian paling rapuh dari alur
+              ini, dan saat ia meleset warnanya berganti di tengah kalimat
+              orang yang sama — lebih mengganggu daripada satu warna untuk
+              semuanya. Paletnya tidak dihapus saat dimatikan, hanya tidak
+              dipakai, jadi menyalakannya kembali mengembalikan setelan lama. */}
+          <label style={{
+            display: 'flex', alignItems: 'center', gap: '9px', cursor: 'pointer',
+            padding: '8px 10px', marginBottom: '9px', borderRadius: 'var(--r-sm)',
+            background: seragam ? 'var(--hl-wash)' : 'transparent',
+            border: `1px solid ${seragam ? 'var(--hl)' : 'var(--border-color)'}`,
+          }}>
+            <input
+              type="checkbox"
+              checked={seragam}
+              onChange={(e) => set({ per_speaker_colors: !e.target.checked })}
+              style={{ width: '15px', height: '15px', accentColor: 'var(--accent-cyan)', flex: 'none' }}
+            />
+            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--ink)' }}>
+              Satu warna untuk seluruh klip
+            </span>
+          </label>
           <p style={{ fontSize: '0.68rem', color: 'var(--text-muted)', margin: '0 0 9px', lineHeight: 1.5 }}>
-            Berlaku untuk baris yang ditandai di tab <strong>Subtitle</strong>.
-            Deteksi otomatis mengisinya lebih dulu; kalau meleset, setel jumlah
-            orangnya di tab Subtitle lalu betulkan barisnya di sana.
+            {seragam
+              ? <>Semua baris memakai <strong>Warna teks</strong> di atas, apa pun
+                  tebakan penuturnya. Palet di bawah tersimpan dan tidak dipakai.</>
+              : <>Berlaku untuk baris yang ditandai di tab <strong>Subtitle</strong>.
+                  Deteksi otomatis mengisinya lebih dulu; kalau meleset, setel jumlah
+                  orangnya di tab Subtitle lalu betulkan barisnya di sana — atau
+                  centang kotak di atas supaya warnanya seragam.</>}
           </p>
+          <div style={{ opacity: seragam ? 0.4 : 1, pointerEvents: seragam ? 'none' : 'auto' }}>
           {Array.from({ length: speakers }, (_, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '9px', marginBottom: '7px' }}>
               <span style={{
@@ -822,6 +872,7 @@ export function StylePanel({
                   style={{ fontSize: '0.73rem', padding: '6px 9px', marginTop: '4px' }}>
             Kembalikan warna bawaan
           </button>
+          </div>
         </div>
       </Section>
 
