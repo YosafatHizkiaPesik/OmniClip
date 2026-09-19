@@ -10,19 +10,31 @@ hanya bisa diedit dari terminal komputer ini.
 
 import asyncio
 import logging
+import re
 import os
 import sys
 from pathlib import Path
 
-from fastapi import APIRouter
+from fastapi import APIRouter, File, UploadFile
+from typing import List
+
 from pydantic import BaseModel, Field
 
 from ..config import (
-    GEMINI_MODELS, get_api_key, get_api_key_source, get_cookies_file,
-    get_model_override,
+    CAPTION_LANGS, GEMINI_MODELS, get_api_key, get_api_key_source,
+    get_caption_langs, get_model_override,
 )
 from ..errors import AppError
 from ..repos import settings as settings_repo
+
+def _cookies_aktif() -> bool:
+    """Apakah cookies sedang dipakai. Tidak menyentuh jaringan."""
+    try:
+        from ..services import cookies as ck
+        return ck.aktif()
+    except Exception:
+        return False
+
 
 log = logging.getLogger("omniclip.settings")
 router = APIRouter(prefix="/api/settings", tags=["settings"])
@@ -65,7 +77,7 @@ async def get_settings():
         # diam tidak berpengaruh.
         "gemini_api_key_source": get_api_key_source(),
         "ai_model": get_model_override(),
-        "cookies_file_set": bool(get_cookies_file()),
+        "cookies_aktif": _cookies_aktif(),
         "gemini_models": GEMINI_MODELS,
     }
 
@@ -108,7 +120,20 @@ async def list_models():
     except Exception as e:
         return {"available": [], "configured": True, "error": str(e)[:200],
                 "default": GEMINI_MODELS}
-    return {"available": available, "configured": True, "default": GEMINI_MODELS}
+    # `cocok`: yang layak memilih klip, dari yang terkuat. Agen (deep-research,
+    # antigravity), Gemma, dan varian lite ikut terdaftar di kunci tapi tidak
+    # sanggup membaca transkrip sejam lalu menjawab dalam JSON yang benar.
+    # `terkuat`: yang akan dicoba pertama bila pengguna memilih "Otomatis" —
+    # sudah melewati model yang kuotanya nol untuk kunci ini.
+    from ..services.peringkat_model import rantai, tanpa_kuota, urutkan
+    cocok = urutkan(available)
+    try:
+        urutan = await asyncio.to_thread(rantai, key)
+    except Exception:
+        urutan = cocok
+    return {"available": available, "configured": True, "default": GEMINI_MODELS,
+            "cocok": cocok, "terkuat": (urutan or [None])[0],
+            "tanpa_kuota": [m for m in cocok if tanpa_kuota(m)]}
 
 
 @router.post("/api-key")
@@ -224,6 +249,63 @@ async def set_model(req: ModelRequest):
     return {"status": "ok", "model": value}
 
 
+# --- Bahasa subtitle ----------------------------------------------------------
+
+# Yang dipajang di antarmuka. Bukan daftar tertutup — kolom isian bebas ada di
+# bawahnya, dan apa pun yang tidak ada di sini tetap bisa diketik.
+BAHASA_UMUM = [
+    ("id", "Indonesia"), ("en", "Inggris"), ("ms", "Melayu"),
+    ("ja", "Jepang"), ("ko", "Korea"), ("zh", "Mandarin"),
+    ("ar", "Arab"), ("es", "Spanyol"), ("pt", "Portugis"),
+    ("fr", "Prancis"), ("de", "Jerman"), ("hi", "Hindi"),
+    ("th", "Thai"), ("vi", "Vietnam"), ("tr", "Turki"), ("ru", "Rusia"),
+]
+
+_KODE = re.compile(r"^[a-zA-Z]{2,3}(-[a-zA-Z0-9]{2,8})?$")
+
+
+class BahasaRequest(BaseModel):
+    langs: List[str] = Field(default_factory=list)
+
+
+@router.get("/languages")
+async def daftar_bahasa():
+    """Bahasa pilihan yang berlaku, plus daftar yang ditawarkan antarmuka."""
+    return {
+        "langs": list(get_caption_langs()),
+        "default": list(CAPTION_LANGS),
+        "common": [{"code": k, "label": v} for k, v in BAHASA_UMUM],
+    }
+
+
+@router.post("/languages")
+async def set_bahasa(req: BahasaRequest):
+    """
+    Urutan bahasa caption yang dicoba lebih dulu.
+
+    Kosong = kembali ke bawaan. Dan apa pun isinya, ini BUKAN batas: kalau tidak
+    satu pun bahasa di daftar ini dimiliki videonya, sistem tetap memakai bahasa
+    yang benar-benar ada di video itu. Daftar ini hanya menyatakan urutan pilihan.
+    """
+    bersih: list[str] = []
+    for kode in req.langs:
+        kode = (kode or "").strip()
+        if not kode:
+            continue
+        if not _KODE.match(kode):
+            raise AppError(f"Kode bahasa tidak dikenal: {kode!r}. "
+                           "Contoh yang benar: id, en, ja, pt-BR.",
+                           code="BAHASA_TIDAK_SAH", status=422)
+        if kode not in bersih:
+            bersih.append(kode)
+
+    if bersih:
+        settings_repo.set_value("transcript.langs", ",".join(bersih))
+    else:
+        settings_repo.delete("transcript.langs")
+    return {"status": "ok", "langs": list(get_caption_langs())}
+
+
 # --- Lokasi penyimpanan -------------------------------------------------------
 
 class PenyimpananRequest(BaseModel):
@@ -248,6 +330,18 @@ def _ringkas_penyimpanan() -> dict:
         if calon.resolve() != sekarang.resolve():
             saran = str(calon)
 
+    def _isi(d: Path) -> dict:
+        """Ukuran dan jumlah berkas satu folder — supaya bisa dibersihkan sadar."""
+        total = jumlah = 0
+        try:
+            for f in d.iterdir():
+                if f.is_file():
+                    jumlah += 1
+                    total += f.stat().st_size
+        except OSError:
+            pass
+        return {"folder": str(d), "ukuran": total, "jumlah": jumlah}
+
     return {
         "folder": str(sekarang),
         "sisa_ruang": sisa,
@@ -255,6 +349,9 @@ def _ringkas_penyimpanan() -> dict:
         "saran": saran,
         "dikunci_env": bool(os.getenv("OMNICLIP_STORAGE", "").strip()),
         "menunggu_pindah": (cfg._user_data_dir() / "pindah-dari.txt").is_file(),
+        # Dua folder yang isinya paling besar dan paling sering dibuka sendiri.
+        "unduhan": _isi(cfg.DOWNLOAD_DIR),
+        "klip": _isi(cfg.CLIPS_DIR),
     }
 
 
@@ -319,3 +416,299 @@ async def buka_penyimpanan():
         raise AppError(f"Tidak bisa membuka folder: {e}",
                        code="STORAGE_OPEN_FAILED", status=500) from e
     return {"status": "ok", "folder": folder}
+
+
+class FolderRequest(BaseModel):
+    jenis: str = Field(..., description="unduhan | klip")
+    folder: str = Field("", description="Kosongkan untuk kembali ke bawaan")
+
+
+_JENIS = {"unduhan", "klip"}
+
+
+@router.post("/penyimpanan/folder")
+async def atur_folder(req: FolderRequest):
+    """
+    Menunjuk folder untuk unduhan atau klip jadi.
+
+    Berkas yang SUDAH ada tidak ikut pindah. Itu disengaja: memindahkan
+    puluhan gigabita di dalam sebuah permintaan HTTP berarti permintaan yang
+    menggantung bermenit-menit tanpa ada yang bisa membatalkannya, dan
+    kegagalan di tengah jalan meninggalkan berkas terbelah di dua tempat.
+    Yang lama tetap bisa dibuka dari halaman Unduhan sampai dipindahkan
+    sendiri — dan foldernya ditunjukkan di sini supaya bisa.
+    """
+    from .. import config as cfg
+
+    if req.jenis not in _JENIS:
+        raise AppError("Jenis folder tidak dikenal.", code="FOLDER_UNKNOWN", status=422)
+
+    data = cfg._user_data_dir()
+    data.mkdir(parents=True, exist_ok=True)
+    penunjuk = data / f"lokasi-{req.jenis}.txt"
+
+    pilihan = req.folder.strip()
+    if not pilihan:
+        penunjuk.unlink(missing_ok=True)
+        return {"status": "ok", "kembali_ke_bawaan": True, "perlu_restart": True}
+
+    tujuan = Path(pilihan).expanduser()
+    if not cfg._bisa_ditulis(tujuan):
+        raise AppError(f"Folder {tujuan} tidak bisa ditulis.",
+                       code="FOLDER_NOT_WRITABLE", status=422)
+    penunjuk.write_text(str(tujuan.resolve()), encoding="utf-8")
+    log.info("Folder %s diarahkan ke %s", req.jenis, tujuan)
+    return {"status": "ok", "folder": str(tujuan.resolve()), "perlu_restart": True}
+
+
+@router.post("/penyimpanan/folder/buka")
+async def buka_folder(req: FolderRequest):
+    """Membuka salah satu folder di pengelola berkas sistem."""
+    import subprocess
+    from .. import config as cfg
+
+    if req.jenis not in _JENIS:
+        raise AppError("Jenis folder tidak dikenal.", code="FOLDER_UNKNOWN", status=422)
+    folder = str(cfg.DOWNLOAD_DIR if req.jenis == "unduhan" else cfg.CLIPS_DIR)
+    try:
+        if sys.platform == "win32":
+            os.startfile(folder)                     # noqa: S606
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", folder], close_fds=True)
+        else:
+            subprocess.Popen(["xdg-open", folder], close_fds=True)
+    except OSError as e:
+        raise AppError(f"Tidak bisa membuka folder: {e}",
+                       code="FOLDER_OPEN_FAILED", status=500) from e
+    return {"status": "ok", "folder": folder}
+
+
+# ---------------------------------------------------------------------------
+# Cookies YouTube
+#
+# Diletakkan di sini dan bukan di variabel lingkungan karena pesan yang
+# meminta cookies muncul di dalam aplikasi, sementara `OMNICLIP_COOKIES_FILE`
+# hanya bisa disetel SEBELUM aplikasi dijalankan. Untuk exe yang diklik dua
+# kali, saran itu tidak bisa dituruti sama sekali.
+# ---------------------------------------------------------------------------
+class CookiesRequest(BaseModel):
+    mode: str = Field("mati", description="mati | browser | berkas")
+    browser: str = ""
+    profil: str = ""
+
+
+@router.get("/cookies")
+async def lihat_cookies():
+    from ..services import cookies as ck
+
+    def baca():
+        s = ck.sumber()
+        return {**s, "browser_tersedia": ck.daftar_browser()}
+
+    return await asyncio.to_thread(baca)
+
+
+@router.post("/cookies")
+async def atur_cookies(req: CookiesRequest):
+    from ..services import cookies as ck
+
+    try:
+        return await asyncio.to_thread(
+            ck.simpan, req.mode, browser=req.browser, profil=req.profil)
+    except ValueError as e:
+        raise AppError(str(e), code="COOKIES_INVALID", status=422) from e
+
+
+@router.post("/cookies/berkas")
+async def unggah_cookies(berkas: UploadFile = File(...)):
+    """Menerima cookies.txt format Netscape."""
+    from .. import config as cfg
+    from ..services import cookies as ck
+
+    isi = await berkas.read()
+    if len(isi) > 8 * 1024 * 1024:
+        raise AppError("Berkas cookies terlalu besar (maksimal 8 MB).",
+                       code="COOKIES_TOO_BIG", status=413)
+    try:
+        jalur = await asyncio.to_thread(
+            ck.simpan_berkas_unggahan, isi, Path(cfg.STORAGE_DIR) / "cookies")
+        return await asyncio.to_thread(ck.simpan, "berkas", berkas=jalur)
+    except ValueError as e:
+        raise AppError(str(e), code="COOKIES_INVALID", status=422) from e
+
+
+@router.post("/cookies/uji")
+async def uji_cookies():
+    """
+    Menguji cookies dengan permintaan sungguhan ke YouTube, dan
+    membandingkannya dengan permintaan tanpa cookies.
+
+    Perbandingannya yang penting, bukan angka tunggalnya: cookies yang "bisa
+    dibaca" tetap bisa menghasilkan nol format yang bisa diunduh, dan satu-
+    satunya cara mengetahuinya adalah meminta keduanya berdampingan.
+    """
+    from ..services import cookies as ck
+
+    return await asyncio.to_thread(ck.uji)
+
+
+@router.delete("/cookies")
+async def matikan_cookies():
+    from ..services import cookies as ck
+
+    return await asyncio.to_thread(ck.simpan, "mati")
+
+
+# ---------------------------------------------------------------------------
+# Pustaka yang memperbarui dirinya sendiri
+# ---------------------------------------------------------------------------
+@router.get("/pustaka")
+async def lihat_pustaka():
+    from ..services import pustaka as P
+
+    def baca():
+        return {
+            "paket": [
+                {
+                    "nama": nama,
+                    "versi": P.versi_terpasang(nama),
+                    "dari_pembaruan": bool(P.versi_aktif(nama)),
+                    "alasan": alasan,
+                }
+                for nama, (_, alasan) in P.OTOMATIS.items()
+            ],
+            "folder": str(P.folder_overlay()),
+        }
+
+    return await asyncio.to_thread(baca)
+
+
+@router.post("/pustaka/periksa")
+async def periksa_pustaka():
+    """Memeriksa PyPI sekarang juga, melewati jeda dua belas jam."""
+    from ..services import pustaka as P
+
+    hasil = await asyncio.to_thread(P.perbarui_semua, paksa=True)
+    return {"hasil": hasil,
+            "perlu_restart": any(h.get("dipasang") for h in hasil)}
+
+
+# ---------------------------------------------------------------------------
+# Penjelajah folder
+#
+# Menggantikan `window.prompt` yang meminta jalur diketik penuh. Itu hampir
+# mustahil dilakukan benar — jalur seperti
+# "/media/ynot/744E3DDC4E3D97B6/Projek Coding/OmniClip" harus disalin dari
+# tempat lain, dan satu salah ketik berarti folder yang tidak ada.
+#
+# Kenapa dijelajahi lewat backend, bukan dengan pemilih folder peramban:
+# peramban TIDAK PERNAH memberi halaman web jalur berkas sungguhan.
+# `<input webkitdirectory>` memberi nama berkas di dalam folder, bukan letak
+# folder itu di cakram, dan `showDirectoryPicker()` memberi pegangan yang hanya
+# berlaku di dalam peramban — ffmpeg tidak bisa memakainya. Dialog milik sistem
+# operasi juga bukan jawaban: ia akan muncul di komputer yang menjalankan
+# backend, bukan di perangkat yang sedang dipakai.
+#
+# Endpoint ini hanya mendaftar NAMA folder; isi berkas tidak pernah dibuka. Ia
+# berada di balik gerbang kata sandi yang sama dengan seluruh API.
+# ---------------------------------------------------------------------------
+def _tempat_umum() -> list[dict]:
+    """Titik awal yang masuk akal, supaya jarang perlu menyusur jauh."""
+    rumah = Path.home()
+    calon: list[tuple[str, Path]] = [("Home", rumah)]
+    for nama, sub in (("Desktop", "Desktop"), ("Unduhan", "Downloads"),
+                      ("Video", "Videos"), ("Dokumen", "Documents")):
+        calon.append((nama, rumah / sub))
+
+    # Cakram dan media yang terpasang — di situlah ruang besar biasanya berada,
+    # dan justru itu yang dicari saat memindahkan folder unduhan.
+    akar: list[Path] = []
+    if sys.platform == "win32":
+        akar = [Path(f"{huruf}:\\") for huruf in "CDEFGHIJKLMNOPQRSTUVWXYZ"]
+    elif sys.platform == "darwin":
+        akar = list(Path("/Volumes").glob("*"))
+    else:
+        akar = list(Path("/media").glob("*/*")) + list(Path("/mnt").glob("*"))
+    for d in akar[:12]:
+        calon.append((f"Cakram: {d.name or str(d)}", d))
+
+    keluar = []
+    terlihat = set()
+    for nama, d in calon:
+        try:
+            if d.is_dir() and str(d) not in terlihat:
+                terlihat.add(str(d))
+                keluar.append({"nama": nama, "jalur": str(d)})
+        except OSError:
+            continue
+    return keluar
+
+
+@router.get("/jelajah")
+async def jelajah(jalur: str = ""):
+    """Isi sebuah folder: hanya sub-folder, tanpa berkas."""
+    def baca():
+        d = Path(jalur).expanduser() if jalur.strip() else Path.home()
+        try:
+            d = d.resolve()
+        except OSError:
+            d = Path.home()
+        if not d.is_dir():
+            raise AppError(f"Folder tidak ditemukan: {d}",
+                           code="FOLDER_NOT_FOUND", status=404)
+
+        anak = []
+        try:
+            for masuk in sorted(d.iterdir(), key=lambda x: x.name.lower()):
+                # Folder tersembunyi disembunyikan: ia bukan tempat menaruh
+                # video, dan menampilkannya membuat daftar Home tidak terbaca.
+                if masuk.name.startswith("."):
+                    continue
+                try:
+                    if masuk.is_dir():
+                        anak.append({"nama": masuk.name, "jalur": str(masuk)})
+                except OSError:
+                    continue
+        except PermissionError:
+            raise AppError("Folder ini tidak bisa dibuka (izin ditolak).",
+                           code="FOLDER_DENIED", status=403) from None
+
+        induk = str(d.parent) if d.parent != d else ""
+        return {
+            "jalur": str(d),
+            "induk": induk,
+            "bisa_ditulis": os.access(d, os.W_OK),
+            "folder": anak[:500],
+            "tempat_umum": _tempat_umum(),
+        }
+
+    return await asyncio.to_thread(baca)
+
+
+class FolderBaruRequest(BaseModel):
+    induk: str
+    nama: str
+
+
+@router.post("/jelajah/buat")
+async def buat_folder(req: FolderBaruRequest):
+    """Membuat sub-folder baru dari dalam dialog pemilih."""
+    def kerja():
+        nama = req.nama.strip()
+        # Nama yang mengandung pemisah jalur bukan "nama folder baru", melainkan
+        # cara menulis di tempat lain.
+        if not nama or nama in (".", "..") or "/" in nama or "\\" in nama:
+            raise AppError("Nama folder tidak sah.", code="FOLDER_NAME", status=422)
+        induk = Path(req.induk).expanduser().resolve()
+        if not induk.is_dir():
+            raise AppError("Folder induk tidak ditemukan.",
+                           code="FOLDER_NOT_FOUND", status=404)
+        baru = induk / nama
+        try:
+            baru.mkdir(exist_ok=True)
+        except OSError as e:
+            raise AppError(f"Tidak bisa membuat folder: {e}",
+                           code="FOLDER_CREATE_FAILED", status=500) from e
+        return {"jalur": str(baru)}
+
+    return await asyncio.to_thread(kerja)

@@ -59,3 +59,12 @@ frontend/.impeccable/review/
 backend/bin/
 backend/build/
 backend/dist/
+
+# Pustaka yang diperbarui sendiri saat aplikasi berjalan (lihat
+# backend/app/services/pustaka.py). Isinya wheel dari PyPI, bukan kode proyek.
+OmniClip_Storage/pustaka/
+# Salinan analisis 1280 px (services/proksi.py) - ratusan MB per video.
+OmniClip_Storage/proksi/
+OmniClip_Storage/suara/
+# Berkas yang diimpor ke Studio dan efek suara yang dibangkitkan.
+OmniClip_Storage/aset/

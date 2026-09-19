@@ -53,6 +53,9 @@ OPEN_PATHS = frozenset({
     "/api/auth/login",
     "/api/auth/logout",
     "/api/auth/setup",
+    # Sidik jari build: tidak memuat apa pun milik pengguna, dan halaman yang
+    # memegang bundel basi harus bisa menanyakannya bahkan sebelum masuk.
+    "/api/build",
 })
 
 

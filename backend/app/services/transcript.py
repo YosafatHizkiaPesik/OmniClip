@@ -11,7 +11,7 @@ import logging
 import re
 from typing import Optional, TypedDict
 
-from ..config import CAPTION_LANGS, WHISPER_MODEL_DEFAULT
+from ..config import get_caption_langs, WHISPER_MODEL_DEFAULT
 from ..repos import transcripts as tx_repo
 from .captions import TranscriptResult, Word, fetch_youtube_captions
 
@@ -92,7 +92,7 @@ def get_transcript(
     *,
     audio_path: Optional[str] = None,
     whisper_model: str = WHISPER_MODEL_DEFAULT,
-    langs=CAPTION_LANGS,
+    langs=None,
     allow_whisper: bool = True,
     on_progress=None,
     should_cancel=None,
@@ -113,7 +113,7 @@ def get_transcript(
     if on_progress:
         on_progress(0.1, "Mencari transkrip di YouTube…")
 
-    result = fetch_youtube_captions(video_id, langs)
+    result = fetch_youtube_captions(video_id, langs or get_caption_langs())
 
     if result is None and allow_whisper and audio_path:
         if on_progress:

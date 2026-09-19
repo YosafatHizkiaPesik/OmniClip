@@ -79,6 +79,15 @@ export function apiGet(path, { signal } = {}) {
  * harus dibuka lagi di server.
  */
 export function apiPost(path, body, { signal, raw = false } = {}) {
+  // FormData dikirim apa adanya, TANPA Content-Type dari kita.
+  //
+  // Unggahan multipart butuh sebuah `boundary` di header, dan satu-satunya
+  // yang tahu nilainya adalah peramban — ia menyusunnya sendiri saat melihat
+  // FormData. Menuliskan Content-Type sendiri menghapus boundary itu, dan
+  // server menolak seluruh unggahan dengan galat yang tidak menyebut sebabnya.
+  if (typeof FormData !== 'undefined' && body instanceof FormData) {
+    return request(path, { method: 'POST', body, signal });
+  }
   return request(path, {
     method: 'POST',
     headers: { 'Content-Type': raw ? 'text/plain' : 'application/json' },

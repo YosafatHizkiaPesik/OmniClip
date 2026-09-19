@@ -4,6 +4,16 @@ import logging
 import time
 from contextlib import asynccontextmanager
 
+# Overlay pustaka dipasang SEBELUM impor apa pun yang memakainya.
+#
+# Sekali sebuah modul masuk ke `sys.modules`, mengubah `sys.path` tidak lagi
+# berpengaruh — jadi baris ini tidak bisa dipindahkan ke bawah, dan tidak bisa
+# ditaruh di dalam lifespan. Lihat services/pustaka.py.
+from .services import pustaka as _pustaka
+
+_PUSTAKA_AKTIF = _pustaka.aktifkan()
+_pustaka.periksa_kesehatan()
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
@@ -11,6 +21,7 @@ from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from .config import ALLOWED_ORIGINS, FRONTEND_DIST, HOST, require_ffmpeg
 from .db import run_migrations
 from .errors import NotFound, register_exception_handlers
+from .routers import aset as aset_router
 from .routers import auth as auth_router
 from .routers import clips as clips_router
 from .routers import jobs as jobs_router
@@ -80,6 +91,9 @@ async def lifespan(app: FastAPI):
     require_ffmpeg()
     run_migrations()
     auth.check_startup_policy()
+    # Audio tersimpan yang videonya sudah dihapus pengguna — lihat services/suara.py.
+    from .services import suara
+    await asyncio.to_thread(suara.bersihkan_yatim)
 
     broker.bind_loop(asyncio.get_running_loop())
     queue.register("demo", _demo_job, lane="cpu")
@@ -98,6 +112,15 @@ async def lifespan(app: FastAPI):
     # diam-diam selalu memakai bilah kabur. Karena itu statusnya dilaporkan
     # sekali saat startup.
     _log_reframe_status()
+
+    if _PUSTAKA_AKTIF:
+        log.info("Pustaka hasil pembaruan dipakai: %s", ", ".join(_PUSTAKA_AKTIF))
+    # Di latar belakang, dan hanya sekali per dua belas jam. Yang diperbarui
+    # berlaku pada jalannya aplikasi BERIKUTNYA — modul yang sudah diimpor
+    # tidak bisa ditukar di tengah jalan, dan berpura-pura bisa akan
+    # menghasilkan kegagalan yang jauh lebih sulit dilacak.
+    _pustaka.periksa_di_latar()
+
     log.info("OmniClip %s siap", __version__)
 
     try:
@@ -124,6 +147,7 @@ app.add_middleware(
 
 register_exception_handlers(app)
 
+app.include_router(aset_router.router)
 app.include_router(auth_router.router)
 app.include_router(jobs_router.router)
 app.include_router(settings_router.router)
@@ -196,6 +220,29 @@ async def robots():
 
 if FRONTEND_DIST.is_dir():
     _INDEX = FRONTEND_DIST / "index.html"
+
+    # Sidik jari build yang sedang disajikan.
+    #
+    # Ada karena satu kelas kebingungan yang terus berulang dan selalu terlihat
+    # seperti "perbaikannya tidak dikerjakan": peramban memegang bundel lama,
+    # aplikasi berjalan dengan kode lama, dan tidak ada apa pun di layar yang
+    # memberi tahu. index.html memang disajikan `no-cache`, tapi itu hanya
+    # mengatur permintaan BERIKUTNYA — halaman yang sudah terbuka sejak sebelum
+    # build baru tidak pernah menanyakannya lagi.
+    #
+    # Yang dipakai sebagai sidik jari adalah nama berkas aset ber-hash di dalam
+    # index.html: ia berubah persis ketika isinya berubah, dan tidak berubah
+    # saat backend sekadar dijalankan ulang.
+    @app.get("/api/build", include_in_schema=False)
+    async def build_stamp():
+        import re as _re
+
+        try:
+            teks = _INDEX.read_text(encoding="utf-8")
+        except OSError:
+            return {"build": ""}
+        cocok = _re.search(r'assets/([^"\']+\.js)', teks)
+        return {"build": cocok.group(1) if cocok else "", "versi": __version__}
 
     @app.get("/{full_path:path}", include_in_schema=False)
     async def spa(full_path: str):

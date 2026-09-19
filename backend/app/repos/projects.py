@@ -32,12 +32,57 @@ def _latest_analysis(conn, video_id: str) -> Optional[dict]:
 
 def _latest_job(conn, video_id: str) -> Optional[dict]:
     row = conn.execute(
-        """SELECT id, status, progress, stage, message, error, created_at
+        """SELECT id, status, progress, stage, message, error, created_at,
+                  started_at, eta_seconds
            FROM jobs WHERE type = 'auto_clip' AND video_id = ?
            ORDER BY created_at DESC LIMIT 1""",
         (video_id,),
     ).fetchone()
     return dict(row) if row else None
+
+
+def _ringkasan_analisis(conn, video_id: str) -> Optional[dict]:
+    """
+    Hanya kolom yang dibutuhkan kartu proyek — TANPA mengurai JSON-nya.
+
+    `_latest_analysis` mengurai seluruh hasil analisis, dan hasil itu memuat
+    setiap klip beserta seluruh baris subtitle dan kata-katanya: terukur 50 KB
+    sampai 343 KB per proyek, sepuluh megabita untuk lima puluh dua analisis di
+    basis data ini. Daftar proyek hanya perlu judul, durasi, mesin, dan BERAPA
+    klipnya — jadi versi lama membayar dua megabita penguraian JSON setiap kali
+    halaman Partitur dibuka, untuk empat angka.
+
+    SQLite bisa membaca ke dalam JSON-nya sendiri (`json_extract`), jadi
+    penguraian itu tidak pernah perlu terjadi di Python.
+    """
+    row = conn.execute(
+        """SELECT id, engine, created_at,
+                  json_extract(result_json, '$.title')          AS j_title,
+                  json_extract(result_json, '$.duration')       AS j_duration,
+                  json_extract(result_json, '$.engine')         AS j_engine,
+                  json_extract(result_json, '$.has_transcript') AS j_has_tx,
+                  json_array_length(json_extract(result_json, '$.clips')) AS j_clips
+             FROM analyses
+            WHERE video_id = ? ORDER BY created_at DESC LIMIT 1""",
+        (video_id,),
+    ).fetchone()
+    if not row:
+        return None
+    # Bentuknya dibuat sama dengan `_latest_analysis` supaya pemanggilnya tidak
+    # perlu tahu bedanya.
+    return {
+        "id": row["id"], "engine": row["engine"], "created_at": row["created_at"],
+        "result": {
+            "title": row["j_title"],
+            "duration": row["j_duration"],
+            "engine": row["j_engine"],
+            # SQLite menyimpan boolean sebagai 0/1; kartunya mengharapkan bool.
+            "has_transcript": (None if row["j_has_tx"] is None
+                               else bool(row["j_has_tx"])),
+            # Bukan daftar klipnya, hanya panjangnya — itu saja yang dipakai.
+            "clips": [None] * (row["j_clips"] or 0),
+        },
+    }
 
 
 def list_projects(limit: int = 60) -> list[dict]:
@@ -62,10 +107,11 @@ def list_projects(limit: int = 60) -> list[dict]:
     projects = []
     for row in rows:
         vid = row["video_id"]
-        analysis = _latest_analysis(conn, vid)
+        analysis = _ringkasan_analisis(conn, vid)
         job = _latest_job(conn, vid)
         video = conn.execute("SELECT * FROM videos WHERE id = ?", (vid,)).fetchone()
         result = (analysis or {}).get("result") or {}
+
 
         # Urutannya penting. Job yang sedang berjalan menang atas hasil lama:
         # video yang sedang dianalisis ulang harus terlihat sedang berjalan,
@@ -98,6 +144,7 @@ def list_projects(limit: int = 60) -> list[dict]:
                 "id": job["id"], "status": job["status"],
                 "progress": job["progress"], "stage": job["stage"],
                 "message": job["message"], "error": job["error"],
+                "started_at": job["started_at"], "eta_seconds": job["eta_seconds"],
             } if job else None,
         })
     return projects

@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Plus, Trash2, Loader2, Star, ChevronRight, Users } from 'lucide-react';
+import { Plus, Trash2, Loader2, Star, ChevronRight, Users, Palette } from 'lucide-react';
 import { formatTime, parseTimeString } from '../../utils/timeFormat';
 import { inkSafe } from '../../lib/contrast';
 import { cachedFonts, fontStack, loadFonts } from '../../lib/fonts';
+import { hexAlpha } from './ClipPreview';
 import {
   COLOR_GROUPS, COLOR_PAIRS, normalizeHex, useFavoriteColors, useRecentColors,
 } from '../../lib/colors';
@@ -151,7 +152,7 @@ export function TrimPanel({ clip, videoDuration, busy, onNudge, onSetBounds, onA
 }
 
 /** Panel penyuntingan subtitle per baris. */
-export function SubtitlePanel({ clip, onUpdate, onRemove, style, onAutoSpeakers,
+export function SubtitlePanel({ clip, onUpdate, onRemove, style, onStyle = null, onAutoSpeakers,
                                speakerCount = 2, speakerConfident = null,
                                onRedetect = null, redetecting = false,
                                // Baris yang sedang disorot di linimasa. Dua
@@ -278,24 +279,15 @@ export function SubtitlePanel({ clip, onUpdate, onRemove, style, onAutoSpeakers,
         </p>
       </div>
 
-      {/* Berapa baris yang jatuh ke tiap orang, dengan warnanya. Selama semua
-          baris masih orang 1, mengganti warna di tab Gaya memang tidak akan
-          mengubah apa pun — itu harus terlihat di sini, bukan ditebak. */}
-      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-        {Object.keys(tally).sort().map((k) => (
-          <span key={k} style={{
-            display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '3px 8px',
-            borderRadius: '99px', fontSize: '0.68rem', fontWeight: 700,
-            background: 'var(--bg-glass)', border: '1px solid var(--border-color)',
-          }}>
-            <span style={{
-              width: '10px', height: '10px', borderRadius: '50%',
-              background: colorOf(Number(k)), border: '1px solid rgba(0,0,0,0.4)',
-            }} />
-            Orang {Number(k) + 1} · {tally[k]} baris
-          </span>
-        ))}
-      </div>
+      {/* Warna tiap orang, di tempat orangnya ditandai.
+          Dulu satu-satunya tempat mengaturnya adalah tab Gaya → Warna, bagian
+          yang tertutup dan jauh dari baris-baris yang ditandai — pengguna yang
+          mencari "warna untuk orang ini" mencarinya di sini, di sebelah
+          penandanya. Keduanya menulis ke palet yang sama. */}
+      <WarnaTiapOrang
+        jumlah={Array.from({ length: total }, (_, i) => i)
+          .filter((i) => tally[i] || i < Math.max(1, speakerCount || 1))}
+        tally={tally} palette={palette} style={style} onStyle={onStyle} />
 
       <div ref={listRef}
            style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '380px', overflowY: 'auto' }}>
@@ -384,6 +376,111 @@ export function SubtitlePanel({ clip, onUpdate, onRemove, style, onAutoSpeakers,
   );
 }
 
+// Warna yang tetap terbaca di atas video apa pun, dengan garis tepi hitam.
+const WARNA_ORANG = ['#FFFFFF', '#FFE500', '#7CFFB2', '#5BC8FF', '#FFB3C7',
+                     '#B39DFF', '#FF9F1C', '#FF6B6B'];
+
+/**
+ * Keping "Orang N · sekian baris" yang sekaligus pemilih warnanya.
+ *
+ * Memilih warna juga menyalakan kembali warna per orang bila sedang diseragamkan:
+ * orang yang sengaja memberi Orang 2 warna hijau jelas ingin melihatnya hijau,
+ * dan diam-diam tidak terjadi apa-apa adalah jawaban terburuk.
+ */
+function WarnaTiapOrang({ jumlah, tally, palette, style, onStyle }) {
+  const [buka, setBuka] = useState(null);
+  const seragam = style?.per_speaker_colors === false;
+  const warnaDari = (i) => palette[i] ?? DEFAULT_SPEAKER_COLORS[i] ?? '#FFFFFF';
+
+  const setel = (i, c) => {
+    const next = [...(style?.speaker_colors ?? DEFAULT_SPEAKER_COLORS)];
+    while (next.length <= i) next.push(DEFAULT_SPEAKER_COLORS[next.length] ?? '#FFFFFF');
+    next[i] = c.toUpperCase();
+    onStyle({ ...style, speaker_colors: next, per_speaker_colors: true });
+  };
+
+  return (
+    <div>
+      <div style={{ ...label, fontSize: '0.7rem', marginBottom: '6px' }}>
+        Warna subtitle tiap orang
+      </div>
+      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+        {jumlah.map((i) => (
+          <div key={i}>
+            <button
+              onClick={() => onStyle && setBuka(buka === i ? null : i)}
+              disabled={!onStyle}
+              title={onStyle ? `Pilih warna untuk Orang ${i + 1}` : undefined}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '4px 9px',
+                borderRadius: '99px', fontSize: '0.7rem', fontWeight: 700, fontFamily: 'inherit',
+                cursor: onStyle ? 'pointer' : 'default', color: 'var(--text-primary)',
+                background: buka === i ? 'var(--hl-wash)' : 'var(--bg-glass)',
+                border: `1px solid ${buka === i ? 'var(--hl)' : 'var(--border-color)'}`,
+                opacity: seragam ? 0.55 : 1,
+              }}>
+              <span style={{
+                width: '13px', height: '13px', borderRadius: '50%',
+                background: warnaDari(i), border: '1px solid rgba(0,0,0,0.45)',
+              }} />
+              Orang {i + 1} · {tally[i] || 0} baris
+              {onStyle && <Palette size={11} style={{ color: 'var(--text-muted)' }} />}
+            </button>
+          </div>
+        ))}
+      </div>
+      {/* Terbuka di bawah deretan keping, selebar panel — bukan melayang di
+          bawah kepingnya. Keping orang kedua ke kanan berada di tepi panel
+          yang sempit, dan kotak melayang di sana terpotong separuh. */}
+      {buka !== null && (
+        <div style={{
+          marginTop: '7px', padding: '9px 10px', borderRadius: 'var(--radius-sm)',
+          background: 'var(--bg-glass)', border: '1px solid var(--border-color)',
+        }}>
+          <div style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-secondary)',
+                        marginBottom: '7px' }}>
+            Warna untuk Orang {buka + 1}
+          </div>
+          <div style={{ display: 'flex', gap: '7px', flexWrap: 'wrap', alignItems: 'center' }}>
+            {WARNA_ORANG.map((c) => {
+              const on = warnaDari(buka).toUpperCase() === c;
+              return (
+                <button key={c} onClick={() => { setel(buka, c); setBuka(null); }}
+                        title={c} aria-label={`Warna ${c}`}
+                        style={{
+                          width: '26px', height: '26px', borderRadius: '50%', cursor: 'pointer',
+                          background: c, padding: 0,
+                          border: on ? '2px solid var(--accent-cyan)' : '1px solid rgba(0,0,0,0.45)',
+                        }} />
+              );
+            })}
+            <label title="Warna lain" style={{ display: 'inline-flex', alignItems: 'center', gap: '5px',
+                                               fontSize: '0.68rem', color: 'var(--text-secondary)',
+                                               fontWeight: 700, cursor: 'pointer' }}>
+              <input type="color" value={warnaDari(buka)}
+                     onChange={(e) => setel(buka, e.target.value)}
+                     style={{ width: '30px', height: '26px', padding: 0, border: 'none',
+                              background: 'none', cursor: 'pointer' }} />
+              Lainnya
+            </label>
+          </div>
+        </div>
+      )}
+      {seragam && onStyle && (
+        <p style={{ fontSize: '0.66rem', color: 'var(--text-muted)', margin: '6px 0 0', lineHeight: 1.5 }}>
+          Warna per orang sedang dimatikan — semua baris memakai satu warna.{' '}
+          <button onClick={() => onStyle({ ...style, per_speaker_colors: true })}
+                  style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+                           color: 'var(--accent-cyan)', fontWeight: 700, fontSize: 'inherit',
+                           fontFamily: 'inherit' }}>
+            Nyalakan
+          </button>
+        </p>
+      )}
+    </div>
+  );
+}
+
 /**
  * Memberitahukan jumlah narasumber kepada sistem.
  *
@@ -442,22 +539,26 @@ const STYLE_PRESETS = [
   {
     id: 'tebal', label: 'Tebal', hint: 'Putih tebal, kata aktif kuning',
     patch: { size: 96, primary: '#FFFFFF', highlight: '#FFE500', font: 'Montserrat',
-             uppercase: true, animation: 'karaoke_pop', position: 'bottom', outline_px: 7 },
+             uppercase: true, animation: 'karaoke_pop', position: 'bottom', outline_px: 7,
+             highlight_words: true, bg: false },
   },
   {
     id: 'neon', label: 'Neon', hint: 'Besar, sorot biru elektrik',
     patch: { size: 110, primary: '#FFFFFF', highlight: '#00E5FF', font: 'Anton',
-             uppercase: true, animation: 'karaoke_pop', position: 'bottom', outline_px: 8 },
+             uppercase: true, animation: 'karaoke_pop', position: 'bottom', outline_px: 8,
+             highlight_words: true, bg: false },
   },
   {
     id: 'lembut', label: 'Lembut', hint: 'Huruf biasa, masuk memudar',
     patch: { size: 84, primary: '#FFFFFF', highlight: '#FFD166', font: 'Poppins',
-             uppercase: false, animation: 'fade', position: 'bottom', outline_px: 5 },
+             uppercase: false, animation: 'fade', position: 'bottom', outline_px: 5,
+             highlight_words: true, bg: false },
   },
   {
     id: 'naik', label: 'Naik', hint: 'Baris naik dari bawah',
     patch: { size: 92, primary: '#FFFFFF', highlight: '#7CFF6B', font: 'Oswald',
-             uppercase: true, animation: 'slide_up', position: 'bottom', outline_px: 7 },
+             uppercase: true, animation: 'slide_up', position: 'bottom', outline_px: 7,
+             highlight_words: true, bg: false },
   },
   {
     id: 'papan', label: 'Papan', hint: 'Blok tebal, sangat mencolok',
@@ -466,22 +567,58 @@ const STYLE_PRESETS = [
     // berarti apa-apa di sana — sah di peramban, putih di video, tanpa satu
     // pun pesan yang menunjukkan ada yang salah.
     patch: { size: 88, primary: '#FFFFFF', highlight: '#FF4D5E', font: 'Archivo Black',
-             uppercase: true, animation: 'pop_in', position: 'bottom', outline_px: 9 },
+             uppercase: true, animation: 'pop_in', position: 'bottom', outline_px: 9,
+             highlight_words: true, bg: false },
   },
   {
     id: 'ramping', label: 'Ramping', hint: 'Sempit, banyak kata muat',
     patch: { size: 116, primary: '#FFFFFF', highlight: '#00F5D4', font: 'Bebas Neue',
-             uppercase: true, animation: 'karaoke_wipe', position: 'bottom', outline_px: 6 },
+             uppercase: true, animation: 'karaoke_wipe', position: 'bottom', outline_px: 6,
+             highlight_words: true, bg: false },
   },
   {
     id: 'ceria', label: 'Ceria', hint: 'Bulat, gaya kartun',
     patch: { size: 94, primary: '#FFFFFF', highlight: '#FF9F1C', font: 'Lilita One',
-             uppercase: true, animation: 'pop_in', position: 'bottom', outline_px: 8 },
+             uppercase: true, animation: 'pop_in', position: 'bottom', outline_px: 8,
+             highlight_words: true, bg: false },
   },
   {
     id: 'bersih', label: 'Bersih', hint: 'Tanpa animasi, tengah bawah',
     patch: { size: 88, primary: '#FFFFFF', highlight: '#FFFFFF', font: 'Rubik',
-             uppercase: false, animation: 'none', position: 'bottom', outline_px: 5 },
+             uppercase: false, animation: 'none', position: 'bottom', outline_px: 5,
+             highlight_words: true, bg: false },
+  },
+  // --- Gaya berpelat --------------------------------------------------------
+  // Teks duduk di atas pelat gelap tembus pandang, bukan di balik garis luar
+  // tebal. Keduanya sama terbacanya di atas latar apa pun; yang pertama
+  // terlihat tenang, yang kedua terlihat keras. Sampai sekarang hanya yang
+  // kedua yang bisa dibuat.
+  {
+    id: 'apple', label: 'Apple', hint: 'Pelat gelap, huruf biasa, tenang',
+    patch: { size: 76, primary: '#FFFFFF', highlight: '#FFFFFF', font: 'Poppins',
+             uppercase: false, animation: 'fade', position: 'bottom', outline_px: 0,
+             highlight_words: false, bg: true, bg_color: '#000000',
+             bg_opacity: 0.55, bg_pad: 14 },
+  },
+  {
+    id: 'sinema', label: 'Sinema', hint: 'Pelat tipis, seperti subtitle film',
+    patch: { size: 64, primary: '#FFFFFF', highlight: '#FFFFFF', font: 'Rubik',
+             uppercase: false, animation: 'none', position: 'bottom', outline_px: 0,
+             highlight_words: false, bg: true, bg_color: '#000000',
+             bg_opacity: 0.72, bg_pad: 10 },
+  },
+  {
+    id: 'ketik', label: 'Ketik', hint: 'Kata muncul satu per satu',
+    patch: { size: 92, primary: '#FFFFFF', highlight: '#FFE500', font: 'Montserrat',
+             uppercase: true, animation: 'typewriter', position: 'bottom', outline_px: 7,
+             highlight_words: false, bg: false },
+  },
+  {
+    id: 'stiker', label: 'Stiker', hint: 'Pelat berwarna, gaya kartun',
+    patch: { size: 84, primary: '#101010', highlight: '#101010', font: 'Lilita One',
+             uppercase: true, animation: 'pop_in', position: 'bottom', outline_px: 0,
+             highlight_words: false, bg: true, bg_color: '#FFE500',
+             bg_opacity: 0.95, bg_pad: 16 },
   },
 ];
 
@@ -509,14 +646,28 @@ function PresetTile({ preset, active, onPick }) {
         // atas putih tidak akan memberi tahu apa pun tentang keterbacaannya.
         background: 'linear-gradient(160deg, #1d2430 0%, #0d1119 100%)',
         padding: '15px 8px', display: 'flex', alignItems: 'center',
-        justifyContent: 'center', gap: '0.28em', minHeight: '58px',
-        fontFamily: fontStack(p.font), fontWeight: 800, fontSize: '0.92rem',
-        lineHeight: 1.1, letterSpacing: '0.01em',
-        WebkitTextStroke: `${Math.max(0.5, (p.outline_px ?? 7) * 0.16)}px #000`,
-        paintOrder: 'stroke fill',
+        justifyContent: 'center', minHeight: '58px',
       }}>
-        <span style={{ color: p.primary }}>{words[0]}</span>
-        <span style={{ color: p.highlight }}>{words[1]}</span>
+        <span style={{
+          display: 'inline-flex', gap: '0.28em', alignItems: 'baseline',
+          fontFamily: fontStack(p.font), fontWeight: 800, fontSize: '0.92rem',
+          lineHeight: 1.1, letterSpacing: '0.01em',
+          // Pelat digambar di sini juga, kalau tidak petak contoh akan
+          // menjanjikan garis luar untuk gaya yang sebenarnya berpelat.
+          ...(p.bg ? {
+            background: hexAlpha(p.bg_color ?? '#000000', p.bg_opacity ?? 0.55),
+            padding: `${(p.bg_pad ?? 14) * 0.22}px ${(p.bg_pad ?? 14) * 0.4}px`,
+            borderRadius: '4px',
+          } : {
+            WebkitTextStroke: `${Math.max(0.5, (p.outline_px ?? 7) * 0.16)}px #000`,
+            paintOrder: 'stroke fill',
+          }),
+        }}>
+          <span style={{ color: p.primary }}>{words[0]}</span>
+          <span style={{ color: p.highlight_words === false ? p.primary : p.highlight }}>
+            {words[1]}
+          </span>
+        </span>
       </div>
       <div style={{
         padding: '5px 7px 6px', textAlign: 'left',
@@ -540,6 +691,7 @@ const ANIMATIONS = [
   ['fade', 'Memudar'],
   ['slide_up', 'Naik'],
   ['pop_in', 'Membesar'],
+  ['typewriter', 'Ketik'],
   ['none', 'Tanpa animasi'],
 ];
 
@@ -745,8 +897,50 @@ export function StylePanel({
   const seragam = style.per_speaker_colors === false;
   const fontLabel = fonts.find((f) => f.family === style.font)?.label ?? style.font;
 
+  // Tak disetel = menyala, supaya klip lama tidak mendadak kehilangan teksnya.
+  const subtitleAktif = style.aktif !== false;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
+      {/* Saklar ini berdiri di luar seluruh bagian lain, dan memang harus:
+          ia bukan salah satu setelan gaya melainkan penentu apakah gaya itu
+          dipakai sama sekali. Ditaruh di dalam salah satu bagian, ia akan
+          tersembunyi di balik bagian yang kebetulan tertutup. */}
+      <button type="button"
+              onClick={() => set({ aktif: !subtitleAktif })}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '10px', width: '100%',
+                padding: '11px 13px', cursor: 'pointer', textAlign: 'left',
+                borderRadius: 'var(--radius-md)',
+                border: subtitleAktif ? '1px solid var(--border-color)'
+                                      : '2px solid var(--accent-cyan)',
+                background: subtitleAktif ? 'transparent' : 'var(--hl-wash)',
+              }}>
+        <span style={{
+          width: '38px', height: '22px', flexShrink: 0, borderRadius: '11px',
+          background: subtitleAktif ? 'var(--accent-cyan)' : 'var(--border-color)',
+          position: 'relative', transition: 'background 140ms ease',
+        }}>
+          <span style={{
+            position: 'absolute', top: '3px', width: '16px', height: '16px',
+            borderRadius: '50%', background: '#fff',
+            left: subtitleAktif ? '19px' : '3px', transition: 'left 140ms ease',
+          }} />
+        </span>
+        <span>
+          <span style={{ display: 'block', fontSize: '0.84rem', fontWeight: 800,
+                         color: 'var(--text-primary)' }}>
+            {subtitleAktif ? 'Subtitle menyala' : 'Subtitle mati'}
+          </span>
+          <span style={{ display: 'block', fontSize: '0.7rem', lineHeight: 1.45,
+                         color: 'var(--text-secondary)' }}>
+            {subtitleAktif
+              ? 'Matikan kalau klip ini lebih baik tanpa teks.'
+              : 'Teks tidak dibakar ke video. Baris, waktu, dan gayanya tetap tersimpan.'}
+          </span>
+        </span>
+      </button>
+
       <Section id="preset" title="Gaya siap pakai" note={activePreset?.label ?? 'ubahan sendiri'}
                openId={openId} setOpenId={setOpenId}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '7px' }}>

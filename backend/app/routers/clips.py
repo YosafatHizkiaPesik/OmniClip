@@ -36,8 +36,6 @@ class AutoClipRequest(BaseModel):
     # 0 = biarkan sistem menghitungnya dari durasi video. Angka tetap 8 dulu
     # memperlakukan podcast dua jam sama dengan video sepuluh menit.
     max_clips: int = 0
-    # short / medium / long — menentukan rentang durasi klip yang dicari.
-    clip_length: str = "medium"
     # Perkiraan penutur dari warna suara. Menambah ~15 detik pada video panjang.
     diarize: bool = True
     speakers: Optional[int] = None      # None = tebak sendiri
@@ -82,6 +80,15 @@ class CaptionStyleModel(BaseModel):
     uppercase: Optional[bool] = None
     animation: Optional[str] = None
     font: Optional[str] = None
+    # False = subtitle tidak digambar sama sekali. Barisnya tetap tersimpan.
+    aktif: Optional[bool] = None
+    # False = tidak ada kata yang disorot; baris tampil satu warna.
+    highlight_words: Optional[bool] = None
+    # Pelat tembus pandang di belakang teks, pengganti garis luar tebal.
+    bg: Optional[bool] = None
+    bg_color: Optional[str] = None
+    bg_opacity: Optional[float] = Field(None, ge=0.0, le=1.0)
+    bg_pad: Optional[int] = Field(None, ge=0, le=60)
     # Jarak teks dari tepi yang dijadikan jangkar, dalam piksel pada kanvas
     # setinggi 1920. Diisi saat pengguna menyeret subtitle di pratinjau.
     margin_v: Optional[int] = None
@@ -95,6 +102,9 @@ class CaptionStyleModel(BaseModel):
     speaker_colors: Optional[List[str]] = None
     # False = satu warna untuk seluruh klip, apa pun tebakan penuturnya.
     per_speaker_colors: Optional[bool] = None
+    # Subtitle kedua saja: True = warnanya mengikuti orang yang bicara, dengan
+    # palet subtitle utama.
+    ikut_warna_orang: Optional[bool] = None
     # --- Tanda air: gayanya sendiri, bukan pinjaman dari subtitle ------------
     wm_font: Optional[str] = None
     wm_size: Optional[int] = Field(None, ge=8, le=400)
@@ -104,7 +114,7 @@ class CaptionStyleModel(BaseModel):
     wm_y: Optional[float] = Field(None, ge=0.0, le=100.0)
     wm_outline: Optional[int] = Field(None, ge=0, le=16)
 
-    @field_validator("primary", "highlight", "wm_color")
+    @field_validator("primary", "highlight", "wm_color", "bg_color")
     @classmethod
     def _cek_warna(cls, v):
         return _warna(v)
@@ -138,6 +148,56 @@ class FrameLayoutModel(BaseModel):
     # Delapan bingkai sudah jauh melewati apa pun yang masih terbaca di layar
     # ponsel, dan tiap bingkai menambah satu cabang skala di filtergraph.
     frames: List[FrameModel] = Field(default_factory=list, max_length=8)
+
+
+class FrameKeyModel(BaseModel):
+    """Satu titik pergantian cara membingkai, dalam waktu KLIP."""
+
+    t: float = Field(0.0, ge=0)
+    # smart = ikuti wajah, box = kotak tetap yang digambar pengguna,
+    # gaming = wajah di atas + permainan di bawah, center = crop tengah,
+    # blur = bilah kabur, layout = susunan buatan pengguna.
+    mode: str = "smart"
+    # Dibaca hanya oleh mode "box": bagian mana dari bingkai sumber yang
+    # diambil, dalam persen.
+    rect: Optional[FrameRectModel] = None
+    # Dibaca hanya oleh mode "smart": orang keberapa yang dibuntuti.
+    person: Optional[int] = Field(None, ge=0, le=7)
+    # Dibaca hanya oleh mode "layout".
+    layout: Optional[FrameLayoutModel] = None
+    # "otomatis" bila diusulkan sutradara, beserta alasannya. Ikut disimpan
+    # supaya lajur Bingkai bisa menjelaskan kenapa bingkainya berganti di situ.
+    asal: Optional[str] = Field(None, max_length=16)
+    alasan: Optional[str] = Field(None, max_length=200)
+
+
+class MediaLayerModel(BaseModel):
+    """Satu sisipan: berkas dari luar video sumber, ditempel pada waktunya."""
+
+    # id aset dari /api/aset — BUKAN jalur berkas.
+    aset: str = Field(..., max_length=64)
+    # Nama tampilan dan jenisnya, disimpan di sisipan supaya linimasa bisa
+    # menggambarnya tanpa memuat pustaka aset lebih dulu.
+    nama: Optional[str] = Field(None, max_length=120)
+    jenis: Optional[str] = Field(None, max_length=16)
+    t: float = Field(0.0, ge=0)
+    # Kosong = sepanjang asetnya (dipotong di akhir klip).
+    dur: Optional[float] = Field(None, gt=0, le=3600)
+    mulai_sumber: float = Field(0.0, ge=0)
+    posisi: Literal["penuh", "atas", "bawah", "tengah", "sudut"] = "penuh"
+    volume: float = Field(1.0, ge=0.0, le=2.0)
+    # Musik latar mengecil sendiri saat orang bicara.
+    redam: bool = False
+    # Dari mana sisipan ini datang: "pengguna" atau "otomatis" (sutradara).
+    asal: Optional[str] = Field(None, max_length=16)
+    alasan: Optional[str] = Field(None, max_length=200)
+
+
+class SubtitleKeduaModel(BaseModel):
+    aktif: bool = True
+    bahasa: str = Field("id", max_length=12)
+    lines: List[Dict[str, Any]] = Field(default_factory=list, max_length=4000)
+    style: Optional[CaptionStyleModel] = None
 
 
 class PersonKeyModel(BaseModel):
@@ -213,6 +273,15 @@ class RenderClipRequest(BaseModel):
     # yang diambil) dan persegi TUJUAN (di mana ia ditaruh pada kanvas hasil),
     # keduanya dalam persen. Hanya dibaca bila frame_mode == "layout".
     frame_layout: Optional[FrameLayoutModel] = None
+    # Linimasa pembingkaian: tiap kunci berlaku dari `t` sampai kunci
+    # berikutnya. Dua kunci atau lebih MENANG atas `frame_mode` — di situlah
+    # satu klip bisa memakai beberapa cara membingkai sekaligus.
+    frame_keys: List[FrameKeyModel] = Field(default_factory=list)
+    # Sisipan: cuplikan, gambar, musik, efek suara dari luar video sumber.
+    media_layers: List[MediaLayerModel] = Field(default_factory=list, max_length=60)
+    # Subtitle kedua — biasanya terjemahan. Gayanya sendiri; divalidasi dengan
+    # model yang sama dengan gaya subtitle utama, jadi warna tetap wajib hex.
+    subtitle_kedua: Optional[SubtitleKeduaModel] = None
     # Mode ikut-wajah: orang yang ditunjuk pengguna. None = otomatis.
     lock_person: Optional[int] = Field(None, ge=0, le=7)
     person_keys: List[PersonKeyModel] = Field(default_factory=list)
@@ -267,18 +336,136 @@ async def start_auto_clip(req: AutoClipRequest):
             "quality": req.quality,
             "whisper_model": req.whisper_model,
             "max_clips": req.max_clips,
-            "clip_length": req.clip_length,
             "diarize": req.diarize,
             "speakers": req.speakers,
             "use_gemini": req.use_gemini,
             "gemini_model": req.gemini_model,
         },
         video_id=video_id,
-        # Panjang klip ikut ke dalam kunci: meminta klip panjang untuk video
-        # yang analisis pendeknya sedang berjalan adalah permintaan berbeda.
-        dedupe_key=f"auto_clip:{video_id}:{req.clip_length}:{req.gemini_model or 'auto'}",
+        dedupe_key=f"auto_clip:{video_id}:{req.gemini_model or 'auto'}",
     )
     return {"job_id": job_id, "created": created, "cached": False, "video_id": video_id}
+
+
+@router.post("/projects/{video_id}/lanjutkan")
+async def lanjutkan_proses(video_id: str):
+    """
+    Menjalankan ulang pekerjaan klip yang gagal atau terputus, dengan setelan
+    yang SAMA PERSIS, dan melaporkan langkah mana yang akan dilewati.
+
+    Pipeline-nya sendiri sudah tidak mengulang pekerjaan yang pernah selesai:
+    video yang sudah ada di disk tidak diunduh lagi, transkrip yang tersimpan
+    tidak disalin ulang, dan unduhan yang terputus dilanjutkan dari berkas
+    `.part`-nya. Yang tidak ada selama ini hanyalah CARA memicunya — pengguna
+    harus menghapus proyeknya lalu memulai dari halaman tonton, tanpa tahu
+    bahwa hampir seluruh pekerjaannya masih tersimpan.
+    """
+    import json as _json
+
+    from ..db import get_conn
+    from ..repos import transcripts as tx_repo
+    from ..services.paths import find_local_video
+
+    vid = _resolve_video_id(video_id)
+    row = get_conn().execute(
+        """SELECT payload_json, status FROM jobs WHERE type='auto_clip' AND video_id=?
+           ORDER BY created_at DESC LIMIT 1""", (vid,)).fetchone()
+    if row is None:
+        raise NotFound("Belum pernah ada proses klip untuk video ini.")
+    if row["status"] in ("queued", "running"):
+        raise InvalidInput("Proses untuk video ini masih berjalan.")
+    try:
+        payload = _json.loads(row["payload_json"] or "{}")
+    except ValueError:
+        payload = {}
+    payload["video_id"] = vid
+
+    dilewati: list[str] = []
+    if find_local_video(vid) is not None:
+        dilewati.append("unduhan (video sudah ada)")
+    if tx_repo.get_best(vid):
+        dilewati.append("transkrip (sudah tersimpan)")
+
+    job_id, created = queue.enqueue(
+        "auto_clip", payload, video_id=vid,
+        dedupe_key=f"auto_clip:{vid}:{payload.get('gemini_model') or 'auto'}",
+    )
+    return {"job_id": job_id, "created": created, "video_id": vid, "dilewati": dilewati}
+
+
+class CariUlangRequest(BaseModel):
+    # "gemini" = peringkat disusun ulang oleh model; "heuristik" = mesin lokal.
+    mesin: Literal["gemini", "heuristik"] = "gemini"
+    gemini_model: Optional[str] = Field(None, max_length=80)
+    # 0 = dihitung dari durasi video.
+    max_clips: int = Field(0, ge=0, le=60)
+
+
+@router.post("/projects/{video_id}/cari-ulang", status_code=202)
+async def cari_ulang(video_id: str, req: CariUlangRequest):
+    """
+    Mencari ulang rekomendasi klip, hook, dan judul — tanpa mengunduh atau
+    mentranskrip ulang.
+
+    Dulu satu-satunya jalan beralih dari mesin lokal ke Gemini (atau mencoba
+    model lain) adalah menghapus proyek lalu mengunduh videonya lagi. Yang
+    diulang di sini hanya pemilihan momen; transkrip dan penanda narasumber
+    yang tersimpan dipakai apa adanya. Hasil sebelumnya tetap tersimpan dan
+    bisa dikembalikan lewat /pulihkan.
+    """
+    from ..config import get_api_key
+    from ..errors import AppError
+    from ..repos import transcripts as tx_repo
+    from ..services.paths import find_local_video
+
+    vid = _resolve_video_id(video_id)
+    if find_local_video(vid) is None:
+        raise AppError("Video sumber belum ada di penyimpanan. Unduh ulang dulu.",
+                       code="SOURCE_NOT_DOWNLOADED", status=409)
+    if not tx_repo.get_best(vid):
+        raise AppError("Video ini belum punya transkrip — jalankan klip otomatis dulu.",
+                       code="NO_TRANSCRIPT", status=409)
+    if req.mesin == "gemini" and not get_api_key():
+        raise AppError("Gemini butuh kunci API. Isi di Pengaturan → Model AI, "
+                       "atau pilih mesin lokal.", code="AI_KEY_MISSING", status=409)
+
+    job_id, created = queue.enqueue(
+        "auto_clip",
+        {
+            "video_id": vid,
+            "ulang": True,
+            "use_gemini": req.mesin == "gemini",
+            "gemini_model": req.gemini_model if req.mesin == "gemini" else None,
+            "max_clips": req.max_clips,
+        },
+        video_id=vid,
+        dedupe_key=f"auto_clip:{vid}:ulang",
+    )
+    return {"job_id": job_id, "created": created, "video_id": vid}
+
+
+@router.post("/projects/{video_id}/pulihkan")
+async def pulihkan_analisis(video_id: str):
+    """Mengembalikan rekomendasi klip sebelum "Cari ulang klip" terakhir."""
+    vid = _resolve_video_id(video_id)
+    kini = analyses_repo.latest_for_video(vid)
+    asal = ((kini or {}).get("result") or {}).get("sebelumnya") or {}
+    lama = analyses_repo.get(int(asal["id"])) if asal.get("id") else None
+    if not lama or lama.get("video_id") != vid:
+        raise NotFound("Tidak ada hasil sebelumnya untuk dikembalikan.")
+    # Yang dipulihkan menunjuk balik ke hasil yang baru saja diganti, jadi
+    # tombol yang sama bisa membalikkannya lagi.
+    hasil = {**lama["result"], "sebelumnya": {
+        "id": kini["id"], "engine": kini["result"].get("engine"),
+        "model": kini["result"].get("model"),
+        "clip_count": len(kini["result"].get("clips") or [])}}
+    analyses_repo.save(
+        video_id=vid, transcript_id=lama.get("transcript_id"),
+        engine=lama.get("engine") or "heuristic", model=lama.get("model"),
+        params={**(lama.get("params") or {}), "dipulihkan_dari": lama["id"]},
+        result=hasil,
+    )
+    return {"success": True, "clip_count": len(lama["result"].get("clips") or [])}
 
 
 @router.get("/analysis/{video_id}")
@@ -330,6 +517,11 @@ class ReframePlanRequest(BaseModel):
     # Dikirim juga ke pratinjau, supaya jejak yang digambar di editor memakai
     # gaya perpindahan yang sama dengan yang nanti dirender.
     frame_motion: Literal["smooth", "cut"] = "smooth"
+    # Yang dijejak: wajah manusia, atau pusat gerakan (kartun, hewan, gameplay).
+    # Dulu pratinjau mode "Ikuti gerakan" tidak meminta apa pun ke sini — ia
+    # hanya menggambar kotak diam di tengah, jadi tidak ada cara melihat apakah
+    # bingkainya benar-benar mengikuti tokoh sebelum merender.
+    subjek: Literal["wajah", "gerak"] = "wajah"
 
 
 # Perencanaan reframe memakan beberapa detik per klip, sementara editor
@@ -365,7 +557,7 @@ async def clip_reframe(req: ReframePlanRequest):
            tuple((s["start"], s["end"]) for s in segments),
            tuple(turns), req.lock_person,
            tuple((round(k.t, 3), k.person) for k in req.person_keys),
-           req.frame_motion)
+           req.frame_motion, req.subjek)
     if key in _REFRAME_CACHE:
         return _REFRAME_CACHE[key]
 
@@ -384,9 +576,11 @@ async def clip_reframe(req: ReframePlanRequest):
                                    aspect_ratio=req.aspect_ratio, track_only=True,
                                    speaker_turns=turns, lock_person=req.lock_person,
                                    person_keys=[k.model_dump() for k in req.person_keys],
-                                   frame_motion=req.frame_motion)
+                                   frame_motion=req.frame_motion,
+                                   subjek=req.subjek)
     if plan is None:
-        payload = {"available": False, "reason": "unsupported"}
+        payload = {"available": False,
+                   "reason": "no_motion" if req.subjek == "gerak" else "unsupported"}
     else:
         payload = {
             "available": plan.usable,
@@ -427,6 +621,77 @@ async def clip_reframe(req: ReframePlanRequest):
         _REFRAME_CACHE.clear()
     _REFRAME_CACHE[key] = payload
     return payload
+
+
+class SutradaraRequest(BaseModel):
+    video_id: str
+    segments: List[SegmentModel]
+    aspect_ratio: str = "9:16"
+
+
+@router.post("/clip-sutradara")
+async def clip_sutradara(req: SutradaraRequest):
+    """
+    Usulan susunan otomatis untuk satu klip: kunci bingkai + sisipan suara.
+
+    Tidak MENERAPKAN apa pun. Hasilnya dikembalikan ke Studio, yang menaruhnya
+    di lajur Bingkai dan daftar Sisipan sebagai usulan bertanda "otomatis" —
+    kelihatan, beralasan, dan bisa dihapus satu per satu.
+    """
+    import asyncio
+
+    from ..services import sutradara
+    from ..services.paths import find_local_video
+    from ..services.render import PLAY_RES
+
+    video_id = _resolve_video_id(req.video_id)
+    segments = [{"start": round(s.start, 3), "end": round(s.end, 3)}
+                for s in req.segments if s.end - s.start > 0.2]
+    if not segments:
+        raise NotFound("Rentang klip tidak valid.")
+    source = find_local_video(video_id)
+    if source is None:
+        raise NotFound("Video sumber belum diunduh.")
+    out_w, out_h = PLAY_RES.get(req.aspect_ratio, (1080, 1920))
+    hasil = await asyncio.to_thread(sutradara.susun, source, segments,
+                                    out_w=out_w, out_h=out_h)
+    hasil.pop("facecam", None)
+    return hasil
+
+
+class TerjemahRequest(BaseModel):
+    video_id: str
+    bahasa: str = Field(..., min_length=2, max_length=12)
+    teks: List[str] = Field(..., max_length=2000)
+
+
+@router.post("/clip-terjemah")
+async def clip_terjemah(req: TerjemahRequest):
+    """
+    Menerjemahkan baris subtitle satu lawan satu. Waktunya tidak disentuh:
+    klien memasangkan hasilnya ke baris yang sama.
+    """
+    import asyncio
+
+    from ..config import get_api_key, get_model_override
+    from ..errors import AppError
+    from ..services.peringkat_model import rantai
+    from ..services.terjemah import terjemahkan
+
+    api_key = get_api_key()
+    if not api_key:
+        raise AppError("Terjemahan butuh kunci Gemini. Isi di Pengaturan → Model AI.",
+                       code="AI_KEY_MISSING", status=409)
+    vid = _resolve_video_id(req.video_id)
+    video = media_repo.get_video(vid) or {}
+    try:
+        return await asyncio.to_thread(
+            terjemahkan, req.teks, req.bahasa.strip(), api_key=api_key,
+            models=rantai(api_key, get_model_override() or None),
+            konteks=(video.get("title") or "")[:200])
+    except Exception as e:
+        raise AppError(f"Terjemahan gagal: {str(e)[:200]}",
+                       code="TERJEMAH_GAGAL", status=502) from e
 
 
 class TitleVoiceRequest(BaseModel):
@@ -583,6 +848,10 @@ async def render_clip(req: RenderClipRequest):
             "title_card": (req.title_card.model_dump() if req.title_card else None),
             "frame_layout": (req.frame_layout.model_dump()
                              if req.frame_layout else None),
+            "frame_keys": [k.model_dump(exclude_none=True) for k in req.frame_keys],
+            "media_layers": [l.model_dump(exclude_none=True) for l in req.media_layers],
+            "subtitle_kedua": (req.subtitle_kedua.model_dump(exclude_none=True)
+                               if req.subtitle_kedua else None),
             "clip_index": req.clip_index,
             "caption_style": (req.caption_style.model_dump(exclude_none=True)
                               if req.caption_style else None),
@@ -597,6 +866,15 @@ async def get_clips():
     clips = list_local_clips()
     for c in clips:
         c["web_url"] = f"/api/media/edited_clips/{c['file_name']}"
+        # Subtitle dan sisipan tiap klip tidak ditampilkan di halaman ini, tapi
+        # ikut terkirim: 357 KB untuk 51 klip, dan halaman ini dibuka tiap kali
+        # pengguna kembali ke daftar. Keduanya ada di dalam `metadata`, dan
+        # `metadata` itu milik cache daftar klip — jadi yang dikirim salinan
+        # baru, bukan yang aslinya dikurangi. Berkas sidecar-nya tetap utuh.
+        meta = c.get("metadata")
+        if isinstance(meta, dict):
+            c["metadata"] = {k: v for k, v in meta.items()
+                             if k not in ("subtitles", "media_layers", "frame_layout")}
     return {"local_clips": clips}
 
 
@@ -668,3 +946,50 @@ async def save_clips(video_id: str, req: SaveClipsRequest):
         result=result,
     )
     return {"success": True, "clip_count": len(result["clips"])}
+
+
+class FacecamRequest(BaseModel):
+    video_id: str
+    segments: List[SegmentModel]
+
+
+@router.post("/clip-facecam")
+async def clip_facecam(req: FacecamRequest):
+    """
+    Susunan dua bidang untuk klip gameplay, diturunkan dari videonya sendiri.
+
+    Ada supaya "Main game" tidak menuntut penyetelan tangan sama sekali.
+    Susunannya memang sederhana — reaksi pemain di atas, permainannya utuh di
+    bawah — dan kedua letaknya tidak berpindah sepanjang video, jadi keduanya
+    bisa ditemukan sekali lalu dipakai apa adanya.
+
+    Dikembalikan dalam bentuk `frame_layout` supaya editor bisa langsung
+    menaruhnya di panel Susun sendiri: pengguna melihatnya sebelum merender,
+    dan bisa menggeser kotaknya kalau tebakannya meleset sedikit.
+    """
+    import asyncio
+
+    from ..services.media import probe
+    from ..services.paths import find_local_video
+    from ..services.reframe import deteksi_facecam
+    from ..services.render import rasio_bidang_wajah, susun_layout_gaming
+
+    src = find_local_video(req.video_id)
+    if not src:
+        raise NotFound("Video sumber belum diunduh.")
+    segs = [s.model_dump() for s in req.segments] or [{"start": 0.0, "end": 30.0}]
+
+    def kerja():
+        info = probe(str(src))
+        w = int(info.get("width") or 1920)
+        h = int(info.get("height") or 1080)
+        mulai = float(segs[0]["start"])
+        panjang = sum(float(s["end"]) - float(s["start"]) for s in segs) or 30.0
+        fc = deteksi_facecam(str(src), mulai, min(panjang, 30.0), w, h,
+                             rasio_potongan=rasio_bidang_wajah(1080, 1920))
+        if not fc:
+            return {"ditemukan": False, "layout": None}
+        return {"ditemukan": True, "facecam": fc,
+                "layout": susun_layout_gaming(fc)}
+
+    return await asyncio.to_thread(kerja)

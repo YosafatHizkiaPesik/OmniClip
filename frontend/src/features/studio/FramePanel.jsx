@@ -1,11 +1,14 @@
 import React from 'react';
 import { Plus, Trash2, ArrowUp, ArrowDown, ScanFace } from 'lucide-react';
+import FrameKeysPanel from './FrameKeysPanel';
 import {
   LAYOUT_PRESETS, addedFrame, clampRect, frameInk, presetLayout,
 } from './frames';
 
 export const FRAME_MODES = [
   { id: 'smart', label: 'Ikuti wajah', hint: 'Kamera mengikuti pembicara. Layar penuh, tanpa bilah kabur.' },
+  { id: 'motion', label: 'Ikuti gerakan', hint: 'Untuk tokoh yang BUKAN manusia — kartun, maskot, hewan. Kamera mengikuti bagian yang paling banyak bergerak, tanpa perlu mengenali wajah.' },
+  { id: 'gaming', label: 'Main game', hint: 'Wajah pemain di atas, permainannya utuh di bawah. Letak facecam dicari sendiri dari videonya.' },
   { id: 'layout', label: 'Susun sendiri', hint: 'Satu bingkai atau lebih, masing-masing bisa diatur letak dan ukurannya.' },
   { id: 'blur', label: 'Bilah kabur', hint: 'Video utuh di tengah, sisi atas-bawah diisi versi kabur.' },
   { id: 'center', label: 'Potong tengah', hint: 'Ambil bagian tengah frame. Paling cepat, tanpa analisis.' },
@@ -25,6 +28,7 @@ export default function FramePanel({
   // Gaya perpindahan: kamera mengikuti dengan mulus, atau diam lalu memotong.
   frameMotion = 'smooth', onFrameMotionChange = null,
   layout, onLayoutChange,
+  frameKeys, onFrameKeys, waktuSekarang, durasiKlip,
   selectedFrameId, onSelectFrame,
   faceTrackAvailable = false,
   peopleCount = 0,
@@ -270,6 +274,12 @@ export default function FramePanel({
             </>
           )}
         </>
+      )}
+
+      {onFrameKeys && (
+        <FrameKeysPanel keys={frameKeys} onKeys={onFrameKeys}
+                        waktuSekarang={waktuSekarang ?? 0}
+                        durasi={durasiKlip ?? 0} />
       )}
     </div>
   );

@@ -3,7 +3,10 @@ import React, {
 } from 'react';
 import { Crosshair, Scissors, Wand2, ZoomIn, ZoomOut } from 'lucide-react';
 import { formatTime, formatTimeFine } from '../../utils/timeFormat';
-import { frameInk, personSpans, presentPeople, withPersonKey } from './frames';
+import {
+  frameInk, MODE_BINGKAI, modeBingkai, personSpans, presentPeople,
+  withFrameKey, withoutFrameKey, withPersonKey,
+} from './frames';
 
 /**
  * Linimasa satu klip: batas potongan, tiap baris subtitle, dan arah bingkai —
@@ -25,7 +28,7 @@ import { frameInk, personSpans, presentPeople, withPersonKey } from './frames';
 // pita kehadirannya di kamera — jadi ia butuh lebih dari sekadar tinggi satu
 // blok subtitle. Pada 36 piksel pitanya tinggal tiga piksel di dasar baris dan
 // praktis tidak terlihat; 46 memberi keduanya ruang untuk dibaca.
-const LANE_H = { seg: 34, sub: 30, aim: 30, frame: 22, orang: 46 };
+const LANE_H = { seg: 34, sub: 30, aim: 30, bingkai: 30, frame: 22, orang: 46, sisip: 26 };
 
 // Turun sampai seperduapuluh detik. Sebuah kata diucapkan dalam sepertiga
 // detik; tanpa tanda yang lebih rapat dari itu, membetulkan letak satu kata
@@ -61,6 +64,38 @@ function aimCuts(keys, duration) {
     keyIndex = k.i;
   }
   cuts.push({ start: cursor, end: duration, person, keyIndex });
+  return cuts.filter((c) => c.end > c.start + 1e-6);
+}
+
+/**
+ * Kunci bingkai -> potongan waktu yang berurutan dan menutup seluruh klip.
+ *
+ * Bentuknya sengaja sama persis dengan `aimCuts`: keduanya menjawab pertanyaan
+ * yang sama bentuknya — "mulai detik ini sampai detik itu, perlakukan begini" —
+ * dan dua benda yang berkelakuan sama harus terlihat sama di linimasa.
+ */
+function frameCuts(keys, duration, modeDasar = 'smart') {
+  const sorted = [...(keys ?? [])]
+    .map((k, i) => ({
+      t: Math.max(0, Math.min(duration, Number(k.t) || 0)),
+      mode: k.mode || 'smart', rect: k.rect, i,
+    }))
+    .sort((a, b) => a.t - b.t);
+  const cuts = [];
+  let cursor = 0;
+  let mode = modeDasar;
+  let rect;
+  let keyIndex = -1;
+  for (const k of sorted) {
+    if (k.t > cursor + 1e-6) {
+      cuts.push({ start: cursor, end: k.t, mode, rect, keyIndex });
+      cursor = k.t;
+    }
+    mode = k.mode;
+    rect = k.rect;
+    keyIndex = k.i;
+  }
+  cuts.push({ start: cursor, end: duration, mode, rect, keyIndex });
   return cuts.filter((c) => c.end > c.start + 1e-6);
 }
 
@@ -108,6 +143,20 @@ export default function ClipTimeline({
   reframe = null,
   personKeys = [],
   onPersonKeys = null,
+  // Linimasa cara membingkai: [{t, mode, rect?}] dalam waktu klip.
+  frameKeys = [],
+  onFrameKeys = null,
+  // Sisipan: [{id, aset, nama, jenis, t, dur, mulai_sumber}] dalam waktu klip.
+  mediaLayers = [],
+  onMediaLayers = null,
+  // Klik pada blok sisipan: membuka rinciannya di panel Sisipan.
+  onPilihSisipan = null,
+  sisipanTerpilih = null,
+  // Cara yang berlaku untuk seluruh klip selama linimasanya masih kosong.
+  // Tanpa ini lajur selalu menggambar "Ikuti wajah" walau panel di kanan
+  // sedang menunjuk sesuatu yang lain — dua tempat yang menjawab pertanyaan
+  // sama dengan jawaban berbeda.
+  modeDasar = 'smart',
   videoRef,
   onSeekClip = null,
   onMoveSubtitle = null,
@@ -151,6 +200,14 @@ export default function ClipTimeline({
   const offsets = useMemo(() => segmentOffsets(segments), [segments]);
   const lines = clip?.subtitles ?? [];
   const packed = useMemo(() => packRows(lines), [lines]);
+  // Sisipan boleh bertumpuk waktunya — musik sepanjang klip di bawah cuplikan
+  // dan efek suara — jadi dipecah ke beberapa baris, sama seperti subtitle,
+  // supaya tidak ada blok yang pegangannya tertutup blok lain.
+  const sisipan = useMemo(() => (mediaLayers ?? []).map((l) => ({
+    ...l, start: Number(l.t) || 0, end: (Number(l.t) || 0) + Math.max(0.1, Number(l.dur) || 1),
+  })), [mediaLayers]);
+  const sisipBaris = useMemo(() => packRows(sisipan, 4), [sisipan]);
+  const sisipLaneH = sisipBaris.count * LANE_H.sisip + (sisipBaris.count - 1) * 3;
   const subLaneH = packed.count * LANE_H.sub + (packed.count - 1) * 3;
 
   useLayoutEffect(() => {
@@ -393,6 +450,61 @@ export default function ClipTimeline({
     onPersonKeys(personKeys.filter((_, i) => i !== cut.keyIndex));
   }, [onPersonKeys, personKeys]);
 
+  /* ── Bingkai sebagai potongan waktu ───────────────────────────────────
+     Lajur kembar "Arah bingkai", tapi yang diatur bukan wajah mana yang
+     diambil melainkan CARA membingkainya. Inilah yang membuat satu klip bisa
+     mengikuti satu pembicara saat ia bicara, lalu berpindah ke kotak tetap
+     yang memuat lima orang sekaligus begitu semuanya bereaksi. */
+  const fcuts = useMemo(() => frameCuts(frameKeys, duration, modeDasar),
+                         [frameKeys, duration, modeDasar]);
+
+  const potongBingkai = useCallback(() => {
+    if (!onFrameKeys) return;
+    const t = nowRef.current;
+    // Potongan baru MEWARISI cara potongan yang dibelah: membelah tidak boleh
+    // mengubah apa pun yang terlihat. Yang berubah berikutnya adalah pilihan
+    // pengguna, bukan efek samping dari membelah.
+    const induk = frameCuts(frameKeys, duration, modeDasar)
+      .find((c) => t >= c.start - 1e-6 && t < c.end);
+    const mode = induk?.mode || modeDasar;
+    onFrameKeys(withFrameKey(frameKeys, t, { mode, rect: induk?.rect }, mode));
+  }, [onFrameKeys, frameKeys, duration, modeDasar]);
+
+  /**
+   * Menekan nama mode = memotong di posisi garis main, lalu memasang mode itu
+   * mulai dari situ.
+   *
+   * Versi pertama mengubah mode SELURUH potongan yang ditekan, dan itu memaksa
+   * dua gerakan untuk satu maksud: belah dulu, baru pilih. Yang diminta cuma
+   * satu — "di detik ini, pakai cara ini" — dan detik yang dimaksud adalah
+   * tempat garis main berdiri, karena di situlah yang sedang dilihat.
+   *
+   * Kalau garis mainnya tidak berada di dalam potongan yang ditekan, tidak ada
+   * detik yang bisa dimaksud: yang benar lalu mengubah potongan itu seluruhnya.
+   */
+  const setModeCut = useCallback((cut, mode) => {
+    if (!onFrameKeys) return;
+    const t = nowRef.current;
+    const didalam = t > cut.start + 0.15 && t < cut.end - 0.15;
+    const di = didalam ? t : cut.start;
+    // Kotak tetap butuh persegi untuk dipotong; tanpa bawaan, memilihnya tidak
+    // mengubah apa pun di layar dan terasa seperti tombol yang rusak.
+    const rect = cut.rect ?? (mode === 'box' ? { x: 10, y: 10, w: 80, h: 80 } : undefined);
+    onFrameKeys(withFrameKey(frameKeys, di, { mode, rect }, cut.mode));
+  }, [onFrameKeys, frameKeys]);
+
+  const gabungBingkai = useCallback((cut) => {
+    if (!onFrameKeys || cut.keyIndex < 0) return;
+    onFrameKeys(withoutFrameKey(frameKeys, cut.keyIndex));
+  }, [onFrameKeys, frameKeys]);
+
+  const geserBingkai = useCallback((cut, t) => {
+    if (!onFrameKeys || cut.keyIndex < 0) return;
+    onFrameKeys((frameKeys ?? [])
+      .map((k, i) => (i === cut.keyIndex ? { ...k, t: Math.max(0, t) } : k))
+      .sort((a, b) => a.t - b.t));
+  }, [onFrameKeys, frameKeys]);
+
   /** Menggeser batas potongan ke detik lain. */
   const moveCut = useCallback((cut, t) => {
     if (!onPersonKeys || cut.keyIndex < 0) return;
@@ -609,6 +721,18 @@ export default function ClipTimeline({
           {!byPerson && (
             <span className="tl-name" style={{ height: `${subLaneH}px` }}>Subtitle</span>
           )}
+          {onFrameKeys && (
+            <span className="tl-name tl-name--aim" style={{ height: `${LANE_H.bingkai}px` }}
+                  title="Cara membingkai, per potongan waktu">
+              Bingkai
+            </span>
+          )}
+          {onMediaLayers && sisipan.length > 0 && (
+            <span className="tl-name" style={{ height: `${sisipLaneH}px` }}
+                  title="Cuplikan, gambar, musik, dan efek suara dari luar video">
+              Sisipan
+            </span>
+          )}
           {hadir.length > 1 && (
             <>
               <span className="tl-name tl-name--aim" style={{ height: `${LANE_H.aim}px` }}>
@@ -706,6 +830,151 @@ export default function ClipTimeline({
             )}
 
             {/* arah bingkai: potongan bersambungan yang bisa dipotong lagi */}
+            {onFrameKeys && (
+              <div className="tl-lane tl-lane--aim" style={{ height: `${LANE_H.bingkai}px` }}
+                   onPointerDown={(e) => {
+                     if (e.target === e.currentTarget) onSeekClip?.(timeAt(e.clientX));
+                   }}>
+                {fcuts.map((cut, ci) => {
+                  const r = shownRect('bingkai', ci, cut.start, cut.end);
+                  const m = modeBingkai(cut.mode);
+                  // Deretan tombol hanya digambar bila memang muat. Tombol yang
+                  // tumpah menutupi potongan tetangga, dan rentang sesempit itu
+                  // memang harus diperbesar dulu sebelum bisa disunting tepat.
+                  // Tombol berisi kata, jadi ruang yang dibutuhkan jauh lebih
+                  // besar daripada lajur di sebelahnya yang memakai angka.
+                  const muat = (r.end - r.start) * pxPerSec
+                    > MODE_BINGKAI.length * 50 + (cut.keyIndex >= 0 ? 24 : 0) + 30;
+                  return (
+                    <div key={`f${cut.keyIndex}:${ci}`} className="tl-block tl-block--aim"
+                         style={{
+                           left: pct(r.start), width: `calc(${pctW(r.end - r.start)} - 2px)`,
+                           background: `color-mix(in srgb, ${m.warna} 18%, var(--plate-3))`,
+                           boxShadow: `inset 0 0 0 1px ${m.warna}`,
+                         }}
+                         title={`${formatTime(cut.start)} → ${formatTime(cut.end)} · ${m.nama}`
+                                + ' · klik dua kali untuk membelah di sini'}
+                         onDoubleClick={(e) => {
+                           e.stopPropagation();
+                           const t = timeAt(e.clientX);
+                           if (t > cut.start + 0.2 && t < cut.end - 0.2) {
+                             onFrameKeys?.(withFrameKey(
+                               frameKeys, t, { mode: cut.mode, rect: cut.rect }, cut.mode));
+                           }
+                         }}>
+                      {cut.keyIndex >= 0 && (
+                        <span className="tl-grip tl-grip--l" title="Geser batas potongan"
+                              onPointerDown={beginDrag({
+                                kind: 'bingkai', index: ci, handle: 'start',
+                                start: cut.start, end: cut.end,
+                                commit: (a) => geserBingkai(cut, a),
+                              })} />
+                      )}
+                      {muat ? (
+                        <span className="tl-aim-pick">
+                          {MODE_BINGKAI.map((opt) => (
+                            <button key={opt.id} type="button"
+                                    className={`tl-aim-btn tl-aim-btn--mode${cut.mode === opt.id ? ' is-on' : ''}`}
+                                    style={cut.mode === opt.id
+                                      ? { background: opt.warna, borderColor: opt.warna, color: '#fff' }
+                                      : undefined}
+                                    title={`${opt.nama} di potongan ini`}
+                                    onPointerDown={(e) => e.stopPropagation()}
+                                    onClick={() => setModeCut(cut, opt.id)}>{opt.huruf}</button>
+                          ))}
+                          {cut.keyIndex >= 0 && (
+                            <button type="button" className="tl-aim-btn tl-aim-btn--x"
+                                    title="Hapus batas ini — sambung dengan potongan sebelumnya"
+                                    onPointerDown={(e) => e.stopPropagation()}
+                                    onClick={() => gabungBingkai(cut)}>×</button>
+                          )}
+                        </span>
+                      ) : (
+                        <span className="tl-block-text">{m.nama}</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {/* Sisipan: seret untuk memindah, tarik ujung untuk memanjangkan
+                atau memendekkan, klik untuk membuka rinciannya. */}
+            {onMediaLayers && sisipan.length > 0 && (
+              <div className="tl-lane tl-lane--sub" style={{ height: `${sisipLaneH}px` }}
+                   onPointerDown={(e) => {
+                     if (e.target === e.currentTarget) onSeekClip?.(timeAt(e.clientX));
+                   }}>
+                {sisipan.map((l, i) => {
+                  const r = shownRect('sisip', i, l.start, l.end);
+                  const row = sisipBaris.rows[i];
+                  const warna = { video: '#3B82F6', gambar: '#A855F7', audio: '#22C55E' }[l.jenis] ?? '#94A3B8';
+                  const simpan = (patch) => onMediaLayers((mediaLayers ?? []).map(
+                    (x) => (x.id === l.id ? { ...x, ...patch } : x)));
+                  // Menarik ujung KIRI memotong awal cuplikannya, bukan
+                  // menggesernya: detik di dalam berkasnya ikut maju, jadi yang
+                  // hilang adalah bagian depannya — seperti memotong klip di
+                  // penyunting mana pun.
+                  const potongDepan = (s2, e2) => simpan({
+                    t: Number(s2.toFixed(2)), dur: Number((e2 - s2).toFixed(2)),
+                    ...(l.jenis !== 'gambar'
+                      ? { mulai_sumber: Number(Math.max(0, (l.mulai_sumber ?? 0) + (s2 - l.start)).toFixed(2)) }
+                      : {}),
+                  });
+                  const on = sisipanTerpilih === l.id;
+                  // Efek suara hampir selalu sependek ini: dentum 1,6 detik di
+                  // klip satu menit, pada zoom 1x, lebarnya 15 piksel — dan dua
+                  // pegangan ujung 8 piksel menutup seluruhnya, jadi tidak ada
+                  // bagian yang bisa dipegang untuk menggeser. Blok diberi lebar
+                  // minimum, dan pegangan hanya muncul bila masih tersisa ruang
+                  // di tengahnya.
+                  const lebarPx = Math.max(0.1, r.end - r.start) * pxPerSec;
+                  const berpegangan = lebarPx >= 40;
+                  return (
+                    <div key={l.id ?? i}
+                         className={`tl-block tl-block--sub${on ? ' is-on' : ''}`}
+                         style={{
+                           left: pct(r.start),
+                           width: `calc(${pctW(Math.max(0.1, r.end - r.start))} - 2px)`,
+                           minWidth: '44px',
+                           top: `${row * (LANE_H.sisip + 3) + 3}px`,
+                           height: `${LANE_H.sisip - 6}px`, bottom: 'auto',
+                           borderLeftColor: warna,
+                           background: `color-mix(in srgb, ${warna} 18%, var(--plate-3))`,
+                         }}
+                         title={`${l.nama ?? l.aset} · ${formatTime(l.start)} → ${formatTime(l.end)}`
+                           + (l.alasan ? `\n${l.alasan}` : '')
+                           + '\n\nSeret untuk memindah, tarik ujungnya untuk mengubah panjang.'}
+                         onPointerDown={(e) => {
+                           onPilihSisipan?.(l.id);
+                           beginDrag({
+                             kind: 'sisip', index: i, handle: 'move', start: l.start, end: l.end,
+                             commit: (s2) => simpan({ t: Number(s2.toFixed(2)) }),
+                           })(e);
+                         }}>
+                      {berpegangan && (
+                      <span className="tl-grip tl-grip--l"
+                            onPointerDown={beginDrag({
+                              kind: 'sisip', index: i, handle: 'start', start: l.start, end: l.end,
+                              commit: potongDepan,
+                            })} />
+                      )}
+                      <span className="tl-block-text">
+                        {l.asal === 'otomatis' ? '✦ ' : ''}{l.nama ?? (l.aset?.startsWith('efek:') ? l.aset.slice(5) : 'Sisipan')}
+                      </span>
+                      {berpegangan && (
+                      <span className="tl-grip tl-grip--r"
+                            onPointerDown={beginDrag({
+                              kind: 'sisip', index: i, handle: 'end', start: l.start, end: l.end,
+                              commit: (s2, e2) => simpan({ dur: Number((e2 - s2).toFixed(2)) }),
+                            })} />
+                      )}
+                    </div>
+                  );
+                })}
+                <span ref={registerHead(40)} className="tl-head" style={{ opacity: 0 }} />
+              </div>
+            )}
+
             {hadir.length > 1 && (
               <div className="tl-lane tl-lane--aim" style={{ height: `${LANE_H.aim}px` }}
                    onPointerDown={(e) => {
@@ -845,6 +1114,33 @@ export default function ClipTimeline({
               ? 'Menyiapkan lajur bingkai — sistem sedang mencari wajah di klip ini…'
               : 'Klip ini hanya punya satu wajah di kamera, jadi tidak ada yang perlu ditunjuk.'}
           </span>
+        </div>
+      )}
+
+      {onFrameKeys && (
+        <div className="clip-tl-foot">
+          <button className="btn-secondary tl-cut" onClick={potongBingkai}
+                  title="Membelah lajur Bingkai di posisi garis main">
+            <Scissors size={12} /> Potong bingkai di {formatTimeFine(now, 1)}
+          </button>
+          <span>
+            Menekan nama cara di dalam sebuah potongan akan <b>memotong di
+            posisi garis main</b> dan memakai cara itu mulai dari situ — jadi
+            geser garis mainnya dulu ke detik yang dimaksud, lalu tekan.
+            Menekannya saat garis main di luar potongan itu mengubah potongan
+            itu seluruhnya.
+            <b> ×</b> menghapus batas dan menyambungkannya kembali; batasnya
+            bisa diseret. Pratinjau di atas mengikuti potongan tempat garis
+            main berada. Ukuran kotak untuk <b>Kotak tetap</b> diatur di panel
+            <b>Bingkai</b> di kanan.
+          </span>
+          {(frameKeys ?? []).length > 0 && (
+            <button className="btn-secondary" style={{
+              marginLeft: 'auto', fontSize: '.72rem', padding: '4px 9px', minHeight: '26px',
+            }} onClick={() => onFrameKeys?.([])}>
+              Kembalikan ke satu cara
+            </button>
+          )}
         </div>
       )}
 

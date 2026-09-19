@@ -496,6 +496,13 @@ a { color: var(--cue); text-underline-offset: 3px; text-decoration-thickness: 1p
   padding-left: 4px; font-size: .66rem; font-weight: 650;
   color: var(--ink-3); white-space: nowrap;
 }
+/* Tombol lajur Bingkai berisi KATA, bukan satu huruf: lebarnya harus mengikuti
+   isinya. Dengan lebar tetap 19px milik lajur Arah bingkai, "Tengah" terpotong
+   jadi "Teng" dan lima mode yang berbeda jadi terlihat mirip semua. */
+.tl-aim-btn--mode {
+  width: auto; min-width: 0; padding: 0 6px;
+  font-size: .64rem; font-weight: 700; white-space: nowrap;
+}
 .tl-aim-btn--x { color: var(--ink-3); }
 .tl-aim-btn--x:hover { background: var(--danger); border-color: var(--danger); color: #fff; }
 /* `overflow: hidden` dari .tl-block DIBATALKAN di sini, dan itu yang membuat
@@ -1268,3 +1275,15 @@ body.is-studio .app-viewport,
 .unduhan-kartu:hover .thumb-play {
   opacity: 1;
 }
+
+/* Bilah tahap yang sedang menunggu pihak lain (Gemini): bergerak, bukan terisi.
+   Kemajuannya memang tidak terukur, jadi yang ditampilkan adalah bahwa ia hidup. */
+.bilah-menunggu {
+  background: repeating-linear-gradient(-45deg,
+    var(--reh, var(--accent-cyan)) 0 8px,
+    color-mix(in srgb, var(--reh, var(--accent-cyan)) 45%, transparent) 8px 16px);
+  background-size: 22px 22px;
+  animation: bilah-jalan 0.9s linear infinite;
+}
+@keyframes bilah-jalan { from { background-position: 0 0; } to { background-position: 22px 0; } }
+@media (prefers-reduced-motion: reduce) { .bilah-menunggu { animation: none; } }

@@ -3,6 +3,7 @@ import {
   AlertTriangle, CheckCircle2, FolderOpen, HardDrive, Loader2, RefreshCw,
 } from 'lucide-react';
 import { apiGet, apiPost } from '../lib/api';
+import FolderPicker from './FolderPicker';
 
 function ukuran(bita) {
   if (!bita) return '—';
@@ -25,6 +26,8 @@ export default function StorageCard({ card, sectionTitle, helpText }) {
   const [sibuk, setSibuk] = useState(false);
   const [galat, setGalat] = useState(null);
   const [pesan, setPesan] = useState(null);
+  // Folder yang sedang dipilih lewat dialog: { jenis, judul, awal } atau null.
+  const [memilih, setMemilih] = useState(null);
 
   const muat = useCallback(async () => {
     try {
@@ -42,6 +45,37 @@ export default function StorageCard({ card, sectionTitle, helpText }) {
       await apiPost('/settings/penyimpanan/buka', {});
     } catch (err) {
       setGalat(err.message);
+    }
+  };
+
+  const bukaFolder = async (jenis) => {
+    setGalat(null);
+    try {
+      await apiPost('/settings/penyimpanan/folder/buka', { jenis });
+    } catch (err) {
+      setGalat(err.message);
+    }
+  };
+
+  // Dialog penjelajah, bukan `window.prompt`. Versi sebelumnya meminta jalur
+  // diketik penuh — "/media/ynot/744E3DDC4E3D97B6/Projek Coding/..." — yang
+  // praktis hanya bisa benar kalau disalin dari tempat lain, dan salah ketiknya
+  // baru ketahuan setelah tombol ditekan.
+  const simpanFolder = async (jenis, judul, folder) => {
+    setMemilih(null);
+    setSibuk(true);
+    setGalat(null);
+    setPesan(null);
+    try {
+      const r = await apiPost('/settings/penyimpanan/folder', { jenis, folder: (folder || '').trim() });
+      setPesan(r.kembali_ke_bawaan
+        ? `${judul} kembali ke folder bawaan. Jalankan ulang OmniClip agar berlaku.`
+        : `${judul} diarahkan ke ${r.folder}. Jalankan ulang OmniClip agar berlaku. Berkas lama tidak ikut pindah.`);
+      await muat();
+    } catch (err) {
+      setGalat(err.message);
+    } finally {
+      setSibuk(false);
     }
   };
 
@@ -92,10 +126,50 @@ export default function StorageCard({ card, sectionTitle, helpText }) {
         </button>
       </div>
 
+      {/* Dua folder yang isinya paling besar, masing-masing bisa ditaruh
+          di tempat lain. Ukuran dan jumlah berkasnya ditampilkan supaya
+          membersihkannya jadi keputusan, bukan tebakan. */}
+      <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        {[['unduhan', 'Video sumber terunduh', info.unduhan],
+          ['klip', 'Klip jadi', info.klip]].map(([jenis, judul, d]) => d && (
+          <div key={jenis} style={{
+            padding: '10px 12px', borderRadius: 'var(--radius-sm, 8px)',
+            background: 'var(--plate-3, rgba(255,255,255,0.04))',
+            border: '1px solid var(--border-color)',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between',
+                          alignItems: 'baseline', gap: '10px', flexWrap: 'wrap' }}>
+              <strong style={{ fontSize: '0.78rem' }}>{judul}</strong>
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                {d.jumlah} berkas · {ukuran(d.ukuran)}
+              </span>
+            </div>
+            <code style={{ display: 'block', fontSize: '0.71rem', marginTop: '5px',
+                           wordBreak: 'break-all', color: 'var(--text-secondary)' }}>
+              {d.folder}
+            </code>
+            <div style={{ display: 'flex', gap: '7px', marginTop: '8px', flexWrap: 'wrap' }}>
+              <button className="btn-secondary" style={{ fontSize: '0.75rem', padding: '5px 9px' }}
+                      onClick={() => bukaFolder(jenis)}>
+                <FolderOpen size={13} /> Buka
+              </button>
+              <button className="btn-secondary" style={{ fontSize: '0.75rem', padding: '5px 9px' }}
+                      onClick={() => setMemilih({ jenis, judul, awal: d.folder })}>
+                Pindahkan ke…
+              </button>
+              <button className="btn-secondary" style={{ fontSize: '0.75rem', padding: '5px 9px' }}
+                      disabled={sibuk} onClick={() => simpanFolder(jenis, judul, '')}>
+                Kembali ke bawaan
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
       {info.dari_sumber && (
         <p style={{ ...helpText, marginTop: '10px' }}>
-          Dijalankan dari kode sumber, jadi penyimpanan mengikuti folder proyek
-          dan tidak bisa dipindahkan dari sini.
+          Dijalankan dari kode sumber, jadi <em>akar</em> penyimpanan mengikuti
+          folder proyek. Kedua folder di atas tetap bisa ditaruh di mana saja.
         </p>
       )}
 
@@ -149,6 +223,15 @@ export default function StorageCard({ card, sectionTitle, helpText }) {
         }}>
           <AlertTriangle size={15} style={{ flexShrink: 0 }} /> {galat}
         </div>
+      )}
+
+      {memilih && (
+        <FolderPicker
+          judul={`Pilih folder untuk ${memilih.judul}`}
+          awal={memilih.awal}
+          onTutup={() => setMemilih(null)}
+          onPilih={(jalur) => simpanFolder(memilih.jenis, memilih.judul, jalur)}
+        />
       )}
     </div>
   );

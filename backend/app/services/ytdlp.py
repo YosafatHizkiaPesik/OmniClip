@@ -2,10 +2,14 @@ import re
 import os
 import json
 import subprocess
+import threading
+import time
 import yt_dlp
 from urllib.parse import quote_plus
 
-from ..config import DOWNLOAD_DIR as _DOWNLOAD_DIR, STORAGE_DIR as _STORAGE_DIR, get_cookies_file
+from ..config import DOWNLOAD_DIR as _DOWNLOAD_DIR, STORAGE_DIR as _STORAGE_DIR
+from . import cookies as cookies_svc
+from . import yt_klien
 
 STORAGE_DIR = str(_STORAGE_DIR)
 DOWNLOAD_DIR = str(_DOWNLOAD_DIR)
@@ -46,20 +50,33 @@ def classify_ytdlp_error(exc: Exception) -> YtdlpError:
             "YTDLP_FORBIDDEN",
             "YouTube menolak unduhan ini (HTTP 403). Biasanya yt-dlp perlu "
             "diperbarui: jalankan `pip install -U yt-dlp` di venv backend. "
-            "Kalau masih gagal, tambahkan file cookies lewat OMNICLIP_COOKIES_FILE.",
+            "Kalau masih gagal, atur cookies di Pengaturan.",
             raw,
         )
     if "sign in to confirm" in low or "not a bot" in low or "captcha" in low:
         return YtdlpError(
             "YTDLP_BOT_CHECK",
-            "YouTube meminta verifikasi bot. Tambahkan file cookies browser lewat "
-            "variabel OMNICLIP_COOKIES_FILE, lalu coba lagi.",
+            "YouTube menolak semua cara masuk yang OmniClip punya untuk video "
+            "ini. Sepuluh player client sudah dicoba bergantian. Biasanya ini "
+            "hilang sendiri; kalau terus muncul untuk banyak video, yt-dlp perlu "
+            "diperbarui — itu perbaikan yang selalu datang dari sisi yt-dlp.",
             raw,
         )
     if "429" in raw or "too many requests" in low or "rate" in low and "limit" in low:
         return YtdlpError(
             "YTDLP_RATE_LIMIT",
             "YouTube sedang membatasi permintaan. Tunggu beberapa menit lalu coba lagi.",
+            raw,
+        )
+    if "fragment" in low:
+        # Sejak potongan yang gagal tidak lagi dilewati diam-diam, unduhan
+        # yang kehilangan potongan berhenti di sini alih-alih menghasilkan
+        # video berlubang.
+        return YtdlpError(
+            "YTDLP_FRAGMENT",
+            "Sebagian video gagal terunduh meski sudah dicoba berulang kali — "
+            "biasanya koneksi sempat terputus. Coba unduh lagi: unduhan "
+            "melanjutkan dari bagian terakhir, bukan mulai dari awal.",
             raw,
         )
     if "private" in low or "members-only" in low or "members only" in low:
@@ -88,11 +105,142 @@ def _base_opts() -> dict:
         'socket_timeout': 30,
         'retries': 3,
     }
-    # Cookies opsional — jalan keluar utama ketika YouTube menuntut verifikasi bot.
-    cookies = get_cookies_file()
-    if cookies:
-        opts['cookiefile'] = cookies
+    # Cookies opsional, dipilih dari Pengaturan. Lihat services/cookies.py:
+    # cookies BUKAN obat verifikasi bot dan sering justru memperburuknya.
+    try:
+        cookies_svc.terapkan(opts)
+    except Exception:
+        # Pengaturan yang tidak terbaca tidak boleh mematikan pencarian.
+        pass
     return opts
+
+
+# ---------------------------------------------------------------------------
+# Gerbang laju permintaan ke YouTube
+#
+# Verifikasi bot yang dilaporkan bukan soal identitas, melainkan volume: video
+# yang PERSIS SAMA gagal dengan "Sign in to confirm you're not a bot" lalu
+# berhasil beberapa menit kemudian tanpa satu pun perubahan. Sumber ledakannya
+# terukur: membuka satu halaman hasil pencarian memicu /upload-dates, dan
+# fungsi itu menembak YouTube untuk SETIAP kartu — dua puluh permintaan penuh
+# dalam kolam delapan thread, dalam hitungan detik, dari satu alamat IP.
+#
+# Jeda minimum antar permintaan jauh lebih murah daripada blokir yang
+# menghentikan seluruh aplikasi selama beberapa menit.
+# ---------------------------------------------------------------------------
+JEDA_MINIMUM = 0.45          # detik antar permintaan metadata
+_kunci_giliran = threading.Lock()
+_giliran_terakhir = 0.0
+
+
+def _tunggu_giliran(jeda: float = JEDA_MINIMUM) -> None:
+    """Menahan pemanggil sampai jeda minimum sejak permintaan terakhir lewat."""
+    global _giliran_terakhir
+    with _kunci_giliran:
+        sisa = _giliran_terakhir + jeda - time.monotonic()
+        if sisa > 0:
+            time.sleep(sisa)
+        _giliran_terakhir = time.monotonic()
+
+
+def _punya_format_video(info: dict) -> bool:
+    return any(f.get("vcodec", "none") != "none" and f.get("height")
+               for f in (info.get("formats") or []))
+
+
+def _ekstrak(url: str, opts: dict, **kw):
+    """
+    extract_info yang berpindah kumpulan player client sampai ada yang
+    benar-benar memberi format, lalu mengingat kumpulan mana yang berhasil.
+
+    Kegagalan yang ditangani ada dua bentuk, dan yang kedua justru yang paling
+    menipu:
+
+      1. Melempar galat — "Sign in to confirm you're not a bot", atau
+         "The page needs to be reloaded".
+      2. BERHASIL, tapi mengembalikan judul dan deskripsi lengkap tanpa satu
+         pun format video. Tidak ada exception, tidak ada yang tampak salah;
+         yang muncul di layar adalah video yang seolah tidak punya resolusi.
+
+    Karena itu keberhasilan diukur dari isi hasilnya, bukan dari ketiadaan
+    galat. Lihat yt_klien.py untuk angka pengukurannya.
+    """
+    galat = None
+    for i, (nama, klien) in enumerate(yt_klien.urutan_coba()):
+        if i:
+            time.sleep(yt_klien.JEDA_ANTAR_STRATEGI)
+        try:
+            with yt_dlp.YoutubeDL(yt_klien.pasang(opts, klien)) as ydl:
+                info = ydl.extract_info(url, download=False, **kw)
+        except Exception as e:
+            galat = galat or e
+            continue
+        if _punya_format_video(info):
+            yt_klien.catat_berhasil(nama)
+            return info
+
+    # Seluruh kumpulan bisa gagal justru KARENA cookies: sesi yang login
+    # menuntut token yang tidak bisa dibuat yt-dlp, dan balasannya adalah
+    # metadata tanpa format. Satu putaran lagi tanpa cookies, supaya pilihan
+    # yang salah di Pengaturan tidak mematikan aplikasi.
+    if cookies_svc.aktif():
+        polos = cookies_svc.lupakan_cookies(opts)
+        for nama, klien in yt_klien.urutan_coba():
+            try:
+                with yt_dlp.YoutubeDL(yt_klien.pasang(polos, klien)) as ydl:
+                    info = ydl.extract_info(url, download=False, **kw)
+            except Exception as e:
+                galat = galat or e
+                continue
+            if _punya_format_video(info):
+                yt_klien.catat_berhasil(nama)
+                # Cookies-nya yang bersalah, bukan YouTube. Dilewati sementara
+                # supaya permintaan berikutnya tidak membayar putaran gagal ini
+                # lagi — 22 detik melawan 2,7 detik, terukur.
+                cookies_svc.lewati_sementara()
+                return info
+
+    if galat is not None:
+        raise galat
+    raise YtdlpError(
+        "YTDLP_NO_FORMAT",
+        "YouTube tidak memberikan satu pun format video untuk video ini. "
+        "Video mungkin masih diproses, khusus member, atau siaran langsung "
+        "yang belum selesai.",
+        "Semua kumpulan player client dicoba, semuanya mengembalikan nol format.",
+    )
+
+
+def _unduh(url: str, opts: dict):
+    """
+    Unduhan yang berpindah kumpulan client dengan cara yang sama.
+
+    Dipisah dari `_ekstrak` karena keberhasilannya tidak bisa dinilai dari isi
+    hasil: begitu byte pertama turun, pemilihan client sudah selesai. Yang bisa
+    dilakukan adalah berpindah ketika client-nya menolak SEBELUM unduhan mulai.
+    """
+    galat = None
+    for i, (nama, klien) in enumerate(yt_klien.urutan_coba()):
+        if i:
+            time.sleep(yt_klien.JEDA_ANTAR_STRATEGI)
+        try:
+            ydl = yt_dlp.YoutubeDL(yt_klien.pasang(opts, klien))
+            with ydl:
+                info = ydl.extract_info(url, download=True)
+            yt_klien.catat_berhasil(nama)
+            return info, ydl
+        except Exception as e:
+            galat = galat or e
+            pesan = str(e).lower()
+            # Kegagalan yang jelas bukan soal client tidak perlu diulang: video
+            # privat tetap privat di client mana pun, dan cakram penuh tetap
+            # penuh. Mengulangnya hanya menunda pesan galat yang benar.
+            if any(t in pesan for t in ("private", "members-only", "members only",
+                                        "removed", "does not exist", "no space",
+                                        "copyright", "geo-restrict")):
+                raise
+            continue
+    raise galat
 
 
 def probe_media(path: str) -> dict:
@@ -228,6 +376,21 @@ def search_youtube_videos(query: str, limit: int = 20, sort: str = "relevan"):
             seen = {v["id"] for v in fresh}
             results = fresh + [v for v in results if v["id"] not in seen]
 
+    # "Terpopuler" diurutkan ulang di sini.
+    #
+    # Bukan karena parameter urutan YouTube diabaikan — justru sebaliknya, ia
+    # tetap dipakai karena ia yang menentukan KUMPULAN videonya. Tapi YouTube
+    # menyelipkan beberapa hasil relevansi di pucuk daftar sebelum urutan
+    # tayangannya dimulai. Terukur pada "windah basudara": 1,6 juta - 1,9 juta -
+    # 1,2 juta, baru kemudian 17 juta - 8,6 juta - 7,6 juta dan seterusnya
+    # menurun rapi. Tiga kartu pertama itulah yang terlihat sebagai "acak".
+    #
+    # Tidak seperti tanggal unggah, jumlah tayangan IKUT di hasil pencarian
+    # datar, jadi mengurutkannya di sini tidak butuh satu pun permintaan
+    # tambahan dan tidak bisa salah.
+    if sort == "terpopuler":
+        results.sort(key=lambda v: v.get("views") or 0, reverse=True)
+
     return results[:limit]
 
 
@@ -352,31 +515,32 @@ def get_video_info(url_or_id: str):
     Mendapatkan detail metadata video YouTube.
     """
     url = url_or_id if url_or_id.startswith("http") else f"https://www.youtube.com/watch?v={url_or_id}"
-    with yt_dlp.YoutubeDL(_base_opts()) as ydl:
-        try:
-            info = ydl.extract_info(url, download=False)
-            return {
-                "id": info.get('id'),
-                "title": info.get('title'),
-                "description": info.get('description', ''),
-                "duration": info.get('duration', 0),
-                "url": url,
-                "thumbnail": info.get('thumbnail'),
-                "channel": info.get('uploader'),
-                "views": info.get('view_count', 0),
-                "upload_date": info.get('upload_date'),
-                "available_resolutions": _available_resolutions(info),
-                # Ketersediaan caption menentukan apakah transkripsi lokal
-                # (yang lambat) diperlukan. Frontend memakainya untuk memberi
-                # perkiraan waktu yang jujur SEBELUM pengguna menunggu.
-                "has_captions": _has_usable_captions(info),
-                "caption_langs": sorted(
-                    set((info.get("subtitles") or {}))
-                    | set((info.get("automatic_captions") or {}))
-                )[:12],
-            }
-        except Exception as e:
-            raise classify_ytdlp_error(e) from e
+    _tunggu_giliran()
+    try:
+        info = _ekstrak(url, _base_opts())
+        return {
+            "id": info.get('id'),
+            "title": info.get('title'),
+            "description": info.get('description', ''),
+            "duration": info.get('duration', 0),
+            "url": url,
+            "thumbnail": info.get('thumbnail'),
+            "channel": info.get('uploader'),
+            "views": info.get('view_count', 0),
+            "upload_date": info.get('upload_date'),
+            "available_resolutions": _available_resolutions(info),
+            # Ketersediaan caption menentukan apakah transkripsi lokal
+            # (yang lambat) diperlukan. Frontend memakainya untuk memberi
+            # perkiraan waktu yang jujur SEBELUM pengguna menunggu.
+            "has_captions": _has_usable_captions(info),
+            "caption_langs": sorted(
+                set((info.get("subtitles") or {}))
+                | set((info.get("automatic_captions") or {}))
+            )[:12],
+        }
+    except Exception as e:
+        raise classify_ytdlp_error(e) from e
+
 
 def _make_progress_hook(on_progress):
     """
@@ -391,16 +555,40 @@ def _make_progress_hook(on_progress):
     def hook(d):
         status = d.get("status")
         if status == "downloading":
-            total = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
             done = d.get("downloaded_bytes") or 0
-            frac = (done / total) if total else 0.0
+            frag_i = d.get("fragment_index")
+            frag_n = d.get("fragment_count")
+
+            # Unduhan berfragmen dihitung dari FRAGMEN, bukan dari bita.
+            #
+            # Pada unduhan DASH bersegmen, `total_bytes` selalu None dan
+            # `total_bytes_estimate` adalah terkaan yang BERLIPAT DUA setiap
+            # fragmen baru: terukur 712 bita, lalu 3 MB, 1, 2, 4, 9, 17, 35,
+            # 71, 141, 283, 567 MB pada satu video yang sama. Membagi bita
+            # terunduh dengan angka yang tumbuh secepat pembilangnya membuat
+            # pecahannya tidak pernah beranjak dari nol — itulah bar yang
+            # "macet", dan pada panggilan pertama pembagi itu masih di bawah
+            # satu megabita sehingga pesannya terbaca "0/0 MB".
+            #
+            # `fragment_index`/`fragment_count` justru terisi dan tepat sejak
+            # panggilan pertama (0/2269), jadi itu yang dipakai.
+            if frag_n:
+                frac = min(1.0, (frag_i or 0) / frag_n)
+                ukuran = f"{done / 1048576:.0f} MB · bagian {frag_i or 0}/{frag_n}"
+            else:
+                total = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
+                frac = (done / total) if total else 0.0
+                ukuran = (f"{done / 1048576:.0f}/{total / 1048576:.0f} MB" if total
+                          else f"{done / 1048576:.0f} MB")
+
             base, span = (0.0, 0.85) if state["stream"] == 0 else (0.85, 0.15)
             overall = base + span * min(1.0, frac)
             if overall - state["last"] >= 0.005:
                 state["last"] = overall
                 speed = d.get("speed") or 0
-                mb = f"{done / 1048576:.0f}/{total / 1048576:.0f} MB" if total else ""
-                on_progress(overall, f"Mengunduh {mb} ({speed / 1048576:.1f} MB/s)" if speed else f"Mengunduh {mb}")
+                on_progress(overall,
+                            f"Mengunduh {ukuran} ({speed / 1048576:.1f} MB/s)" if speed
+                            else f"Mengunduh {ukuran}")
         elif status == "finished":
             state["stream"] += 1
             state["last"] = -1.0
@@ -479,7 +667,16 @@ def download_youtube_media(url_or_id: str, resolution: str = "720p", on_progress
         # Pakai file .part selama proses berlangsung: unduhan yang gagal di
         # tengah jalan tidak lagi menyisakan .mp4 rusak yang tampak valid di
         # daftar Downloads. list_local_downloads() sudah melewati file .part.
-        'fragment_retries': 3,
+        'fragment_retries': 15,
+        # Potongan yang tetap gagal sesudah semua percobaan TIDAK boleh
+        # dilewati. Bawaan yt-dlp melewatinya diam-diam lalu tetap merakit
+        # berkasnya — hasilnya video yang tampak utuh tapi berlubang: terukur
+        # pada satu unduhan 40 menit, dua celah 5,08 detik di aliran videonya
+        # sementara audionya lengkap. Di hasil render itu terlihat sebagai
+        # gambar yang membeku, dan tidak ada satu pun pesan yang menjelaskan
+        # kenapa. Lebih baik unduhannya gagal dan bisa diulang — berkas .part
+        # disimpan, jadi pengulangannya melanjutkan, bukan mulai dari nol.
+        'skip_unavailable_fragments': False,
         'merge_output_format': 'mp4',
         'restrictfilenames': True, # Hindari karakter spesial di nama file
     })
@@ -491,66 +688,65 @@ def download_youtube_media(url_or_id: str, resolution: str = "720p", on_progress
     if on_progress is not None:
         ydl_opts['progress_hooks'] = [_make_progress_hook(on_progress)]
 
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        try:
-            info = ydl.extract_info(url, download=True)
-            
-            # Get actual downloaded filename
-            filename = ydl.prepare_filename(info)
-            
-            # Fix extension for merged/converted files
-            if not os.path.exists(filename):
-                # Try common extensions
-                base = os.path.splitext(filename)[0]
-                for ext in ['.mp4', '.mkv', '.webm', '.mp3', '.m4a']:
-                    candidate = base + ext
-                    if os.path.exists(candidate):
-                        filename = candidate
-                        break
-            
-            # For Audio MP3 conversion
-            if resolution == "Audio MP3":
-                base, _ = os.path.splitext(filename)
-                mp3_path = base + ".mp3"
-                if os.path.exists(mp3_path):
-                    filename = mp3_path
-            
-            if not os.path.exists(filename):
-                # Try to find the file by video ID
-                vid_id = info.get('id', '')
-                for fname in os.listdir(DOWNLOAD_DIR):
-                    if vid_id in fname and not fname.endswith('.part'):
-                        filename = os.path.join(DOWNLOAD_DIR, fname)
-                        break
+    try:
+        info, ydl = _unduh(url, ydl_opts)
 
-            if not os.path.exists(filename):
-                return {"success": False, "error": f"File unduhan tidak ditemukan setelah proses selesai."}
+        # Get actual downloaded filename
+        filename = ydl.prepare_filename(info)
+        
+        # Fix extension for merged/converted files
+        if not os.path.exists(filename):
+            # Try common extensions
+            base = os.path.splitext(filename)[0]
+            for ext in ['.mp4', '.mkv', '.webm', '.mp3', '.m4a']:
+                candidate = base + ext
+                if os.path.exists(candidate):
+                    filename = candidate
+                    break
+        
+        # For Audio MP3 conversion
+        if resolution == "Audio MP3":
+            base, _ = os.path.splitext(filename)
+            mp3_path = base + ".mp3"
+            if os.path.exists(mp3_path):
+                filename = mp3_path
+        
+        if not os.path.exists(filename):
+            # Try to find the file by video ID
+            vid_id = info.get('id', '')
+            for fname in os.listdir(DOWNLOAD_DIR):
+                if vid_id in fname and not fname.endswith('.part'):
+                    filename = os.path.join(DOWNLOAD_DIR, fname)
+                    break
 
-            # Laporkan apa yang SUNGGUH diunduh, bukan apa yang diminta. Kalau
-            # YouTube hanya menyediakan 480p untuk permintaan 1080p, user berhak
-            # tahu — bukan diberi label "1080p" pada file 480p.
-            probe = probe_media(filename) if resolution != "Audio MP3" else {}
-            actual_height = probe.get("height")
+        if not os.path.exists(filename):
+            return {"success": False, "error": f"File unduhan tidak ditemukan setelah proses selesai."}
 
-            return {
-                "success": True,
-                "file_path": filename,
-                "file_name": os.path.basename(filename),
-                "video_id": info.get('id'),
-                "title": info.get('title'),
-                "duration": probe.get("duration") or info.get('duration'),
-                "requested_resolution": resolution,
-                "resolution": f"{actual_height}p" if actual_height else resolution,
-                "width": probe.get("width"),
-                "height": actual_height,
-                "vcodec": probe.get("vcodec"),
-                "acodec": probe.get("acodec"),
-                "file_size": os.path.getsize(filename) if os.path.exists(filename) else 0
-            }
-        except Exception as e:
-            err = classify_ytdlp_error(e)
-            print(f"[OmniClip] Unduhan gagal ({err.code}): {err.original[:300]}")
-            return {"success": False, "error": err.message, "code": err.code}
+        # Laporkan apa yang SUNGGUH diunduh, bukan apa yang diminta. Kalau
+        # YouTube hanya menyediakan 480p untuk permintaan 1080p, user berhak
+        # tahu — bukan diberi label "1080p" pada file 480p.
+        probe = probe_media(filename) if resolution != "Audio MP3" else {}
+        actual_height = probe.get("height")
+
+        return {
+            "success": True,
+            "file_path": filename,
+            "file_name": os.path.basename(filename),
+            "video_id": info.get('id'),
+            "title": info.get('title'),
+            "duration": probe.get("duration") or info.get('duration'),
+            "requested_resolution": resolution,
+            "resolution": f"{actual_height}p" if actual_height else resolution,
+            "width": probe.get("width"),
+            "height": actual_height,
+            "vcodec": probe.get("vcodec"),
+            "acodec": probe.get("acodec"),
+            "file_size": os.path.getsize(filename) if os.path.exists(filename) else 0
+        }
+    except Exception as e:
+        err = classify_ytdlp_error(e)
+        print(f"[OmniClip] Unduhan gagal ({err.code}): {err.original[:300]}")
+        return {"success": False, "error": err.message, "code": err.code}
 
 def delete_local_download(filename: str) -> dict:
     """Menghapus file unduhan lokal."""
@@ -600,7 +796,9 @@ def list_local_downloads():
 # Jadi ia diambil belakangan, bersamaan, dan hasilnya diisikan ke kartu yang
 # sudah tampil. Sampai datang, kartunya tidak menuliskan tanggal apa pun —
 # lebih baik kosong daripada menampilkan tanggal yang dikarang.
-UPLOAD_DATE_WORKERS = 8
+# Diturunkan dari 8. Dengan jeda 0,45 detik per permintaan, thread yang lebih
+# banyak hanya berebut gerbang yang sama — yang tersisa cuma risikonya.
+UPLOAD_DATE_WORKERS = 3
 
 # Tanggal unggah yang sudah pernah diambil.
 #
@@ -627,6 +825,10 @@ def fetch_upload_dates(video_ids: list[str]) -> dict:
         return cached
 
     def one(vid: str):
+        # Gerbang laju: inilah tempat ledakan permintaan yang memicu verifikasi
+        # bot berasal. Dua puluh kartu berarti dua puluh permintaan penuh, dan
+        # tanpa jeda semuanya berangkat dalam hitungan detik dari satu IP.
+        _tunggu_giliran()
         opts = _base_opts()
         opts.update({'skip_download': True})
         try:

@@ -1,4 +1,9 @@
 # --- Web framework ---
+# Dibutuhkan FastAPI untuk menerima unggahan berkas (impor video lokal).
+# Sudah terpasang di venv sejak lama tapi tidak pernah dideklarasikan — sama
+# seperti googleapiclient dulu, ia hanya bekerja di mesin yang kebetulan
+# sudah punya.
+python-multipart>=0.0.9
 fastapi>=0.110.0
 uvicorn>=0.28.0
 pydantic>=2.6.0

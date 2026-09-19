@@ -2,10 +2,9 @@
 
 import logging
 import os
-import tempfile
 from typing import Optional
 
-from ..errors import AppError, RenderError
+from ..errors import AppError, JobCancelled, RenderError
 from ..repos import media as media_repo
 from .jobs import JobContext
 from .paths import find_local_video
@@ -152,6 +151,8 @@ def run_render(ctx: JobContext) -> dict:
     # pesan sendiri, pengguna melihat bar diam di 2% tanpa tahu sebabnya.
     if frame_mode == "smart":
         ctx.progress(0.02, stage="reframe", message="Melacak wajah pembicara…")
+    elif frame_mode == "gaming":
+        ctx.progress(0.02, stage="reframe", message="Mencari kamera wajah pemain…")
     elif frame_mode == "layout":
         frames = (ctx.payload.get("frame_layout") or {}).get("frames") or []
         ctx.progress(0.02, stage="prepare",
@@ -181,6 +182,9 @@ def run_render(ctx: JobContext) -> dict:
         caption_style=style,
         frame_mode=frame_mode,
         frame_layout=ctx.payload.get("frame_layout"),
+        frame_keys=ctx.payload.get("frame_keys"),
+        media_layers=ctx.payload.get("media_layers"),
+        subtitle_kedua=ctx.payload.get("subtitle_kedua"),
         lock_person=ctx.payload.get("lock_person"),
         person_keys=ctx.payload.get("person_keys"),
         title_card=ctx.payload.get("title_card"),
@@ -224,7 +228,15 @@ STAGES = {
 
 def _stage_progress(ctx: JobContext, stage: str, frac: float, message: str) -> None:
     lo, hi = STAGES[stage]
-    ctx.progress(lo + (hi - lo) * max(0.0, min(1.0, frac)), stage=stage, message=message)
+    nilai = lo + (hi - lo) * max(0.0, min(1.0, frac))
+    # Bar kemajuan tidak pernah mundur. Langkah bantu yang dipakai lebih dari
+    # satu tahap — menyiapkan audio dipakai transkripsi DAN perkiraan
+    # narasumber — pernah melaporkan dirinya sebagai tahap yang sudah lewat,
+    # dan bar melompat dari 82% ke 56%. Bagi yang menunggu, itu terbaca
+    # sebagai "prosesnya mengulang dari awal".
+    nilai = max(nilai, getattr(ctx, "_puncak", 0.0))
+    ctx._puncak = nilai
+    ctx.progress(nilai, stage=stage, message=message)
 
 
 def run_auto_clip(ctx: JobContext) -> dict:
@@ -238,13 +250,13 @@ def run_auto_clip(ctx: JobContext) -> dict:
     from pathlib import Path
 
     from ..config import (
-        GEMINI_MODELS, MAX_TRANSCRIPT_CHARS, get_api_key, get_model_override,
+        MAX_TRANSCRIPT_CHARS, get_api_key, get_model_override,
     )
     from ..repos import analyses as analyses_repo
     from ..repos import transcripts as tx_repo
     from .clipmodel import build_clip_payload
     from .heuristics import generate_candidates, validate_and_snap
-    from .media import energy_track, extract_audio_wav, probe, zscore
+    from .media import energy_track, probe, zscore
     from .transcript import get_transcript, words_to_sentences
 
     video_id = ctx.payload["video_id"]
@@ -261,6 +273,11 @@ def run_auto_clip(ctx: JobContext) -> dict:
     # 0 = biarkan sistem yang menentukan dari durasi video.
     requested_clips = int(ctx.payload.get("max_clips") or 0)
     use_gemini = bool(ctx.payload.get("use_gemini", True))
+    # Cari ulang klip dari Studio: video, transkrip, dan label penutur yang
+    # sudah ada dipakai lagi; hanya pemilihan momen yang diulang. Analisis
+    # sebelumnya dicatat supaya pengguna bisa kembali kepadanya.
+    ulang = bool(ctx.payload.get("ulang"))
+    sebelumnya = analyses_repo.latest_for_video(video_id) if ulang else None
 
     # --- 1. Metadata ---------------------------------------------------------
     _stage_progress(ctx, "resolve", 0.2, "Membaca informasi video…")
@@ -293,6 +310,12 @@ def run_auto_clip(ctx: JobContext) -> dict:
     else:
         _stage_progress(ctx, "download", 1.0, "Video sudah tersedia di penyimpanan lokal.")
 
+    # Salinan analisis dimulai SEKARANG, di latar, sementara transkrip dan
+    # pemilihan klip berjalan. Begitu pengguna membuka Studio, pelacakan wajah
+    # dan gerakan sudah membaca salinan 1280 px, bukan sumber 4K-nya.
+    from .proksi import siapkan as _siapkan_proksi
+    _siapkan_proksi(source)
+
     if not duration:
         duration = float(probe(source).get("duration") or 0)
     ctx.check_cancelled()
@@ -300,21 +323,39 @@ def run_auto_clip(ctx: JobContext) -> dict:
     # --- 3. Transkrip --------------------------------------------------------
     _stage_progress(ctx, "captions", 0.2, "Mencari transkrip…")
 
-    tmpdir = tempfile.mkdtemp(prefix=f"omni_{ctx.job_id[:8]}_")
-    audio_path = os.path.join(tmpdir, "audio.wav")
+    # Audio disimpan per sumber (services/suara.py), bukan di folder sementara:
+    # mengekstraknya berarti membaca seluruh berkas video, dan "Deteksi ulang"
+    # nanti membutuhkan audio yang sama.
+    from . import suara
+    audio_path = ""
     transcript = None
     try:
-        # Audio hanya diekstrak bila caption tidak ada — ekstraksi memakan waktu.
-        def need_audio() -> str:
-            if not os.path.exists(audio_path):
-                _stage_progress(ctx, "transcribe", 0.02, "Menyiapkan audio…")
-                extract_audio_wav(source, audio_path)
+        # Audio hanya diekstrak bila benar-benar dibutuhkan — ekstraksi mahal.
+        def need_audio(tahap: str = "transcribe", bagian: float = 0.02) -> str:
+            nonlocal audio_path
+            if not audio_path:
+                if not suara.ada(source):
+                    _stage_progress(ctx, tahap, bagian, "Menyiapkan audio…")
+                audio_path = suara.siapkan(source) or ""
+                if not audio_path:
+                    raise AppError("Audio video ini tidak bisa dibaca.",
+                                   code="AUDIO_FAILED", status=500)
             return audio_path
 
         from .captions import fetch_youtube_captions
-        transcript = fetch_youtube_captions(video_id)
+        from ..config import get_caption_langs
+        tersimpan = tx_repo.get_best(video_id) if ulang else None
+        if tersimpan and tersimpan.get("words") and tersimpan.get("sentences"):
+            transcript = {"words": tersimpan["words"], "source": tersimpan["source"],
+                          "language": tersimpan.get("language")}
+        else:
+            tersimpan = None
+            transcript = fetch_youtube_captions(video_id, get_caption_langs())
 
-        if transcript:
+        if tersimpan:
+            _stage_progress(ctx, "captions", 1.0,
+                            f"Memakai transkrip tersimpan ({len(transcript['words'])} kata).")
+        elif transcript:
             _stage_progress(ctx, "captions", 1.0,
                             f"Transkrip ditemukan ({len(transcript['words'])} kata).")
         else:
@@ -358,14 +399,22 @@ def run_auto_clip(ctx: JobContext) -> dict:
         # yang dikirim ke Gemini, dan ke ringkasan transkrip yang tersimpan.
         from .clipmodel import strip_non_speech
         words = strip_non_speech(transcript["words"])
-        sentences = words_to_sentences(words)
-        tx_repo.save(video_id=video_id, source=transcript["source"],
-                     model=whisper_model if transcript["source"] == "whisper" else transcript["language"],
-                     language=transcript["language"], words=words, sentences=sentences)
-        stored = tx_repo.get_best(video_id)
+        if tersimpan:
+            # Kalimat tersimpan, bukan disusun ulang: label penutur dan sidik
+            # suara yang tersimpan dikunci pada kalimat-kalimat INI.
+            sentences = tersimpan["sentences"]
+            stored = tersimpan
+        else:
+            sentences = words_to_sentences(words)
+            tx_repo.save(video_id=video_id, source=transcript["source"],
+                         model=whisper_model if transcript["source"] == "whisper" else transcript["language"],
+                         language=transcript["language"], words=words, sentences=sentences)
+            stored = tx_repo.get_best(video_id)
 
         _stage_progress(ctx, "analyze", 0.15, "Mengukur energi bicara…")
-        energy = zscore(energy_track(source, duration=duration or 600))
+        # Dari audio tersimpan bila ada: jauh lebih kecil daripada videonya.
+        energy = zscore(energy_track(suara.tersimpan(source) or source,
+                                     duration=duration or 600))
 
         # --- Perkiraan penutur ------------------------------------------------
         # Hasilnya menempel di tiap kata sebagai "sp", sehingga setiap baris
@@ -373,14 +422,40 @@ def run_auto_clip(ctx: JobContext) -> dict:
         # bukan pengenalan suara terlatih; `speaker_confident` menyatakan apakah
         # pemisahannya cukup meyakinkan untuk dipercaya.
         speaker_count, speaker_conf, speaker_score = 0, False, None
-        if ctx.payload.get("diarize", True) and sentences:
+        speaker_requested = ctx.payload.get("speakers") or None
+        lama = (sebelumnya or {}).get("result") or {}
+        label_lama = lama.get("label_kalimat")
+        if ulang and not speaker_requested:
+            speaker_requested = lama.get("speaker_requested")
+        if ulang and label_lama and len(label_lama) == len(sentences):
+            # Label hasil deteksi (atau deteksi ulang) pengguna DIPAKAI LAGI.
+            # Mengulang pemisahan suara bisa memberi nomor yang berbeda, dan
+            # warna tiap orang yang sudah diatur pengguna akan tertukar.
+            _stage_progress(ctx, "analyze", 0.3, "Memakai penanda narasumber sebelumnya…")
+            for sent, label in zip(sentences, label_lama):
+                a, b = sent["wi"]
+                for w in words[a:b]:
+                    w.pop("sp", None)
+                    if label:
+                        w["sp"] = int(label)
+            speaker_count = int(lama.get("speaker_count") or 0)
+            speaker_conf = lama.get("speaker_confident", False)
+            speaker_score = lama.get("speaker_score")
+        elif ctx.payload.get("diarize", True) and sentences:
             try:
                 _stage_progress(ctx, "analyze", 0.3, "Memperkirakan jumlah narasumber…")
                 from .diarize import analyze_speakers, label_from_evidence
-                wav = need_audio()
+                from .sutradara import perkiraan_pemain
+                jumlah = speaker_requested
+                if jumlah is None:
+                    # Gameplay berfacecam: jumlah orang dari GAMBAR, bukan suara.
+                    # Lihat catatan di sutradara.perkiraan_pemain.
+                    jumlah = perkiraan_pemain(source, duration or 0)
+                # Satu orang tidak perlu dipisahkan — dan tidak perlu audio.
                 dia = analyze_speakers(
-                    wav, [(x["s"], x["e"]) for x in sentences],
-                    speakers=ctx.payload.get("speakers") or None,
+                    need_audio("analyze", 0.3) if jumlah != 1 else "",
+                    [(x["s"], x["e"]) for x in sentences],
+                    speakers=jumlah,
                 )
                 speaker_count = dia.speaker_count
                 speaker_conf = dia.confident
@@ -395,18 +470,18 @@ def run_auto_clip(ctx: JobContext) -> dict:
                 log.warning("Perkiraan penutur gagal: %s", str(e)[:200])
 
         _stage_progress(ctx, "analyze", 0.5, "Mencari momen paling menarik…")
-        from .heuristics import LENGTH_PRESETS
-        preset = LENGTH_PRESETS.get(ctx.payload.get("clip_length") or "medium",
-                                    LENGTH_PRESETS["medium"])
+        from .heuristics import DURASI_MAKS
+        # Tidak ada lagi preset panjang. Panjang tiap klip ditentukan isinya —
+        # lihat catatan panjang di heuristics.py.
+        #
         # Kandidat dibuat lebih banyak daripada jatah akhirnya. Kelebihan itu
         # dipakai dua kali: sebagai bahan pilihan yang lebih luas untuk Gemini,
         # dan sebagai cadangan bila model mengembalikan lebih sedikit dari yang
         # diminta.
         candidates = validate_and_snap(
             generate_candidates(sentences, words, energy, duration=duration,
-                                target=preset["target"], ideal=preset["ideal"],
                                 max_out=max_clips + 8),
-            sentences, duration, max_duration=preset["max"],
+            sentences, duration, max_duration=DURASI_MAKS,
         )
         heuristic_pool = list(candidates)
         engine = "heuristic"
@@ -415,26 +490,60 @@ def run_auto_clip(ctx: JobContext) -> dict:
 
         # --- 5. Penajaman oleh Gemini (opsional) -----------------------------
         api_key = ctx.payload.get("api_key") or get_api_key()
+        gemini_gagal = None
         if use_gemini and api_key and candidates:
             _stage_progress(ctx, "gemini", 0.2, "Menyusun ulang peringkat dengan Gemini…")
             try:
                 from .gemini import refine_candidates
+                from .peringkat_model import rantai
+                # Tanpa pilihan pengguna, yang dicoba pertama adalah model
+                # TERKUAT yang benar-benar bisa dipakai kunci ini — bukan
+                # daftar tetap yang ditulis tangan dan cepat tertinggal.
+                urutan_model = rantai(api_key, ctx.payload.get("gemini_model")
+                                      or get_model_override() or None)
                 candidates, model_used = refine_candidates(
                     sentences=sentences, candidates=candidates, video_title=title,
-                    api_key=api_key, models=GEMINI_MODELS, max_clips=max_clips,
+                    api_key=api_key,
+                    models=urutan_model,
+                    max_clips=max_clips,
                     max_chars=MAX_TRANSCRIPT_CHARS,
-                    max_seconds=preset["max"],
-                    model_override=(ctx.payload.get("gemini_model")
-                                    or get_model_override() or None),
+                    max_seconds=DURASI_MAKS,
+                    kabar=lambda pesan: _stage_progress(ctx, "gemini", 0.3, pesan),
+                    batal=ctx.check_cancelled,
                 )
+                # Pemeriksaan kedua, khusus batas. Gagal di sini tidak
+                # membatalkan apa pun: batas dari pemilihan tetap dipakai.
+                try:
+                    from .gemini import rapikan_batas
+                    _stage_progress(ctx, "gemini", 0.75,
+                                    "Memeriksa awal dan akhir tiap klip…")
+                    diubah = rapikan_batas(
+                        sentences=sentences, candidates=candidates, api_key=api_key,
+                        models=[model_used] + [m for m in urutan_model if m != model_used],
+                        max_seconds=DURASI_MAKS,
+                        kabar=lambda pesan: _stage_progress(ctx, "gemini", 0.75, pesan),
+                        batal=ctx.check_cancelled,
+                    )
+                    log.info("Pemeriksaan batas: %d dari %d klip dirapikan",
+                             diubah, len(candidates))
+                except JobCancelled:
+                    raise
+                except Exception as e:
+                    log.warning("Pemeriksaan batas dilewati: %s", str(e)[:200])
                 candidates = validate_and_snap(candidates, sentences, duration,
-                                               max_duration=preset["max"])
+                                               max_duration=DURASI_MAKS)
                 engine = "gemini"
+            except JobCancelled:
+                raise
             except Exception as e:
                 # Kegagalan Gemini TIDAK boleh menjatuhkan pipeline: hasil
                 # heuristik tetap valid dan tetap jujur.
                 log.warning("Gemini gagal, memakai hasil heuristik: %s", str(e)[:200])
-                _stage_progress(ctx, "gemini", 1.0, "Gemini tidak tersedia — memakai mesin lokal.")
+                gemini_gagal = ("Gemini sedang sibuk atau tidak menjawab"
+                                if any(x in str(e) for x in ("503", "UNAVAILABLE", "timeout",
+                                                             "timed out", "batas waktu"))
+                                else "Gemini gagal")
+                _stage_progress(ctx, "gemini", 1.0, f"{gemini_gagal} — memakai mesin lokal.")
 
         # Gemini sering mengembalikan lebih sedikit dari yang diminta — pada
         # video ini 11 dari 19. Sisa jatahnya diisi dari kandidat heuristik
@@ -470,6 +579,21 @@ def run_auto_clip(ctx: JobContext) -> dict:
 
         # --- 6. Simpan --------------------------------------------------------
         _stage_progress(ctx, "persist", 0.4, "Menyusun hasil…")
+
+        # Gelombang suara untuk linimasa Studio, dihitung SEKARANG dari WAV
+        # pendek yang sudah diekstrak — bukan nanti dari berkas videonya.
+        # Tanpa ini, membuka Studio untuk video 108 menit di cakram eksternal
+        # berarti membaca berkas 3 GB penuh dulu sebelum linimasanya tampil.
+        if os.path.exists(audio_path):
+            try:
+                from ..repos import projects as projects_repo
+                from .media import waveform_peaks
+                if not projects_repo.get_waveform(video_id, 1200):
+                    puncak = waveform_peaks(audio_path, bins=1200, duration=duration)
+                    if puncak:
+                        projects_repo.save_waveform(video_id, 1200, puncak, duration)
+            except Exception as e:                  # tidak boleh menggagalkan pipeline
+                log.warning("Gelombang suara tidak disiapkan: %s", str(e)[:160])
         channel = (ctx.payload.get("channel")
                    or (media_repo.get_video(video_id) or {}).get("channel") or "")
         clips = [build_clip_payload(c, words=words, sentences=sentences, index=i,
@@ -493,27 +617,45 @@ def run_auto_clip(ctx: JobContext) -> dict:
             "speaker_count": speaker_count,
             "speaker_confident": speaker_conf,
             "speaker_score": speaker_score,
+            "speaker_requested": speaker_requested,
+            # Gemini diminta tapi gagal: klipnya dari mesin lokal, dan itu
+            # harus terbaca, bukan hanya terlihat dari label mesin.
+            "gemini_gagal": gemini_gagal,
+            # Penutur per kalimat — dibawa oleh "Cari ulang klip" supaya warna
+            # tiap orang tidak berubah hanya karena rekomendasinya diganti.
+            "label_kalimat": [
+                int(words[s_["wi"][0]].get("sp", 0)) if s_["wi"][0] < len(words) else 0
+                for s_ in sentences],
             "clips": clips,
             "local_url": f"/api/media/local_downloads/{source.name}",
         }
+        if sebelumnya:
+            payload["sebelumnya"] = {
+                "id": sebelumnya["id"],
+                "engine": lama.get("engine"),
+                "model": lama.get("model"),
+                "clip_count": len(lama.get("clips") or []),
+            }
         analyses_repo.save(video_id=video_id,
                            transcript_id=stored["id"] if stored else None,
                            engine=engine, model=model_used,
                            params={"max_clips": max_clips,
                                    "max_clips_requested": requested_clips,
-                                   "quality": quality},
+                                   "quality": quality, "ulang": ulang},
                            result=payload)
 
-        ctx.progress(1.0, stage="done", message=f"{len(clips)} klip siap ditinjau.")
+        ctx.progress(1.0, stage="done", message=(
+            f"{len(clips)} klip siap ditinjau"
+            + (f" — {gemini_gagal}, jadi dipilih mesin lokal. Coba lagi nanti."
+               if gemini_gagal
+               else f", dipilih {model_used}." if engine == "gemini" and model_used
+               else ".")))
         return payload
 
     finally:
-        try:
-            if os.path.exists(audio_path):
-                os.remove(audio_path)
-            os.rmdir(tmpdir)
-        except OSError:
-            pass
+        # Audionya sengaja TIDAK dihapus — "Deteksi ulang" memakainya lagi.
+        # Lihat services/suara.py.
+        pass
 
 
 def run_retitle(ctx: JobContext) -> dict:
@@ -525,9 +667,10 @@ def run_retitle(ctx: JobContext) -> dict:
     Gemini pada analisis awal keluar dengan judul heuristik — kalimat dari
     klipnya sendiri, akurat dan sama sekali tidak memancing.
     """
-    from ..config import GEMINI_MODELS, get_api_key, get_model_override
+    from ..config import get_api_key, get_model_override
     from ..repos import analyses as analyses_repo
     from .gemini import rewrite_titles
+    from .peringkat_model import rantai
 
     video_id = ctx.payload["video_id"]
     only_weak = bool(ctx.payload.get("only_weak", True))
@@ -555,9 +698,8 @@ def run_retitle(ctx: JobContext) -> dict:
                  message=f"Menulis ulang {len(target)} judul…")
     fresh, model = rewrite_titles(
         clips=target, video_title=result.get("title") or "",
-        api_key=key, models=GEMINI_MODELS,
-        model_override=(ctx.payload.get("gemini_model")
-                        or get_model_override() or None),
+        api_key=key,
+        models=rantai(key, ctx.payload.get("gemini_model") or get_model_override() or None),
     )
 
     for idx, row in fresh.items():
@@ -699,7 +841,7 @@ def run_diarize(ctx: JobContext) -> dict:
     from ..repos import transcripts as tx_repo
     from .clipmodel import rebuild_subtitles_for_segments, strip_non_speech
     from .diarize import analyze_speakers, label_from_evidence
-    from .media import extract_audio_wav
+    from . import suara
 
     video_id = ctx.payload["video_id"]
     speakers = ctx.payload.get("speakers")
@@ -722,81 +864,113 @@ def run_diarize(ctx: JobContext) -> dict:
     words = strip_non_speech(stored["words"])
     sentences = stored["sentences"]
 
-    ctx.progress(0.05, stage="audio", message="Menyiapkan audio…")
-    tmpdir = tempfile.mkdtemp(prefix="omniclip_diarize_")
-    audio_path = os.path.join(tmpdir, "audio.wav")
-    try:
-        extract_audio_wav(str(source), audio_path)
-        ctx.check_cancelled()
+    # Audio diambil hanya saat benar-benar dibutuhkan, dan dari simpanan bila
+    # ada. Dulu ia diekstrak ulang di awal setiap deteksi ulang — 64 detik untuk
+    # video 3,9 GB — termasuk ketika pengguna memilih SATU orang, yang tidak
+    # memerlukan audio sama sekali.
+    audio_path = ""
 
-        label = (f"Memisahkan {speakers} narasumber…" if speakers
-                 else "Memperkirakan jumlah narasumber…")
-        spans = [(s["s"], s["e"]) for s in sentences]
+    def perlu_audio() -> str:
+        nonlocal audio_path
+        if not audio_path:
+            if not suara.ada(source):
+                ctx.progress(0.1, stage="audio",
+                             message="Membaca audio video (sekali saja, lalu disimpan)…")
+            audio_path = suara.siapkan(source) or ""
+            if not audio_path:
+                raise AppError("Audio video ini tidak bisa dibaca.",
+                               code="AUDIO_FAILED", status=500)
+            ctx.check_cancelled()
+        return audio_path
 
-        # --- Jalur pertama: tambatkan suara ke wajah -------------------------
-        #
-        # Dicoba lebih dulu karena ia menjawab dua pertanyaan sekaligus. Label
-        # yang dihasilkannya ADALAH nomor orang, jadi warna subtitle dan nomor
-        # wajah berhenti menjadi dua penomoran berbeda yang kebetulan sama-sama
-        # angka. Ia menolak dirinya sendiri bila modelnya gagal uji silang, dan
-        # saat itu terjadi jalur lama di bawah yang berjalan.
-        dia = None
-        if speakers is None:
-            ctx.progress(0.20, stage="faces",
-                         message="Mencari siapa yang terlihat bicara…")
-            bukti = _bukti_wajah(source, cached["result"], sentences, ctx)
-            if bukti:
-                ctx.progress(0.45, stage="diarize",
-                             message="Menambatkan suara ke wajah…")
-                dia = label_from_evidence(audio_path, spans, bukti["span"],
-                                          bukti["orang"])
+    label = (f"Memisahkan {speakers} narasumber…" if speakers
+             else "Memperkirakan jumlah narasumber…")
 
-        if dia is None:
-            ctx.progress(0.55, stage="diarize", message=label)
-            dia = analyze_speakers(audio_path, spans, speakers=speakers)
+    def dengar(dari: float, sampai: float):
+        # Hitungan suara pertama kali bisa satu setengah menit untuk video
+        # dua jam; bilah yang diam selama itu terbaca sebagai macet.
+        def lapor(bagian: float) -> None:
+            ctx.progress(dari + (sampai - dari) * bagian, stage="diarize",
+                         message=f"Mendengarkan suara tiap orang… {int(bagian * 100)}%")
+            ctx.check_cancelled()
+        return lapor
 
-        ctx.progress(0.85, stage="apply", message="Menerapkan penanda ke subtitle…")
-        # Label menempel pada KATA, bukan pada baris subtitle: batas baris bisa
-        # berubah setiap kali pengguna menggeser rentang klip, sedangkan katanya
-        # tidak. Dari kata, warna baris dihitung ulang kapan pun dibutuhkan.
-        for word in words:
-            word.pop("sp", None)
-        if dia.speaker_count > 1:
-            for sentence, speaker in zip(sentences, dia.labels):
-                a, b = sentence["wi"]
-                for word in words[a:b]:
-                    word["sp"] = int(max(0, speaker))
+    spans = [(s["s"], s["e"]) for s in sentences]
 
-        result = dict(cached["result"])
-        result["clips"] = [
-            {**clip,
-             "subtitles": rebuild_subtitles_for_segments(clip["segments"], words)[0]}
-            for clip in (result.get("clips") or [])
-        ]
-        result["speaker_count"] = dia.speaker_count
-        result["speaker_confident"] = dia.confident
-        result["speaker_score"] = dia.separation
-        result["speaker_requested"] = speakers
+    # --- Jalur pertama: tambatkan suara ke wajah -------------------------
+    #
+    # Dicoba lebih dulu karena ia menjawab dua pertanyaan sekaligus. Label
+    # yang dihasilkannya ADALAH nomor orang, jadi warna subtitle dan nomor
+    # wajah berhenti menjadi dua penomoran berbeda yang kebetulan sama-sama
+    # angka. Ia menolak dirinya sendiri bila modelnya gagal uji silang, dan
+    # saat itu terjadi jalur lama di bawah yang berjalan.
+    dia = None
+    if speakers is None:
+        # Gameplay berfacecam: jumlah orangnya dibaca dari gambar lebih dulu.
+        from .sutradara import perkiraan_pemain
+        ctx.progress(0.15, stage="faces", message="Memeriksa apakah ini rekaman gameplay…")
+        speakers = perkiraan_pemain(source, float(cached["result"].get("duration") or 0))
+        if speakers:
+            label = (f"Rekaman gameplay — {speakers} orang di facecam"
+                     if speakers > 1 else "Rekaman gameplay — satu pemain")
+    if speakers is None:
+        ctx.progress(0.20, stage="faces",
+                     message="Mencari siapa yang terlihat bicara…")
+        bukti = _bukti_wajah(source, cached["result"], sentences, ctx)
+        if bukti:
+            ctx.progress(0.45, stage="diarize",
+                         message="Menambatkan suara ke wajah…")
+            dia = label_from_evidence(perlu_audio(), spans, bukti["span"],
+                                      bukti["orang"], kemajuan=dengar(0.45, 0.8))
 
-        analyses_repo.save(
-            video_id=video_id, transcript_id=stored["id"],
-            engine=result.get("engine", "heuristic"), model=result.get("model"),
-            params={"rediarized": True, "speakers": speakers},
-            result=result,
-        )
-        ctx.progress(1.0, stage="done",
-                     message=f"{dia.speaker_count} narasumber ditandai.")
-        return {"speaker_count": dia.speaker_count,
-                "speaker_confident": dia.confident,
-                "speaker_score": dia.separation,
-                "clips": result["clips"]}
-    finally:
-        try:
-            if os.path.exists(audio_path):
-                os.remove(audio_path)
-            os.rmdir(tmpdir)
-        except OSError:
-            pass
+    if dia is None:
+        ctx.progress(0.55, stage="diarize", message=label)
+        dia = analyze_speakers(perlu_audio() if speakers != 1 else "",
+                               spans, speakers=speakers,
+                               kemajuan=dengar(0.55, 0.84))
+
+    ctx.progress(0.85, stage="apply", message="Menerapkan penanda ke subtitle…")
+    # Label menempel pada KATA, bukan pada baris subtitle: batas baris bisa
+    # berubah setiap kali pengguna menggeser rentang klip, sedangkan katanya
+    # tidak. Dari kata, warna baris dihitung ulang kapan pun dibutuhkan.
+    for word in words:
+        word.pop("sp", None)
+    if dia.speaker_count > 1:
+        for sentence, speaker in zip(sentences, dia.labels):
+            a, b = sentence["wi"]
+            for word in words[a:b]:
+                word["sp"] = int(max(0, speaker))
+
+    result = dict(cached["result"])
+    result["clips"] = [
+        {**clip,
+         "subtitles": rebuild_subtitles_for_segments(clip["segments"], words)[0]}
+        for clip in (result.get("clips") or [])
+    ]
+    result["speaker_count"] = dia.speaker_count
+    result["label_kalimat"] = ([int(max(0, x)) for x in dia.labels]
+                               if dia.speaker_count > 1 else [0] * len(sentences))
+    result["speaker_confident"] = dia.confident
+    result["speaker_score"] = dia.separation
+    result["speaker_requested"] = speakers
+
+    analyses_repo.save(
+        video_id=video_id, transcript_id=stored["id"],
+        engine=result.get("engine", "heuristic"), model=result.get("model"),
+        params={"rediarized": True, "speakers": speakers},
+        result=result,
+    )
+    pesan = f"{dia.speaker_count} narasumber ditandai."
+    if speakers and 1 < dia.speaker_count < speakers:
+        # Jumlahnya tidak diam-diam berbeda dari yang diminta: katakan sebabnya.
+        pesan = (f"Diminta {speakers} orang, tapi {speakers - dia.speaker_count} "
+                 f"kelompok ternyata suara orang yang sama — {dia.speaker_count} "
+                 "narasumber ditandai.")
+    ctx.progress(1.0, stage="done", message=pesan)
+    return {"speaker_count": dia.speaker_count,
+            "speaker_confident": dia.confident,
+            "speaker_score": dia.separation,
+            "clips": result["clips"]}
 
 
 # --- Unggah ke Google ---------------------------------------------------------

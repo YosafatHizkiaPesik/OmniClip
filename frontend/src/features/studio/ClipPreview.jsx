@@ -5,6 +5,7 @@ import { fontStack } from '../../lib/fonts';
 import { CARD_VARIANTS } from './cardStyles';
 import { CANVAS_ASPECT, coverPercent, followX, frameInk } from './frames';
 import { beginRectDrag } from './rectDrag';
+import MediaOverlay from './MediaOverlay';
 
 // `r` adalah rasio yang sama dengan `aspect`, dalam bentuk angka. Batas tinggi
 // kanvas dinyatakan lewat lebar (lebar = tinggi x rasio) karena membatasi
@@ -31,7 +32,9 @@ const ASS_FONT_RATIO = 0.521 / 0.756;
 const WARNA_BAWAAN = ['#FFFFFF', '#7CFFB2', '#FFB3C7', '#B39DFF',
                       '#FFD166', '#5BC8FF', '#FF9F1C', '#B8FF3A'];
 
-function hexAlpha(hex, opacity) {
+/** '#RRGGBB' + ketembusan -> 'rgba(...)'. Diekspor supaya petak contoh preset
+ *  memakai perhitungan yang sama — dua salinan berarti dua warna. */
+export function hexAlpha(hex, opacity) {
   const c = String(hex || '').trim().replace('#', '');
   if (c.length !== 6) return `rgba(255,255,255,${opacity})`;
   const n = parseInt(c, 16);
@@ -72,6 +75,8 @@ export default function ClipPreview({
   videoRef: externalRef,
   constrained = true,
   frameMode = 'smart',
+  // Kotak sumber mode "box", dalam persen, dari potongan lajur Bingkai.
+  boxRect = null,
   reframe = null,          // {available, crop_w, source_w, keyframes:[[t,x]]}
   reframeLoading = false,
   layout = null,           // {background, frames:[{id,label,src,dst,fit}]}
@@ -198,11 +203,19 @@ export default function ClipPreview({
   }, []);
 
   const frames = layout?.frames ?? [];
-  const useLayout = frameMode === 'layout' && frames.length > 0;
-  const useReframe = frameMode === 'smart' && reframe?.available && constrained && !useLayout;
+  // Mode gaming ikut memakai jalur susunan: susunannya memang dua bidang, dan
+  // satu-satunya bedanya dari "Susun sendiri" adalah siapa yang menyusunnya.
+  const useLayout = (frameMode === 'layout' || frameMode === 'gaming') && frames.length > 0;
+  const useReframe = (frameMode === 'smart' || frameMode === 'motion')
+    && reframe?.available && constrained && !useLayout;
   const useCenter = frameMode === 'center' && !useLayout;
   const useOriginal = frameMode === 'original' && !useLayout;
-  const useBlur = !useReframe && !useCenter && !useOriginal && !useLayout;
+  // Kotak tetap: dipotong persis seperti yang akan dilakukan ffmpeg. Tanpa
+  // cabang ini ia jatuh ke bilah kabur — pratinjaunya menyebut "Bilah kabur"
+  // sementara linimasanya menyebut "Kotak tetap", dan yang dipercaya orang
+  // adalah yang terlihat.
+  const useBox = frameMode === 'box' && boxRect && !useLayout;
+  const useBlur = !useReframe && !useCenter && !useOriginal && !useLayout && !useBox;
   // Susunan bingkai jarang menutupi seluruh kanvas — celah di antaranya diisi
   // versi kabur dari sumbernya, kecuali bila pengguna memilih hitam pekat.
   const showBlurBg = useBlur || (useLayout && layout?.background !== 'black');
@@ -519,6 +532,37 @@ export default function ClipPreview({
   const ghostLine = !activeLine && constrained && !playing ? lines[0] ?? null : null;
   const shownLine = activeLine ?? ghostLine;
 
+  // Subtitle kedua (terjemahan): baris utuh pada waktunya sendiri, gayanya
+  // sendiri, tanpa sorotan per kata — sama persis dengan yang dirender.
+  const kedua = clip?.subtitle_kedua;
+  const barisKedua = useMemo(() => {
+    if (!kedua || kedua.aktif === false) return null;
+    const l = (kedua.lines ?? []).find((x) => clipTime >= x.start && clipTime < x.end);
+    if (!l) return null;
+    // Penuturnya dibaca dari subtitle UTAMA saat itu, bukan disimpan di baris
+    // terjemahan: deteksi ulang jumlah orang mengubah label subtitle utama,
+    // dan terjemahan yang menyimpan label lamanya akan berwarna orang lain.
+    const tengah = (l.start + l.end) / 2;
+    const asal = (clip?.subtitles ?? []).find((x) => tengah >= x.start && tengah < x.end);
+    return { ...l, speaker: asal?.speaker ?? 0 };
+  }, [kedua, clipTime, clip?.subtitles]);
+  const gayaKedua = useMemo(() => {
+    // Bila diminta, warna tiap orang ikut ke terjemahan memakai palet yang
+    // SAMA dengan subtitle utama — satu orang, satu warna, di kedua baris.
+    // Bukan bawaan: tanpa diminta, warna yang dipilih untuk terjemahan tidak
+    // boleh diam-diam tertimpa warna orang pertama.
+    const ikut = kedua?.style?.ikut_warna_orang === true
+      && style?.per_speaker_colors !== false;
+    return {
+      font: 'Poppins', size: 72, primary: '#FFE500', uppercase: false, position: 'top',
+      margin_v: 260, outline_px: 6, animation: 'fade',
+      ...(kedua?.style ?? {}),
+      highlight_words: false, aktif: true,
+      per_speaker_colors: ikut,
+      speaker_colors: ikut ? style?.speaker_colors : undefined,
+    };
+  }, [kedua?.style, style?.per_speaker_colors, style?.speaker_colors]);
+
   const activeWordIndex = useMemo(() => {
     const w = activeLine?.words;
     if (!w?.length) return -1;
@@ -804,7 +848,22 @@ export default function ClipPreview({
         position: 'absolute', inset: 0, width: '100%', height: '100%',
         objectFit: 'contain', background: '#000', transform: baseTransform,
       }
-      : useCenter
+      : useBox
+        ? (() => {
+          // Kotak persen -> skala + geser. Videonya diperbesar sampai kotaknya
+          // sepenuhi kanvas, lalu digeser supaya kotak itu yang terlihat.
+          const bw = Math.max(1, Number(boxRect.w) || 100);
+          const bh = Math.max(1, Number(boxRect.h) || 100);
+          const bx = Number(boxRect.x) || 0;
+          const by = Number(boxRect.y) || 0;
+          return {
+            position: 'absolute',
+            left: `${-bx * (100 / bw)}%`, top: `${-by * (100 / bh)}%`,
+            width: `${100 * (100 / bw)}%`, height: `${100 * (100 / bh)}%`,
+            objectFit: 'cover', background: '#000',
+          };
+        })()
+        : useCenter
         ? {
           position: 'absolute', top: 0, left: '50%', height: '100%', width: 'auto',
           transform: baseTransform, background: '#000',
@@ -983,11 +1042,14 @@ export default function ClipPreview({
             display: 'flex', alignItems: 'center', gap: '5px', pointerEvents: 'none',
           }}>
             {reframeLoading && <Loader2 size={10} className="animate-spin" />}
-            {reframeLoading ? 'Melacak wajah…'
+            {reframeLoading ? (frameMode === 'motion' ? 'Melacak gerakan…' : 'Melacak wajah…')
               : useLayout ? `${frames.length} bingkai`
-                : useReframe ? `Ikut wajah ${Math.round((reframe.face_coverage ?? 0) * 100)}%`
+                : useReframe ? `${frameMode === 'motion' ? 'Ikut gerakan' : 'Ikut wajah'} ${Math.round((reframe.face_coverage ?? 0) * 100)}%`
+                  : frameMode === 'motion' && reframe && !reframe.available ? 'Gerakan terlalu sedikit — bilah kabur'
                   : useOriginal ? 'Bingkai orisinal'
-                    : useCenter ? 'Potong tengah' : 'Bilah kabur'}
+                    : useBox ? 'Kotak tetap'
+                      : frameMode === 'gaming' ? 'Main game'
+                        : useCenter ? 'Potong tengah' : 'Bilah kabur'}
           </div>
         )}
 
@@ -1121,7 +1183,22 @@ export default function ClipPreview({
           </button>
         )}
 
-        {shownLine && boxH > 0 && (
+        {/* Sisipan: di atas bingkai, di bawah subtitle — urutan yang sama
+            dengan render. */}
+        {constrained && (
+          <MediaOverlay layers={clip?.media_layers} clipTime={clipTime}
+                        playing={playing} boxW={boxW} boxH={boxH} />
+        )}
+
+        {/* Saklar subtitle dihormati di pratinjau juga. Pratinjau yang masih
+            menampilkan teks setelah subtitle dimatikan adalah pratinjau yang
+            berbohong tentang hasilnya — cacat yang lebih buruk daripada
+            saklarnya tidak ada. */}
+        {barisKedua && boxH > 0 && (
+          <CaptionOverlay line={{ ...barisKedua, words: [] }} activeWordIndex={-1}
+                          style={gayaKedua} clipTime={clipTime} boxH={boxH} />
+        )}
+        {shownLine && boxH > 0 && style?.aktif !== false && (
           <CaptionOverlay line={shownLine} activeWordIndex={activeWordIndex}
                           style={style} clipTime={clipTime} boxH={boxH}
                           ghost={!activeLine}
@@ -1275,6 +1352,28 @@ export function CaptionOverlay({
   const transform = [anchorMiddle ? 'translateY(-50%)' : '', entry.transform || '']
     .filter(Boolean).join(' ');
 
+  // Sorotan per kata adalah saklarnya SENDIRI, terpisah dari animasi masuk.
+  // Gaya bersih berpelat memakai animasi masuk tanpa sorotan; tanpa pemisahan
+  // ini kedua hal itu tidak bisa dipilih sendiri-sendiri.
+  const sorot = style?.highlight_words !== false && anim !== 'none' && anim !== 'block';
+
+  // "Ketik": kata yang belum diucapkan belum ada di layar sama sekali.
+  const tampil = anim === 'typewriter' && activeWordIndex >= 0
+    ? words.slice(0, activeWordIndex + 1)
+    : words;
+
+  // Pelat tembus pandang, padanan BorderStyle 3 di libass. Empuknya diberikan
+  // dalam satuan ASS, jadi diskalakan sama seperti ukuran huruf.
+  const pelat = style?.bg
+    ? {
+        display: 'inline-block',
+        background: hexAlpha(style.bg_color ?? '#000000', style.bg_opacity ?? 0.55),
+        padding: `${(style.bg_pad ?? 14) * scale * 0.45}px ${(style.bg_pad ?? 14) * scale}px`,
+        boxDecorationBreak: 'clone',
+        WebkitBoxDecorationBreak: 'clone',
+      }
+    : { display: 'inline' };
+
   return (
     <div
       onPointerDown={draggable ? onMoveStart : undefined}
@@ -1300,9 +1399,13 @@ export function CaptionOverlay({
         // bergeser satu piksel menghasilkan tepi bergerigi pada teks besar —
         // itulah "pixel-pixel" yang terlihat di pratinjau, dan tidak pernah ada
         // di hasil render karena libass memang menggambar garis luar sungguhan.
-        WebkitTextStroke: `${strokePx}px #000`,
+        // BorderStyle 3 di libass menghilangkan garis luar huruf. Kalau
+        // pratinjau tetap menggambarnya, gaya berpelat akan terlihat berbeda
+        // di editor dan di video.
+        WebkitTextStroke: style?.bg ? 'none' : `${strokePx}px #000`,
         paintOrder: 'stroke fill',
-        textShadow: `0 ${(fontPx * 0.06).toFixed(1)}px ${(fontPx * 0.2).toFixed(1)}px rgba(0,0,0,0.55)`,
+        textShadow: style?.bg ? 'none'
+          : `0 ${(fontPx * 0.06).toFixed(1)}px ${(fontPx * 0.2).toFixed(1)}px rgba(0,0,0,0.55)`,
         textTransform: uppercase ? 'uppercase' : 'none',
         opacity: ghost ? 0.45 : 1,
         // Kotak batas ditampilkan saat disentuh. Tanpa melihat kotaknya, tidak
@@ -1314,18 +1417,23 @@ export function CaptionOverlay({
         ...(transform ? { transform } : {}),
       }}
     >
-      {words.map((w, i) => {
-        const active = i === activeWordIndex;
-        return (
-          <span key={i} style={{
-            color: active ? (style?.highlight ?? '#FFE500') : speakerColor,
-            marginRight: '0.28em',
-            display: 'inline-block',
-            transform: active && anim === 'karaoke_pop' ? 'scale(1.09)' : 'none',
-            transition: 'transform 90ms ease, color 60ms linear',
-          }}>{w.w}</span>
-        );
-      })}
+      {/* Pelat digambar sebagai latar SPAN, bukan latar kotak luarnya: kotak
+          luar selebar `box_w` sementara pelatnya harus sepanjang teksnya saja.
+          Sama seperti BorderStyle 3 di libass, yang juga memeluk barisnya. */}
+      <span style={pelat}>
+        {tampil.map((w, i) => {
+          const active = sorot && i === activeWordIndex;
+          return (
+            <span key={i} style={{
+              color: active ? (style?.highlight ?? '#FFE500') : speakerColor,
+              marginRight: i === tampil.length - 1 ? 0 : '0.28em',
+              display: 'inline-block',
+              transform: active && anim === 'karaoke_pop' ? 'scale(1.09)' : 'none',
+              transition: 'transform 90ms ease, color 60ms linear',
+            }}>{w.w}</span>
+          );
+        })}
+      </span>
 
       {draggable && (
         <>

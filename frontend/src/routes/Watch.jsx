@@ -23,9 +23,13 @@ const RESOLUTIONS = ['Terbaik', '360p', '480p', '720p', '1080p', 'Audio MP3'];
  * Halaman tonton.
  *
  * Sengaja dijaga tetap ringkas: pemutar, identitas video, dua tombol aksi, dan
- * rekomendasi. Pengaturan yang jarang diubah — panjang klip, model AI, ketelitian
- * transkrip — pindah ke Settings; menaruhnya di sini membuat layar penuh pilihan
- * yang harus dibaca ulang setiap kali membuka video.
+ * rekomendasi. Pengaturan yang jarang diubah — model AI, ketelitian transkrip —
+ * pindah ke Settings; menaruhnya di sini membuat layar penuh pilihan yang harus
+ * dibaca ulang setiap kali membuka video.
+ *
+ * Panjang klip dulu juga dipilih di sini. Pilihannya dihapus: panjang tiap klip
+ * sekarang ditentukan isinya, bukan oleh preset yang harus ditebak sebelum
+ * videonya dianalisis.
  */
 export default function Watch() {
   const { videoId } = useParams();
@@ -89,8 +93,7 @@ export default function Watch() {
         // 0 = biarkan server menghitungnya dari durasi video. Angka tetap 8
         // memperlakukan podcast dua jam sama dengan video sepuluh menit.
         max_clips: Number(localStorage.getItem('omniclip_max_clips') || 0),
-        // Preferensi tersimpan di Settings. Halaman ini tidak menanyakannya lagi.
-        clip_length: localStorage.getItem('omniclip_clip_length') || 'medium',
+        // Panjang milik video ini, dipilih tepat di atas tombolnya.
         whisper_model: localStorage.getItem('omniclip_whisper_model') || 'base',
         gemini_model: localStorage.getItem('omniclip_gemini_model') || null,
       });
@@ -223,6 +226,7 @@ export default function Watch() {
                   : <><Scissors size={16} /><Sparkles size={14} /> Potong jadi klip</>}
               </button>
             </div>
+
           </div>
 
           {pending && (

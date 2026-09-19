@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   ArrowDownToLine, CheckCircle2, Loader2, RefreshCw, AlertTriangle, Info,
 } from 'lucide-react';
-import { apiGet } from '../lib/api';
+import { apiGet, apiPost } from '../lib/api';
 import { useJobRunner } from '../hooks/useJob';
 
 /**
@@ -157,6 +157,73 @@ export default function UpdateCard({ card, sectionTitle, helpText }) {
           <span>{galat || pekerjaan.error || 'Pemasangan gagal.'}</span>
         </p>
       )}
+
+      <PustakaOtomatis helpText={helpText} />
+    </div>
+  );
+}
+
+/**
+ * Pustaka yang memperbarui dirinya sendiri, terpisah dari versi aplikasi.
+ *
+ * Ditampilkan karena ia menjelaskan sesuatu yang kalau tidak akan tampak
+ * seperti keanehan: OmniClip bisa memperbaiki unduhan YouTube yang rusak tanpa
+ * versinya berubah sama sekali. Bukan karena ada yang perlu dikerjakan di
+ * sini — tombolnya hanya mempercepat pemeriksaan yang memang sudah berjalan
+ * sendiri tiap dua belas jam.
+ */
+function PustakaOtomatis({ helpText }) {
+  const [data, setData] = useState(null);
+  const [sibuk, setSibuk] = useState(false);
+  const [kabar, setKabar] = useState(null);
+
+  const muat = async () => {
+    try { setData(await apiGet('/settings/pustaka')); } catch { /* diam */ }
+  };
+  useEffect(() => { muat(); }, []);
+
+  const periksa = async () => {
+    setSibuk(true); setKabar(null);
+    try {
+      const r = await apiPost('/settings/pustaka/periksa', {});
+      const dipasang = (r.hasil || []).filter((h) => h.dipasang);
+      setKabar(dipasang.length
+        ? `${dipasang.map((h) => `${h.paket} ${h.terbaru}`).join(', ')} dipasang. `
+          + 'Berlaku setelah OmniClip dijalankan ulang.'
+        : 'Semua pustaka sudah mutakhir.');
+      await muat();
+    } catch (err) {
+      setKabar(err.message);
+    } finally { setSibuk(false); }
+  };
+
+  if (!data?.paket?.length) return null;
+
+  return (
+    <div style={{ marginTop: '16px', paddingTop: '14px',
+                  borderTop: '1px solid var(--rule-2, var(--border-color))' }}>
+      <strong style={{ fontSize: '0.82rem' }}>Pustaka YouTube &amp; suara</strong>
+      <p style={{ ...helpText, margin: '4px 0 9px' }}>
+        Diperbarui sendiri tiap dua belas jam. Inilah yang menjaga unduhan tetap
+        bekerja saat YouTube berubah — perbaikannya datang dari pustakanya, bukan
+        dari versi OmniClip.
+      </p>
+      <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap', fontSize: '0.78rem' }}>
+        {data.paket.map((p) => (
+          <span key={p.nama} style={{ color: 'var(--text-secondary)' }}>
+            {p.nama} <code>{p.versi || '—'}</code>
+            {p.dari_pembaruan && (
+              <em style={{ color: 'var(--text-muted)', fontStyle: 'normal' }}> (hasil pembaruan)</em>
+            )}
+          </span>
+        ))}
+      </div>
+      <button style={{ ...ghost, marginTop: '10px', fontSize: '0.78rem', padding: '7px 11px' }}
+              onClick={periksa} disabled={sibuk}>
+        {sibuk ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+        Periksa pustaka sekarang
+      </button>
+      {kabar && <p style={{ ...helpText, marginTop: '8px' }}>{kabar}</p>}
     </div>
   );
 }

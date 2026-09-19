@@ -513,3 +513,61 @@ export function saveFraming(videoId, mode, layout) {
     localStorage.setItem(STORE_KEY, JSON.stringify(all));
   } catch { /* penyimpanan penuh atau ditolak: bukan alasan menjatuhkan editor */ }
 }
+
+
+/**
+ * Mode membingkai yang bisa dipasang per potongan waktu di lajur Bingkai.
+ *
+ * Label pendeknya berupa KATA, bukan huruf. Versi pertama memakai satu huruf
+ * (W/K/G/T/B) meniru lajur Arah bingkai di sebelahnya — dan itu salah menarik
+ * kesimpulan: angka di lajur itu bisa berdiri sendiri karena "1" dan "2" memang
+ * nomor orang yang terlihat di layar. Huruf tidak menunjuk apa pun. Ditanyakan
+ * langsung oleh pemiliknya: "apa maksud dari w, k, g, t, b".
+ */
+export const MODE_BINGKAI = [
+  { id: 'smart', huruf: 'Wajah', nama: 'Ikuti wajah', warna: 'var(--accent-cyan)' },
+  { id: 'motion', huruf: 'Gerak', nama: 'Ikuti gerakan', warna: '#2fb6c9' },
+  { id: 'box', huruf: 'Kotak', nama: 'Kotak tetap', warna: '#e8a33d' },
+  { id: 'gaming', huruf: 'Game', nama: 'Main game', warna: '#8f7bff' },
+  { id: 'center', huruf: 'Tengah', nama: 'Potong tengah', warna: '#3dbd8a' },
+  { id: 'layout', huruf: 'Susun', nama: 'Susun sendiri', warna: '#e05c8a' },
+  { id: 'blur', huruf: 'Kabur', nama: 'Bilah kabur', warna: '#8c8c8c' },
+];
+
+export function modeBingkai(id) {
+  return MODE_BINGKAI.find((m) => m.id === id) ?? MODE_BINGKAI[0];
+}
+
+/**
+ * Menaruh atau mengganti satu kunci bingkai di detik `t`.
+ *
+ * Kunci pertama selalu ditarik ke nol: potongan tanpa pembingkaian akan
+ * dirender sebagai latar kabur kosong, dan itu tidak pernah diinginkan siapa
+ * pun. Server memaksakan aturan yang sama, tapi memaksakannya di sini juga
+ * membuat linimasanya jujur SEBELUM dirender.
+ */
+export function withFrameKey(keys, t, patch, modeAwal = 'smart') {
+  const at = Math.max(0, Math.round(t * 100) / 100);
+  const lama = (keys ?? []).find((k) => Math.abs(k.t - at) <= 0.05);
+  const sisa = (keys ?? []).filter((k) => Math.abs(k.t - at) > 0.05);
+  const hasil = [...sisa, { ...(lama ?? { mode: modeAwal }), ...patch, t: at }]
+    .sort((a, b) => a.t - b.t);
+  // Rentang sebelum kunci pertama harus punya pemiliknya sendiri.
+  //
+  // Versi pertama menyeret kunci paling awal ke detik nol, dan itu diam-diam
+  // membatalkan pembelahan: pada lajur yang masih kosong, membelah di detik 30
+  // membuat satu kunci di 30 yang lalu ditarik ke 0 — hasilnya tetap satu
+  // potongan, dan tombol belahnya terlihat tidak bekerja. Yang benar adalah
+  // MENAMBAH kunci pembuka, bukan memindahkan kunci yang baru dibuat.
+  if (hasil.length && hasil[0].t > 0.05) {
+    hasil.unshift({ t: 0, mode: modeAwal });
+  }
+  return hasil;
+}
+
+/** Membuang satu kunci; potongan itu menyatu dengan yang sebelumnya. */
+export function withoutFrameKey(keys, index) {
+  const baru = (keys ?? []).filter((_, i) => i !== index);
+  if (baru.length) baru[0] = { ...baru[0], t: 0 };
+  return baru;
+}

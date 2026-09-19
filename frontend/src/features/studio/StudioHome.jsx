@@ -1,9 +1,12 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Sparkles, Loader2, AlertTriangle, CheckCircle2, Trash2, Clock, Film, RefreshCw, Search,
+  RotateCw,
 } from 'lucide-react';
-import { apiDelete, apiGet } from '../../lib/api';
+import { apiDelete, apiGet, apiPost } from '../../lib/api';
+import ImportBar from './ImportBar';
 import { formatTime } from '../../utils/timeFormat';
+import BilahProses from '../../components/BilahProses';
 
 /**
  * Halaman depan Studio: setiap video yang diminta untuk diklip jadi satu kartu.
@@ -28,6 +31,9 @@ export default function StudioHome({ onOpen, onFindVideos }) {
   const [projects, setProjects] = useState(null);
   const [error, setError] = useState(null);
   const timerRef = useRef(null);
+  const [putaran, setPutaran] = useState(0);
+  const [melanjutkan, setMelanjutkan] = useState(null);
+  const [catatanLanjut, setCatatanLanjut] = useState({});
 
   const load = useCallback(async () => {
     try {
@@ -54,7 +60,24 @@ export default function StudioHome({ onOpen, onFindVideos }) {
     };
     tick();
     return () => { alive = false; clearTimeout(timerRef.current); };
-  }, [load]);
+  }, [load, putaran]);
+
+  // Melanjutkan pekerjaan yang gagal atau terputus. Server menjalankannya ulang
+  // dengan setelan yang sama, dan langkah yang sudah pernah selesai — unduhan,
+  // transkrip — tidak diulang.
+  const lanjutkan = async (videoId, e) => {
+    e.stopPropagation();
+    setMelanjutkan(videoId);
+    try {
+      const r = await apiPost(`/projects/${videoId}/lanjutkan`, {});
+      setCatatanLanjut((prev) => ({ ...prev, [videoId]: r.dilewati ?? [] }));
+      setPutaran((n) => n + 1);      // polling berhenti saat semua selesai; hidupkan lagi
+    } catch (err) {
+      setError(err);
+    } finally {
+      setMelanjutkan(null);
+    }
+  };
 
   const handleDelete = async (videoId, e) => {
     e.stopPropagation();
@@ -98,6 +121,8 @@ export default function StudioHome({ onOpen, onFindVideos }) {
         </button>
       </header>
 
+      <ImportBar onDone={load} />
+
       {error && (
         <div style={{
           padding: '11px 13px', marginBottom: '14px', fontSize: '0.82rem',
@@ -136,7 +161,6 @@ export default function StudioHome({ onOpen, onFindVideos }) {
           const meta = STATUS_META[p.status] ?? STATUS_META.unknown;
           const busy = p.status === 'running' || p.status === 'queued';
           const openable = p.status === 'done';
-          const pct = Math.round((p.job?.progress ?? 0) * 100);
 
           return (
             <div
@@ -200,28 +224,30 @@ export default function StudioHome({ onOpen, onFindVideos }) {
                   )}
                 </div>
 
-                {busy && (
-                  <>
-                    <div style={{ height: '4px', borderRadius: '99px', background: 'var(--bg-glass)', overflow: 'hidden' }}>
-                      <div style={{
-                        width: '100%', height: '100%', background: 'var(--reh)',
-                        transform: `scaleX(${pct / 100})`, transformOrigin: 'left',
-                        transition: 'transform .3s cubic-bezier(.16,1,.3,1)',
-                      }} />
-                    </div>
-                    <div style={{ fontSize: '0.71rem', color: 'var(--text-secondary)' }}>
-                      {pct}% · {p.job?.message || 'Menyiapkan…'}
-                    </div>
-                  </>
-                )}
+                {busy && <BilahProses job={{ ...p.job, status: p.status }} />}
 
                 {p.status === 'failed' && p.job?.error && (
                   <div style={{ fontSize: '0.71rem', color: 'var(--text-muted)', lineHeight: 1.45 }}>
                     {p.job.error}
                   </div>
                 )}
+                {busy && catatanLanjut[p.video_id]?.length > 0 && (
+                  <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', lineHeight: 1.45 }}>
+                    Dilanjutkan — dilewati: {catatanLanjut[p.video_id].join(', ')}.
+                  </div>
+                )}
 
                 <div style={{ display: 'flex', gap: '7px', marginTop: '3px' }}>
+                  {p.status === 'failed' && (
+                    <button className="btn-primary" style={{ flex: 1, fontSize: '0.76rem', padding: '7px' }}
+                            disabled={melanjutkan === p.video_id}
+                            title="Menjalankan ulang dengan setelan yang sama. Unduhan dan transkrip yang sudah ada tidak diulang."
+                            onClick={(e) => lanjutkan(p.video_id, e)}>
+                      {melanjutkan === p.video_id
+                        ? <Loader2 size={13} className="animate-spin" /> : <RotateCw size={13} />}
+                      Lanjutkan proses
+                    </button>
+                  )}
                   {openable && (
                     <button className="btn-primary" style={{ flex: 1, fontSize: '0.76rem', padding: '7px' }}
                             onClick={(e) => { e.stopPropagation(); onOpen(p); }}>

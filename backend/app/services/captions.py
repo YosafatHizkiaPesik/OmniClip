@@ -80,7 +80,7 @@ def _parse_json3(data: dict[str, Any]) -> list[Word]:
             })
 
     words.sort(key=lambda w: w["s"])
-    return _clamp_overlaps(_dedupe(split_phrases(words)))
+    return _clamp_overlaps(buang_kembar(split_phrases(bersihkan_kata(words))))
 
 
 # Kecepatan bicara, karakter per detik. Dipakai hanya untuk menaksir sampai
@@ -167,27 +167,70 @@ def _clamp_overlaps(words: list[Word], max_word_duration: float = 1.2) -> list[W
     return words
 
 
-def _dedupe(words: list[Word]) -> list[Word]:
+# Aksara tak kasatmata yang dipakai takarir YouTube sebagai penanda tata letak.
+# Bagi pembacanya ia bukan apa-apa; bagi kode yang memecah kata, ia sebuah kata.
+TAK_TAMPAK = "\u200b\u200c\u200d\u2060\ufeff\u00ad"
+_TAK_TAMPAK = str.maketrans("", "", TAK_TAMPAK)
+
+
+def bersihkan_kata(words: list[Word]) -> list[Word]:
+    """
+    Membuang penanda tata letak yang menyamar jadi kata.
+
+    Terukur pada satu transkrip takarir resmi: 17.426 "kata", dan 7.550 di
+    antaranya — 43% — tidak berisi apa pun selain zero-width space. Akibatnya
+    berantai dan tidak satu pun terlihat seperti kesalahan:
+
+      - kerapatan kata jadi dua kali lipat yang sebenarnya, sehingga penilai
+        tempo bicara membaca setiap video sebagai "terlalu cepat";
+      - pemecah baris menghitungnya sebagai kata, jadi satu baris subtitle yang
+        katanya lima kata sebenarnya cuma dua kata yang terbaca;
+      - dan sorotan karaoke berhenti 60 milidetik pada kata yang tidak kelihatan,
+        jadi sorotannya seperti tersendat tanpa sebab.
+
+    Dibersihkan di sini dan di pintu keluar penyimpanan, supaya transkrip yang
+    sudah terlanjur tersimpan ikut terbetulkan tanpa diunduh ulang.
+    """
+    out: list[Word] = []
+    for w in words:
+        teks = (w.get("w") or "").translate(_TAK_TAMPAK).strip()
+        if not teks:
+            continue
+        out.append({**w, "w": teks})
+    return out
+
+
+def buang_kembar(words: list[Word]) -> list[Word]:
     """
     Membuang kata yang benar-benar terduplikasi.
 
     Kuncinya adalah (waktu, teks) — BUKAN teks saja. Rolling caption mengulang
     kata pada waktu yang berbeda; membuang berdasarkan teks saja akan menghapus
     pengulangan yang sah di sepanjang video.
+
+    Yang dibandingkan BUKAN cuma kata sebelumnya. Rolling caption mengulang
+    seluruh BARIS, bukan satu kata: terukur, tujuh kata yang sama muncul dua
+    kali dengan timestamp yang identik sampai milidetik. Perbandingan terhadap
+    tetangga langsung tidak pernah melihatnya — kata kedua dari pengulangan
+    dibandingkan dengan kata terakhir baris pertama, dan keduanya memang
+    berbeda. Hasilnya dua baris subtitle yang identik dan bertumpuk di layar,
+    persis seperti yang terlihat di hasil render.
     """
     out: list[Word] = []
+    terlihat: set[tuple[str, int]] = set()
     for w in words:
-        if out:
-            prev = out[-1]
-            if prev["w"] == w["w"] and abs(prev["s"] - w["s"]) < 0.05:
-                continue
+        kunci = (w["w"], int(round(float(w["s"]) * 50)))   # ember 20 milidetik
+        if kunci in terlihat:
+            continue
+        terlihat.add(kunci)
         out.append(w)
     return out
 
 
-def _try_language(video_id: str, lang: str, tmpdir: str) -> Optional[TranscriptResult]:
+def _try_language(video_id: str, lang: str,
+                  tmpdir: str) -> tuple[Optional[TranscriptResult], list[str]]:
     """
-    Mengunduh caption untuk SATU bahasa.
+    Mengunduh caption untuk SATU bahasa; juga melaporkan bahasa yang tersedia.
 
     Meminta beberapa bahasa sekaligus terbukti memicu HTTP 429 dari YouTube:
     bahasa pertama berhasil, permintaan kedua langsung kena rate limit. Jadi
@@ -203,29 +246,43 @@ def _try_language(video_id: str, lang: str, tmpdir: str) -> Optional[TranscriptR
         "outtmpl": os.path.join(tmpdir, "%(id)s.%(ext)s"),
     })
 
+    # Player client yang sama dengan jalur unduhan: caption pun ditolak oleh
+    # client yang sedang diblokir YouTube, dan client yang terakhir terbukti
+    # bekerja sudah diketahui — tidak ada gunanya menemukannya lagi dari nol.
+    from .yt_klien import pasang, terakhir_berhasil
+
+    dipakai = terakhir_berhasil()
+    if dipakai and dipakai[1]:
+        opts = pasang(opts, dipakai[1])
+
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=True)
     except Exception as e:
         log.info("Caption '%s' tidak bisa diambil: %s", lang, str(e)[:160])
-        return None
+        return None, []
+
+    # Bahasa apa saja yang benar-benar dimiliki video ini, manual lebih dulu.
+    # Diambil dari `info` panggilan ini, bukan dari permintaan terpisah:
+    # permintaan tambahan ke YouTube adalah persis yang memicu 429.
+    tersedia = list(info.get("subtitles") or {}) + list(info.get("automatic_captions") or {})
 
     matches = glob.glob(os.path.join(tmpdir, f"*.{lang}.json3"))
     if not matches:
         matches = [f for f in glob.glob(os.path.join(tmpdir, "*.json3"))]
     if not matches:
-        return None
+        return None, tersedia
 
     try:
         with open(matches[0], encoding="utf-8") as f:
             data = json.load(f)
     except (OSError, json.JSONDecodeError) as e:
         log.warning("File caption rusak: %s", e)
-        return None
+        return None, tersedia
 
     words = _parse_json3(data)
     if not words:
-        return None
+        return None, tersedia
 
     # Caption tulisan manusia jauh lebih akurat daripada hasil ASR YouTube.
     is_manual = lang in (info.get("subtitles") or {})
@@ -233,7 +290,14 @@ def _try_language(video_id: str, lang: str, tmpdir: str) -> Optional[TranscriptR
         "words": words,
         "language": lang,
         "source": "youtube_manual" if is_manual else "youtube_asr",
-    }
+    }, tersedia
+
+
+# Batas jumlah permintaan ke YouTube per video. Tanpa batas, video dengan
+# delapan puluh bahasa caption otomatis akan menembak delapan puluh permintaan
+# berturut-turut dan berakhir di HTTP 429 — dan 429 menjatuhkan seluruh
+# aplikasi, bukan cuma transkripnya.
+MAKS_PERCOBAAN_BAHASA = 5
 
 
 def fetch_youtube_captions(
@@ -247,16 +311,30 @@ def fetch_youtube_captions(
     """
     tmpdir = tempfile.mkdtemp(prefix=f"omni_sub_{video_id}_")
     try:
+        antre = list(langs)
         seen: set[str] = set()
-        for lang in langs:
+        dicoba = 0
+        while antre and dicoba < MAKS_PERCOBAAN_BAHASA:
+            lang = antre.pop(0)
             if lang in seen:
                 continue
             seen.add(lang)
-            result = _try_language(video_id, lang, tmpdir)
+            dicoba += 1
+            result, tersedia = _try_language(video_id, lang, tmpdir)
             if result:
                 log.info("Transkrip dari caption %s (%s): %d kata",
                          lang, result["source"], len(result["words"]))
                 return result
+
+            # Bahasa pilihan tidak ada — pakai bahasa yang DIMILIKI videonya.
+            #
+            # Sebelumnya daftarnya berhenti di id dan en, jadi video berbahasa
+            # lain selalu jatuh ke Whisper meski caption buatan manusia dalam
+            # bahasanya sendiri tersedia. Subtitle yang benar sudah ada di sana;
+            # yang kurang cuma kemauan untuk memintanya.
+            for kandidat in tersedia:
+                if kandidat not in seen and kandidat not in antre:
+                    antre.append(kandidat)
         return None
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)

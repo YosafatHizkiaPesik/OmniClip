@@ -48,6 +48,13 @@ def _warn_low_memory() -> None:
 if __name__ == "__main__":
     import uvicorn
 
+    # Overlay pustaka dipasang sebelum uvicorn mengimpor app.main, supaya
+    # versi hasil pembaruan yang menang. Lihat app/services/pustaka.py.
+    from app.services import pustaka
+
+    pustaka.aktifkan()
+    pustaka.periksa_kesehatan()
+
     from app.config import HOST, PORT
 
     _prefer_self_for_oom()
@@ -69,4 +76,9 @@ if __name__ == "__main__":
         # loopback, karena hanya dari sanalah `cloudflared` menyambung.
         proxy_headers=True,
         forwarded_allow_ips="127.0.0.1",
+        # Studio yang terbuka menahan sambungan selamanya (aliran video, pantau
+        # job). Tanpa batas ini, menutup atau memperbarui aplikasi menunggu
+        # sambungan itu tanpa akhir — terukur, proses lama tetap hidup setelah
+        # diminta berhenti, dan yang baru tidak bisa memakai portnya.
+        timeout_graceful_shutdown=5,
     )

@@ -166,6 +166,9 @@ class JobQueue:
             "stage": job["stage"],
             "message": job["message"],
             "eta_seconds": job["eta_seconds"],
+            # Kapan mulai berjalan (detik epoch) — antarmuka menghitung lama
+            # berjalan dari sini, supaya menunggu yang tidak terukur pun jujur.
+            "started_at": job.get("started_at"),
             "error": job["error"],
             "error_code": job["error_code"],
             "video_id": job["video_id"],

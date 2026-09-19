@@ -36,6 +36,12 @@ export default function FrameStage({
   onLockPerson = null,
   // Tanda linimasa: siapa yang dituju bingkai, per rentang waktu.
   personKeys = null,
+  // Kotak sumber untuk mode "box", dalam persen. Datang dari potongan lajur
+  // Bingkai tempat garis main sedang berada.
+  boxRect = null,
+  // Dipanggil saat kotak itu diseret atau diubah ukurannya. Tanpa ini kotaknya
+  // hanya bisa dilihat, dan ukurannya harus ditebak lewat empat kolom angka.
+  onBoxRectChange = null,
 }) {
   const mirrorRef = useRef(null);
   const boxRef = useRef(null);
@@ -96,7 +102,7 @@ export default function FrameStage({
   /** Posisi crop pada detik tertentu — pembacaan yang sama dengan `sendcmd`. */
   const cropXAt = useMemo(() => {
     const kf = reframe?.keyframes;
-    if (!kf?.length || frameMode !== 'smart') return null;
+    if (!kf?.length || (frameMode !== 'smart' && frameMode !== 'motion')) return null;
     return (t) => {
       if (t <= kf[0][0]) return kf[0][1];
       let lo = 0;
@@ -217,6 +223,24 @@ export default function FrameStage({
     });
   }, [editable, box.w, box.h, layout, onLayoutChange, onSelectFrame]);
 
+  /**
+   * Menyeret kotak mode "Kotak tetap".
+   *
+   * Memakai mesin seret yang sama dengan bingkai susun-sendiri — `beginRectDrag`
+   * — supaya keduanya terasa persis sama di tangan. Dua benda yang berkelakuan
+   * sama tidak boleh menuntut cara memegang yang berbeda.
+   */
+  const bisaSeretKotak = frameMode === 'box' && !!boxRect && !!onBoxRectChange;
+  const seretKotak = useCallback((handle) => (e) => {
+    if (!bisaSeretKotak) return;
+    setDrag({ frameId: '__box', handle });
+    beginRectDrag(e, {
+      boxW: box.w, boxH: box.h, rect: boxRect, handle,
+      onChange: (src) => onBoxRectChange(src),
+      onEnd: () => setDrag(null),
+    });
+  }, [bisaSeretKotak, box.w, box.h, boxRect, onBoxRectChange]);
+
   // Kotak yang digambar untuk mode selain susun-sendiri: apa yang benar-benar
   // diambil ffmpeg, bukan gambaran umum.
   const staticCrop = useMemo(() => {
@@ -225,6 +249,44 @@ export default function FrameStage({
       const w = Math.min(100, (target / aspect) * 100);
       return { x: (100 - w) / 2, y: 0, w, h: 100, label: 'Potong tengah' };
     }
+    // Kotak tetap: gambar kotak yang BENAR-BENAR akan dipotong ffmpeg. Tanpa
+    // ini, memilih "Kotak tetap" di linimasa tidak mengubah apa pun di layar —
+    // pratinjaunya tetap memperlihatkan bingkai yang mengikuti wajah, dan
+    // pilihannya terasa seperti tombol yang tidak tersambung ke mana-mana.
+    if (frameMode === 'box' && boxRect) {
+      return {
+        x: Number(boxRect.x) || 0, y: Number(boxRect.y) || 0,
+        w: Number(boxRect.w) || 100, h: Number(boxRect.h) || 100,
+        label: 'Kotak tetap',
+      };
+    }
+    if (frameMode === 'gaming' && (layout?.frames ?? []).length) {
+      return null;     // kedua bidangnya sudah digambar sendiri di bawah
+    }
+    if (frameMode === 'gaming') {
+      // Susunannya dua bidang, jadi tidak ada satu kotak yang bisa mewakilinya.
+      // Yang jujur adalah mengatakan apa yang akan terjadi, bukan menggambar
+      // kotak yang tidak benar.
+      return { x: 0, y: 0, w: 100, h: 100, label: 'Main game: wajah di atas, permainan di bawah' };
+    }
+    if (frameMode === 'blur') {
+      return { x: 0, y: 0, w: 100, h: 100, label: 'Bilah kabur: seluruh bingkai dipakai' };
+    }
+    if (frameMode === 'motion' && reframe?.available && reframe.source_w) {
+      // Jejak gerakan dari server — rencana yang sama persis dengan render,
+      // jadi kotak ini bergeser tepat seperti hasilnya nanti.
+      return {
+        x: 0, y: 0, w: (reframe.crop_w / reframe.source_w) * 100, h: 100,
+        label: 'Ikuti gerakan', moving: true,
+      };
+    }
+    if (frameMode === 'motion') {
+      // Belum ada jejak (masih dihitung, atau videonya nyaris tanpa gerakan):
+      // tunjukkan lebar jendelanya di tengah, dan katakan begitu.
+      const w = Math.min(100, (target / aspect) * 100);
+      return { x: (100 - w) / 2, y: 0, w, h: 100,
+               label: 'Ikuti gerakan — jendela ini bergeser mengikuti tokoh' };
+    }
     if (frameMode === 'smart' && reframe?.available && reframe.source_w) {
       return {
         x: 0, y: 0, w: (reframe.crop_w / reframe.source_w) * 100, h: 100,
@@ -232,7 +294,7 @@ export default function FrameStage({
       };
     }
     return null;
-  }, [frameMode, aspectRatio, aspect, reframe]);
+  }, [frameMode, aspectRatio, aspect, reframe, boxRect, layout]);
 
   return (
     /* Pelatnya MEMELUK videonya.
@@ -278,7 +340,9 @@ export default function FrameStage({
         <div className="frame-stage-tag">
           <b>Video sumber</b>
           <span>
-            {frameMode === 'layout'
+            {frameMode === 'gaming'
+              ? 'wajah pemain di atas, permainan utuh di bawah — dicari otomatis'
+              : frameMode === 'layout'
               ? `${layout?.frames?.length ?? 0} bingkai — seret kotaknya`
               : frameMode === 'original' ? 'dipakai utuh, tanpa dipotong'
                 : frameMode === 'blur' ? 'muat seluruhnya, sisi diisi versi kabur'
@@ -334,8 +398,45 @@ export default function FrameStage({
               </button>
             ))}
 
-          {/* Mode tetap: satu kotak, tidak bisa diseret. */}
-          {!editable && staticCrop && (
+          {/* Main game: kedua bidangnya digambar, tapi tidak bisa diseret —
+              letaknya memang dicari sistem, bukan disusun pengguna. */}
+          {frameMode === 'gaming' && (layout?.frames ?? []).map((f, i) => (
+            <div key={`g${i}`} className="frame-rect is-locked"
+                 style={{
+                   left: `${f.src.x}%`, top: `${f.src.y}%`,
+                   width: `${f.src.w}%`, height: `${f.src.h}%`,
+                   borderColor: frameInk(i),
+                 }}>
+              <span className="frame-rect-tag" style={{ background: frameInk(i) }}>
+                {i === 0 ? 'Permainan' : 'Reaksi'}
+              </span>
+            </div>
+          ))}
+
+          {/* Kotak tetap: bisa diseret dan diubah ukurannya, sama seperti
+              bingkai susun-sendiri. */}
+          {bisaSeretKotak && (
+            <div className="frame-rect is-on"
+                 onPointerDown={seretKotak(null)}
+                 style={{
+                   left: `${boxRect.x}%`, top: `${boxRect.y}%`,
+                   width: `${boxRect.w}%`, height: `${boxRect.h}%`,
+                   borderColor: 'var(--hl)', cursor: drag ? 'grabbing' : 'grab',
+                   zIndex: 3,
+                 }}>
+              <span className="frame-rect-tag" style={{ background: 'var(--hl)', color: '#1A1400' }}>
+                Kotak tetap · seret untuk memindahkan
+              </span>
+              {['nw', 'ne', 'sw', 'se'].map((h) => (
+                <span key={h} className={`frame-grip grip-${h}`}
+                      style={{ borderColor: 'var(--hl)' }}
+                      onPointerDown={seretKotak(h)} />
+              ))}
+            </div>
+          )}
+
+          {/* Mode tetap lainnya: satu kotak, tidak bisa diseret. */}
+          {!editable && !bisaSeretKotak && staticCrop && (
             <div ref={staticCrop.moving ? cropRef : null} className="frame-rect is-locked"
                  style={{
                    left: `${staticCrop.x}%`, top: `${staticCrop.y}%`,
@@ -361,7 +462,16 @@ export default function FrameStage({
                      left: `${f.src.x}%`, top: `${f.src.y}%`,
                      width: `${f.src.w}%`, height: `${f.src.h}%`,
                      borderColor: ink, cursor: drag ? 'grabbing' : 'grab',
-                     zIndex: on ? 3 : 2,
+                     // Bingkai yang lebih KECIL berada di atas.
+                     //
+                     // Dengan urutan daftar, bingkai yang menutupi seluruh
+                     // gambar tergambar di atas bingkai kecil di dalamnya, dan
+                     // bingkai kecil itu jadi tidak bisa disentuh sama sekali —
+                     // setiap klik mengenai yang besar. Yang dipilih orang
+                     // hampir selalu yang lebih kecil, karena yang besar bisa
+                     // diraih di mana saja di luar yang kecil.
+                     zIndex: on ? 40 : 10 + Math.round(
+                       100 - (f.src.w * f.src.h) / 100),
                    }}>
                 <span className="frame-rect-tag" style={{ background: ink }}>
                   {i + 1}. {f.label}{f.follow ? ' · mengikuti' : ''}

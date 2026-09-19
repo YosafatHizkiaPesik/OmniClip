@@ -246,6 +246,16 @@ MIGRATIONS: list[str] = [
     CREATE INDEX idx_uploads_clip ON uploads(clip_name);
     CREATE INDEX idx_uploads_created ON uploads(created_at DESC);
     """,
+    # --- terjemahan subtitle: disimpan supaya kuota tidak terbakar dua kali ---
+    """
+    CREATE TABLE terjemahan (
+      sidik       TEXT NOT NULL,
+      bahasa      TEXT NOT NULL,
+      teks        TEXT NOT NULL,
+      created_at  REAL NOT NULL,
+      PRIMARY KEY (sidik, bahasa)
+    );
+    """,
 ]
 
 

@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import {
   KeyRound, Loader2, Sun, Moon, Eye, EyeOff, Info,
-  CheckCircle2, AlertTriangle, Cookie, Sparkles, Scissors, Mic,
-  Trash2,
+  CheckCircle2, AlertTriangle, Sparkles, Scissors, Mic,
+  Trash2, Languages,
 } from 'lucide-react';
 import { apiDelete, apiGet, apiPost } from '../lib/api';
 import GoogleAccountCard from './GoogleAccountCard';
 import SecurityCard from './SecurityCard';
 import StorageCard from './StorageCard';
+import CookiesCard from './CookiesCard';
 import UpdateCard from './UpdateCard';
 
 // Bagian pada satu lembar bergaris, bukan kartu di atas kartu. Tumpukan kartu
@@ -45,6 +46,7 @@ export default function ProfileTab() {
   // Model AI yang dipakai untuk memilih klip. Disimpan di browser dan dikirim
   // bersama setiap permintaan auto-clip.
   const [models, setModels] = useState(null);
+  const [modelInfo, setModelInfo] = useState({ terkuat: null, tanpaKuota: [] });
   const [model, setModel] = useState(() => localStorage.getItem('omniclip_gemini_model') || '');
   const [deletingKey, setDeletingKey] = useState(false);
   // Versi datang dari backend: satu sumber, bukan angka yang ditulis ulang
@@ -54,12 +56,46 @@ export default function ProfileTab() {
   // Preferensi pengklipan. Dulu tinggal di halaman tonton, yang membuat layar
   // itu penuh pilihan yang harus dibaca ulang setiap membuka video padahal
   // jarang diubah.
-  const [clipLength, setClipLength] = useState(
-    () => localStorage.getItem('omniclip_clip_length') || 'medium');
   const [maxClips, setMaxClips] = useState(
     () => Number(localStorage.getItem('omniclip_max_clips') || 0));
   const [whisperModel, setWhisperModel] = useState(
     () => localStorage.getItem('omniclip_whisper_model') || 'base');
+
+  // Bahasa subtitle. Tinggal di SERVER, bukan di localStorage: yang memakainya
+  // adalah pengambil caption di backend, dan pilihan yang cuma ada di peramban
+  // tidak akan pernah sampai ke sana.
+  const [langs, setLangs] = useState([]);
+  const [bahasaUmum, setBahasaUmum] = useState(null);
+  const [langDraft, setLangDraft] = useState('');
+  const [langError, setLangError] = useState(null);
+
+  useEffect(() => {
+    apiGet('/settings/languages')
+      .then((r) => { setLangs(r.langs || []); setBahasaUmum(r.common || []); })
+      .catch((e) => setLangError(e.message));
+  }, []);
+
+  const simpanLangs = async (next) => {
+    setLangError(null);
+    try {
+      const r = await apiPost('/settings/languages', { langs: next });
+      setLangs(r.langs || []);
+    } catch (e) {
+      setLangError(e.message);
+    }
+  };
+
+  // Klik menambah ke AKHIR daftar, bukan menyisipkan di tempat acak: urutannya
+  // adalah urutan pilihan, dan itu harus terbaca dari urutan menekannya.
+  const toggleLang = (code) => simpanLangs(
+    langs.includes(code) ? langs.filter((x) => x !== code) : [...langs, code]);
+
+  const tambahLang = () => {
+    const kode = langDraft.trim();
+    if (!kode) return;
+    setLangDraft('');
+    if (!langs.includes(kode)) simpanLangs([...langs, kode]);
+  };
 
   const loadSettings = async () => {
     try {
@@ -91,16 +127,14 @@ export default function ProfileTab() {
   useEffect(() => {
     apiGet('/settings/models')
       .then((res) => {
-        setModels(res.available || []);
+        // Hanya model yang layak memilih klip, dari yang terkuat. Agen, Gemma,
+        // dan varian lite ikut terdaftar di kunci tapi tidak cocok untuk ini.
+        setModels(res.cocok?.length ? res.cocok : (res.available || []));
+        setModelInfo({ terkuat: res.terkuat || null, tanpaKuota: res.tanpa_kuota || [] });
         if (res.error) setModelsError(res.error);
       })
       .catch((err) => setModelsError(err.message));
   }, []);
-
-  const chooseClipLength = (v) => {
-    setClipLength(v);
-    localStorage.setItem('omniclip_clip_length', v);
-  };
 
   const chooseMaxClips = (v) => {
     setMaxClips(v);
@@ -259,43 +293,6 @@ export default function ProfileTab() {
         </p>
       </div>
 
-      {/* --- Preferensi klip --- */}
-      <div style={card}>
-        <div style={sectionTitle}>
-          <Scissors size={18} style={{ color: 'var(--reh)' }} />
-          Panjang klip
-        </div>
-        <p style={helpText}>
-          Batas durasi yang dicari saat menyusun klip otomatis. Batas atas inilah
-          yang menentukan apakah sebuah pembahasan tertangkap utuh atau hanya
-          bagian pembukanya.
-        </p>
-        <div style={{ display: 'grid', gap: '8px', marginTop: '13px' }}>
-          {[
-            ['short', 'Pendek', '15–40 detik', 'Untuk potongan singkat yang langsung ke inti.'],
-            ['medium', 'Sedang', '20–60 detik', 'Pilihan aman untuk kebanyakan konten.'],
-            ['long', 'Panjang', '35–110 detik', 'Menangkap pembahasan utuh: pertanyaan beserta jawabannya.'],
-          ].map(([v, title, range, hint]) => (
-            <button key={v} onClick={() => chooseClipLength(v)} style={{
-              textAlign: 'left', padding: '11px 13px', cursor: 'pointer',
-              borderRadius: 'var(--radius-md)',
-              border: clipLength === v ? '2px solid var(--accent-cyan)' : '1px solid var(--border-color)',
-              background: clipLength === v ? 'var(--hl-wash)' : 'transparent',
-            }}>
-              <div style={{
-                fontSize: '0.88rem', fontWeight: 800, marginBottom: '3px',
-                color: clipLength === v ? 'var(--accent-cyan)' : 'var(--text-primary)',
-              }}>
-                {title} <span style={{ fontWeight: 600, color: 'var(--text-muted)' }}>{range}</span>
-              </div>
-              <div style={{ fontSize: '0.76rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                {hint}
-              </div>
-            </button>
-          ))}
-        </div>
-      </div>
-
       {/* --- Ketelitian transkrip --- */}
       <div style={card}>
         <div style={sectionTitle}>
@@ -329,6 +326,68 @@ export default function ProfileTab() {
         </div>
       </div>
 
+      {/* --- Bahasa subtitle --- */}
+      <div style={card}>
+        <div style={sectionTitle}>
+          <Languages size={18} style={{ color: 'var(--reh)' }} />
+          Bahasa subtitle
+        </div>
+        <p style={helpText}>
+          Urutan bahasa yang <strong>dicoba lebih dulu</strong> saat mengambil
+          subtitle dari YouTube. Ini bukan batas: kalau video tidak punya satu pun
+          bahasa di sini, sistem tetap memakai bahasa yang benar-benar ada di video
+          itu. Untuk video tanpa subtitle sama sekali, bahasanya dikenali sendiri
+          dari suaranya.
+        </p>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '13px' }}>
+          {(bahasaUmum ?? []).map(({ code, label: nama }) => {
+            const urutan = langs.indexOf(code);
+            const on = urutan >= 0;
+            return (
+              <button key={code} onClick={() => toggleLang(code)} style={{
+                display: 'inline-flex', alignItems: 'center', gap: '6px',
+                padding: '7px 11px', fontSize: '0.76rem', fontWeight: 700,
+                cursor: 'pointer', borderRadius: 'var(--radius-sm)',
+                border: on ? '2px solid var(--accent-cyan)' : '1px solid var(--border-color)',
+                background: on ? 'var(--hl-wash)' : 'transparent',
+                color: on ? 'var(--accent-cyan)' : 'var(--text-secondary)',
+              }}>
+                {on && (
+                  <span style={{
+                    minWidth: '17px', height: '17px', borderRadius: '50%',
+                    background: 'var(--accent-cyan)', color: '#04121a',
+                    fontSize: '0.66rem', fontWeight: 900,
+                    display: 'grid', placeItems: 'center',
+                  }}>{urutan + 1}</span>
+                )}
+                {nama}
+              </button>
+            );
+          })}
+        </div>
+        <div style={{ display: 'flex', gap: '7px', marginTop: '11px', flexWrap: 'wrap' }}>
+          <input value={langDraft} onChange={(e) => setLangDraft(e.target.value)}
+                 placeholder="Kode lain, mis. pt-BR"
+                 onKeyDown={(e) => { if (e.key === 'Enter') tambahLang(); }}
+                 style={{
+                   flex: '1 1 150px', padding: '8px 10px', fontSize: '0.78rem',
+                   fontFamily: 'inherit', borderRadius: 'var(--radius-sm)',
+                   border: '1px solid var(--border-color)', background: 'transparent',
+                   color: 'var(--text-primary)',
+                 }} />
+          <button onClick={tambahLang} className="btn-secondary"
+                  style={{ fontSize: '0.78rem' }}>Tambah</button>
+          <button onClick={() => simpanLangs([])} className="btn-secondary"
+                  style={{ fontSize: '0.78rem' }}>Kembalikan bawaan</button>
+        </div>
+        {langError && (
+          <p style={{ fontSize: '0.75rem', color: 'var(--danger)', margin: '9px 0 0' }}>{langError}</p>
+        )}
+        <p style={{ ...helpText, marginTop: '11px' }}>
+          Urutan sekarang: <strong>{langs.join(' → ') || 'bawaan'}</strong>
+        </p>
+      </div>
+
       {/* --- Model AI --- */}
       <div style={card}>
         <div style={sectionTitle}>
@@ -357,13 +416,21 @@ export default function ProfileTab() {
                       border: '1px solid var(--border-color)',
                       background: 'var(--bg-glass)', color: 'var(--text-primary)',
                     }}>
-              <option value="">Otomatis (coba berurutan dari yang tercepat)</option>
-              {models.map((m) => <option key={m} value={m}>{m}</option>)}
+              <option value="">
+                Otomatis — model terkuat yang tersedia{modelInfo.terkuat ? ` (sekarang ${modelInfo.terkuat})` : ''}
+              </option>
+              {models.map((m) => (
+                <option key={m} value={m} disabled={modelInfo.tanpaKuota.includes(m)}>
+                  {m}{modelInfo.tanpaKuota.includes(m) ? ' — tidak tersedia untuk kunci ini' : ''}
+                </option>
+              ))}
             </select>
             <p style={{ ...helpText, marginTop: '10px' }}>
-              {models.length} model tersedia untuk API key ini. Untuk podcast panjang
-              yang pembahasannya berlapis, model <strong>pro</strong> memberi
-              pemilihan yang jauh lebih nyambung daripada <strong>flash</strong>.
+              Urut dari yang terkuat. <strong>Otomatis</strong> mencoba yang teratas
+              lebih dulu, dan pindah ke berikutnya bila model itu sedang sibuk atau
+              tidak termasuk kuota kunci Anda. Model <strong>pro</strong> tidak
+              termasuk kuota gratis Gemini; ia terpakai sendiri begitu kunci Anda
+              mendapat aksesnya.
             </p>
           </>
         )}
@@ -483,29 +550,7 @@ export default function ProfileTab() {
         )}
       </div>
 
-      {/* --- Cookies YouTube --- */}
-      <div style={card}>
-        <div style={sectionTitle}>
-          <Cookie size={18} style={{ color: 'var(--reh)' }} />
-          Cookies YouTube
-        </div>
-        <p style={helpText}>
-          Kalau YouTube menolak unduhan dengan pesan <em>&ldquo;Sign in to confirm you&rsquo;re not a bot&rdquo;</em>{' '}
-          atau HTTP 403, ekspor cookies dari browser ke sebuah file, lalu jalankan backend
-          dengan variabel <code>OMNICLIP_COOKIES_FILE=/path/ke/cookies.txt</code>.
-          Langkah pertama yang lebih sering menyelesaikan masalah:{' '}
-          <code>pip install -U yt-dlp</code> di venv backend.
-        </p>
-        {settings && (
-          <div style={{ ...helpText, marginTop: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            {settings.cookies_file_set ? (
-              <><CheckCircle2 size={15} style={{ color: 'var(--entry)' }} /> File cookies terpasang.</>
-            ) : (
-              <><Info size={15} style={{ color: 'var(--text-muted)' }} /> Belum dipakai (tidak wajib).</>
-            )}
-          </div>
-        )}
-      </div>
+      <CookiesCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
 
       <UpdateCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
 

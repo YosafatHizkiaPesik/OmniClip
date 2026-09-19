@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft, Menu, X, Scissors, Type, Palette, Download, Loader2, CheckCircle2,
-  AlertTriangle, Crop, Plus, Trash2, Play, Save, Tag, Undo2, Redo2,
+  AlertTriangle, Crop, Plus, Trash2, Play, Save, Tag, Undo2, Redo2, Clapperboard, RefreshCw,
 } from 'lucide-react';
 import { apiGet, apiPost, downloadToDisk } from '../../lib/api';
 import { loadFonts } from '../../lib/fonts';
@@ -14,6 +14,9 @@ import FrameStage from './FrameStage';
 import ClipTimeline from './ClipTimeline';
 import FramePanel from './FramePanel';
 import TitlePanel from './TitlePanel';
+import MediaPanel from './MediaPanel';
+import TerjemahPanel from './TerjemahPanel';
+import CariUlangDialog from './CariUlangDialog';
 import {
   loadFraming, saveFraming, serializeLayout, clipTimeFor, sourceTimeFor,
   personKeyAt, withPersonKey,
@@ -99,6 +102,8 @@ const TABS = [
   { id: 'style', label: 'Gaya', Icon: Palette },
   { id: 'frame', label: 'Bingkai', Icon: Crop },
   { id: 'title', label: 'Judul', Icon: Tag },
+  // Berkas dari luar video sumber, plus sutradara otomatis.
+  { id: 'media', label: 'Sisipan', Icon: Clapperboard },
 ];
 
 /**
@@ -114,6 +119,8 @@ export default function Editor({ project, onBack }) {
   const videoRef = useRef(null);
 
   const [data, setData] = useState(null);
+  // Dialog "Cari ulang klip": mesin/model lain tanpa mengunduh ulang.
+  const [cariUlang, setCariUlang] = useState(false);
   const [error, setError] = useState(null);
   const [peaks, setPeaks] = useState([]);
   // Dibuka pada baris lirik: itulah isi bidang pandang pertama yang
@@ -122,6 +129,8 @@ export default function Editor({ project, onBack }) {
   // memegang linimasa; panel yang berdiri terbuka sejak detik pertama memakan
   // sepertiga lebar untuk sesuatu yang belum tentu dibutuhkan.
   const [tab, setTab] = useState(null);
+  // Sisipan yang sedang dipegang — disorot bersamaan di linimasa dan panel.
+  const [sisipanTerpilih, setSisipanTerpilih] = useState(null);
   const [railOpen, setRailOpen] = useState(true);
   const [dockView, setDockView] = useState('clip');
 
@@ -215,6 +224,152 @@ export default function Editor({ project, onBack }) {
    * ditentukan per klip dan "orang 2" di klip lain belum tentu orang yang sama.
    */
   const personKeys = useMemo(() => selected?.person_keys ?? [], [selected]);
+
+  /**
+   * Linimasa pembingkaian klip ini. Disimpan bersama klipnya, bukan di tingkat
+   * proyek: cara membingkai yang benar ditentukan isi klipnya sendiri, dan dua
+   * klip dari video yang sama sering menuntut perlakuan yang berbeda.
+   */
+  const frameKeys = useMemo(() => selected?.frame_keys ?? [], [selected]);
+
+  /**
+   * Potongan lajur Bingkai tempat garis main sedang berada.
+   *
+   * Dipakai supaya PRATINJAU mengikuti linimasa, bukan hanya hasil render.
+   * Tanpa ini memilih "Kotak tetap" di linimasa tidak mengubah apa pun di
+   * layar — pratinjaunya tetap memperlihatkan bingkai yang mengikuti wajah,
+   * dan pilihannya terasa seperti tombol yang tidak tersambung ke mana-mana.
+   */
+  const kunciBingkaiAktif = useMemo(() => {
+    if (!selected || !frameKeys.length) return null;
+    const t = clipTimeFor(selected.segments, sourceTime);
+    let aktif = null;
+    for (const k of [...frameKeys].sort((a, b) => (a.t ?? 0) - (b.t ?? 0))) {
+      if ((k.t ?? 0) <= t + 1e-6) aktif = k;
+    }
+    return aktif;
+  }, [frameKeys, selected, sourceTime]);
+
+  // Mode yang benar-benar berlaku sekarang: linimasa menang atas mode tunggal,
+  // sama seperti aturan di server.
+  const frameModeEfektif = kunciBingkaiAktif?.mode || frameMode;
+
+
+  const setFrameKeys = useCallback((next) => {
+    if (!selected) return;
+    const value = typeof next === 'function' ? next(selected.frame_keys ?? []) : next;
+    editor.updateClip(selected.clip_id, { frame_keys: value });
+  }, [selected, editor]);
+
+  /**
+   * Satu pintu untuk mengganti cara membingkai, dipakai panel Bingkai maupun
+   * lajur linimasa.
+   *
+   * Sebelumnya keduanya menulis ke tempat yang berbeda — panel ke `frameMode`,
+   * lajur ke `frame_keys` — dan tidak ada yang membaca tulisan yang lain.
+   * Akibatnya persis seperti yang dilaporkan: memilih "Susun sendiri" di panel
+   * lalu menggambar dua bingkai, sementara lajurnya tetap menyala di "Wajah".
+   * Dua tempat yang menjawab pertanyaan yang sama harus punya satu jawaban.
+   */
+  const pilihCaraBingkai = useCallback((mode) => {
+    const kunci = selected?.frame_keys ?? [];
+    if (kunci.length >= 2) {
+      // Sudah ada linimasa: yang diganti adalah potongan tempat garis main
+      // berdiri. Mengganti seluruh klip di sini akan menghapus pekerjaan
+      // memotong yang sudah dilakukan.
+      const t = clipTimeFor(selected.segments, sourceTime);
+      let sasaran = kunci[0];
+      for (const k of [...kunci].sort((a, b) => (a.t ?? 0) - (b.t ?? 0))) {
+        if ((k.t ?? 0) <= t + 1e-6) sasaran = k;
+      }
+      setFrameKeys(kunci.map((k) => (k === sasaran
+        ? { ...k, mode, layout: mode === 'layout' ? (k.layout ?? layout) : k.layout }
+        : k)));
+    } else {
+      // Belum ada linimasa: satu cara untuk seluruh klip. Kunci sisa dibuang
+      // supaya lajurnya tidak menampilkan potongan yang tidak berarti apa-apa.
+      if (kunci.length) setFrameKeys([]);
+      // Berpindah dari "Main game" ke "Susun sendiri" MEWARISI kedua bingkai
+      // yang barusan dicari sistem. Tanpa ini keduanya hilang dan pengguna
+      // kembali ke satu bingkai kosong — padahal justru di sinilah susunan
+      // otomatis itu seharusnya bisa disesuaikan: geser sedikit, lalu pakai.
+      if (mode === 'layout' && frameModeEfektif === 'gaming' && layoutGamingRef.current) {
+        setLayout(layoutGamingRef.current);
+      }
+      setFrameMode(mode);
+    }
+  }, [selected, sourceTime, setFrameKeys, frameModeEfektif, setLayout]);
+
+  /**
+   * Susunan bingkai yang sedang berlaku.
+   *
+   * Tiap potongan waktu bisa punya susunannya sendiri — itulah yang membuat
+   * "reaksi + gameplay" di satu bagian dan "reaksi penuh" di bagian lain bisa
+   * hidup dalam satu klip. Selama linimasanya kosong, yang berlaku adalah
+   * susunan milik klip seperti sebelumnya.
+   */
+  const layoutEfektif = (kunciBingkaiAktif?.mode === 'layout' && kunciBingkaiAktif.layout)
+    ? kunciBingkaiAktif.layout
+    : layout;
+
+  /**
+   * Menulis balik kotak yang baru diseret ke kunci yang sedang berlaku.
+   *
+   * Harus berada SESUDAH `setFrameKeys`: ia masuk daftar kebergantungan
+   * useCallback, dan daftar itu dibaca saat render — bukan saat dipanggil.
+   */
+  const setKotakBingkai = useCallback((rect) => {
+    if (!kunciBingkaiAktif) return;
+    setFrameKeys((lama) => (lama ?? []).map((k) => (
+      Math.abs((k.t ?? 0) - (kunciBingkaiAktif.t ?? 0)) < 1e-6 ? { ...k, rect } : k
+    )));
+  }, [kunciBingkaiAktif, setFrameKeys]);
+
+  /**
+   * Susunan dua bidang untuk mode "Main game", dicari dari videonya sendiri.
+   *
+   * Mode gaming memang sudah otomatis saat merender — server mencari letak
+   * facecam-nya sendiri. Tapi sampai render selesai, pengguna tidak punya cara
+   * melihat apa yang akan terjadi, dan "otomatis tapi tak terlihat" sulit
+   * dibedakan dari "tidak bekerja". Susunannya diambil lebih awal supaya
+   * pratinjaunya benar sejak sebelum dirender.
+   */
+  const [layoutGaming, setLayoutGaming] = useState(null);
+  // Dibaca oleh `pilihCaraBingkai`, yang dideklarasikan lebih dulu. Lewat ref,
+  // bukan lewat daftar kebergantungan — itu yang dua kali membuat seluruh
+  // Studio gagal dirender karena dipakai sebelum dideklarasikan.
+  const layoutGamingRef = useRef(null);
+  const [gamingSibuk, setGamingSibuk] = useState(false);
+
+  useEffect(() => {
+    if (frameModeEfektif !== 'gaming' || !selected?.segments?.length) return undefined;
+    let batal = false;
+    setGamingSibuk(true);
+    apiPost('/clip-facecam', { video_id: videoId, segments: selected.segments })
+      .then((r) => {
+        if (batal) return;
+        setLayoutGaming(r?.layout ?? null);
+        layoutGamingRef.current = r?.layout ?? null;
+      })
+      .catch(() => { if (!batal) setLayoutGaming(null); })
+      .finally(() => { if (!batal) setGamingSibuk(false); });
+    return () => { batal = true; };
+  }, [frameModeEfektif, selected?.clip_id, videoId]);   // eslint-disable-line
+
+  // Susunan yang dipakai pratinjau: milik gaming saat modenya gaming.
+  const susunanTampil = frameModeEfektif === 'gaming' ? layoutGaming : layoutEfektif;
+
+  /** Menulis susunan bingkai ke potongan yang berlaku, atau ke klip. */
+  const setSusunanEfektif = useCallback((next) => {
+    if (kunciBingkaiAktif?.mode === 'layout') {
+      setFrameKeys((lama) => (lama ?? []).map((k) => (
+        Math.abs((k.t ?? 0) - (kunciBingkaiAktif.t ?? 0)) < 1e-6
+          ? { ...k, layout: next } : k
+      )));
+      return;
+    }
+    setLayout(next);
+  }, [kunciBingkaiAktif, setFrameKeys, setLayout]);
   const setPersonKeys = useCallback((next) => {
     if (!selected) return;
     const value = typeof next === 'function' ? next(selected.person_keys ?? []) : next;
@@ -342,7 +497,11 @@ export default function Editor({ project, onBack }) {
     [reframe, selected],
   );
 
-  const sceneKey = `${videoId}|${segmentKey}|${frameMode}|${frameMotion}|${aspectRatio}|${followKey}`;
+  // Yang dijejak mengikuti cara membingkai yang SEDANG berlaku, termasuk yang
+  // datang dari kunci di lajur Bingkai — kalau tidak, potongan "Gerak" di
+  // tengah klip ber-mode wajah akan dipratinjau dengan jejak wajah.
+  const subjekLacak = frameModeEfektif === 'motion' ? 'gerak' : 'wajah';
+  const sceneKey = `${videoId}|${segmentKey}|${frameMode}|${subjekLacak}|${frameMotion}|${aspectRatio}|${followKey}`;
   const sceneKeyRef = useRef(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { setSelectedLine(null); }, [segmentKey]);
@@ -352,10 +511,15 @@ export default function Editor({ project, onBack }) {
     // yang diminta mengikuti orang. Dulu ia hanya diambil di mode ikut-wajah,
     // jadi kotak pengikut di susunan sendiri diam saja di pratinjau meski
     // hasil rendernya bergerak.
-    const wantsTrack = frameMode === 'smart'
+    const wantsTrack = frameModeEfektif === 'smart' || frameModeEfektif === 'motion'
       || (frameMode === 'layout' && (layout?.frames ?? []).some((f) => f.follow));
     if (!videoId || !selected || !wantsTrack || aspectRatio === '16:9') {
       setReframe(null);
+      // Tanda sibuk WAJIB dimatikan di sini juga. Permintaan sebelumnya sudah
+      // dibatalkan oleh pembersih efek, jadi `.finally`-nya tidak akan pernah
+      // mematikannya — dan berpindah mode di tengah pelacakan membuat tanda
+      // "melacak…" menggantung selamanya. Itulah loading yang tidak selesai.
+      setReframeLoading(false);
       return undefined;
     }
     // Rencana klip SEBELUMNYA dibuang hanya bila yang berubah adalah KLIPNYA.
@@ -376,7 +540,8 @@ export default function Editor({ project, onBack }) {
       segments: selected.segments,
       aspect_ratio: aspectRatio,
       frame_motion: frameMotion,
-      person_keys: personKeys,
+      subjek: subjekLacak,
+      person_keys: subjekLacak === 'wajah' ? personKeys : [],
       // Label penutur ikut dikirim: dengan itu server bisa mencocokkan wajah
       // dengan suara, dan crop mengikuti orang yang sedang bicara.
       subtitles: (selected.subtitles ?? []).map((l) => ({
@@ -388,7 +553,7 @@ export default function Editor({ project, onBack }) {
       .finally(() => { if (!cancelled) setReframeLoading(false); });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [videoId, segmentKey, frameMode, aspectRatio, followKey, personKeys]);
+  }, [videoId, segmentKey, frameMode, subjekLacak, frameModeEfektif, aspectRatio, followKey, personKeys]);
 
   // Timecode dibaca dari elemen video pada ~10 Hz. `timeupdate` hanya menyala
   // sekitar 4 Hz dan angkanya terlihat tersendat; membacanya tiap frame dan
@@ -445,6 +610,54 @@ export default function Editor({ project, onBack }) {
     const v = videoRef.current;
     if (clip && v) v.currentTime = clip.segments[0].start;
   }, [clips, editor]);
+
+  /**
+   * Video selalu diparkir DI DALAM klip yang sedang dipilih.
+   *
+   * `selectClip` sudah melompat ke awal klip, tapi hanya saat klipnya diklik —
+   * bukan saat editor pertama terbuka, dan bukan saat `videoRef` belum terisi
+   * atau metadatanya belum termuat (menyetel `currentTime` pada elemen yang
+   * belum siap tidak melakukan apa-apa, tanpa galat).
+   *
+   * Akibatnya terlihat sebagai layar hitam dan dilaporkan begitu: pemutar
+   * berhenti di detik 0 SUMBER sementara klip yang dipilih mulai di menit 23.
+   * Pada video ini detik 0 kebetulan gelap — jadi yang tampil memang hampir
+   * hitam, dan tidak ada apa pun di layar yang menjelaskan kenapa.
+   */
+  useEffect(() => {
+    const v = videoRef.current;
+    const segs = selected?.segments;
+    if (!v || !segs?.length) return undefined;
+    const mulai = Number(segs[0].start) || 0;
+    const akhir = Number(segs[segs.length - 1].end) || mulai;
+    const parkir = () => {
+      const t = v.currentTime;
+      // Hanya dipindahkan bila memang berada DI LUAR klipnya: kalau tidak,
+      // setiap penyuntingan kecil akan menyentak pemutar kembali ke awal.
+      if (t < mulai - 0.5 || t > akhir + 0.5) {
+        try { v.currentTime = mulai; } catch { /* elemen belum siap */ }
+      }
+    };
+    parkir();
+    v.addEventListener('loadedmetadata', parkir);
+    v.addEventListener('loadeddata', parkir);
+    return () => {
+      v.removeEventListener('loadedmetadata', parkir);
+      v.removeEventListener('loadeddata', parkir);
+    };
+    // Cara membingkai DAN jumlah bidangnya ikut jadi pemicu, dan keduanya
+    // bukan kelebihan.
+    //
+    // Setiap kali susunan pratinjau berubah, elemen <video>-nya dibuat ulang
+    // dan yang baru lahir di detik 0 — detik 0 SUMBER, bukan awal klipnya.
+    // Terlacak langkah demi langkah: memilih klip yang mulai di 1126 detik
+    // memang memarkir semuanya di 1127, dan tetap begitu saat tab Bingkai
+    // dibuka maupun saat "Main game" ditekan; baru ketika deteksi facecam
+    // SELESAI dan bidang keduanya muncul, keempat elemen video serentak
+    // kembali ke 0. Pada video gelap itu terbaca sebagai dua kotak kosong.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.clip_id, videoRef, frameModeEfektif,
+      susunanTampil?.frames?.length ?? 0]);
 
   /** Detik keberapa di dalam klip yang sedang dipilih, dari playhead. */
   const clipNow = useCallback(() => (
@@ -735,11 +948,25 @@ export default function Editor({ project, onBack }) {
     frame_mode: frameMode,
     frame_motion: frameMotion,
     frame_layout: frameMode === 'layout' ? serializeLayout(layout) : null,
+    // Dua kunci atau lebih MENANG atas frame_mode di server. Dikirim apa adanya
+    // supaya aturan itu hanya hidup di satu tempat.
+    // Susunan tiap potongan ikut dikirim dalam bentuk yang sama dengan
+    // `frame_layout`, supaya server tidak perlu tahu dua bentuk yang berbeda.
+    frame_keys: (clip.frame_keys ?? []).map((k) => (
+      k.mode === 'layout' && k.layout
+        ? { ...k, layout: serializeLayout(k.layout) }
+        : k
+    )),
     // Tanda milik KLIP INI, bukan klip yang sedang dibuka: ekspor berjalan
     // atas semua huruf yang dicentang, dan memakai tanda klip terpilih untuk
     // semuanya akan mengarahkan bingkai empat belas klip lain ke orang yang
     // tidak pernah ditunjuk untuk mereka.
     person_keys: frameMode === 'smart' ? (clip.person_keys ?? []) : [],
+    // Sisipan milik klip INI. `id` hanya pengenal di editor; server tidak perlu.
+    media_layers: (clip.media_layers ?? []).map(({ id, ...l }) => l),
+    // Subtitle kedua milik klip ini. `sumber_sidik` hanya penanda usang di editor.
+    subtitle_kedua: clip.subtitle_kedua
+      ? (({ sumber_sidik, ...k }) => k)(clip.subtitle_kedua) : null,
     // Kartu judul dikirim hanya bila pengguna menyalakannya untuk klip INI.
     // Teks kosong berarti memakai judul klipnya sendiri — dua judul yang sama
     // adalah kasus paling sering, dan mengetiknya dua kali tidak masuk akal.
@@ -897,6 +1124,20 @@ export default function Editor({ project, onBack }) {
               Pintasannya sendiri sudah cukup bagi yang tahu pintasannya ada;
               tombolnya di sini untuk yang tidak. Judulnya menyebutkan
               pintasannya, jadi keduanya saling mengajarkan. */}
+          <button className="btn-secondary" onClick={() => setCariUlang(true)}
+                  title="Cari ulang rekomendasi klip, hook, dan judul — dengan Gemini atau mesin lokal, tanpa mengunduh ulang">
+            <RefreshCw size={14} />
+            Cari ulang
+          </button>
+          {cariUlang && (
+            <CariUlangDialog videoId={videoId} data={data} dirty={editor.dirty}
+                             onSimpanDulu={() => editor.saveClips()}
+                             onSelesai={(segar) => {
+                               setData(segar);
+                               editor.load(videoId, segar.clips || []);
+                             }}
+                             onTutup={() => setCariUlang(false)} />
+          )}
           <button className="btn-secondary" onClick={editor.undo}
                   disabled={!editor.canUndo}
                   title="Urungkan suntingan terakhir (Ctrl+Z)">
@@ -1010,18 +1251,21 @@ export default function Editor({ project, onBack }) {
           <div className="stage-row">
             <FrameStage src={data.local_url} videoRef={videoRef}
                         segments={selected?.segments ?? null}
-                        frameMode={frameMode} reframe={reframe} aspectRatio={aspectRatio}
-                        layout={layout} onLayoutChange={setLayout}
+                        frameMode={frameModeEfektif} reframe={reframe} aspectRatio={aspectRatio}
+                        boxRect={kunciBingkaiAktif?.rect ?? null}
+                        onBoxRectChange={setKotakBingkai}
+                        layout={susunanTampil} onLayoutChange={setSusunanEfektif}
                         selectedFrameId={selectedFrameId} onSelectFrame={setSelectedFrameId}
                         personKeys={personKeys} onLockPerson={aimPerson} />
 
             <div className="pit editor-pit">
               <ClipPreview src={data.local_url} clip={selected} aspectRatio={aspectRatio}
                            style={{ ...style, showHook }} videoRef={videoRef}
-                           constrained={constrained} frameMode={frameMode}
+                           constrained={constrained} frameMode={frameModeEfektif}
+                           boxRect={kunciBingkaiAktif?.rect ?? null}
                            reframe={reframe} reframeLoading={reframeLoading}
                            onStyleChange={patchStyle} onCardChange={patchCard}
-                           layout={layout} onLayoutChange={setLayout}
+                           layout={susunanTampil} onLayoutChange={setSusunanEfektif}
                            frameEditing={tab === 'frame'}
                            selectedFrameId={selectedFrameId}
                            onSelectFrame={setSelectedFrameId} />
@@ -1073,8 +1317,14 @@ export default function Editor({ project, onBack }) {
                 </>
               )}
               {tab === 'subtitle' && (
+                <TerjemahPanel clip={selected} videoId={videoId}
+                               styleUtama={style} onStyleUtama={setStyle}
+                               onChange={(next) => selected
+                                 && editor.updateClip(selected.clip_id, { subtitle_kedua: next })} />
+              )}
+              {tab === 'subtitle' && (
                 <SubtitlePanel clip={selected} onUpdate={editor.updateSubtitle}
-                               onRemove={editor.removeSubtitle} style={style}
+                               onRemove={editor.removeSubtitle} style={style} onStyle={setStyle}
                                selectedLine={selectedLine} onSelectLine={setSelectedLine}
                                onSeekLine={seekClip}
                                onAutoSpeakers={editor.autoSpeakers}
@@ -1097,18 +1347,32 @@ export default function Editor({ project, onBack }) {
                             onChange={(patch) => selected
                               && editor.updateClip(selected.clip_id, patch)} />
               )}
+              {tab === 'media' && (
+                <MediaPanel clip={selected} videoId={videoId} aspectRatio={aspectRatio}
+                            waktuSekarang={clipNow()}
+                            durasiKlip={(selected?.segments ?? []).reduce(
+                              (n, sg) => n + (sg.end - sg.start), 0)}
+                            onLayers={(next) => selected
+                              && editor.updateClip(selected.clip_id, { media_layers: next })}
+                            frameKeys={frameKeys} onFrameKeys={setFrameKeys}
+                            sorot={sisipanTerpilih} onSorot={setSisipanTerpilih} />
+              )}
               {tab === 'frame' && (
-                <FramePanel frameMode={frameMode} onFrameModeChange={setFrameMode}
+                <FramePanel frameMode={frameModeEfektif} onFrameModeChange={pilihCaraBingkai}
                             frameMotion={frameMotion}
                             onFrameMotionChange={setFrameMotion}
-                            layout={layout} onLayoutChange={setLayout}
+                            layout={susunanTampil} onLayoutChange={setSusunanEfektif}
                             selectedFrameId={selectedFrameId}
                             onSelectFrame={setSelectedFrameId}
                             faceTrackAvailable={!!reframe?.people?.length}
                             peopleCount={orangHadir.length}
                             aimedPerson={aimedPerson} onAimPerson={aimPerson}
                             keyCount={personKeys.length}
-                            onClearKeys={() => setPersonKeys([])} />
+                            onClearKeys={() => setPersonKeys([])}
+                            frameKeys={frameKeys} onFrameKeys={setFrameKeys}
+                            waktuSekarang={clipNow()}
+                            durasiKlip={(selected?.segments ?? []).reduce(
+                              (n, sg) => n + (sg.end - sg.start), 0)} />
               )}
             </div>
           </aside>
@@ -1230,6 +1494,13 @@ export default function Editor({ project, onBack }) {
           {dockView === 'clip' ? (
             <ClipTimeline clip={selected} reframe={reframe}
                           personKeys={personKeys} onPersonKeys={setPersonKeys}
+                          frameKeys={frameKeys} onFrameKeys={setFrameKeys}
+                          mediaLayers={selected?.media_layers ?? []}
+                          onMediaLayers={(next) => selected
+                            && editor.updateClip(selected.clip_id, { media_layers: next })}
+                          sisipanTerpilih={sisipanTerpilih}
+                          onPilihSisipan={(id) => { setSisipanTerpilih(id); setTab('media'); }}
+                          modeDasar={frameMode}
                           videoRef={videoRef} onSeekClip={seekClip}
                           onMoveSubtitle={(i, a, b) => selected
                             && editor.moveSubtitle(selected.clip_id, i, a, b)}

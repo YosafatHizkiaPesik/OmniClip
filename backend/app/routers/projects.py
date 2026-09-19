@@ -146,6 +146,13 @@ async def delete_project(video_id: str):
     return {"success": True, "video_id": vid, "jobs_dihapus": jobs_dihapus}
 
 
+# Hitungan gelombang yang sedang berjalan, per (video, bins). Permintaan kedua
+# untuk kunci yang sama MENUNGGU hitungan pertama alih-alih memulai sendiri:
+# terukur, membuka Studio sekali memicu dua pembacaan berkas 3 GB bersamaan di
+# cakram eksternal, dan keduanya jadi dua kali lebih lambat.
+_GELOMBANG_JALAN: dict = {}
+
+
 @router.get("/videos/{video_id}/waveform")
 async def waveform(video_id: str, bins: int = Query(1200, ge=100, le=4000)):
     """
@@ -166,10 +173,29 @@ async def waveform(video_id: str, bins: int = Query(1200, ge=100, le=4000)):
 
     from ..services.media import probe, waveform_peaks
 
-    info = await asyncio.to_thread(probe, source)
-    duration = float(info.get("duration") or 0)
-    peaks = await asyncio.to_thread(waveform_peaks, source, bins=bins, duration=duration)
-    if peaks:
-        await asyncio.to_thread(projects_repo.save_waveform, vid, bins, peaks, duration)
-    return {"video_id": vid, "bins": len(peaks), "peaks": peaks,
-            "duration": duration, "cached": False}
+    kunci = (vid, bins)
+    jalan = _GELOMBANG_JALAN.get(kunci)
+    if jalan is not None:
+        return await asyncio.shield(jalan)
+
+    async def hitung() -> dict:
+        info = await asyncio.to_thread(probe, source)
+        duration = float(info.get("duration") or 0)
+        # Audio yang sudah disimpan pipeline jauh lebih kecil daripada videonya.
+        from ..services import suara
+        asal = suara.tersimpan(source) or source
+        peaks = await asyncio.to_thread(waveform_peaks, asal, bins=bins, duration=duration)
+        if peaks:
+            await asyncio.to_thread(projects_repo.save_waveform, vid, bins, peaks, duration)
+        return {"video_id": vid, "bins": len(peaks), "peaks": peaks,
+                "duration": duration, "cached": False}
+
+    tugas = asyncio.ensure_future(hitung())
+    _GELOMBANG_JALAN[kunci] = tugas
+    try:
+        return await asyncio.shield(tugas)
+    finally:
+        if tugas.done():
+            _GELOMBANG_JALAN.pop(kunci, None)
+        else:
+            tugas.add_done_callback(lambda _t: _GELOMBANG_JALAN.pop(kunci, None))

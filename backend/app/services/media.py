@@ -1,6 +1,7 @@
 """Utilitas media berbasis ffmpeg: probe, ekstraksi audio, jejak energi, waveform."""
 
 import json
+from .proses import jalankan, popen
 import logging
 import math
 import re
@@ -50,7 +51,7 @@ def extract_audio_wav(src: str | Path, dest: str | Path, *, sample_rate: int = 1
            "-i", str(src), "-vn", "-ac", "1", "-ar", str(sample_rate),
            "-c:a", "pcm_s16le", str(dest)]
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
+        r = jalankan(cmd, timeout=1800)
         if r.returncode != 0:
             log.error("Ekstraksi audio gagal: %s", r.stderr[-400:])
             return False
@@ -71,14 +72,18 @@ def energy_track(src: str | Path, *, duration: float) -> list[float]:
     untuk mengenali bagian yang disampaikan dengan energi tinggi.
     """
     cmd = [
-        "ffmpeg", "-hide_banner", "-nostdin", "-loglevel", "error", "-i", str(src),
+        # `-vn` WAJIB. Tanpanya ffmpeg ikut mendekode seluruh VIDEONYA pada
+        # resolusi penuh hanya untuk dibuang — terukur 94,8 detik untuk dua
+        # menit rekaman 1440p, dan 3,1 detik dengan `-vn`. Pada video 108 menit
+        # itu beda antara satu setengah jam dan tiga menit "Mengukur energi
+        # bicara…".
+        "ffmpeg", "-hide_banner", "-nostdin", "-loglevel", "error", "-i", str(src), "-vn",
         "-af", "aresample=8000,asetnsamples=8000,astats=metadata=1:reset=1,"
                "ametadata=print:key=lavfi.astats.Overall.RMS_level:file=-",
         "-f", "null", "-",
     ]
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True,
-                           timeout=max(300, duration * 0.5))
+        r = jalankan(cmd, timeout=max(300, duration * 0.5))
     except subprocess.TimeoutExpired:
         log.warning("Analisis energi timeout; dilewati")
         return []
@@ -133,7 +138,7 @@ def waveform_peaks(src: str | Path, *, bins: int = 2000,
     acc_peak = 0
     acc_count = 0
 
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    proc = popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     try:
         while True:
             chunk = proc.stdout.read(1 << 20)  # 1 MB

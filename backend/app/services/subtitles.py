@@ -15,7 +15,7 @@ masalah escaping drawtext dan memberi word-wrap gratis.
 """
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Literal, Optional
 
 log = logging.getLogger("omniclip.subtitles")
@@ -46,14 +46,53 @@ class CaptionStyle:
     pos_x: float = 50.0
     box_w: float = 84.0
     uppercase: bool = True
+    # Subtitle bisa dimatikan sepenuhnya tanpa kehilangan gayanya.
+    #
+    # Ada klip yang memang lebih baik tanpa teks: musik, aksi, reaksi tanpa
+    # dialog. Sebelumnya satu-satunya cara adalah mengosongkan tiap baris satu
+    # per satu, yang menghapus pekerjaan penyuntingan dan tidak bisa dibatalkan.
+    # Saklar ini hanya menahan teksnya dari gambar; barisnya, waktunya, dan
+    # seluruh gayanya tetap tersimpan dan kembali utuh saat dinyalakan lagi.
+    #
+    # Tanda air dan teks hook TIDAK ikut mati — keduanya bukan subtitle, dan
+    # klip tanpa subtitle justru sering tetap membutuhkan hook-nya.
+    aktif: bool = True
+
     # karaoke_pop  : kata aktif berganti warna dan memantul (bawaan)
     # karaoke_wipe : kata aktif hanya berganti warna, tanpa memantul
     # fade         : baris masuk dengan pudar
     # slide_up     : baris naik dari bawah lalu diam
     # pop_in       : baris membesar dari kecil
+    # typewriter   : kata muncul satu per satu, barisnya tumbuh
     # block/none   : tanpa animasi apa pun
-    animation: Literal["karaoke_pop", "karaoke_wipe", "fade",
-                       "slide_up", "pop_in", "block", "none"] = "karaoke_pop"
+    animation: Literal["karaoke_pop", "karaoke_wipe", "fade", "slide_up",
+                       "pop_in", "typewriter", "block", "none"] = "karaoke_pop"
+
+    # Sorotan per kata, TERPISAH dari animasi masuk.
+    #
+    # Keduanya memang dua hal berbeda — satu mengatur cara BARIS masuk, satu
+    # lagi cara KATA disorot — dan gaya bersih ala Apple butuh yang pertama
+    # tanpa yang kedua: baris utuh memudar masuk, warnanya satu, tidak ada kata
+    # yang menyala. Tanpa saklar ini gaya itu mustahil dibuat, karena sorotan
+    # menyala pada setiap animasi kecuali "tanpa animasi" — dan "tanpa animasi"
+    # juga mematikan pudarnya.
+    highlight_words: bool = True
+
+    # --- Pelat di belakang teks ----------------------------------------------
+    #
+    # Alih-alih garis luar tebal, teks duduk di atas pelat gelap tembus pandang.
+    # Ini yang membedakan gaya bersih (Apple, subtitle film) dari gaya klip
+    # vertikal: garis luar tujuh piksel terbaca di atas latar apa pun tapi
+    # selalu terlihat "keras", sedangkan pelat terbaca sama baiknya dan terlihat
+    # tenang.
+    #
+    # Di ASS ini BorderStyle 3, yang memakai OutlineColour sebagai warna pelat
+    # dan Outline sebagai empuknya. Garis luar teks otomatis hilang di mode ini,
+    # dan itu memang yang diinginkan.
+    bg: bool = False
+    bg_color: str = "#000000"
+    bg_opacity: float = 0.55
+    bg_pad: int = 14
     # Warna per penutur, DIINDEKS LANGSUNG: speaker_colors[0] milik orang
     # pertama, [1] orang kedua, dan seterusnya. Versi sebelumnya melewati indeks
     # 0 dan memaksa orang pertama memakai `primary`, sehingga warnanya tidak
@@ -189,6 +228,7 @@ def _wrap(text: str, max_chars: int = 17) -> str:
 # animasi karaoke karena keduanya bisa dipakai bersamaan: baris boleh masuk
 # dengan pudar SEKALIGUS menyorot kata satu per satu.
 LINE_ENTRY = {"fade", "slide_up", "pop_in"}
+TANPA_ANIMASI = {"none", "block"}
 KARAOKE = {"karaoke_pop", "karaoke_wipe"}
 
 
@@ -285,6 +325,34 @@ def _lengkapi_warna(warna) -> tuple[str, ...]:
     return tuple(keluar)
 
 
+def gaya_dari_dict(d: dict) -> CaptionStyle:
+    """CaptionStyle dari dict klien; kunci yang tidak dikenal diabaikan."""
+    from dataclasses import fields
+    dikenal = {f.name for f in fields(CaptionStyle)}
+    bawaan = CaptionStyle(size=72, position="bottom", uppercase=False,
+                          animation="fade", highlight_words=False)
+    return replace(bawaan, **{k: v for k, v in (d or {}).items()
+                              if k in dikenal and v is not None})
+
+
+def _style_line(nama: str, st: CaptionStyle, lebar: int) -> str:
+    """Baris `Style:` ASS dari sebuah CaptionStyle — dipakai subtitle kedua."""
+    align = ALIGNMENT.get(st.position, 2)
+    half = max(4.0, min(100.0, st.box_w)) / 2.0
+    center = max(half, min(100.0 - half, st.pos_x))
+    ml = max(0, int(round((center - half) / 100.0 * lebar)))
+    mr = max(0, int(round((100.0 - center - half) / 100.0 * lebar)))
+    if st.bg:
+        bs, tebal, bayang = 3, st.bg_pad, 0
+        garis = hex_to_ass_alpha(st.bg_color, st.bg_opacity)
+    else:
+        bs, tebal, bayang = 1, st.outline_px, st.shadow_px
+        garis = "&H00000000"
+    return (f"Style: {nama},{st.font},{st.size},{hex_to_ass(st.primary)},&H000000FF,"
+            f"{garis},&H80000000,-1,0,0,0,100,100,0,0,{bs},{tebal},{bayang},"
+            f"{align},{ml},{mr},{st.margin_v},1")
+
+
 def build_ass(
     *,
     lines: list[dict],
@@ -293,6 +361,13 @@ def build_ass(
     watermark: str = "",
     play_res: tuple[int, int] = (1080, 1920),
     clip_duration: float = 0.0,
+    # Subtitle kedua — biasanya terjemahan: baris-baris dengan waktunya sendiri,
+    # dan gayanya sendiri. Lihat `_style_kedua`.
+    kedua_lines: Optional[list[dict]] = None,
+    kedua_style: Optional[CaptionStyle] = None,
+    # True = warna tiap baris terjemahan mengikuti warna orang yang sedang
+    # bicara, dengan palet subtitle utama.
+    kedua_ikut_orang: bool = False,
 ) -> str:
     """
     Menyusun file ASS lengkap.
@@ -320,6 +395,20 @@ def build_ass(
     margin_l = max(0, int(round((center - half) / 100.0 * w)))
     margin_r = max(0, int(round((100.0 - center - half) / 100.0 * w)))
 
+    # BorderStyle 3 menggambar OutlineColour sebagai PELAT di belakang teks,
+    # dengan Outline sebagai empuknya, dan menghilangkan garis luar huruf.
+    if st.bg:
+        border_style, garis_tebal, bayang = 3, st.bg_pad, 0
+        garis_warna = hex_to_ass_alpha(st.bg_color, st.bg_opacity)
+    else:
+        border_style, garis_tebal, bayang = 1, st.outline_px, st.shadow_px
+        garis_warna = "&H00000000"
+
+    gaya_kedua = ""
+    ada_kedua = bool(kedua_lines) and kedua_style is not None and kedua_style.aktif
+    if ada_kedua:
+        gaya_kedua = _style_line("Caption2", kedua_style, w) + "\n"
+
     head = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {w}
@@ -330,8 +419,8 @@ YCbCr Matrix: TV.709
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Caption,{st.font},{st.size},{primary},&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,{st.outline_px},{st.shadow_px},{align},{margin_l},{margin_r},{st.margin_v},1
-Style: Hook,{st.font},{hook.size if hook else 64},{hook_color},&H000000FF,&H00000000,&HB4000000,-1,0,0,0,100,100,0,0,3,0,0,8,100,100,150,1
+Style: Caption,{st.font},{st.size},{primary},&H000000FF,{garis_warna},&H80000000,-1,0,0,0,100,100,0,0,{border_style},{garis_tebal},{bayang},{align},{margin_l},{margin_r},{st.margin_v},1
+{gaya_kedua}Style: Hook,{st.font},{hook.size if hook else 64},{hook_color},&H000000FF,&H00000000,&HB4000000,-1,0,0,0,100,100,0,0,3,0,0,8,100,100,150,1
 Style: Mark,{wm_font},{st.wm_size},{wm_warna},&H000000FF,&H80000000,&H00000000,0,0,0,0,100,100,0,0,1,{st.wm_outline},0,5,0,0,0,1
 
 [Events]
@@ -355,7 +444,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         )
 
     # --- Caption ---------------------------------------------------------------
-    for line in lines:
+    # Saklar mati menahan TEKSNYA saja. Hook dan tanda air di atas sudah
+    # terlanjur ditulis, dan memang harus: klip tanpa subtitle sering justru
+    # yang paling butuh hook-nya.
+    for line in (lines if st.aktif else []):
         words = reconcile_words(line)
         raw_text = (line.get("text") or "").strip() or " ".join(w["w"] for w in words)
         if not raw_text:
@@ -380,7 +472,27 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         # alasan memilih salah satunya.
         #
         # Pantulan kata tetap khusus `karaoke_pop`, sama seperti di pratinjau.
-        if st.animation not in ("none", "block") and words:
+        # Kata muncul satu per satu dan barisnya tumbuh. Berbeda dari karaoke:
+        # di sini kata yang belum diucapkan belum ada di layar sama sekali,
+        # bukan sekadar belum berwarna.
+        if st.animation == "typewriter" and words:
+            for idx, word in enumerate(words):
+                mulai = word["s"]
+                selesai = words[idx + 1]["s"] if idx + 1 < len(words) else line["end"]
+                if selesai <= mulai:
+                    selesai = mulai + 0.08
+                tampil = words[:idx + 1]
+                teks = " ".join(
+                    escape_ass(w["w"].upper() if st.uppercase else w["w"])
+                    for w in tampil
+                )
+                events.append(
+                    f"Dialogue: 0,{_ts(mulai)},{_ts(selesai)},Caption,,0,0,0,,"
+                    f"{base_tag}{teks}"
+                )
+            continue
+
+        if st.highlight_words and st.animation not in TANPA_ANIMASI and words:
             bounce = st.animation == "karaoke_pop"
             masuk = _entry_tag(st.animation, play_res=play_res,
                                margin_v=st.margin_v, align=align,
@@ -420,6 +532,45 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 f"Dialogue: 0,{_ts(line['start'])},{_ts(line['end'])},Caption,,0,0,0,,"
                 f"{entry}{base_tag}{escape_ass(text)}"
             )
+
+    # --- Subtitle kedua ---------------------------------------------------------
+    # Baris utuh, tanpa sorotan per kata: urutan kata berubah antar bahasa, jadi
+    # tidak ada cara jujur menandai kapan sebuah kata terjemahan "diucapkan".
+    if ada_kedua:
+        st2 = kedua_style
+        # Penuturnya dibaca dari subtitle UTAMA pada titik tengah baris ini,
+        # bukan disimpan di baris terjemahan — deteksi ulang jumlah orang
+        # mengubah label subtitle utama, dan label lama akan salah warna.
+        ikut = kedua_ikut_orang and st.per_speaker_colors
+        penutur = []
+        if ikut:
+            for l in lines or []:
+                try:
+                    penutur.append((float(l["start"]), float(l["end"]),
+                                    int(l.get("speaker") or 0)))
+                except (KeyError, TypeError, ValueError):
+                    continue
+        for line in kedua_lines:
+            teks = (line.get("text") or "").strip()
+            if not teks:
+                continue
+            try:
+                a, b = float(line["start"]), float(line["end"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if b <= a:
+                continue
+            teks = teks.upper() if st2.uppercase else teks
+            masuk = rf"{{\fad({min(160, int((b - a) * 300))},0)}}" \
+                if st2.animation not in TANPA_ANIMASI else ""
+            warna = ""
+            if ikut:
+                tengah = (a + b) / 2.0
+                sp = next((p for s0, s1, p in penutur if s0 <= tengah < s1), 0)
+                if 0 <= sp < len(speaker_ass):
+                    warna = f"{{\\c{speaker_ass[sp]}}}"
+            events.append(f"Dialogue: 1,{_ts(a)},{_ts(b)},Caption2,,0,0,0,,"
+                          f"{masuk}{warna}{escape_ass(teks)}")
 
     # --- Watermark -------------------------------------------------------------
     if watermark.strip() and clip_duration > 0:

@@ -24,10 +24,11 @@ from typing import Any, Callable, Optional
 from dataclasses import replace
 
 from ..config import CLIPS_DIR, FONTS_DIR, LOGS_DIR
+from .proses import popen
 from .paths import extract_id_from_filename
 from .reframe import build_reframe_filter, plan_reframe
 from .paths import ffpath
-from .subtitles import CaptionStyle, HookSpec, build_ass
+from .subtitles import CaptionStyle, HookSpec, build_ass, gaya_dari_dict
 from . import titlecard as tc
 
 log = logging.getLogger("omniclip.render")
@@ -36,11 +37,31 @@ log = logging.getLogger("omniclip.render")
 # lalu `-ss` kecil sesudah `-i` (akurat ke frame).
 PREROLL = 5.0
 
+
+def kabur(w: int, h: int) -> str:
+    """
+    Latar kabur selebar kanvas, dikerjakan pada gambar seperempat ukuran.
+
+    Semula filter kaburnya bekerja langsung pada kanvas penuh 1080x1920
+    (boxblur 28, enam lintasan). Itu filter termahal di seluruh render:
+    terukur 0,2x waktu nyata — 18,8 detik untuk empat detik video — sebelum
+    satu piksel pun dikodekan. Tiap susunan gaming di linimasa bingkai
+    membayarnya sekali lagi, jadi klip gaming -> reaksi -> gaming tidak selesai
+    dalam lima menit dan tampak seperti macet.
+
+    Latar kabur memang tidak punya detail untuk dipertahankan. Dikecilkan
+    empat kali, dikaburkan, lalu dibesarkan lagi, hasilnya tidak bisa dibedakan
+    dari yang lama di samping-sampingan, dan waktunya 3,6 detik.
+    """
+    return (f"scale={max(2, w // 4)}:{max(2, h // 4)},boxblur=9:3,"
+            f"scale={w}:{h}")
+
+
 ASPECT_FILTERS = {
     "9:16": (
         "split[bgsrc][fgsrc];"
         "[bgsrc]scale=1080:1920:force_original_aspect_ratio=increase,"
-        "crop=1080:1920,boxblur=28:6[bg];"
+        "crop=1080:1920," + kabur(1080, 1920) + "[bg];"
         "[fgsrc]scale=1080:1920:force_original_aspect_ratio=decrease[fg];"
         "[bg][fg]overlay=(W-w)/2:(H-h)/2,setsar=1"
     ),
@@ -82,8 +103,8 @@ def _run_ffmpeg(cmd: list[str], *, duration: float,
     if timeout is None:
         timeout = max(240.0, duration * 20)
 
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                            text=True, bufsize=1)
+    proc = popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                 text=True, bufsize=1)
     deadline = time.time() + timeout
     cancelled = timed_out = False
 
@@ -148,8 +169,17 @@ def _build_segment_graph(segments: list[dict]) -> tuple[list[str], str, str]:
         # `-ss` melompat cepat ke keyframe terdekat, lalu trim memotong presisi.
         inputs += ["-ss", f"{start - pre:.3f}", "-t", f"{pre + dur:.3f}", "-i", "SRC"]
 
+        # `fps=30` LANGSUNG sesudah pemotongan, untuk semua mode:
+        #   - sumber 60 fps (rekaman game) membawa dua kali bingkai yang
+        #     dibutuhkan hasil 30 fps melewati setiap crop, scale, dan blur di
+        #     belakangnya — pada susunan gaming dan linimasa bingkai, itu
+        #     beberapa filter berat per bingkai yang separuhnya dibuang begitu
+        #     sampai ke pengode;
+        #   - celah di sumber yang berlubang (unduhan yang kehilangan potongan)
+        #     diisi bingkai terakhir, jadi gambar dan suara tetap sinkron.
         parts.append(
-            f"[{i}:v]trim=start={pre:.3f}:duration={dur:.3f},setpts=PTS-STARTPTS[v{i}]"
+            f"[{i}:v]trim=start={pre:.3f}:duration={dur:.3f},setpts=PTS-STARTPTS,"
+            f"fps=30[v{i}]"
         )
         parts.append(
             f"[{i}:a]atrim=start={pre:.3f}:duration={dur:.3f},asetpts=PTS-STARTPTS[a{i}]"
@@ -182,7 +212,7 @@ def _pct_rect(rect: dict, w: int, h: int) -> tuple[int, int, int, int]:
 
 def build_layout_graph(layout: dict, in_label: str, out_label: str, *,
                        src_w: int, src_h: int, out_w: int, out_h: int,
-                       plan=None, workdir=None) -> str:
+                       plan=None, workdir=None, awalan: str = "") -> str:
     """
     Menyusun beberapa potongan video sumber menjadi satu kanvas.
 
@@ -199,24 +229,32 @@ def build_layout_graph(layout: dict, in_label: str, out_label: str, *,
     if not frames:
         return ""
 
+    # `awalan` membuat setiap label di graf ini unik. Tanpanya, dua susunan
+    # dalam satu linimasa bingkai — gaming, reaksi, gaming lagi — memakai
+    # `[lsrc0]`, `[lbg]`, `[lo0]` yang SAMA dua kali. ffmpeg tidak menolaknya;
+    # ia menyambung grafnya silang dan macet. Terukur: klip 15 detik tidak
+    # selesai dalam 300 detik, dan pada klip yang lebih panjang gambarnya
+    # membeku selama potongan reaksinya.
+    L = lambda nama: f"[{awalan}{nama}]"
+
     parts: list[str] = []
     n = len(frames)
     # Satu cabang per bingkai, plus satu untuk latar.
-    parts.append(f"{in_label}split={n + 1}" + "".join(f"[lsrc{i}]" for i in range(n + 1)))
+    parts.append(f"{in_label}split={n + 1}" + "".join(f"{L(f'lsrc{i}')}" for i in range(n + 1)))
 
-    bg = "[lbg]"
+    bg = L('lbg')
     if layout.get("background") == "black":
         # Sumber latar tetap dipakai supaya panjang dan laju frame-nya persis
         # sama dengan bingkainya; `drawbox` mengecatnya hitam penuh.
         parts.append(
-            f"[lsrc{n}]scale={out_w}:{out_h}:force_original_aspect_ratio=increase,"
+            f"{L(f'lsrc{n}')}scale={out_w}:{out_h}:force_original_aspect_ratio=increase,"
             f"crop={out_w}:{out_h},drawbox=x=0:y=0:w={out_w}:h={out_h}:color=black:t=fill,"
-            f"setsar=1[lbg]"
+            f"setsar=1{L('lbg')}"
         )
     else:
         parts.append(
-            f"[lsrc{n}]scale={out_w}:{out_h}:force_original_aspect_ratio=increase,"
-            f"crop={out_w}:{out_h},boxblur=28:6,setsar=1[lbg]"
+            f"{L(f'lsrc{n}')}scale={out_w}:{out_h}:force_original_aspect_ratio=increase,"
+            f"crop={out_w}:{out_h},{kabur(out_w, out_h)},setsar=1{L('lbg')}"
         )
 
     for i, f in enumerate(frames):
@@ -243,20 +281,20 @@ def build_layout_graph(layout: dict, in_label: str, out_label: str, *,
             src_rect = f.get("src") or {}
             centre_pct = float(src_rect.get("x", 0)) + float(src_rect.get("w", 100)) / 2
             crop = build_reframe_filter(
-                plan, workdir / f"reframe_{i}.cmd", out_w, out_h,
-                name=f"lf{i}", crop_w=sw, crop_h=sh, crop_y=sy,
+                plan, workdir / f"reframe_{awalan}{i}.cmd", out_w, out_h,
+                name=f"{awalan}lf{i}", crop_w=sw, crop_h=sh, crop_y=sy,
                 person=plan.person_near(centre_pct), scale=False)
-            parts.append(f"[lsrc{i}]{crop},{place},setsar=1[lf{i}]")
+            parts.append(f"{L(f'lsrc{i}')}{crop},{place},setsar=1{L(f'lf{i}')}")
         else:
-            parts.append(f"[lsrc{i}]crop={sw}:{sh}:{sx}:{sy},{place},setsar=1[lf{i}]")
+            parts.append(f"{L(f'lsrc{i}')}crop={sw}:{sh}:{sx}:{sy},{place},setsar=1{L(f'lf{i}')}")
 
     # Ditumpuk berurutan: bingkai terakhir di daftar tergambar paling atas,
     # sama seperti urutan yang ditampilkan panelnya.
     prev = bg
     for i in range(n):
-        nxt = f"[lo{i}]" if i < n - 1 else out_label
+        nxt = f"{L(f'lo{i}')}" if i < n - 1 else out_label
         sx, sy, sw, sh = _pct_rect(frames[i].get("dst") or {}, out_w, out_h)
-        parts.append(f"{prev}[lf{i}]overlay={sx}:{sy}:shortest=0{nxt}")
+        parts.append(f"{prev}{L(f'lf{i}')}overlay={sx}:{sy}:shortest=0{nxt}")
         prev = nxt
 
     return ";".join(parts)
@@ -280,6 +318,416 @@ def slugify(text: str) -> str:
     cleaned = re.sub(r"[^A-Za-z0-9]+", "-", cleaned).strip("-")
     cleaned = re.sub(r"-{2,}", "-", cleaned)
     return cleaned[:SLUG_MAX].strip("-") or "klip"
+
+
+# --- Susunan klip gameplay -----------------------------------------------------
+#
+# Video orang bermain game tidak bisa dipotong seperti podcast. Memaksa
+# face-tracking ke sana menghasilkan crop yang meloncat mengejar wajah kecil di
+# pojok; menjatuhkannya ke bilah kabur justru membuang wajahnya sama sekali dan
+# menyisakan gambar permainan yang diperkecil di tengah. Keduanya membuang satu
+# dari dua hal yang membuat klip gameplay layak ditonton.
+#
+# Yang disusun di sini dua bidang: reaksi pemain di atas, permainannya di bawah.
+#
+# Permainan dipasang "contain" dan bukan "cover" — itu keputusan yang sengaja.
+# "Cover" akan memenuhi bidangnya tanpa bilah, tapi untuk bingkai 16:9 yang
+# dijadikan 9:16 itu berarti membuang sebagian besar lebarnya, dan di permainan
+# justru di pinggir layar itulah peta, darah, dan musuh berada. Yang diminta
+# adalah "gameplay yang jelas", dan jelas berarti UTUH.
+
+# Tinggi bidang wajah dalam persen kanvas. Sisanya milik permainan — TIDAK ada
+# sisa yang dibiarkan kosong.
+#
+# Versi pertama menyisakan 28% di bawah sebagai latar kabur supaya subtitle
+# punya tempat duduk. Hasilnya terlihat di layar dan salah: bidang permainannya
+# jadi kecil dengan lubang kosong besar di bawahnya, dan yang dilaporkan
+# pemiliknya adalah "tidak full klipnya". Subtitle memang lebih baik duduk di
+# atas gambar daripada di atas kekosongan.
+GAMING_WAJAH_TINGGI = 38.0
+
+
+def rasio_bidang_wajah(out_w: int, out_h: int) -> float:
+    """Lebar/tinggi bidang wajah di kanvas hasil."""
+    return out_w / max(1.0, out_h * GAMING_WAJAH_TINGGI / 100.0)
+
+
+def _petak_tanpa_facecam(facecam: dict) -> dict:
+    """
+    Bagian bingkai yang TIDAK memuat facecam, sebesar mungkin.
+
+    Ada karena wajah pemain muncul dua kali: sekali diperbesar di bidang atas,
+    sekali lagi kecil di dalam gambar permainan di bawahnya — persis seperti
+    yang terlihat di hasil render dan dilaporkan pemiliknya. Facecam selalu
+    menempel di salah satu sudut, jadi membuang satu jalur di sisinya selalu
+    menyisakan persegi utuh; yang dipilih adalah jalur yang menyisakan paling
+    banyak.
+    """
+    fx, fy = float(facecam["x"]), float(facecam["y"])
+    fw, fh = float(facecam["w"]), float(facecam["h"])
+    calon = [
+        {"x": 0.0, "y": 0.0, "w": 100.0, "h": fy},                  # di atasnya
+        {"x": 0.0, "y": fy + fh, "w": 100.0, "h": 100.0 - (fy + fh)},  # di bawahnya
+        {"x": 0.0, "y": 0.0, "w": fx, "h": 100.0},                  # di kirinya
+        {"x": fx + fw, "y": 0.0, "w": 100.0 - (fx + fw), "h": 100.0},  # di kanannya
+    ]
+    terbaik = max(calon, key=lambda r: max(0.0, r["w"]) * max(0.0, r["h"]))
+    # Kalau facecam-nya menutupi hampir seluruh bingkai, tidak ada sisa yang
+    # berarti: pakai bingkai penuh dan terima wajah yang muncul dua kali,
+    # karena memotongnya akan menyisakan seiris gambar yang tidak berguna.
+    if terbaik["w"] * terbaik["h"] < 1500.0:
+        return {"x": 0.0, "y": 0.0, "w": 100.0, "h": 100.0}
+    return terbaik
+
+
+def susun_layout_gaming(facecam: dict) -> dict:
+    """Kotak facecam -> susunan dua bidang yang dimengerti build_layout_graph."""
+    main = _petak_tanpa_facecam(facecam)
+    return {
+        "background": "blur",
+        "frames": [
+            # Permainan digambar lebih dulu supaya wajah berada di atasnya bila
+            # suatu saat keduanya bersinggungan.
+            #
+            # "cover", bukan "contain": bidangnya diisi penuh. Bilah kosong di
+            # sekeliling gambar permainan membuang ruang layar yang justru
+            # paling berharga di bingkai tegak, dan sisi yang terpotong jauh
+            # lebih sedikit daripada yang hilang lewat bilah.
+            {"src": main,
+             "dst": {"x": 0, "y": GAMING_WAJAH_TINGGI, "w": 100,
+                     "h": 100 - GAMING_WAJAH_TINGGI},
+             "fit": "cover"},
+            {"src": {k: facecam[k] for k in ("x", "y", "w", "h")},
+             "dst": {"x": 0, "y": 0, "w": 100, "h": GAMING_WAJAH_TINGGI},
+             "fit": "cover"},
+        ],
+    }
+
+
+# --- Bingkai yang berubah sepanjang klip ---------------------------------------
+#
+# Satu klip, beberapa cara membingkai, masing-masing berlaku di potongan waktu
+# sendiri. Ini menjawab dua hal yang sebelumnya tidak bisa dilakukan sama
+# sekali, dan keduanya datang dari kebutuhan yang sama:
+#
+#   Podcast bertiga — narasumber bicara, kamera mengikutinya; lalu ia melempar
+#   lelucon dan yang penting justru REAKSI dua orang lain. "Ikuti wajah" secara
+#   definisi hanya memberi satu wajah, jadi momen terbaiknya hilang.
+#
+#   Gameplay horor — adegan menegangkan butuh wajah DAN permainan berdampingan;
+#   begitu jumpscare-nya datang, yang ingin dilihat orang cuma wajahnya, penuh
+#   satu layar.
+#
+# Cara kerjanya: tiap kunci menghasilkan gambar 1080x1920 UTUH lewat cabangnya
+# sendiri, lalu semuanya ditumpuk dengan `enable=between(t,…)` sehingga persis
+# satu yang terlihat pada satu waktu.
+#
+# Kenapa bukan satu crop yang ukurannya digerakkan sendcmd — yang jauh lebih
+# murah: mengubah LEBAR crop di tengah aliran mengubah ukuran bingkai yang
+# masuk ke `scale`, dan itu memaksa ffmpeg menyusun ulang filter graph-nya di
+# tengah jalan. Menggerakkan posisi saja aman (itulah yang dipakai "ikuti
+# wajah"), mengganti ukuran tidak. Ongkos cara ini adalah tiap cabang tetap
+# dihitung walau sedang tidak terlihat — untuk dua sampai empat kunci, itu
+# harga yang jelas dan bisa diprediksi, bukan kegagalan yang muncul sesekali.
+
+# Pergantian dibulatkan ke batas ini supaya `between()` tidak pernah punya
+# celah maupun tumpang tindih yang terlihat.
+KUNCI_EPS = 0.001
+
+
+def _urut_kunci(keys: list, durasi: float) -> list[dict]:
+    """Membersihkan daftar kunci jadi potongan waktu yang berurutan dan utuh."""
+    bersih = []
+    for k in keys or []:
+        if not isinstance(k, dict):
+            continue
+        try:
+            t = max(0.0, float(k.get("t") or 0.0))
+        except (TypeError, ValueError):
+            continue
+        if t >= durasi:
+            continue
+        bersih.append({**k, "t": t})
+    if not bersih:
+        return []
+    bersih.sort(key=lambda k: k["t"])
+    # Kunci pertama selalu dimulai dari nol: potongan tanpa pembingkaian akan
+    # tampil sebagai latar kabur kosong, yang tidak pernah diinginkan siapa pun.
+    bersih[0]["t"] = 0.0
+    for i, k in enumerate(bersih):
+        k["akhir"] = bersih[i + 1]["t"] if i + 1 < len(bersih) else durasi
+    return [k for k in bersih if k["akhir"] - k["t"] > KUNCI_EPS]
+
+
+def _cabang_kunci(k: dict, i: int, masuk: str, keluar: str, *,
+                  src_w: int, src_h: int, out_w: int, out_h: int,
+                  aspect_ratio: str, plan, workdir, layout_gaming,
+                  plan_gerak=None) -> str:
+    """Satu kunci -> potongan graf yang menghasilkan kanvas penuh."""
+    mode = (k.get("mode") or "smart").lower()
+
+    if mode == "box" and k.get("rect"):
+        x, y, w, h = _pct_rect(k["rect"], src_w, src_h)
+        # `increase` lalu crop: kotak yang digambar pengguna jarang persis
+        # serasi dengan kanvasnya, dan meregangkan gambar jauh lebih buruk
+        # daripada memangkas beberapa piksel di sisinya.
+        return (f"{masuk}crop={w}:{h}:{x}:{y},"
+                f"scale={out_w}:{out_h}:force_original_aspect_ratio=increase,"
+                f"crop={out_w}:{out_h},setsar=1{keluar}")
+
+    if mode in ("gaming", "layout"):
+        tata = k.get("layout") or (layout_gaming if mode == "gaming" else None)
+        if tata and tata.get("frames"):
+            return build_layout_graph(tata, masuk, keluar, src_w=src_w, src_h=src_h,
+                                      out_w=out_w, out_h=out_h,
+                                      plan=plan, workdir=workdir, awalan=f"k{i}_")
+        mode = "smart"
+
+    if mode == "motion" and plan_gerak is not None and plan_gerak.usable:
+        from .reframe import build_reframe_filter
+        rantai = build_reframe_filter(
+            plan_gerak, workdir / f"gerak_kunci{i}.cmd", out_w, out_h, name=f"fg{i}")
+        return f"{masuk}{rantai},setsar=1{keluar}"
+
+    if mode == "smart" and plan is not None and plan.usable:
+        from .reframe import build_reframe_filter
+        orang = k.get("person")
+        rantai = build_reframe_filter(
+            plan, workdir / f"reframe_kunci{i}.cmd", out_w, out_h,
+            name=f"fk{i}", person=int(orang) if orang is not None else None)
+        return f"{masuk}{rantai},setsar=1{keluar}"
+
+    if mode == "center":
+        f = CENTER_FILTERS.get(aspect_ratio) or CENTER_FILTERS["9:16"]
+        return f"{masuk}{f}{keluar}"
+
+    # Sisanya, termasuk "smart"/"motion" yang rencananya tidak terpakai:
+    # bilah kabur.
+    f = ASPECT_FILTERS.get(aspect_ratio) or ASPECT_FILTERS["9:16"]
+    return f"{masuk}{f}{keluar}"
+
+
+def build_frame_keys_graph(keys: list, in_label: str, out_label: str, *,
+                           src_w: int, src_h: int, out_w: int, out_h: int,
+                           durasi: float, aspect_ratio: str = "9:16",
+                           plan=None, workdir=None,
+                           layout_gaming: Optional[dict] = None,
+                           plan_gerak=None) -> tuple[str, list]:
+    """
+    Graf untuk daftar kunci pembingkaian. Mengembalikan (graf, kunci_terpakai).
+
+    Graf kosong berarti tidak ada yang bisa disusun — pemanggil lalu kembali ke
+    jalur satu-mode seperti biasa.
+    """
+    dipakai = _urut_kunci(keys, durasi)
+    if len(dipakai) < 2:
+        # Satu kunci bukan linimasa, melainkan satu mode biasa. Ditolak di sini
+        # supaya tidak ada klip yang membayar ongkos cabang berganda percuma.
+        return "", dipakai
+
+    # Potongan-potongan DISAMBUNG, bukan ditumpuk.
+    #
+    # Versi sebelumnya menjalankan semua cara membingkai sekaligus lalu
+    # menumpuknya dengan `overlay` + `enable=between(...)` di atas latar kabur.
+    # Secara teori benar; dalam praktik `overlay` harus MENYINKRONKAN semua
+    # cabang, termasuk cabang yang baru punya bingkai di detik ke-21, dan pada
+    # klip 40 detik dengan kunci gaming -> reaksi -> gaming hasilnya kehilangan
+    # 3,8 detik bingkai tepat di potongan reaksinya: gambar membeku, video lebih
+    # pendek daripada audionya. Klip 10 detik dengan kunci yang sama lolos, jadi
+    # kesalahannya tidak terlihat di uji pendek.
+    #
+    # Di sini tiap potongan diproses di jendela waktunya sendiri lalu
+    # disambung dengan `concat`, yang membaca potongan satu per satu dan tidak
+    # menyinkronkan apa pun. Latar kabur yang tidak pernah terlihat juga tidak
+    # perlu dihitung lagi.
+    n = len(dipakai)
+    # `fps` di depan: laju bingkai tetap, dan CELAH di sumber diisi bingkai
+    # terakhir sebelum celahnya. Tanpa ini, sumber yang berlubang — unduhan
+    # yang kehilangan potongan — membuat potongan yang tersambung lebih pendek
+    # daripada jendelanya, dan video berakhir jauh sebelum audionya.
+    bagian = [f"{in_label}fps=30,split={n}" + "".join(f"[fsrc{i}]" for i in range(n))]
+    for i, k in enumerate(dipakai):
+        t0, t1 = k["t"], k["akhir"]
+        # `trim` TANPA mengatur ulang cap waktu: berkas perintah `sendcmd`
+        # (ikut wajah, ikut gerakan) memakai waktu KLIP, jadi cabangnya harus
+        # melihat waktu aslinya. Cap waktu baru dinolkan SESUDAH cabangnya,
+        # karena `concat` menyambung potongan yang masing-masing mulai dari nol.
+        bagian.append(f"[fsrc{i}]trim=start={t0:.3f}:end={t1:.3f}[fwin{i}]")
+        bagian.append(_cabang_kunci(
+            k, i, f"[fwin{i}]", f"[fk{i}]", src_w=src_w, src_h=src_h,
+            out_w=out_w, out_h=out_h, aspect_ratio=aspect_ratio,
+            plan=plan, workdir=workdir, layout_gaming=layout_gaming,
+            plan_gerak=plan_gerak))
+        # Semua potongan wajib seragam — ukuran, laju, format piksel — atau
+        # `concat` menolaknya.
+        bagian.append(f"[fk{i}]scale={out_w}:{out_h},setsar=1,format=yuv420p,"
+                      f"setpts=PTS-STARTPTS[fc{i}]")
+    bagian.append("".join(f"[fc{i}]" for i in range(n))
+                  + f"concat=n={n}:v=1:a=0{out_label}")
+    return ";".join(bagian), dipakai
+
+
+# --- Sisipan: media dari luar video sumber -------------------------------------
+#
+# Seluruh jalur render tadinya berangkat dari SATU berkas: tiap bidang, tiap
+# bingkai, adalah jendela ke dalam video yang sama. Sisipan adalah berkas KEDUA
+# dan seterusnya — cuplikan pertandingan di bawah orang yang membahasnya, logo,
+# musik latar, efek suara — masing-masing input ffmpeg sendiri yang ditempel
+# pada waktunya.
+#
+# Urutan penempelan dipilih dengan sengaja: gambar sisipan ditumpuk SESUDAH
+# pembingkaian dan SEBELUM subtitle. Sebelum pembingkaian, cuplikannya ikut
+# terpotong crop 9:16 dan kehilangan dua pertiga lebarnya; sesudah subtitle,
+# cuplikan layar penuh menutupi teksnya.
+
+# Petak tujuan per posisi, dalam pecahan kanvas: (x, y, lebar, tinggi).
+POSISI_SISIPAN = {
+    "penuh": (0.0, 0.0, 1.0, 1.0),
+    "atas": (0.0, 0.0, 1.0, 0.5),
+    "bawah": (0.0, 0.5, 1.0, 0.5),
+    "tengah": (0.0, 0.25, 1.0, 0.5),
+    # Gambar-dalam-gambar di pojok kanan atas, 16:9 selebar 46% kanvas.
+    "sudut": (0.50, 0.06, 0.46, None),
+}
+
+
+def _petak_sisipan(posisi: str, out_w: int, out_h: int) -> tuple[int, int, int, int]:
+    x, y, w, h = POSISI_SISIPAN.get(posisi) or POSISI_SISIPAN["penuh"]
+    pw = _even(out_w * w)
+    ph = _even(pw * 9 / 16) if h is None else _even(out_h * h)
+    return int(round(out_w * x)), int(round(out_h * y)), pw, ph
+
+
+def siapkan_sisipan(lapisan: Optional[list], durasi: float) -> list[dict]:
+    """Membersihkan daftar sisipan dan mencari berkasnya. Yang tak dikenal dibuang."""
+    from . import aset as aset_svc
+
+    keluar: list[dict] = []
+    for l in lapisan or []:
+        if not isinstance(l, dict):
+            continue
+        path = aset_svc.jalur(str(l.get("aset") or ""))
+        info = aset_svc.info(str(l.get("aset") or "")) if path else None
+        if path is None or info is None:
+            log.warning("Sisipan dilewati: aset %r tidak ditemukan", l.get("aset"))
+            continue
+        try:
+            t = max(0.0, float(l.get("t") or 0.0))
+            mulai = max(0.0, float(l.get("mulai_sumber") or 0.0))
+            vol = max(0.0, min(2.0, float(l.get("volume", 1.0))))
+        except (TypeError, ValueError):
+            continue
+        if t >= durasi:
+            continue
+        panjang_aset = float(info.get("durasi") or 0.0)
+        dur = l.get("dur")
+        dur = float(dur) if dur not in (None, "") else (
+            panjang_aset - mulai if panjang_aset > 0 else 4.0)
+        if info["jenis"] != "gambar" and panjang_aset > 0:
+            dur = min(dur, max(0.05, panjang_aset - mulai))
+        dur = min(dur, durasi - t)
+        if dur <= 0.05:
+            continue
+        keluar.append({
+            "path": path, "jenis": info["jenis"], "punya_suara": info.get("punya_suara"),
+            "t": t, "dur": dur, "mulai": mulai, "volume": vol,
+            "posisi": str(l.get("posisi") or "penuh"),
+            "redam": bool(l.get("redam", False)),
+        })
+    return keluar
+
+
+def build_sisipan_graph(lapisan: list[dict], vin: str, ain: str, *,
+                        input_awal: int, out_w: int, out_h: int
+                        ) -> tuple[list[str], str, str, str]:
+    """
+    (input tambahan, graf, label video, label audio).
+
+    Label yang dikembalikan sama dengan masukannya bila tidak ada yang perlu
+    dilakukan, jadi pemanggil tidak perlu memeriksa apa pun.
+    """
+    inputs: list[str] = []
+    bagian: list[str] = []
+    video = vin
+    suara: list[tuple[str, bool]] = []      # (label, diredam)
+    idx = input_awal
+
+    for i, l in enumerate(lapisan):
+        t0, dur = l["t"], l["dur"]
+        if l["jenis"] == "gambar":
+            inputs += ["-loop", "1", "-t", f"{dur:.3f}", "-i", str(l["path"])]
+        else:
+            inputs += ["-ss", f"{l['mulai']:.3f}", "-t", f"{dur:.3f}", "-i", str(l["path"])]
+
+        if l["jenis"] in ("video", "gambar"):
+            x, y, w, h = _petak_sisipan(l["posisi"], out_w, out_h)
+            # `setpts ... +t0/TB` menggeser cuplikannya ke waktunya di klip;
+            # tanpa itu overlay menempelkannya di detik nol, lalu `enable`
+            # menyembunyikannya — cuplikan yang "tidak muncul" padahal ada.
+            geser = f"setpts=PTS-STARTPTS+{t0:.3f}/TB"
+            if l["jenis"] == "gambar":
+                # Gambar DIMUAT utuh, bukan dipotong memenuhi petaknya: logo
+                # persegi di petak 16:9 kehilangan atas-bawahnya kalau dipotong.
+                # Transparansi PNG ikut dibawa (yuva420p), dan gambarnya
+                # ditaruh di tengah petak.
+                bagian.append(
+                    f"[{idx}:v]scale={w}:{h}:force_original_aspect_ratio=decrease,"
+                    f"setsar=1,format=yuva420p,{geser}[sv{i}]")
+                px = f"{x}+({w}-overlay_w)/2"
+                py = f"{y}+({h}-overlay_h)/2"
+            else:
+                bagian.append(
+                    f"[{idx}:v]scale={w}:{h}:force_original_aspect_ratio=increase,"
+                    f"crop={w}:{h},setsar=1,format=yuv420p,{geser}[sv{i}]")
+                px, py = str(x), str(y)
+            keluar = f"[svo{i}]"
+            bagian.append(
+                f"{video}[sv{i}]overlay=x={px}:y={py}:eof_action=pass:"
+                f"enable='between(t,{t0:.3f},{t0 + dur:.3f})'{keluar}")
+            video = keluar
+
+        if l["volume"] > 0 and (l["jenis"] == "audio" or l.get("punya_suara")):
+            ms = int(round(t0 * 1000))
+            bagian.append(
+                f"[{idx}:a]aresample=48000,aformat=channel_layouts=stereo,"
+                f"asetpts=PTS-STARTPTS,volume={l['volume']:.3f},"
+                f"adelay={ms}|{ms}[sa{i}]")
+            suara.append((f"[sa{i}]", l["redam"]))
+        idx += 1
+
+    audio = ain
+    if suara:
+        # Audio utama diseragamkan ke 48 kHz stereo SEBELUM dicampur.
+        #
+        # `loudnorm` diam-diam mengeluarkan 192 kHz. Dicampur langsung dengan
+        # sisipan 48 kHz, `amix` salah menghitung panjangnya dan memotong
+        # seluruh audio klip: terukur, klip 10 detik keluar dengan audio 7,1
+        # detik. Diseragamkan dulu, panjangnya kembali 10,0.
+        bagian.append(f"{ain}aresample=48000,aformat=channel_layouts=stereo[sutama0]")
+        utama = "[sutama0]"
+        diredam = [lab for lab, r in suara if r]
+        biasa = [lab for lab, r in suara if not r]
+        if diredam:
+            # Musik latar mengecil sendiri saat orang bicara. Tanpa ini pilihan
+            # volumenya selalu salah: cukup keras untuk terdengar di jeda
+            # berarti menutupi kalimat, cukup pelan untuk kalimat berarti
+            # hilang di jeda.
+            n = len(diredam)
+            bagian.append(f"{utama}asplit={n + 1}[sutama]"
+                          + "".join(f"[ssc{j}]" for j in range(n)))
+            utama = "[sutama]"
+            for j, lab in enumerate(diredam):
+                bagian.append(f"{lab}[ssc{j}]sidechaincompress="
+                              f"threshold=0.02:ratio=9:attack=15:release=450:makeup=1"
+                              f"[sd{j}]")
+                biasa.append(f"[sd{j}]")
+        semua = [utama] + biasa
+        bagian.append(
+            "".join(semua) + f"amix=inputs={len(semua)}:duration=first:normalize=0,"
+            "alimiter=limit=0.97[scampur]")
+        audio = "[scampur]"
+
+    return inputs, ";".join(bagian), video, audio
 
 
 def build_clip_filename(*, title: str, index: Optional[int], start: float,
@@ -328,6 +776,14 @@ def render_clip(
     # sinematik, yang memotong terasa seperti hasil editor.
     frame_motion: str = "smooth",
     frame_layout: Optional[dict] = None,
+    # Linimasa pembingkaian: [{t, mode, rect?, person?, layout?}] dalam waktu
+    # KLIP. Bila berisi dua kunci atau lebih, ia menang atas `frame_mode`.
+    frame_keys: Optional[list] = None,
+    # Sisipan: [{aset, t, dur?, mulai_sumber?, posisi?, volume?, redam?}] dalam
+    # waktu KLIP. Lihat build_sisipan_graph.
+    media_layers: Optional[list] = None,
+    # Subtitle kedua (biasanya terjemahan): {aktif, bahasa, lines, style}.
+    subtitle_kedua: Optional[dict] = None,
     lock_person: Optional[int] = None,
     # Tanda linimasa dari pengguna: [{t, person}] dalam waktu KLIP.
     person_keys: Optional[list] = None,
@@ -411,7 +867,92 @@ def render_clip(
             if l.get("speaker") is not None and l.get("end") is not None
         ]
 
-        if frame_mode == "layout" and frame_layout and frame_layout.get("frames"):
+        # Mode gaming: susunannya TIDAK digambar pengguna melainkan diturunkan
+        # dari videonya sendiri, lalu dijalankan lewat jalur susunan yang sama.
+        # Linimasa pembingkaian diperiksa lebih dulu: ia menggantikan seluruh
+        # percabangan mode tunggal di bawahnya.
+        kunci_graf = ""
+        kunci_dipakai: list = []
+        # Satu kunci tetap sebuah keputusan: "seluruh klip ini dibingkai
+        # begini". Dulu ia diabaikan dan render kembali ke mode dasar — jadi
+        # usulan sutradara "gaming untuk seluruh klip" dirender sebagai ikuti
+        # wajah tanpa satu pun tanda. Digandakan di tengah klip, ia melewati
+        # jalur linimasa yang sama dengan kunci lainnya.
+        satu = [k for k in (frame_keys or []) if isinstance(k, dict)]
+        if len(satu) == 1:
+            separuh = sum(float(sg["end"]) - float(sg["start"]) for sg in segments) / 2
+            frame_keys = [{**satu[0], "t": 0.0}, {**satu[0], "t": round(separuh, 3)}]
+        if frame_keys and len([k for k in frame_keys if isinstance(k, dict)]) >= 2:
+            from .media import probe as _probe
+
+            info = _probe(src)
+            skunci_w = int(info.get("width") or 1920)
+            skunci_h = int(info.get("height") or 1080)
+            durasi_klip = sum(float(sg["end"]) - float(sg["start"]) for sg in segments)
+
+            # Rencana wajah disusun sekali dan dipakai semua kunci "smart".
+            kunci_plan_gerak = None
+            if any((k.get("mode") or "") == "motion" for k in frame_keys):
+                kunci_plan_gerak = plan_reframe(
+                    str(src), segments, aspect_ratio=aspect_ratio,
+                    frame_motion=frame_motion, subjek="gerak")
+
+            kunci_plan = None
+            if any((k.get("mode") or "smart") == "smart" for k in frame_keys):
+                kunci_plan = plan_reframe(str(src), segments, aspect_ratio=aspect_ratio,
+                                          speaker_turns=speaker_turns,
+                                          person_keys=person_keys,
+                                          frame_motion=frame_motion)
+                if kunci_plan is not None:
+                    face_coverage = kunci_plan.face_coverage
+
+            # Begitu pula facecam: dicari sekali, dipakai tiap kunci "gaming".
+            tata_gaming = None
+            if any((k.get("mode") or "") == "gaming" for k in frame_keys):
+                from .reframe import deteksi_facecam
+                mulai_k = float(segments[0]["start"]) if segments else 0.0
+                fc = deteksi_facecam(src, mulai_k, min(durasi_klip, 30.0),
+                                     skunci_w, skunci_h,
+                                     rasio_potongan=rasio_bidang_wajah(out_w, out_h))
+                if fc:
+                    tata_gaming = susun_layout_gaming(fc)
+
+            kunci_graf, kunci_dipakai = build_frame_keys_graph(
+                frame_keys, vlabel, "[vkeys]",
+                src_w=skunci_w, src_h=skunci_h, out_w=out_w, out_h=out_h,
+                durasi=durasi_klip, aspect_ratio=aspect_ratio,
+                plan=kunci_plan, workdir=workdir, layout_gaming=tata_gaming,
+                plan_gerak=kunci_plan_gerak)
+            if kunci_graf:
+                frame_used = "keys"
+                log.info("Linimasa bingkai: %s",
+                         " -> ".join(f"{k['t']:.1f}s {k.get('mode','smart')}"
+                                     for k in kunci_dipakai))
+
+        dari_gaming = False
+        if not kunci_graf and frame_mode == "gaming":
+            from .media import probe as _probe
+            from .reframe import deteksi_facecam
+
+            info = _probe(src)
+            mulai = float(segments[0]["start"]) if segments else 0.0
+            panjang = sum(float(sg["end"]) - float(sg["start"]) for sg in segments) or 1.0
+            facecam = deteksi_facecam(
+                src, mulai, min(panjang, 30.0),
+                int(info.get("width") or 1920), int(info.get("height") or 1080),
+                rasio_potongan=rasio_bidang_wajah(out_w, out_h))
+            if facecam:
+                frame_layout = susun_layout_gaming(facecam)
+                frame_mode = "layout"
+                dari_gaming = True
+            else:
+                # Tidak ada facecam yang diam di satu tempat: ini bukan rekaman
+                # gameplay dengan kamera pemain. Jatuh ke pelacakan wajah biasa,
+                # yang punya jalur mundurnya sendiri ke bilah kabur.
+                log.info("Facecam tidak ditemukan — mode gaming jatuh ke smart")
+                frame_mode = "smart"
+
+        if not kunci_graf and frame_mode == "layout" and frame_layout and frame_layout.get("frames"):
             from .media import probe as _probe
             info = _probe(src)
             layout_frames = frame_layout.get("frames") or []
@@ -442,24 +983,35 @@ def render_clip(
                 plan=layout_plan, workdir=workdir,
             )
             if layout_graph:
-                frame_used = "layout"
+                # Dilaporkan apa adanya: "gaming" saat susunannya diturunkan
+                # sendiri dari videonya, "layout" saat pengguna yang menggambar.
+                frame_used = "gaming" if dari_gaming else "layout"
 
-        if frame_mode == "smart":
+        # "motion" memakai mesin yang sama persis dengan "smart" — yang berbeda
+        # hanya APA yang dijejak: pusat massa gerakan, bukan wajah manusia.
+        # Itulah yang membuatnya bekerja pada kartun, maskot, dan hewan, yang
+        # tidak pernah ditemukan pendeteksi wajah.
+        if not kunci_graf and frame_mode in ("smart", "motion"):
             plan = plan_reframe(str(src), segments, aspect_ratio=aspect_ratio,
                                 speaker_turns=speaker_turns, lock_person=lock_person,
-                                person_keys=person_keys, frame_motion=frame_motion)
+                                person_keys=person_keys, frame_motion=frame_motion,
+                                subjek="gerak" if frame_mode == "motion" else "wajah")
             if plan is not None:
                 face_coverage = plan.face_coverage
             if plan is not None and plan.usable:
                 chain.append(build_reframe_filter(
                     plan, workdir / "reframe.cmd", out_w, out_h))
-                frame_used = "smart"
+                frame_used = frame_mode
 
-        if frame_used not in ("smart", "original", "layout"):
+        if frame_used not in ("smart", "motion", "original", "layout", "gaming", "keys"):
             table = CENTER_FILTERS if frame_used == "center" else ASPECT_FILTERS
             aspect = table.get(aspect_ratio)
             if aspect:
                 chain.append(aspect)
+
+        # Semua yang di atas garis ini MEMBINGKAI; semua yang di bawahnya
+        # menghias. Sisipan ditempel tepat di antaranya.
+        n_bingkai = len(chain)
 
         grade = VIDEO_FILTERS.get(video_filter)
         if grade:
@@ -481,9 +1033,28 @@ def render_clip(
                 shadow_px=max(1, int(round(style_for_render.shadow_px * factor))),
             )
 
+        # Subtitle kedua: gaya sendiri, diskalakan dengan aturan yang sama.
+        kedua_lines, kedua_style = None, None
+        if subtitle_kedua and subtitle_kedua.get("aktif", True) and subtitle_kedua.get("lines"):
+            kedua_style = gaya_dari_dict(subtitle_kedua.get("style") or {})
+            if out_h and out_h != 1920:
+                f2 = out_h / 1920.0
+                kedua_style = replace(
+                    kedua_style,
+                    size=max(20, int(round(kedua_style.size * f2))),
+                    margin_v=max(12, int(round(kedua_style.margin_v * f2))),
+                    outline_px=max(2, int(round(kedua_style.outline_px * f2))),
+                    shadow_px=max(1, int(round(kedua_style.shadow_px * f2))),
+                )
+            kedua_lines = subtitle_kedua["lines"]
+
         ass_path = None
-        if (subtitles and any((l.get("text") or "").strip() for l in subtitles)) \
-                or hook_text.strip() or watermark.strip():
+        # Saklar subtitle ikut dihormati di sini, bukan hanya di dalam
+        # build_ass: klip tanpa subtitle, tanpa hook, dan tanpa tanda air tidak
+        # perlu melewati filter `ass` sama sekali.
+        ada_teks = (style_for_render.aktif and subtitles
+                    and any((l.get("text") or "").strip() for l in subtitles))
+        if ada_teks or kedua_lines or hook_text.strip() or watermark.strip():
             ass_path = workdir / "captions.ass"
             ass_path.write_text(
                 build_ass(
@@ -493,6 +1064,10 @@ def render_clip(
                     watermark=watermark,
                     play_res=(out_w, out_h),
                     clip_duration=total_duration,
+                    kedua_lines=kedua_lines,
+                    kedua_style=kedua_style,
+                    kedua_ikut_orang=bool(((subtitle_kedua or {}).get("style") or {})
+                                          .get("ikut_warna_orang")),
                 ),
                 encoding="utf-8",
             )
@@ -518,11 +1093,35 @@ def render_clip(
             chain.append(tc.overlay_filter(card, str(FONTS_DIR) if FONTS_DIR.is_dir() else None))
 
         graph = seg_graph
-        if layout_graph:
+        if kunci_graf:
+            graph += ";" + kunci_graf
+            vlabel = "[vkeys]"
+        elif layout_graph:
             graph += ";" + layout_graph
             vlabel = "[vlay]"
-        if chain:
-            graph += f";{vlabel}" + ",".join(chain) + "[vout]"
+        rantai_bingkai, rantai_hias = chain[:n_bingkai], chain[n_bingkai:]
+        if rantai_bingkai:
+            graph += f";{vlabel}" + ",".join(rantai_bingkai) + "[vbingkai]"
+            vlabel = "[vbingkai]"
+
+        # Sisipan: di atas bingkai, di bawah subtitle.
+        sisipan = siapkan_sisipan(media_layers, total_duration)
+        sisipan_graf, sisipan_a = "", None
+        if sisipan:
+            n_input = len([x for x in inputs if x == "-i"])
+            s_inputs, sisipan_graf, vlabel, sisipan_a = build_sisipan_graph(
+                sisipan, vlabel, "[SISIPAN_A]", input_awal=n_input,
+                out_w=out_w, out_h=out_h)
+            inputs += s_inputs
+            log.info("Sisipan: %s", ", ".join(
+                f"{l['jenis']}@{l['t']:.1f}s" for l in sisipan))
+            # Graf audio sisipan butuh audio utama yang SUDAH dinormalisasi,
+            # yang labelnya baru ada di bawah. `[SISIPAN_A]` adalah penanda
+            # tempat yang diganti begitu labelnya diketahui.
+            graph += ";" + sisipan_graf
+
+        if rantai_hias:
+            graph += f";{vlabel}" + ",".join(rantai_hias) + "[vout]"
             vout = "[vout]"
         else:
             vout = vlabel
@@ -535,6 +1134,12 @@ def render_clip(
         if loudnorm:
             graph += f";{alabel}loudnorm=I=-16:TP=-1.5:LRA=11[aout]"
             aout = "[aout]"
+        if sisipan_a and sisipan_a != "[SISIPAN_A]":
+            # Ucapan dinormalisasi DULU, baru dicampur. Kalau dicampur lebih
+            # dulu, loudnorm akan meratakan musik dan ucapan bersama-sama, dan
+            # volume yang dipilih pengguna untuk musiknya kehilangan artinya.
+            graph = graph.replace("[SISIPAN_A]", aout)
+            aout = sisipan_a
 
         # Kartu yang MENAMBAH waktu disambung paling akhir, sesudah subtitle dan
         # normalisasi: latarnya diambil dari bingkai pertama aliran yang sudah
@@ -562,7 +1167,10 @@ def render_clip(
         cmd += [
             "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
             "-pix_fmt", "yuv420p", "-profile:v", "high", "-level", "4.1",
-            "-r", "30", "-g", "60", "-threads", "4",
+            # Tanpa `-threads`: x264 memilih sendiri, dan terukur 10% lebih
+            # cepat daripada patokan 4 yang dulu. Antrean render sudah menjamin
+            # hanya satu render berjalan, jadi tidak ada yang perlu dijatah.
+            "-r", "30", "-g", "60",
             "-c:a", "aac", "-b:a", "128k", "-ar", "48000", "-ac", "2",
             "-movflags", "+faststart",
             str(out_path),
@@ -603,6 +1211,8 @@ def render_clip(
             "watermark": watermark,
             "video_filter": video_filter,
             "subtitles": subtitles or [],
+            "media_layers": media_layers or [],
+            "subtitle_kedua": subtitle_kedua,
             "created_at": time.time(),
         }
         (CLIPS_DIR / out_name.replace(".mp4", ".json")).write_text(
@@ -630,11 +1240,36 @@ def render_clip(
             pass
 
 
+# Daftar klip, ditahan di memori sampai isi foldernya berubah.
+#
+# Tiap pemanggilan membaca satu `stat` dan satu berkas sidecar JSON per klip.
+# Di folder dengan 49 klip di cakram luar itu terukur 0,86 detik — dan halaman
+# Klip jadi memanggilnya setiap kali dibuka, termasuk saat kembali dari halaman
+# lain. Waktu tempuh cakramnya tidak bisa dikurangi; yang bisa adalah tidak
+# menempuhnya lagi untuk jawaban yang belum berubah.
+#
+# Kuncinya waktu-ubah FOLDER, bukan pewaktu: menulis, menghapus, atau mengganti
+# nama berkas di dalamnya mengubah angka itu, jadi klip yang baru selesai
+# dirender langsung terlihat tanpa menunggu apa pun kedaluwarsa.
+_DAFTAR_KLIP: tuple[float, int, list[dict]] | None = None
+
+
 def list_local_clips() -> list[dict]:
     """Klip hasil render beserta metadata sidecar-nya."""
+    global _DAFTAR_KLIP
+
     clips: list[dict] = []
     if not CLIPS_DIR.is_dir():
         return clips
+
+    try:
+        tanda = CLIPS_DIR.stat().st_mtime
+    except OSError:
+        tanda = 0.0
+    if _DAFTAR_KLIP is not None and _DAFTAR_KLIP[0] == tanda:
+        # Salinan dangkal: pemanggil menambahkan `web_url` ke tiap entri, dan
+        # menyerahkan objek simpanan berarti ia ikut tertulis berkali-kali.
+        return [dict(c) for c in _DAFTAR_KLIP[2]]
 
     for path in CLIPS_DIR.glob("*.mp4"):
         stat = path.stat()
@@ -653,4 +1288,5 @@ def list_local_clips() -> list[dict]:
         clips.append(entry)
 
     clips.sort(key=lambda c: c["created_at"], reverse=True)
-    return clips
+    _DAFTAR_KLIP = (tanda, len(clips), clips)
+    return [dict(c) for c in clips]

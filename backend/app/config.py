@@ -149,8 +149,42 @@ _pindahkan_bila_diminta(STORAGE_DIR)
 # .env dibaca dari penyimpanan pengguna saat terbungkus — folder aplikasi bukan
 # tempat yang bisa ditulis, dan isinya hilang saat aplikasi diperbarui.
 load_dotenv(STORAGE_DIR / ".env" if FROZEN else BACKEND_DIR / ".env")
-DOWNLOAD_DIR = STORAGE_DIR / "local_downloads"
-CLIPS_DIR = STORAGE_DIR / "edited_clips"
+def _folder_pilihan(nama: str, bawaan: Path) -> Path:
+    """
+    Folder yang dipilih pengguna untuk satu jenis berkas, atau bawaannya.
+
+    Dibaca SEKALI saat startup dan disimpan sebagai konstanta, bukan dibaca
+    ulang tiap pemakaian. Alasannya praktis: `DOWNLOAD_DIR` dipakai sebagai
+    nilai tetap di belasan tempat — termasuk sebagai string yang dibekukan saat
+    impor di `ytdlp.py` — dan membuat semuanya dinamis berarti menyentuh
+    lusinan baris demi setelan yang berubah beberapa kali seumur hidup
+    pemasangan. Menggantinya menuntut aplikasi dijalankan ulang, sama seperti
+    memindahkan seluruh penyimpanan.
+
+    Penunjuknya tinggal di folder data sistem, bukan di dalam folder yang
+    ditunjuknya — sebuah berkas yang menyebutkan di mana sesuatu berada tidak
+    bisa ikut tinggal di dalamnya.
+    """
+    try:
+        penunjuk = _user_data_dir() / f"lokasi-{nama}.txt"
+        if penunjuk.is_file():
+            pilihan = Path(penunjuk.read_text(encoding="utf-8").strip()).expanduser()
+            if str(pilihan).strip() and _bisa_ditulis(pilihan):
+                return pilihan.resolve()
+    except OSError:
+        pass
+    return bawaan
+
+
+# Keduanya bisa ditaruh di mana saja, terpisah dari penyimpanan lainnya.
+#
+# Ini dua folder yang ISINYA BESAR dan yang paling sering dibuka orang sendiri:
+# video sumber yang diunduh sebelum diklip, dan klip jadinya. Menaruhnya di
+# tempat yang dipilih pengguna membuat keduanya bisa ditemukan, dipindahkan ke
+# cakram lain, dan dibersihkan saat penyimpanan penuh — tanpa menebak-nebak di
+# mana aplikasi menyembunyikannya.
+DOWNLOAD_DIR = _folder_pilihan("unduhan", STORAGE_DIR / "local_downloads")
+CLIPS_DIR = _folder_pilihan("klip", STORAGE_DIR / "edited_clips")
 THUMBS_DIR = STORAGE_DIR / "thumbnails"
 LOGS_DIR = STORAGE_DIR / "logs"
 # Pembacaan judul yang sudah disintesis. Disimpan supaya menekan "dengarkan"
@@ -211,7 +245,30 @@ JOB_PROGRESS_MIN_INTERVAL = 0.25  # detik antar tulisan progress ke DB
 # --- Transkrip ----------------------------------------------------------------
 WHISPER_MODEL_DEFAULT = os.getenv("OMNICLIP_WHISPER_MODEL", "base")
 WHISPER_IDLE_UNLOAD_SECONDS = 600
+# Urutan bahasa caption yang DICOBA LEBIH DULU. Bukan daftar tertutup: kalau
+# tidak satu pun ada, `fetch_youtube_captions` melanjutkan ke bahasa yang
+# benar-benar dimiliki videonya. Daftar ini cuma menyatakan "kalau ada
+# pilihan, saya mau yang ini".
 CAPTION_LANGS = ("id", "id-ID", "en", "en-US")
+
+
+def get_caption_langs() -> tuple[str, ...]:
+    """
+    Urutan bahasa pilihan pengguna, dari basis data.
+
+    Kosong = pakai bawaan. Nilainya berupa kode bahasa dipisah koma, mis.
+    "ja,en" untuk orang yang mengklip video Jepang dan lebih suka takarirnya
+    dalam bahasa aslinya.
+    """
+    try:
+        from .repos import settings as settings_repo
+        raw = settings_repo.get("transcript.langs").strip()
+    except Exception:
+        raw = ""
+    if not raw:
+        return CAPTION_LANGS
+    pilihan = tuple(x.strip() for x in raw.split(",") if x.strip())
+    return pilihan or CAPTION_LANGS
 
 
 # --- Gemini -------------------------------------------------------------------
@@ -305,6 +362,14 @@ def get_model_override() -> str:
 
 
 def get_cookies_file() -> str:
+    """
+    Berkas cookies dari variabel lingkungan.
+
+    Pilihan cookies yang sebenarnya sekarang tinggal di `services/cookies.py`
+    dan disimpan di basis data, supaya bisa diatur dari dalam aplikasi. Fungsi
+    ini ditinggalkan agar pemasangan lama yang sudah menyetel variabelnya tidak
+    berubah perilaku diam-diam; `cookies.sumber()` tetap menghormatinya.
+    """
     path = os.environ.get("OMNICLIP_COOKIES_FILE", "").strip()
     return path if path and os.path.exists(path) else ""
 

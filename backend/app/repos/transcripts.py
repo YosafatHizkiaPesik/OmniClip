@@ -42,8 +42,18 @@ def _hydrate(row) -> dict:
     # tanpa harus diunduh ulang — dan supaya setiap pemakainya melihat bentuk
     # yang sama. Pemecahnya aman dijalankan berulang: entri yang memang sudah
     # satu kata dilewati apa adanya.
-    from ..services.captions import split_phrases
-    d["words"] = split_phrases(kata)
+    from ..services.captions import bersihkan_kata, buang_kembar, split_phrases
+    # Urutannya sama persis dengan urutan di `_parse_json3`, dan memang harus:
+    # kalau pintu masuk dan pintu keluar membersihkan dengan cara berbeda,
+    # transkrip yang baru diunduh dan transkrip yang sudah tersimpan akan
+    # menghasilkan subtitle yang berbeda dari video yang sama.
+    #
+    # Penanda tata letak tak kasatmata dibuang lebih dulu — kalau tidak,
+    # pemecah frasa di bawahnya menghitungnya sebagai kata. Lalu baris yang
+    # terduplikasi oleh rolling caption dibuang; tanpa langkah ini transkrip
+    # yang tersimpan dari versi lama tetap menghasilkan dua baris subtitle
+    # yang identik dan bertumpuk.
+    d["words"] = buang_kembar(split_phrases(bersihkan_kata(kata)))
     d["sentences"] = json.loads(d.pop("segments_json") or "[]")
     return d
 

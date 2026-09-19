@@ -24,11 +24,14 @@ rekaman satu mikrofon yang jauh masih akan meleset. Karena itu hasilnya selalu
 bisa disunting per baris di editor.
 """
 
+import hashlib
+import json
 import logging
 import math
 import os
 import wave
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 
 import numpy as np
@@ -387,6 +390,40 @@ def _kmeans(x: np.ndarray, k: int, *, iters: int = 60, seed: int = 7):
     return labels, c
 
 
+# Kemiripan pusat kelompok (sidik mentah) di atas ini = satu suara yang terbelah.
+SUARA_KEMBAR = 0.88
+
+
+def _gabung_kembar(x: np.ndarray, labels: np.ndarray, k: int) -> tuple[np.ndarray, int]:
+    """
+    Menggabungkan kelompok yang pusatnya hampir identik; nomornya dirapatkan.
+
+    Dihitung pada sidik MENTAH, bukan yang reratanya dibuang: membuang arah
+    bersama memang mempertajam pemisahan untuk pengelompokan, tapi juga
+    membesar-besarkan beda kecil antara dua belahan satu suara.
+    """
+    labels = labels.copy()
+    digabung = 0
+    while True:
+        ada = [c for c in range(k) if (labels == c).any()]
+        if len(ada) < 2:
+            break
+        pusat = []
+        for c in ada:
+            m = x[labels == c].mean(axis=0)
+            pusat.append(m / max(float(np.linalg.norm(m)), 1e-9))
+        S = np.array(pusat) @ np.array(pusat).T
+        np.fill_diagonal(S, -1.0)
+        i, j = np.unravel_index(int(np.argmax(S)), S.shape)
+        if S[i, j] < SUARA_KEMBAR:
+            break
+        labels[labels == ada[j]] = ada[i]
+        digabung += 1
+    ada = sorted({int(c) for c in labels})
+    rapat = {c: n for n, c in enumerate(ada)}
+    return np.array([rapat[int(c)] for c in labels]), digabung
+
+
 def _separation(x: np.ndarray, labels: np.ndarray, k: int) -> float:
     """
     Seberapa jauh suara antar kelompok, di ranah kemiripan kosinus asli.
@@ -500,8 +537,75 @@ MIN_HOLDOUT_ACCURACY = 0.70
 MIN_HOLDOUT_SAMPLES = 8
 
 
+def _embeddings(wav_path: str, spans: list[tuple[float, float]],
+                kemajuan=None
+                ) -> Optional[tuple[list[np.ndarray], list[list[int]]]]:
+    """
+    Sidik suara per jendela, beserta span yang disentuh tiap jendela.
+
+    Ini bagian mahal dari pemisahan penutur — 80 detik untuk rekaman 1 jam 48
+    menit — dan hasilnya sama sekali tidak bergantung pada BERAPA orang yang
+    dicari: yang bergantung hanya pengelompokannya sesudah ini. Jadi disimpan
+    di sebelah WAV-nya. Pengguna yang mencoba "2 orang", lalu "3 orang", lalu
+    "biar sistem menebak" membayar hitungannya sekali, bukan tiga kali.
+
+    Kuncinya adalah daftar span itu sendiri: transkrip yang berubah
+    menghasilkan jendela yang berbeda, dan simpanannya otomatis tidak dipakai.
+
+    None bila audionya tidak bisa dibaca atau bukan 16 kHz mono.
+    """
+    wav = Path(wav_path)
+    kunci = hashlib.sha1(
+        repr([(round(float(a), 3), round(float(b), 3)) for a, b in spans]).encode()
+    ).hexdigest()[:12]
+    simpan = wav.with_name(f"{wav.stem}.sidik-{kunci}.npz")
+    if simpan.is_file():
+        try:
+            with np.load(simpan, allow_pickle=False) as d:
+                vectors = list(d["x"])
+                covers = json.loads(str(d["covers"]))
+            if len(vectors) == len(covers):
+                return vectors, covers
+        except (OSError, ValueError, KeyError) as e:
+            log.info("Simpanan sidik suara rusak, dihitung ulang: %s", e)
+
+    vectors: list[np.ndarray] = []
+    covers: list[list[int]] = []
+    try:
+        with wave.open(str(wav), "rb") as wf:
+            if wf.getframerate() != SAMPLE_RATE or wf.getnchannels() != 1:
+                log.warning("WAV bukan 16 kHz mono; pemisahan penutur dilewati")
+                return None
+            jendela = _build_windows(spans)
+            for n, (pieces, touched) in enumerate(jendela):
+                if kemajuan is not None and n % 25 == 0:
+                    kemajuan(n / max(1, len(jendela)))
+                audio = _window_audio(wf, pieces)
+                if audio is None:
+                    continue
+                vec = _embed(kaldi_fbank(audio))
+                if vec is not None:
+                    vectors.append(vec)
+                    covers.append(touched)
+    except (OSError, wave.Error) as e:
+        log.warning("Gagal membaca audio untuk pemisahan penutur: %s", e)
+        return None
+
+    if vectors:
+        sementara = simpan.with_name(simpan.stem + ".tmp.npz")
+        try:
+            np.savez(sementara, x=np.vstack(vectors),
+                     covers=np.array(json.dumps(covers)))
+            os.replace(sementara, simpan)
+        except OSError as e:
+            log.info("Sidik suara tidak bisa disimpan: %s", e)
+            sementara.unlink(missing_ok=True)
+    return vectors, covers
+
+
 def label_from_evidence(wav_path: str, spans: list[tuple[float, float]],
-                        span_person: list, n_people: int) -> Optional[Diarization]:
+                        span_person: list, n_people: int,
+                        kemajuan=None) -> Optional[Diarization]:
     """
     Memberi label penutur dari SUARA, tapi diajari oleh GAMBAR.
 
@@ -531,24 +635,10 @@ def label_from_evidence(wav_path: str, spans: list[tuple[float, float]],
     if not spans or n_people < 2 or _get_session() is None:
         return None
 
-    windows = _build_windows(spans)
-    vectors: list[np.ndarray] = []
-    covers: list[list[int]] = []
-    try:
-        with wave.open(wav_path, "rb") as wf:
-            if wf.getframerate() != SAMPLE_RATE or wf.getnchannels() != 1:
-                return None
-            for pieces, touched in windows:
-                audio = _window_audio(wf, pieces)
-                if audio is None:
-                    continue
-                vec = _embed(kaldi_fbank(audio))
-                if vec is not None:
-                    vectors.append(vec)
-                    covers.append(touched)
-    except (OSError, wave.Error) as e:
-        log.warning("Gagal membaca audio untuk penambatan wajah: %s", e)
+    sidik = _embeddings(wav_path, spans, kemajuan)
+    if sidik is None:
         return None
+    vectors, covers = sidik
     if len(vectors) < 8:
         return None
 
@@ -688,7 +778,8 @@ def label_from_evidence(wav_path: str, spans: list[tuple[float, float]],
 def analyze_speakers(wav_path: str, spans: list[tuple[float, float]], *,
                      speakers: Optional[int] = None,
                      max_speakers: int = MAX_SPEAKERS,
-                     turn_gap: float = 1.0) -> Diarization:
+                     turn_gap: float = 1.0,
+                     kemajuan=None) -> Diarization:
     """
     Menebak berapa orang bicara dan memberi label penutur untuk tiap span.
 
@@ -713,27 +804,10 @@ def analyze_speakers(wav_path: str, spans: list[tuple[float, float]], *,
         log.info("Model penutur tidak tersedia — pemisahan dilewati")
         return Diarization(labels=[0] * len(spans), speaker_count=0, separation=0.0)
 
-    windows = _build_windows(spans)
-    vectors: list[np.ndarray] = []
-    covers: list[list[int]] = []
-
-    try:
-        with wave.open(wav_path, "rb") as wf:
-            if wf.getframerate() != SAMPLE_RATE or wf.getnchannels() != 1:
-                log.warning("WAV bukan 16 kHz mono; pemisahan penutur dilewati")
-                return Diarization(labels=[0] * len(spans), speaker_count=0,
-                                   separation=0.0)
-            for pieces, touched in windows:
-                audio = _window_audio(wf, pieces)
-                if audio is None:
-                    continue
-                vec = _embed(kaldi_fbank(audio))
-                if vec is not None:
-                    vectors.append(vec)
-                    covers.append(touched)
-    except (OSError, wave.Error) as e:
-        log.warning("Gagal membaca audio untuk pemisahan penutur: %s", e)
+    sidik = _embeddings(wav_path, spans, kemajuan)
+    if sidik is None:
         return Diarization(labels=[0] * len(spans), speaker_count=0, separation=0.0)
+    vectors, covers = sidik
 
     if len(vectors) < 12:
         log.info("Hanya %d jendela layak — pemisahan penutur dilewati", len(vectors))
@@ -806,6 +880,28 @@ def analyze_speakers(wav_path: str, spans: list[tuple[float, float]], *,
         return Diarization(labels=[0] * len(spans), speaker_count=1,
                            separation=sep, coherence=coh, quality=score,
                            requested=speakers)
+
+    # Kelompok yang ternyata SATU SUARA digabung kembali.
+    #
+    # k-means membagi ruang sidik jadi k bagian sebanding, dan bila k melebihi
+    # jumlah orang yang sebenarnya, yang dibelah adalah suara yang paling banyak
+    # bicara — nada bercerita dan nada bercanda orang yang sama jatuh ke dua
+    # kelompok. Di subtitle itu terlihat sebagai orang yang warnanya berganti
+    # saat ia bicara lagi. Terukur pada pusat kelompok (sidik mentah, kosinus):
+    # belahan satu suara 0,90-0,96 (Kang Sule 0,949; wawancara dua orang yang
+    # dipaksa jadi tiga 0,956), sedangkan dua orang berbeda paling tinggi 0,82.
+    # Penggabungan ini berlaku juga untuk jumlah yang diminta pengguna: angka
+    # itu biasanya datang dari tebakan sebelumnya, dan yang ia inginkan adalah
+    # warna yang benar, bukan tepat sekian kelompok.
+    labels, digabung = _gabung_kembar(x, np.asarray(labels), chosen_k)
+    if digabung:
+        log.info("%d kelompok ternyata suara yang sama — %d penutur menjadi %d",
+                 digabung, chosen_k, chosen_k - digabung)
+        chosen_k -= digabung
+        if chosen_k < 2:
+            return Diarization(labels=[0] * len(spans), speaker_count=1,
+                               separation=sep, coherence=coh, quality=score,
+                               requested=speakers)
 
     # Dihaluskan di ranah JENDELA lebih dulu, saat urutannya masih berurut
     # waktu: satu jendela nyasar di tengah giliran orang lain adalah derau, dan

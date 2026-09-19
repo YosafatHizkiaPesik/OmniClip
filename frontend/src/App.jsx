@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import ErrorBoundary from './components/ErrorBoundary';
 import { apiGet } from './lib/api';
+import useBuildWatch from './hooks/useBuildWatch';
 
 // Metafora partitur memberi bentuk pada layar kerjanya, tapi tidak boleh
 // menutupi tugasnya: nama bagian di sini menyebut apa yang ada di dalamnya.
@@ -37,6 +38,8 @@ function isEditorPath(pathname) {
  * jadi menutupnya di editor tidak ikut menutupnya di beranda.
  */
 export default function App() {
+  // Memuat ulang sendiri kalau build di server sudah berganti.
+  useBuildWatch();
   const [engine, setEngine] = useState(null);
   // Pembaruan yang tersedia harus terlihat tanpa membuka Pengaturan — orang
   // tidak membuka halaman setelan untuk memeriksa sesuatu yang tidak mereka

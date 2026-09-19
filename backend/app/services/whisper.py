@@ -167,7 +167,7 @@ def _transcribe_file(model, path: str, language: Optional[str],
             })
         if on_segment is not None:
             on_segment(float(seg.end))
-    return words, (info.language or language or "id")
+    return words, (info.language or language or "")
 
 
 def _merge_overlap(existing: list[dict], incoming: list[dict], boundary: float) -> list[dict]:
@@ -199,7 +199,15 @@ def transcribe_audio(
     wav_path: str,
     *,
     model_size: str = WHISPER_MODEL_DEFAULT,
-    language: Optional[str] = "id",
+    # None = biarkan modelnya MENGENALI sendiri bahasanya.
+    #
+    # Sebelumnya bawaannya "id", dan tidak ada satu pun pemanggil yang
+    # mengirim nilai lain — jadi setiap video tanpa caption dipaksa
+    # ditranskrip sebagai bahasa Indonesia, termasuk video yang jelas
+    # berbahasa lain. Hasilnya bukan kesalahan yang terlihat seperti
+    # kesalahan: Whisper tetap mengeluarkan kata-kata Indonesia, hanya saja
+    # tidak ada hubungannya dengan yang diucapkan.
+    language: Optional[str] = None,
     on_progress: Optional[Callable[[float], None]] = None,
     should_cancel: Optional[Callable[[], bool]] = None,
 ) -> tuple[list[dict], str]:
@@ -227,7 +235,7 @@ def transcribe_audio(
     log.info("Audio dipotong menjadi %d bagian @ %.0f menit", n_chunks, CHUNK_SECONDS / 60)
 
     all_words: list[dict] = []
-    detected = language or "id"
+    detected = language or ""
     tmpdir = tempfile.mkdtemp(prefix="omni_whisper_")
 
     try:
