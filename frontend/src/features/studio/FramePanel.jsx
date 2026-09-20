@@ -8,7 +8,7 @@ import {
 export const FRAME_MODES = [
   { id: 'smart', label: 'Ikuti wajah', hint: 'Kamera mengikuti pembicara. Layar penuh, tanpa bilah kabur.' },
   { id: 'motion', label: 'Ikuti gerakan', hint: 'Untuk tokoh yang BUKAN manusia — kartun, maskot, hewan. Kamera mengikuti bagian yang paling banyak bergerak, tanpa perlu mengenali wajah.' },
-  { id: 'gaming', label: 'Main game', hint: 'Wajah pemain di atas, permainannya utuh di bawah. Letak facecam dicari sendiri dari videonya.' },
+  { id: 'gaming', label: 'Main game', hint: 'Wajah pemain di atas, permainan di bawah. Letak facecam dicari sendiri, lalu ukuran dan posisinya bisa Anda atur.' },
   { id: 'layout', label: 'Susun sendiri', hint: 'Satu bingkai atau lebih, masing-masing bisa diatur letak dan ukurannya.' },
   { id: 'blur', label: 'Bilah kabur', hint: 'Video utuh di tengah, sisi atas-bawah diisi versi kabur.' },
   { id: 'center', label: 'Potong tengah', hint: 'Ambil bagian tengah frame. Paling cepat, tanpa analisis.' },
@@ -28,6 +28,8 @@ export default function FramePanel({
   // Gaya perpindahan: kamera mengikuti dengan mulus, atau diam lalu memotong.
   frameMotion = 'smooth', onFrameMotionChange = null,
   layout, onLayoutChange,
+  // Main game: setelan susunan dua bidangnya.
+  gamingSibuk = false, onGaming = null, onGamingUlang = null,
   frameKeys, onFrameKeys, waktuSekarang, durasiKlip,
   selectedFrameId, onSelectFrame,
   faceTrackAvailable = false,
@@ -139,7 +141,12 @@ export default function FramePanel({
         </>
       )}
 
-      {frameMode !== 'layout' && (
+      {frameMode === 'gaming' && onGaming && (
+        <GamingSetelan layout={layout} sibuk={gamingSibuk}
+                       onGaming={onGaming} onUlang={onGamingUlang} />
+      )}
+
+      {frameMode !== 'layout' && frameMode !== 'gaming' && (
         <p style={{ fontSize: '.72rem', color: 'var(--ink-3)', lineHeight: 1.5, margin: '4px 0 0' }}>
           Mode ikut-wajah menganalisis klip sebelum render. Bila wajah jarang
           terlihat — misalnya rekaman layar — sistem otomatis memakai bilah kabur.
@@ -329,5 +336,83 @@ function RectFields({ label, rect, onChange }) {
         ))}
       </div>
     </div>
+  );
+}
+
+/**
+ * Setelan Main game: seberapa besar wajah, dan bagaimana permainannya ditaruh.
+ *
+ * Letak kotaknya sendiri diatur di meja bingkai (seret dan tarik sudutnya);
+ * di sini hanya ukuran bidang dan pilihan yang tidak bisa diseret.
+ */
+function GamingSetelan({ layout, sibuk, onGaming, onUlang }) {
+  const g = layout?.gaming;
+  const ada = !!layout?.frames?.length;
+  // Kosong setelah kotak Permainan diubah sendiri: kedua tombol hanya titik
+  // berangkat, bukan keadaan yang harus dipertahankan.
+  const permainan = g?.permainan ?? 'isi';
+  const wajah = Math.round(g?.wajah ?? 40);
+  const maksWajah = 75;
+  const pindah = Math.max(0, (layout?.reaksi?.length ?? 1) - 1);
+  return (
+    <>
+      <div style={{ height: '1px', background: 'var(--rule-2)', margin: '4px 0' }} />
+      <div className="mark" style={{ color: 'var(--ink)' }}>Susunan main game</div>
+      {!ada ? (
+        <p style={{ fontSize: '.74rem', color: 'var(--ink-3)', lineHeight: 1.5, margin: 0 }}>
+          {sibuk ? 'Mencari kamera wajah pemain di video ini…'
+            : 'Kamera wajah pemain tidak ditemukan di klip ini. Coba klip lain, '
+              + 'atau pakai Susun sendiri.'}
+        </p>
+      ) : (
+        <>
+          <div style={{ display: 'flex', gap: '6px' }}>
+            {[
+              { id: 'isi', label: 'Penuhi layar', hint: 'wajah di atas, game mengisi sisanya' },
+              { id: 'utuh', label: 'Game utuh', hint: 'seluruh layar game, sisa diisi kabur' },
+            ].map((m) => (
+              <button key={m.id} onClick={() => onGaming({ permainan: m.id })}
+                      className={`choice${permainan === m.id ? ' is-on' : ''}`}
+                      style={{ flex: 1 }}>
+                <div className="choice-t">{m.label}</div>
+                <div className="choice-h">{m.hint}</div>
+              </button>
+            ))}
+          </div>
+
+          <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '4px' }}>
+            <span style={{ display: 'flex', fontSize: '.74rem', color: 'var(--ink-2)' }}>
+              Tinggi bidang wajah
+              <b style={{ marginLeft: 'auto', color: 'var(--ink)' }}>{wajah}%</b>
+            </span>
+            <input type="range" min="20" max={maksWajah} step="1"
+                   value={Math.min(wajah, maksWajah)}
+                   onChange={(e) => onGaming({ wajah: Number(e.target.value) })} />
+          </label>
+
+          <p style={{ fontSize: '.72rem', color: 'var(--ink-3)', lineHeight: 1.55, margin: '2px 0 0' }}>
+            Kedua bingkai bebas diatur seperti <b>Susun sendiri</b>: seret dan
+            tarik sudut kotak di <b>video sumber</b> untuk memilih bagian yang
+            diambil, dan di <b>layar hasil</b> untuk menentukan letak dan
+            ukurannya. Garis putus-putus di dalam kotak menandai bagian yang
+            benar-benar tampil. Tombol dan penggeser di atas menyusun ulang
+            keduanya dari awal. Setelan ini milik klip ini saja.
+          </p>
+          {pindah > 0 && (
+            <p style={{ fontSize: '.72rem', color: 'var(--ink-2)', lineHeight: 1.55, margin: 0 }}>
+              Kamera wajah berpindah tempat {pindah}× di klip ini — kotak Reaksi
+              ikut pindah pada detiknya. Menyeret kotak Reaksi mengubah letak
+              yang berlaku di posisi garis main saja.
+            </p>
+          )}
+          {onUlang && (
+            <button className="btn-secondary" style={{ fontSize: '.75rem', alignSelf: 'start' }}
+                    onClick={onUlang} disabled={sibuk}>
+              Cari ulang letak wajah otomatis
+            </button>
+          )}
+        </>
+      )}
+    </>
   );
 }

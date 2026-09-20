@@ -15,7 +15,7 @@ import { clampRect, MIN_PCT } from './frames';
  *                yang dipegang — sisi seberangnya jadi jangkar.
  */
 export function beginRectDrag(e, { boxW, boxH, rect, handle, onChange, onEnd,
-                                  lockX = false }) {
+                                  lockX = false, aspek = null, rapikan = clampRect }) {
   if (!boxW || !boxH) return;
   e.preventDefault();
   e.stopPropagation();
@@ -33,7 +33,7 @@ export function beginRectDrag(e, { boxW, boxH, rect, handle, onChange, onEnd,
       // Bingkai yang mengikuti orang tidak punya posisi mendatar sendiri —
       // jejak wajahnya yang menentukan. Membiarkannya digeser ke samping akan
       // membuat kotaknya melompat balik begitu videonya jalan lagi.
-      onChange(clampRect({
+      onChange(rapikan({
         ...origin,
         x: lockX ? origin.x : origin.x + dx,
         y: origin.y + dy,
@@ -42,6 +42,20 @@ export function beginRectDrag(e, { boxW, boxH, rect, handle, onChange, onEnd,
     }
 
     let { x, y, w, h } = origin;
+    if (aspek) {
+      // Rasio terkunci (lebar/tinggi dalam PIKSEL): hanya lebar yang dibaca
+      // dari seretan, tingginya mengikuti. Sisi seberang sudut tetap jangkar.
+      const perW = boxW / (boxH * aspek);         // tinggi% per lebar%
+      const maksW = handle.includes('w') ? origin.x + origin.w : 100 - origin.x;
+      const maksH = handle.includes('n') ? origin.y + origin.h : 100 - origin.y;
+      const arah = handle.includes('w') ? -1 : 1;
+      w = Math.max(MIN_PCT, Math.min(maksW, maksH / perW, origin.w + arah * dx));
+      h = w * perW;
+      x = handle.includes('w') ? origin.x + origin.w - w : origin.x;
+      y = handle.includes('n') ? origin.y + origin.h - h : origin.y;
+      onChange(rapikan({ x, y, w, h }));
+      return;
+    }
     if (handle.includes('e')) w = Math.max(MIN_PCT, Math.min(100 - x, origin.w + dx));
     if (handle.includes('s')) h = Math.max(MIN_PCT, Math.min(100 - y, origin.h + dy));
     if (handle.includes('w')) {

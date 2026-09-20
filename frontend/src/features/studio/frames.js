@@ -111,6 +111,39 @@ export const LAYOUT_PRESETS = [
         { x: 4, y: 64, w: 40, h: 24 }),
     ],
   },
+  // Reaksi terbagi: wajah beberapa orang ditumpuk di satu kanvas 9:16, untuk
+  // momen tawa atau kaget bersama. Sutradara AI mengisi `src` dari posisi
+  // wajah yang sebenarnya; kotak sumber di sini hanya titik awal manual.
+  {
+    id: 'reaction-2',
+    label: 'Reaksi 2 orang',
+    hint: 'Dua wajah bertumpuk, atas dan bawah — untuk tawa atau kaget bersama.',
+    build: () => [
+      makeFrame('Orang 1', { x: 10, y: 10, w: 36, h: 64 }, { x: 0, y: 0, w: 100, h: 50 }),
+      makeFrame('Orang 2', { x: 54, y: 10, w: 36, h: 64 }, { x: 0, y: 50, w: 100, h: 50 }),
+    ],
+  },
+  {
+    id: 'reaction-3',
+    label: 'Reaksi 3 orang',
+    hint: 'Tiga wajah bertumpuk.',
+    build: () => [
+      makeFrame('Orang 1', { x: 4, y: 12, w: 28, h: 50 }, { x: 0, y: 0, w: 100, h: 33.333 }),
+      makeFrame('Orang 2', { x: 36, y: 12, w: 28, h: 50 }, { x: 0, y: 33.333, w: 100, h: 33.334 }),
+      makeFrame('Orang 3', { x: 68, y: 12, w: 28, h: 50 }, { x: 0, y: 66.667, w: 100, h: 33.333 }),
+    ],
+  },
+  {
+    id: 'reaction-4',
+    label: 'Reaksi 4 orang',
+    hint: 'Empat wajah dalam kisi 2×2.',
+    build: () => [
+      makeFrame('Orang 1', { x: 2, y: 10, w: 22, h: 70 }, { x: 0, y: 0, w: 50, h: 50 }),
+      makeFrame('Orang 2', { x: 26, y: 10, w: 22, h: 70 }, { x: 50, y: 0, w: 50, h: 50 }),
+      makeFrame('Orang 3', { x: 51, y: 10, w: 22, h: 70 }, { x: 0, y: 50, w: 50, h: 50 }),
+      makeFrame('Orang 4', { x: 76, y: 10, w: 22, h: 70 }, { x: 50, y: 50, w: 50, h: 50 }),
+    ],
+  },
   {
     id: 'split-even',
     label: 'Dua tumpuk sama besar',
@@ -156,7 +189,15 @@ export function serializeLayout(layout) {
       dst: clampRect(f.dst),
       fit: f.fit === 'contain' ? 'contain' : 'cover',
       follow: !!f.follow,
+      // Nomor orang yang dibuntuti — diisi sutradara AI. Tanpa ini server
+      // menebak dari letak kotak.
+      ...(Number.isInteger(f.person) ? { person: f.person } : {}),
     })),
+    // Main game: letak wajah per detik klip, dan setelan susunannya.
+    ...(layout.reaksi?.length
+      ? { reaksi: layout.reaksi.map((r) => ({ t: Math.max(0, Number(r.t) || 0), src: { ...r.src } })) }
+      : {}),
+    ...(layout.gaming ? { gaming: { ...layout.gaming } } : {}),
   };
 }
 
@@ -437,7 +478,10 @@ export function followX(reframe, frame, t) {
   const fps = reframe?.people_fps || 8;
   if (!people?.length) return null;
 
-  const idx = personNear(people, frame.src.x + frame.src.w / 2);
+  // Orang yang ditentukan (bingkai reaksi dari sutradara) menang atas tebakan
+  // dari letak kotak — sama seperti server.
+  const idx = Number.isInteger(frame.person) && frame.person < people.length
+    ? frame.person : personNear(people, frame.src.x + frame.src.w / 2);
   if (idx === null) return null;
 
   const track = people[idx];
@@ -550,7 +594,11 @@ export function withFrameKey(keys, t, patch, modeAwal = 'smart') {
   const at = Math.max(0, Math.round(t * 100) / 100);
   const lama = (keys ?? []).find((k) => Math.abs(k.t - at) <= 0.05);
   const sisa = (keys ?? []).filter((k) => Math.abs(k.t - at) > 0.05);
-  const hasil = [...sisa, { ...(lama ?? { mode: modeAwal }), ...patch, t: at }]
+  // Kunci yang disentuh tangan menjadi milik pengguna: label asal dan alasan
+  // dari sutradara dilepas, supaya "Susun bingkai dengan AI" berikutnya tidak
+  // menimpanya. Sutradara sendiri tidak memakai fungsi ini.
+  const hasil = [...sisa, { ...(lama ?? { mode: modeAwal }), asal: undefined,
+                            alasan: undefined, ...patch, t: at }]
     .sort((a, b) => a.t - b.t);
   // Rentang sebelum kunci pertama harus punya pemiliknya sendiri.
   //
@@ -570,4 +618,200 @@ export function withoutFrameKey(keys, index) {
   const baru = (keys ?? []).filter((_, i) => i !== index);
   if (baru.length) baru[0] = { ...baru[0], t: 0 };
   return baru;
+}
+
+
+// --- Main game: susunan dua bidang yang bisa disetel ---------------------------
+//
+// Cermin `render.susun_layout_gaming` di server. Keduanya harus menghitung hal
+// yang sama, karena yang disetel di sini dikirim apa adanya ke render.
+
+export const GAMING_WAJAH_BAWAAN = 40;
+const RASIO_KELUARAN = { '9:16': 9 / 16, '1:1': 1, '4:5': 4 / 5, '16:9': 16 / 9 };
+
+export function rasioKeluaran(aspectRatio) {
+  return RASIO_KELUARAN[aspectRatio] ?? 9 / 16;
+}
+
+/**
+ * Kotak sumber berasio PIKSEL `rasioPx`, berpusat di tengah `r`, sebesar
+ * mungkin tanpa keluar bingkai. Kotak yang rasionya sama dengan bidangnya
+ * tidak dipotong lagi oleh "cover" — yang terlihat di meja bingkai = hasilnya.
+ */
+export function pasRasio(r, rasioPx, srcAspek, { pertahankan = 'h', dalam = false } = {}) {
+  const cx = r.x + r.w / 2;
+  const cy = r.y + r.h / 2;
+  const k = rasioPx / Math.max(1e-6, srcAspek);
+  let h;
+  let w;
+  if (pertahankan === 'w') { w = r.w; h = w / k; } else { h = r.h; w = h * k; }
+  // Di dalam kotaknya saja (facecam): dipangkas, tidak dilebarkan ke layar
+  // permainan di sebelahnya.
+  if (dalam) { w = Math.min(r.w, r.h * k); h = w / k; }
+  if (w > 100) { w = 100; h = w / k; }
+  if (h > 100) { h = 100; w = h * k; }
+  const x = Math.min(Math.max(0, cx - w / 2), 100 - w);
+  const y = Math.min(Math.max(0, cy - h / 2), 100 - h);
+  const bulat = (v) => Math.round(v * 100) / 100;
+  return { x: bulat(x), y: bulat(y), w: bulat(w), h: bulat(h) };
+}
+
+/** Rasio piksel bidang tujuan di kanvas. */
+export function rasioBidang(dst, outAspek) {
+  return (dst.w * outAspek) / Math.max(1e-6, dst.h);
+}
+
+/** Bidang permainan selebar kanvas, setinggi BENTUK kotak sumbernya. */
+export function bidangPermainan(src, wajah, srcAspek, outAspek) {
+  const rasioPx = (src.w / Math.max(1e-6, src.h)) * srcAspek;
+  const sisa = 100 - wajah;
+  let h = (100 * outAspek) / rasioPx;
+  if (h > sisa) {
+    h = sisa;
+    const w = (h * rasioPx) / outAspek;
+    return { x: (100 - w) / 2, y: wajah, w, h };
+  }
+  return { x: 0, y: wajah, w: 100, h };
+}
+
+/** Cermin `render._permainan_tanpa_wajah`: potongan permainan tanpa facecam. */
+export function permainanTanpaWajah(facecams, rasioPx, srcAspek) {
+  const k = rasioPx / Math.max(1e-6, srcAspek);
+  const w = Math.min(100, 100 * k);
+  if (w >= 100) {
+    const h = Math.min(100, 100 / k);
+    return { x: 0, y: (100 - h) / 2, w: 100, h };
+  }
+  const tengah = 50 - w / 2;
+  const calon = [tengah];
+  for (const f of facecams) calon.push(f.x - w, f.x + f.w);
+  const bebas = (x) => facecams.every((f) => x + w <= f.x + 0.5 || x >= f.x + f.w - 0.5);
+  const sah = calon.filter((x) => x >= -1e-6 && x <= 100 - w + 1e-6 && bebas(x));
+  const x = sah.length
+    ? sah.reduce((a, v) => (Math.abs(v - tengah) < Math.abs(a - tengah) ? v : a))
+    : tengah;
+  return { x: Math.min(Math.max(0, x), 100 - w), y: 0, w, h: 100 };
+}
+
+/**
+ * Susunan Main game dari PRESET: tinggi bidang wajah dan cara menaruh
+ * permainan. Dipanggil hanya saat preset dipilih atau penggeser digeser —
+ * sesudah itu kedua bingkai bebas diatur seperti di Susun sendiri, dan tidak
+ * ada yang menimpanya.
+ *
+ *   'isi'  (bawaan) permainan memenuhi seluruh sisa kanvas, dipotong dari
+ *          bagian yang tidak memuat facecam supaya wajah tidak tampil dua kali;
+ *   'utuh' seluruh layar permainan selebar kanvas, sisanya latar kabur.
+ */
+export function susunGaming(lama, { wajah, permainan = 'isi', srcAspek, outAspek }) {
+  const main = lama.frames[0];
+  const muka = lama.frames[1];
+  const tinggiWajah = Math.max(15, Math.min(75, wajah));
+  const mukaDst = { x: 0, y: 0, w: 100, h: tinggiWajah };
+  const rasioMuka = rasioBidang(mukaDst, outAspek);
+  // Dibentuk dari `kotak` — panel facecam yang ditemukan, atau kotak terakhir
+  // yang diseret pengguna — supaya tiap geseran tidak memangkasnya lagi.
+  const reaksi = (lama.reaksi?.length ? lama.reaksi : [{ t: 0, src: muka.src }])
+    .map((r) => {
+      const kotak = r.kotak ?? r.src;
+      return { t: r.t, kotak, src: pasRasio(kotak, rasioMuka, srcAspek, { dalam: true }) };
+    });
+  let mainSrc;
+  let mainDst;
+  if (permainan === 'utuh') {
+    mainSrc = { x: 0, y: 0, w: 100, h: 100 };
+    mainDst = bidangPermainan(mainSrc, tinggiWajah, srcAspek, outAspek);
+  } else {
+    mainDst = { x: 0, y: tinggiWajah, w: 100, h: 100 - tinggiWajah };
+    mainSrc = permainanTanpaWajah(reaksi.map((r) => r.kotak),
+      rasioBidang(mainDst, outAspek), srcAspek);
+  }
+  return {
+    ...lama,
+    gaming: { ...(lama.gaming ?? {}), wajah: tinggiWajah, permainan, sumber: srcAspek },
+    reaksi,
+    frames: [
+      { ...main, src: mainSrc, dst: mainDst, fit: 'cover', follow: false },
+      { ...muka, src: reaksi[0].src, dst: mukaDst, fit: 'cover', follow: false },
+    ],
+  };
+}
+
+/** Indeks letak wajah yang berlaku pada detik klip `t`. */
+export function reaksiAktif(layout, t) {
+  const r = layout?.reaksi ?? [];
+  let i = 0;
+  for (let j = 0; j < r.length; j += 1) if ((r[j].t ?? 0) <= t + 1e-6) i = j;
+  return i;
+}
+
+/** Susunan Main game seperti yang tampil pada detik klip `t`. */
+export function gamingPadaWaktu(layout, t) {
+  if (!layout?.frames?.length || !(layout.reaksi?.length > 1)) return layout;
+  const r = layout.reaksi[reaksiAktif(layout, t)];
+  return { ...layout,
+           frames: layout.frames.map((f, i) => (i === 1 ? { ...f, src: r.src } : f)) };
+}
+
+/** Susunan dari server (tanpa id) -> susunan editor. */
+export function susunanDariServer(l) {
+  if (!l?.frames?.length) return null;
+  return {
+    background: l.background === 'black' ? 'black' : 'blur',
+    gaming: l.gaming ?? null,
+    reaksi: (l.reaksi ?? []).map((r) => ({
+      t: Number(r.t) || 0, src: { ...r.src }, ...(r.kotak ? { kotak: { ...r.kotak } } : {}),
+    })),
+    frames: l.frames.map((f, i) => ({
+      ...makeFrame(f.label || (i === 0 ? 'Permainan' : 'Reaksi'), f.src, f.dst),
+      // Tanpa pembulatan clampRect: rasio kotak harus tepat sama dengan
+      // bidangnya, dan 0,1% di sini sudah terlihat sebagai potongan tipis.
+      src: { ...f.src },
+      dst: { ...f.dst },
+      fit: f.fit === 'contain' ? 'contain' : 'cover',
+    })),
+  };
+}
+
+/**
+ * Susun sendiri: bentuk kotak sumber dan bidang tujuannya saling mengikuti.
+ *
+ * Dengan "cover", kotak sumber yang bentuknya berbeda dari bidangnya dipotong
+ * lagi saat ditampilkan — terlapor: kotak di sekeliling notifikasi donasi yang
+ * lebar dan pendek, ditaruh di bidang yang tinggi, keluar dengan kiri-kanan
+ * teksnya hilang. Yang dikotaki pengguna harus tampil utuh. Jadi:
+ *
+ *   - kotak SUMBER diubah ukurannya -> tinggi bidang tujuan menyesuaikan
+ *     (lebar dan letak atasnya tetap);
+ *   - bidang TUJUAN diubah ukurannya -> kotak sumber menyesuaikan (lebar dan
+ *     pusatnya tetap).
+ *
+ * Memindahkan tanpa mengubah ukuran tidak menyentuh apa pun, dan bingkai
+ * "Muat semua" (contain) dibiarkan: bilahnya memang pilihan pengguna.
+ */
+export function selaraskanBentuk(lama, baru, { srcAspek, outAspek }) {
+  if (!lama?.frames?.length || !baru?.frames?.length) return baru;
+  const sebelum = new Map(lama.frames.map((f) => [f.id, f]));
+  const beda = (a, b) => Math.abs(a.w - b.w) > 0.05 || Math.abs(a.h - b.h) > 0.05;
+  const bulat = (v) => Math.round(v * 100) / 100;
+  let berubah = false;
+  const frames = baru.frames.map((f) => {
+    const p = sebelum.get(f.id);
+    if (!p || f.fit === 'contain') return f;
+    if (beda(p.src, f.src)) {
+      const rasioPx = (f.src.w / Math.max(1e-6, f.src.h)) * srcAspek;
+      let { x, y, w } = f.dst;
+      let h = (w * outAspek) / rasioPx;
+      if (h > 100) { h = 100; w = (h * rasioPx) / outAspek; x = (100 - w) / 2; }
+      if (y + h > 100) y = 100 - h;
+      berubah = true;
+      return { ...f, dst: { x: bulat(x), y: bulat(Math.max(0, y)), w: bulat(w), h: bulat(h) } };
+    }
+    if (beda(p.dst, f.dst)) {
+      berubah = true;
+      return { ...f, src: pasRasio(f.src, rasioBidang(f.dst, outAspek), srcAspek, { pertahankan: 'w' }) };
+    }
+    return f;
+  });
+  return berubah ? { ...baru, frames } : baru;
 }

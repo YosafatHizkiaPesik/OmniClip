@@ -842,6 +842,14 @@ a { color: var(--cue); text-underline-offset: 3px; text-decoration-thickness: 1p
               0 2px 8px rgba(0, 0, 0, .5);
 }
 .frame-rect.is-on { box-shadow: 0 0 0 1px rgba(0, 0, 0, .55), inset 0 0 0 2px rgba(255, 255, 255, .6); }
+/* Bagian kotak sumber yang sungguh tampil di klip (lihat FrameStage). */
+.frame-rect-tampil {
+  position: absolute;
+  border: 1.5px dashed;
+  background: rgba(255, 255, 255, 0.08);
+  pointer-events: none;
+}
+
 .frame-rect-tag {
   position: absolute; left: -2px; top: -2px; padding: 2px 6px;
   font-size: .62rem; font-weight: 750; color: #fff; white-space: nowrap;

@@ -78,24 +78,30 @@ function frameCuts(keys, duration, modeDasar = 'smart') {
   const sorted = [...(keys ?? [])]
     .map((k, i) => ({
       t: Math.max(0, Math.min(duration, Number(k.t) || 0)),
-      mode: k.mode || 'smart', rect: k.rect, i,
+      mode: k.mode || 'smart', rect: k.rect, layout: k.layout, i, asal: k.asal, alasan: k.alasan,
     }))
     .sort((a, b) => a.t - b.t);
   const cuts = [];
   let cursor = 0;
   let mode = modeDasar;
   let rect;
+  let layout;
   let keyIndex = -1;
+  let asal;
+  let alasan;
   for (const k of sorted) {
     if (k.t > cursor + 1e-6) {
-      cuts.push({ start: cursor, end: k.t, mode, rect, keyIndex });
+      cuts.push({ start: cursor, end: k.t, mode, rect, layout, keyIndex, asal, alasan });
       cursor = k.t;
     }
     mode = k.mode;
     rect = k.rect;
+    layout = k.layout;
     keyIndex = k.i;
+    asal = k.asal;
+    alasan = k.alasan;
   }
-  cuts.push({ start: cursor, end: duration, mode, rect, keyIndex });
+  cuts.push({ start: cursor, end: duration, mode, rect, layout, keyIndex, asal, alasan });
   return cuts.filter((c) => c.end > c.start + 1e-6);
 }
 
@@ -467,7 +473,10 @@ export default function ClipTimeline({
     const induk = frameCuts(frameKeys, duration, modeDasar)
       .find((c) => t >= c.start - 1e-6 && t < c.end);
     const mode = induk?.mode || modeDasar;
-    onFrameKeys(withFrameKey(frameKeys, t, { mode, rect: induk?.rect }, mode));
+    // Susunan bingkainya ikut disalin: tanpa itu kedua belahan meminjam
+    // susunan milik klip, dan mengubah yang satu ikut mengubah yang lain.
+    onFrameKeys(withFrameKey(frameKeys, t,
+      { mode, rect: induk?.rect, layout: induk?.layout }, mode));
   }, [onFrameKeys, frameKeys, duration, modeDasar]);
 
   /**
@@ -490,7 +499,8 @@ export default function ClipTimeline({
     // Kotak tetap butuh persegi untuk dipotong; tanpa bawaan, memilihnya tidak
     // mengubah apa pun di layar dan terasa seperti tombol yang rusak.
     const rect = cut.rect ?? (mode === 'box' ? { x: 10, y: 10, w: 80, h: 80 } : undefined);
-    onFrameKeys(withFrameKey(frameKeys, di, { mode, rect }, cut.mode));
+    onFrameKeys(withFrameKey(frameKeys, di,
+      { mode, rect, layout: mode === cut.mode ? cut.layout : undefined }, cut.mode));
   }, [onFrameKeys, frameKeys]);
 
   const gabungBingkai = useCallback((cut) => {
@@ -501,7 +511,8 @@ export default function ClipTimeline({
   const geserBingkai = useCallback((cut, t) => {
     if (!onFrameKeys || cut.keyIndex < 0) return;
     onFrameKeys((frameKeys ?? [])
-      .map((k, i) => (i === cut.keyIndex ? { ...k, t: Math.max(0, t) } : k))
+      .map((k, i) => (i === cut.keyIndex
+        ? { ...k, t: Math.max(0, t), asal: undefined, alasan: undefined } : k))
       .sort((a, b) => a.t - b.t));
   }, [onFrameKeys, frameKeys]);
 
@@ -853,13 +864,15 @@ export default function ClipTimeline({
                            boxShadow: `inset 0 0 0 1px ${m.warna}`,
                          }}
                          title={`${formatTime(cut.start)} → ${formatTime(cut.end)} · ${m.nama}`
+                                + (cut.alasan ? ` · ✦ ${cut.asal === 'ai' ? 'AI' : 'otomatis'}: ${cut.alasan}` : '')
                                 + ' · klik dua kali untuk membelah di sini'}
                          onDoubleClick={(e) => {
                            e.stopPropagation();
                            const t = timeAt(e.clientX);
                            if (t > cut.start + 0.2 && t < cut.end - 0.2) {
                              onFrameKeys?.(withFrameKey(
-                               frameKeys, t, { mode: cut.mode, rect: cut.rect }, cut.mode));
+                               frameKeys, t,
+                               { mode: cut.mode, rect: cut.rect, layout: cut.layout }, cut.mode));
                            }
                          }}>
                       {cut.keyIndex >= 0 && (
@@ -869,6 +882,11 @@ export default function ClipTimeline({
                                 start: cut.start, end: cut.end,
                                 commit: (a) => geserBingkai(cut, a),
                               })} />
+                      )}
+                      {cut.asal && (
+                        <span className="tl-aim-asal" aria-label="Disusun sutradara"
+                              style={{ position: 'absolute', top: 1, right: 3, fontSize: '0.62rem',
+                                       color: m.warna, pointerEvents: 'none' }}>✦</span>
                       )}
                       {muat ? (
                         <span className="tl-aim-pick">

@@ -21,6 +21,9 @@ import {
   loadFraming, saveFraming, serializeLayout, clipTimeFor, sourceTimeFor,
   personKeyAt, withPersonKey,
   presentPeople,
+  GAMING_WAJAH_BAWAAN, gamingPadaWaktu, newFrameId, reaksiAktif, selaraskanBentuk, rasioKeluaran,
+  susunanDariServer,
+  susunGaming,
 } from './frames';
 
 const DEFAULT_STYLE = {
@@ -258,8 +261,19 @@ export default function Editor({ project, onBack }) {
   const setFrameKeys = useCallback((next) => {
     if (!selected) return;
     const value = typeof next === 'function' ? next(selected.frame_keys ?? []) : next;
-    editor.updateClip(selected.clip_id, { frame_keys: value });
-  }, [selected, editor]);
+    // Setiap potongan "Susun sendiri" memegang SALINAN susunannya sendiri.
+    //
+    // Potongan tanpa susunan dulu meminjam susunan milik klip — dan semua
+    // potongan peminjam menampilkan hal yang sama. Terlapor: menata potongan
+    // pertama, membelah, menata ulang yang kedua, lalu kembali ke awal — yang
+    // pertama ikut berubah menjadi tataan terbaru.
+    const salin = (l) => (l?.frames?.length
+      ? { ...l, frames: l.frames.map((f) => ({ ...f, id: newFrameId() })) } : l);
+    const milikSendiri = (value ?? []).map((k) => (
+      k.mode === 'layout' && !k.layout?.frames?.length && layout?.frames?.length
+        ? { ...k, layout: salin(layout) } : k));
+    editor.updateClip(selected.clip_id, { frame_keys: milikSendiri });
+  }, [selected, editor, layout]);
 
   /**
    * Satu pintu untuk mengganti cara membingkai, dipakai panel Bingkai maupun
@@ -293,8 +307,16 @@ export default function Editor({ project, onBack }) {
       // yang barusan dicari sistem. Tanpa ini keduanya hilang dan pengguna
       // kembali ke satu bingkai kosong — padahal justru di sinilah susunan
       // otomatis itu seharusnya bisa disesuaikan: geser sedikit, lalu pakai.
+      //
+      // Dengan id BARU per bingkai. Susunan dari server dulu datang tanpa id,
+      // dan dua bingkai tanpa id adalah "bingkai yang sama" bagi penyeretnya:
+      // terlapor, menyeret kotak hijau ikut memindahkan dan mengecilkan yang
+      // biru.
       if (mode === 'layout' && frameModeEfektif === 'gaming' && layoutGamingRef.current) {
-        setLayout(layoutGamingRef.current);
+        const { gaming, reaksi, ...asal } = gamingPadaWaktu(   // eslint-disable-line no-unused-vars
+          layoutGamingRef.current, clipTimeFor(selected.segments, sourceTime));
+        setLayout({ ...asal,
+                    frames: asal.frames.map((f) => ({ ...f, id: newFrameId() })) });
       }
       setFrameMode(mode);
     }
@@ -334,42 +356,120 @@ export default function Editor({ project, onBack }) {
    * dibedakan dari "tidak bekerja". Susunannya diambil lebih awal supaya
    * pratinjaunya benar sejak sebelum dirender.
    */
-  const [layoutGaming, setLayoutGaming] = useState(null);
+  // Milik KLIP, bukan video: streamer memindahkan kamera wajahnya di tengah
+  // siaran, jadi letak yang benar untuk satu klip bisa salah untuk klip lain.
+  // Terlapor: klip M dibingkai di kiri atas karena memakai setelan klip lain.
+  //
+  // Yang disetel pengguna disimpan di klipnya (`susunan_game`, ikut Simpan).
+  // Hasil pencarian otomatis cukup diingat di sini — menyimpannya ke klip akan
+  // membuat "Simpan" menyala hanya karena sebuah klip dibuka.
+  const [cacheGaming, setCacheGaming] = useState({});
+  const layoutGaming = selected
+    ? (selected.susunan_game ?? cacheGaming[selected.clip_id] ?? null) : null;
   // Dibaca oleh `pilihCaraBingkai`, yang dideklarasikan lebih dulu. Lewat ref,
   // bukan lewat daftar kebergantungan — itu yang dua kali membuat seluruh
   // Studio gagal dirender karena dipakai sebelum dideklarasikan.
-  const layoutGamingRef = useRef(null);
+  const layoutGamingRef = useRef(layoutGaming);
+  layoutGamingRef.current = layoutGaming;
+  const setLayoutGaming = useCallback((next) => {
+    if (!selected) return;
+    layoutGamingRef.current = next;
+    editor.updateClip(selected.clip_id, { susunan_game: next });
+  }, [selected, editor]);
+  const [deteksiUlang, setDeteksiUlang] = useState(0);
   const [gamingSibuk, setGamingSibuk] = useState(false);
+  const tKlip = selected ? clipTimeFor(selected.segments, sourceTime) : 0;
 
   useEffect(() => {
     if (frameModeEfektif !== 'gaming' || !selected?.segments?.length) return undefined;
+    // Sudah disetel atau sudah dicari untuk klip ini: jangan ditimpa tebakan.
+    if (layoutGamingRef.current?.frames?.length) return undefined;
+    const idKlip = selected.clip_id;
     let batal = false;
     setGamingSibuk(true);
     apiPost('/clip-facecam', { video_id: videoId, segments: selected.segments })
       .then((r) => {
         if (batal) return;
-        setLayoutGaming(r?.layout ?? null);
-        layoutGamingRef.current = r?.layout ?? null;
+        const l = susunanDariServer(r?.layout);
+        const srcAspek = (r?.src_w && r?.src_h) ? r.src_w / r.src_h : 16 / 9;
+        // Dihitung ulang untuk rasio keluaran yang sedang dipilih — server
+        // menyusunnya untuk 9:16.
+        const jadi = l && susunGaming(l, {
+          wajah: l.gaming?.wajah ?? GAMING_WAJAH_BAWAAN,
+          permainan: l.gaming?.permainan ?? 'isi',
+          srcAspek, outAspek: rasioKeluaran(aspectRatio),
+        });
+        setCacheGaming((c) => ({ ...c, [idKlip]: jadi || null }));
       })
-      .catch(() => { if (!batal) setLayoutGaming(null); })
+      .catch(() => { /* tanpa susunan: render mencari facecam sendiri */ })
       .finally(() => { if (!batal) setGamingSibuk(false); });
     return () => { batal = true; };
-  }, [frameModeEfektif, selected?.clip_id, videoId]);   // eslint-disable-line
+  }, [frameModeEfektif, selected?.clip_id, videoId, deteksiUlang]);   // eslint-disable-line
 
-  // Susunan yang dipakai pratinjau: milik gaming saat modenya gaming.
-  const susunanTampil = frameModeEfektif === 'gaming' ? layoutGaming : layoutEfektif;
+  /** Mengubah setelan Main game: tinggi wajah dan titik berangkat permainan. */
+  const setelGaming = useCallback((ubah) => {
+    const lama = layoutGamingRef.current;
+    if (!lama?.frames?.length) return;
+    setLayoutGaming(susunGaming(lama, {
+      wajah: ubah.wajah ?? lama.gaming?.wajah ?? GAMING_WAJAH_BAWAAN,
+      permainan: ubah.permainan ?? lama.gaming?.permainan ?? 'isi',
+      srcAspek: lama.gaming?.sumber ?? 16 / 9,
+      outAspek: rasioKeluaran(aspectRatio),
+    }));
+  }, [aspectRatio, setLayoutGaming]);
+
+  /** Membuang setelan klip ini dan mencari letak facecam dari awal. */
+  const ulangiGaming = useCallback(() => {
+    if (!selected) return;
+    layoutGamingRef.current = null;
+    editor.updateClip(selected.clip_id, { susunan_game: null });
+    setCacheGaming((c) => { const n = { ...c }; delete n[selected.clip_id]; return n; });
+    setDeteksiUlang((n) => n + 1);
+  }, [selected, editor]);
+
+  // Rasio keluaran berubah (9:16 -> 1:1): bidangnya dihitung ulang; tebakan
+  // yang belum disentuh dicari lagi untuk rasio baru.
+  useEffect(() => {
+    setCacheGaming({});
+    if (selected?.susunan_game?.frames?.length) setelGaming({});
+  }, [aspectRatio]);   // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Susunan yang dipakai pratinjau: milik gaming saat modenya gaming — dengan
+  // kotak wajah yang berlaku pada detik ini.
+  const susunanTampil = frameModeEfektif === 'gaming'
+    ? gamingPadaWaktu(layoutGaming, tKlip) : layoutEfektif;
 
   /** Menulis susunan bingkai ke potongan yang berlaku, atau ke klip. */
   const setSusunanEfektif = useCallback((next) => {
+    if (frameModeEfektif === 'gaming') {
+      // `next` adalah susunan yang TAMPIL: kotak wajahnya milik letak yang
+      // berlaku di detik ini, jadi hanya letak itu yang diubah.
+      const lama = layoutGamingRef.current;
+      if (!lama?.frames?.length) return;
+      // Bebas seperti Susun sendiri: kotak sumber DAN bidang di kanvas
+      // disimpan apa adanya. Hanya kotak wajah yang punya letak per waktu.
+      const i = reaksiAktif(lama, tKlip);
+      const reaksi = (lama.reaksi?.length ? lama.reaksi : [{ t: 0, src: lama.frames[1].src }])
+        .map((r, j) => (j === i
+          ? { ...r, src: next.frames[1].src, kotak: next.frames[1].src } : r));
+      setLayoutGaming({ ...lama, reaksi, frames: next.frames });
+      return;
+    }
+    const v = videoRef.current;
+    const bentuk = {
+      srcAspek: (v?.videoWidth && v?.videoHeight) ? v.videoWidth / v.videoHeight : 16 / 9,
+      outAspek: rasioKeluaran(aspectRatio),
+    };
     if (kunciBingkaiAktif?.mode === 'layout') {
       setFrameKeys((lama) => (lama ?? []).map((k) => (
         Math.abs((k.t ?? 0) - (kunciBingkaiAktif.t ?? 0)) < 1e-6
-          ? { ...k, layout: next } : k
+          ? { ...k, layout: selaraskanBentuk(k.layout, next, bentuk) } : k
       )));
       return;
     }
-    setLayout(next);
-  }, [kunciBingkaiAktif, setFrameKeys, setLayout]);
+    setLayout((lama) => selaraskanBentuk(lama, next, bentuk));
+  }, [kunciBingkaiAktif, frameModeEfektif, setLayoutGaming, setFrameKeys, setLayout,
+      aspectRatio, tKlip]);
   const setPersonKeys = useCallback((next) => {
     if (!selected) return;
     const value = typeof next === 'function' ? next(selected.person_keys ?? []) : next;
@@ -485,6 +585,12 @@ export default function Editor({ project, onBack }) {
     ? selected.segments.map((s) => `${s.start.toFixed(2)}-${s.end.toFixed(2)}`).join(',')
     : '';
   const followKey = (layout?.frames ?? []).map((f) => (f.follow ? '1' : '0')).join('');
+  // Lajur Bingkai yang berisi kunci ikut-wajah atau bingkai pengikut (reaksi
+  // dari sutradara) butuh jejak wajah sepanjang klip — bukan hanya saat garis
+  // main kebetulan berada di potongan ikut-wajah. Tanpa ini, jejaknya dibuang
+  // setiap kali garis main masuk ke bidikan reaksi, dan bidikan itu diam.
+  const kunciButuhJejak = (frameKeys ?? []).some((k) => (k.mode ?? 'smart') === 'smart'
+    || (k.layout?.frames ?? []).some((f) => f.follow));
   // Apa yang menentukan WAJAH-WAJAHNYA — beda dari apa yang menentukan ke mana
   // bingkai diarahkan. Hanya perubahan yang pertama yang boleh mengosongkan
   // linimasa bingkai.
@@ -512,7 +618,8 @@ export default function Editor({ project, onBack }) {
     // jadi kotak pengikut di susunan sendiri diam saja di pratinjau meski
     // hasil rendernya bergerak.
     const wantsTrack = frameModeEfektif === 'smart' || frameModeEfektif === 'motion'
-      || (frameMode === 'layout' && (layout?.frames ?? []).some((f) => f.follow));
+      || (frameMode === 'layout' && (layout?.frames ?? []).some((f) => f.follow))
+      || kunciButuhJejak;
     if (!videoId || !selected || !wantsTrack || aspectRatio === '16:9') {
       setReframe(null);
       // Tanda sibuk WAJIB dimatikan di sini juga. Permintaan sebelumnya sudah
@@ -553,7 +660,8 @@ export default function Editor({ project, onBack }) {
       .finally(() => { if (!cancelled) setReframeLoading(false); });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [videoId, segmentKey, frameMode, subjekLacak, frameModeEfektif, aspectRatio, followKey, personKeys]);
+  }, [videoId, segmentKey, frameMode, subjekLacak, frameModeEfektif, aspectRatio, followKey,
+      personKeys, kunciButuhJejak]);
 
   // Timecode dibaca dari elemen video pada ~10 Hz. `timeupdate` hanya menyala
   // sekitar 4 Hz dan angkanya terlihat tersendat; membacanya tiap frame dan
@@ -947,7 +1055,11 @@ export default function Editor({ project, onBack }) {
     aspect_ratio: aspectRatio,
     frame_mode: frameMode,
     frame_motion: frameMotion,
-    frame_layout: frameMode === 'layout' ? serializeLayout(layout) : null,
+    frame_layout: frameMode === 'layout' ? serializeLayout(layout)
+      // Main game yang sudah disetel dikirim sebagai susunan jadi; tanpanya
+      // server mencari facecam sendiri seperti dulu.
+      : frameMode === 'gaming'
+        ? serializeLayout(clip.susunan_game ?? cacheGaming[clip.clip_id]) : null,
     // Dua kunci atau lebih MENANG atas frame_mode di server. Dikirim apa adanya
     // supaya aturan itu hanya hidup di satu tempat.
     // Susunan tiap potongan ikut dikirim dalam bentuk yang sama dengan
@@ -955,7 +1067,10 @@ export default function Editor({ project, onBack }) {
     frame_keys: (clip.frame_keys ?? []).map((k) => (
       k.mode === 'layout' && k.layout
         ? { ...k, layout: serializeLayout(k.layout) }
-        : k
+        : k.mode === 'gaming' && !k.layout
+            && (clip.susunan_game ?? cacheGaming[clip.clip_id])?.frames?.length
+          ? { ...k, layout: serializeLayout(clip.susunan_game ?? cacheGaming[clip.clip_id]) }
+          : k
     )),
     // Tanda milik KLIP INI, bukan klip yang sedang dibuka: ekspor berjalan
     // atas semua huruf yang dicentang, dan memakai tanda klip terpilih untuk
@@ -978,7 +1093,7 @@ export default function Editor({ project, onBack }) {
       }
       : null,
     caption_style: style,
-  }), [videoId, aspectRatio, frameMode, frameMotion, layout, style, showHook]);
+  }), [videoId, aspectRatio, frameMode, frameMotion, layout, cacheGaming, style, showHook]);
 
   const handleExportSelected = async () => {
     const targets = clips.filter((c) => checked.has(c.clip_id));
@@ -1362,6 +1477,8 @@ export default function Editor({ project, onBack }) {
                             frameMotion={frameMotion}
                             onFrameMotionChange={setFrameMotion}
                             layout={susunanTampil} onLayoutChange={setSusunanEfektif}
+                            gamingSibuk={gamingSibuk}
+                            onGaming={setelGaming} onGamingUlang={ulangiGaming}
                             selectedFrameId={selectedFrameId}
                             onSelectFrame={setSelectedFrameId}
                             faceTrackAvailable={!!reframe?.people?.length}

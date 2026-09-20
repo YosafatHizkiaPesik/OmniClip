@@ -43,6 +43,9 @@ backend/models/campplus_sv.onnx
 # Pengenal wajah SFace: 37 MB. Yang membuat nomor orang menunjuk ORANG dan
 # bukan kursi, jadi ia penting — tapi bobot model tetap tidak masuk riwayat git.
 backend/models/face_recognition_sface_2021dec.onnx
+# Pendengar peristiwa suara YAMNet (tawa, sorak, teriak): 16 MB, diunduh saat
+# pertama dipakai sutradara bingkai.
+backend/models/yamnet.onnx
 # Suara Piper untuk membacakan judul klip: 63 MB, diunduh sekali saat pertama
 # dipakai. Bobot model tidak masuk riwayat git — YuNet (232 KB) ikut karena
 # kecil dan tanpa itu bingkai otomatis tidak bisa jalan sama sekali.

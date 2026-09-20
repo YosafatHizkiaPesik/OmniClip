@@ -1292,3 +1292,76 @@ Job kini membawa `started_at` dan `eta_seconds` ke kartu.
 - Diagnosa: `_HIDUP_TERAKHIR["waktu"]` berisi detik setiap jejak terlihat.
 
 **Hasil:** JHrjjPbD7I4 3 klip: tidak ada jejak iklan yang lolos (dulu 2); 7 video lain: 0 wajah orang dinyatakan mati. Klip P dari 40:33 mengikuti orang berkacamata-berheadphone, iklan hanya di tepi.
+
+## 19. Sutradara bingkai AI (tahap 1-2 dari rencana; belum di-commit)
+
+Rencana lengkap: bingkai berganti per momen — podcast: tawa → wajah yang bereaksi (bergantian atau ditumpuk) → kembali ikut wajah; game horor: jumpscare → wajah penuh → kembali gameplay. Gemini utama, OpenRouter cadangan (belum), tombol di Studio (sudah) + otomatis setelah auto-klip (belum).
+
+**Sudah jadi:**
+- `reframe.py`: `ReframePlan.people_box` (cy, lebar wajah per orang per sampel), `cut_times`, `kotak_orang()` (None bila orangnya tak terlihat di rentang — jangan pakai posisi dari bidikan lain).
+- `peristiwa_suara.py`: YAMNet ONNX (16 MB, sha256 diperiksa, `backend/models/yamnet.onnx`, di-.gitignore) → tawa/sorak/teriak. Caption YouTube Indonesia tidak pernah menandai tawa dan meregangkan kata sampai 100% klip, jadi YAMNet satu-satunya sinyal tawa yang andal. Ambang: skor mutlak ≥0,015 DAN ≥20× median klip.
+- `momen.py`: gabungan kejut, tanpa-kata, mulut bersama, potong kamera, dan YAMNet → momen kandidat ber-id.
+- `penyedia_ai.py`: `tanya_gemini(bahan=[video|gambar|teks])`, rantai model + catat_gagal seperti gemini.py.
+- `sutradara_ai.py`: proksi 360p dengan JAM KLIP ditulis di pojok (tanpa itu Gemini menaruh momen di detik 100 dari video 70 detik), lembar wajah P0…Pn (OpenCV), menu bingkai tetap, validasi (tempel ke bukti lokal ±2 dtk, bidikan ≥0,6 dtk, momen ≤5 dtk, jarak ≥3 dtk, kekuatan ≥0,55, wajah <44 px → bidikan lebar, pecah di potongan kamera), `susun_lokal` tanpa AI, job `sutradara` (lajur net), `POST /api/clip-sutradara-ai`.
+- Bidikan wajah/terbagi = susunan dengan bingkai `follow` + `person` eksplisit (FrameModel.person, render, serializeLayout, followX).
+- Studio: kartu "Sutradara bingkai" di panel Sisipan (AI / Mesin lokal / Buang), bilah kemajuan, konfirmasi bila lajur sudah diatur tangan; lajur Bingkai menandai kunci ✦ dengan alasannya; menyunting kunci melepas `asal`.
+- **Bug lama diperbaiki:** pratinjau terlempar ke awal klip setiap kali pemutaran masuk kunci "Susun"/"Game" — elemen <video> baru lahir di detik 0 sumber dan penjaga "parkir" Editor menariknya ke awal klip. `ClipPreview.pasangUtama` kini menyerahkan posisi+status putar ke elemen pengganti SEKETIKA.
+- **ffmpeg bundelan (`backend/bin/ffmpeg` 7.0.2 statis) TIDAK punya `drawtext`.** Jangan pakai drawtext di mana pun; jam proksi ditulis lewat ASS/libass.
+
+**Terukur:** job lewat API 74-104 dtk (sebagian besar menunggu model sibuk), ±5-13 rb token/klip. Render dengan kunci AI berhasil (mode `keys`).
+
+**Sisa:** setengah detik hitam saat masuk susunan di pratinjau; sel terbagi bisa berisi orang yang sama bila kamera berpindah di tengah momen (jalur lokal); model memberi kekuatan 1,0 hampir ke semua momen; nomor orang di render bergantung pada roster yang sama (restart backend di antara susun dan render → risiko nomor tertukar); tahap 3 game horor (butuh video uji — minta izin unduh), tahap 4 OpenRouter, tahap 5 otomatis setelah auto-klip + cache.
+
+## 20. Unduhan paralel dan lebih cepat (belum di-commit)
+
+- **Kecepatan.** Satu sambungan ke YouTube diperlambat setelah ±30 dtk (terukur 9,8 → 2–5 MB/s di internet 100 Mbps).
+  `ytdlp._opsi_paralel`: `extractor_args youtube formats=dashy` + `concurrent_fragment_downloads=8`
+  (`OMNICLIP_SAMBUNGAN_UNDUH`). Terukur 10–12 MB/s stabil. Bila gagal, diulang sekali dengan satu sambungan.
+- **Paralel.** Auto-klip pindah ke lajur baru `klip` (lebar 3, `OMNICLIP_LANE_KLIP`). Pekerjaan berat bergiliran
+  lewat `jobs.gerbang_cpu` (semafor selebar lane `cpu`): job lane `cpu` memegangnya penuh, auto-klip mengambilnya
+  sesudah unduhan (`ctx.giliran_cpu`) dengan pesan "menunggu giliran analisis". Job antre versi lama dipindah
+  lajurnya saat start (`repos.jobs.pindah_lajur`).
+- **"Macet di 100%".** Pesan "Menggabungkan…" dibuang pembatas laju tulis (datang <0,25 dtk sesudah kabar unduhan
+  terakhir). `ctx.progress(paksa=True)` untuk pesan pergantian langkah, dan `_make_pp_hook` melaporkan lama
+  penggabungan tiap 2 dtk (terukur 2,5 menit untuk 1,3 GB di hard disk NTFS eksternal).
+
+## 21. Main game bisa disetel, dan Susun sendiri yang tidak memotong diam-diam (belum di-commit)
+
+- `render.susun_layout_gaming(facecam, src_w, src_h, out_w, out_h, wajah=40, permainan="utuh"|"isi")`.
+  "utuh" = seluruh layar permainan (31,6% kanvas untuk 16:9) di bawah wajah, sisanya latar kabur;
+  "isi" = memenuhi sisa kanvas dengan kotak sumber berasio sama dengan bidangnya (`_pas_rasio`).
+  `_petak_tanpa_facecam` dibuang: permainan tidak lagi dipangkas seperempat demi menghindari facecam.
+- Render mode gaming memakai `frame_layout` kiriman Studio bila ada; kunci "gaming" di linimasa diberi
+  `layout` yang sama oleh `Editor.renderPayload`.
+- Studio: `FramePanel.GamingSetelan` (Permainan utuh / Penuhi bawah, penggeser tinggi wajah, cari ulang);
+  kotak di meja bingkai bisa diseret, sudutnya berasio terkunci (`beginRectDrag({aspek})`). Setelan per video
+  di localStorage `omniclip.gaming` (`muatGaming`/`simpanGaming`).
+- Bug: Main game → Susun sendiri membuat dua kotak "menyatu" — susunan dari server tanpa `id`. Sekarang id baru.
+- Susun sendiri: `frames.selaraskanBentuk` — mengubah ukuran kotak sumber menyesuaikan tinggi bidang tujuan,
+  mengubah bidang tujuan menyesuaikan kotak sumber (cover saja). Terlapor: notifikasi donasi terpotong kiri-kanan.
+
+## 22. Main game per klip dengan wajah yang berpindah; potongan Susun sendiri yang mandiri (belum di-commit)
+
+- Letak facecam kini per klip, dipindai per 8 dtk (`reframe.deteksi_facecam_waktu`); pusat bergeser >8% = letak baru.
+  Susunan membawa `reaksi: [{t, src, kotak}]`; render memecah kunci gaming per letak (`render.pecah_reaksi`).
+  Main game tanpa linimasa sekarang lewat jalur kunci (satu kunci "gaming").
+- Kotak Reaksi dibentuk DI DALAM panel facecam (`_pas_rasio(dalam=True)`), bukan dilebarkan ke layar permainan.
+- Kotak Permainan bebas bentuk; bidangnya selebar kanvas setinggi bentuknya (`bidangPermainan` / `_bidang_permainan`).
+- Setelan disimpan di klip (`susunan_game`, ikut Simpan); hasil deteksi yang belum disentuh hanya di-cache di Editor.
+  Setelan per video di localStorage (bagian 21) dibuang — itulah yang membuat klip M dibingkai di kiri atas.
+- Susun sendiri: tiap potongan memegang salinan susunannya (`Editor.setFrameKeys` + `frameCuts` membawa `layout`).
+  Teruji: potong di 0:10, ubah potongan kedua, kembali ke 0:00 → potongan pertama tetap.
+- Sisa: kotak facecam hasil deteksi sedikit lebih lebar dari panel aslinya (strip tipis permainan di tepi panel wajah).
+
+## 23. Main game: memenuhi layar, tanpa facecam ganda, bebas diatur (belum di-commit)
+
+- Bawaan "isi": wajah 40% atas, permainan mengisi 60% sisanya; potongan permainan dipilih yang tidak memuat
+  facecam (`render._permainan_tanpa_wajah` / `frames.permainanTanpaWajah`). "utuh" tetap tersedia.
+- Tepi panel facecam ditajamkan dari garis diam lintas waktu (`reframe._tepi_panel`): puncak gradien ≥2,5×
+  median jalurnya DAN kuat di ≥70% panjang sisinya; sisi di pinggir bingkai tidak dicari; ditolak bila panel
+  hampir selebar wajah. Terukur: 96GQgDkHC64 → 0–18,4% × 71,5–100% (tepat); Devour (facecam tanpa bingkai,
+  orang dipotong dari latar) tetap memakai perkiraan dari awan wajah.
+- Pindah letak facecam harus dibenarkan potongan 8 dtk berikutnya; ukuran dianggap berubah bila >2,5×.
+- Studio: kedua bingkai Main game bebas seperti Susun sendiri (kotak sumber di meja bingkai, bidang di layar
+  hasil). Preset/penggeser menyusun ulang dari awal. Garis putus-putus `.frame-rect-tampil` menandai bagian
+  kotak yang sungguh tampil (cover), juga di Susun sendiri.

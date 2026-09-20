@@ -283,7 +283,8 @@ def build_layout_graph(layout: dict, in_label: str, out_label: str, *,
             crop = build_reframe_filter(
                 plan, workdir / f"reframe_{awalan}{i}.cmd", out_w, out_h,
                 name=f"{awalan}lf{i}", crop_w=sw, crop_h=sh, crop_y=sy,
-                person=plan.person_near(centre_pct), scale=False)
+                person=(int(f["person"]) if f.get("person") is not None
+                        else plan.person_near(centre_pct)), scale=False)
             parts.append(f"{L(f'lsrc{i}')}{crop},{place},setsar=1{L(f'lf{i}')}")
         else:
             parts.append(f"{L(f'lsrc{i}')}crop={sw}:{sh}:{sx}:{sy},{place},setsar=1{L(f'lf{i}')}")
@@ -344,7 +345,7 @@ def slugify(text: str) -> str:
 # jadi kecil dengan lubang kosong besar di bawahnya, dan yang dilaporkan
 # pemiliknya adalah "tidak full klipnya". Subtitle memang lebih baik duduk di
 # atas gambar daripada di atas kekosongan.
-GAMING_WAJAH_TINGGI = 38.0
+GAMING_WAJAH_TINGGI = 40.0
 
 
 def rasio_bidang_wajah(out_w: int, out_h: int) -> float:
@@ -352,56 +353,164 @@ def rasio_bidang_wajah(out_w: int, out_h: int) -> float:
     return out_w / max(1.0, out_h * GAMING_WAJAH_TINGGI / 100.0)
 
 
-def _petak_tanpa_facecam(facecam: dict) -> dict:
+def _pas_rasio(r: dict, rasio_px: float, src_aspek: float, dalam: bool = False) -> dict:
     """
-    Bagian bingkai yang TIDAK memuat facecam, sebesar mungkin.
+    Kotak sumber yang rasionya (dalam PIKSEL) sama dengan bidang tujuannya,
+    berpusat di tengah kotak `r`, sebesar mungkin tanpa keluar dari bingkai.
 
-    Ada karena wajah pemain muncul dua kali: sekali diperbesar di bidang atas,
-    sekali lagi kecil di dalam gambar permainan di bawahnya — persis seperti
-    yang terlihat di hasil render dan dilaporkan pemiliknya. Facecam selalu
-    menempel di salah satu sudut, jadi membuang satu jalur di sisinya selalu
-    menyisakan persegi utuh; yang dipilih adalah jalur yang menyisakan paling
-    banyak.
+    Kotak yang rasionya berbeda dari bidangnya dipotong lagi oleh "cover" saat
+    dirender — dan yang terlihat di meja bingkai jadi lebih luas daripada yang
+    benar-benar masuk ke klip. Menyamakan rasionya membuat kotak itu jujur.
     """
-    fx, fy = float(facecam["x"]), float(facecam["y"])
-    fw, fh = float(facecam["w"]), float(facecam["h"])
-    calon = [
-        {"x": 0.0, "y": 0.0, "w": 100.0, "h": fy},                  # di atasnya
-        {"x": 0.0, "y": fy + fh, "w": 100.0, "h": 100.0 - (fy + fh)},  # di bawahnya
-        {"x": 0.0, "y": 0.0, "w": fx, "h": 100.0},                  # di kirinya
-        {"x": fx + fw, "y": 0.0, "w": 100.0 - (fx + fw), "h": 100.0},  # di kanannya
-    ]
-    terbaik = max(calon, key=lambda r: max(0.0, r["w"]) * max(0.0, r["h"]))
-    # Kalau facecam-nya menutupi hampir seluruh bingkai, tidak ada sisa yang
-    # berarti: pakai bingkai penuh dan terima wajah yang muncul dua kali,
-    # karena memotongnya akan menyisakan seiris gambar yang tidak berguna.
-    if terbaik["w"] * terbaik["h"] < 1500.0:
-        return {"x": 0.0, "y": 0.0, "w": 100.0, "h": 100.0}
-    return terbaik
+    cx = float(r["x"]) + float(r["w"]) / 2
+    cy = float(r["y"]) + float(r["h"]) / 2
+    # rasio persen = rasio piksel / rasio sumber
+    k = rasio_px / max(1e-6, src_aspek)
+    h = float(r["h"])
+    w = h * k
+    if dalam:
+        # Di DALAM kotaknya: panel facecam yang lebih tegak dari bidang wajah
+        # dipangkas atas-bawahnya, bukan dilebarkan ke samping — yang di
+        # sampingnya adalah layar permainan, dan itu yang tampil sebagai
+        # sepotong gelap di sebelah wajah.
+        w = min(float(r["w"]), h * k)
+        h = w / k
+    if w > 100.0:
+        w = 100.0
+        h = w / k
+    if h > 100.0:
+        h = 100.0
+        w = h * k
+    x = min(max(0.0, cx - w / 2), 100.0 - w)
+    y = min(max(0.0, cy - h / 2), 100.0 - h)
+    return {"x": round(x, 2), "y": round(y, 2), "w": round(w, 2), "h": round(h, 2)}
 
 
-def susun_layout_gaming(facecam: dict) -> dict:
-    """Kotak facecam -> susunan dua bidang yang dimengerti build_layout_graph."""
-    main = _petak_tanpa_facecam(facecam)
+def susun_layout_gaming(facecam, *, src_w: int = 1920, src_h: int = 1080,
+                        out_w: int = 1080, out_h: int = 1920,
+                        wajah: float = GAMING_WAJAH_TINGGI,
+                        permainan: str = "isi") -> dict:
+    """
+    Kotak facecam -> susunan dua bidang yang dimengerti build_layout_graph.
+
+    `facecam` boleh satu kotak, atau daftar `deteksi_facecam_waktu`
+    ([{"t", "facecam"}]) bila wajahnya berpindah di tengah klip. Letak-letak
+    itu disimpan di `reaksi`, dan `pecah_reaksi` memecahnya jadi potongan
+    waktu saat merender.
+
+    `permainan`:
+      - "utuh"  seluruh layar permainan, selebar kanvas, tepat di bawah wajah;
+                sisanya latar kabur tempat subtitle.
+      - "isi"   bidang permainan memenuhi sisa kanvas; sisi kiri-kanan
+                terpotong.
+    Keduanya hanya titik berangkat: bidang permainan selalu dihitung dari
+    BENTUK kotak sumbernya (`_bidang_permainan`), jadi kotak yang diubah
+    pengguna tampil utuh tanpa dipotong lagi.
+    """
+    posisi = facecam if isinstance(facecam, list) else [{"t": 0.0, "facecam": facecam}]
+    src_aspek = src_w / max(1, src_h)
+    out_aspek = out_w / max(1, out_h)
+    wajah = max(15.0, min(75.0, float(wajah)))
+    if permainan == "utuh":
+        main_src = {"x": 0, "y": 0, "w": 100, "h": 100}
+        main_dst = _bidang_permainan(main_src, wajah, src_aspek, out_aspek)
+    else:
+        # Memenuhi seluruh sisa kanvas — tanpa bilah kosong — dengan potongan
+        # permainan yang TIDAK memuat facecam, supaya wajah tidak tampil dua
+        # kali (sekali besar di atas, sekali kecil di dalam permainan).
+        main_dst = {"x": 0, "y": round(wajah, 2), "w": 100, "h": round(100 - wajah, 2)}
+        main_src = _permainan_tanpa_wajah(
+            [p["facecam"] for p in posisi],
+            (out_w * main_dst["w"]) / (out_h * main_dst["h"]), src_aspek)
+    wajah_dst = {"x": 0, "y": 0, "w": 100, "h": round(wajah, 2)}
+    rasio_wajah = (out_w * wajah_dst["w"]) / (out_h * wajah_dst["h"])
+    reaksi = []
+    for p in posisi:
+        kotak = {k: round(float(p["facecam"][k]), 2) for k in ("x", "y", "w", "h")}
+        reaksi.append({"t": round(float(p["t"]), 2), "kotak": kotak,
+                       "src": _pas_rasio(kotak, rasio_wajah, src_aspek, dalam=True)})
     return {
         "background": "blur",
+        # Setelan susunan, supaya editor bisa menampilkan dan mengubahnya.
+        "gaming": {"wajah": round(wajah, 2), "permainan": permainan},
+        "reaksi": reaksi,
         "frames": [
             # Permainan digambar lebih dulu supaya wajah berada di atasnya bila
             # suatu saat keduanya bersinggungan.
-            #
-            # "cover", bukan "contain": bidangnya diisi penuh. Bilah kosong di
-            # sekeliling gambar permainan membuang ruang layar yang justru
-            # paling berharga di bingkai tegak, dan sisi yang terpotong jauh
-            # lebih sedikit daripada yang hilang lewat bilah.
-            {"src": main,
-             "dst": {"x": 0, "y": GAMING_WAJAH_TINGGI, "w": 100,
-                     "h": 100 - GAMING_WAJAH_TINGGI},
-             "fit": "cover"},
-            {"src": {k: facecam[k] for k in ("x", "y", "w", "h")},
-             "dst": {"x": 0, "y": 0, "w": 100, "h": GAMING_WAJAH_TINGGI},
-             "fit": "cover"},
+            {"label": "Permainan", "src": main_src, "dst": main_dst, "fit": "cover"},
+            {"label": "Reaksi", "src": reaksi[0]["src"], "dst": wajah_dst, "fit": "cover"},
         ],
     }
+
+
+def _permainan_tanpa_wajah(facecams: list, rasio_px: float, src_aspek: float) -> dict:
+    """
+    Potongan permainan setinggi bingkai berasio `rasio_px`, sedekat mungkin ke
+    tengah, yang tidak bersinggungan dengan facecam mana pun di klip ini.
+    Bila tidak ada tempat seperti itu, potongan tengah.
+    """
+    k = rasio_px / max(1e-6, src_aspek)
+    h = 100.0
+    w = min(100.0, h * k)
+    if w >= 100.0:
+        return {"x": 0, "y": round(max(0.0, (100 - 100 / k) / 2), 2),
+                "w": 100, "h": round(min(100.0, 100 / k), 2)}
+    tengah = 50.0 - w / 2
+    calon = [tengah]
+    for f in facecams:
+        calon += [float(f["x"]) - w, float(f["x"]) + float(f["w"])]
+
+    def bebas(x):
+        return all(x + w <= float(f["x"]) + 0.5 or x >= float(f["x"]) + float(f["w"]) - 0.5
+                   for f in facecams)
+
+    sah = [x for x in calon if -1e-6 <= x <= 100 - w + 1e-6 and bebas(x)]
+    x = min(sah, key=lambda v: abs(v - tengah)) if sah else tengah
+    return {"x": round(min(max(0.0, x), 100 - w), 2), "y": 0, "w": round(w, 2), "h": 100}
+
+
+def _bidang_permainan(src: dict, wajah: float, src_aspek: float, out_aspek: float) -> dict:
+    """Bidang permainan selebar kanvas, setinggi bentuk kotak sumbernya."""
+    rasio_px = (float(src["w"]) / max(1e-6, float(src["h"]))) * src_aspek
+    sisa = 100.0 - wajah
+    h = 100.0 * out_aspek / rasio_px
+    if h > sisa:
+        h = sisa
+        w = h * rasio_px / out_aspek
+        return {"x": round((100 - w) / 2, 2), "y": round(wajah, 2),
+                "w": round(w, 2), "h": round(h, 2)}
+    return {"x": 0, "y": round(wajah, 2), "w": 100, "h": round(h, 2)}
+
+
+def pecah_reaksi(keys: list, durasi: float, bawaan: Optional[dict]) -> list:
+    """
+    Kunci "gaming" yang wajahnya berpindah -> beberapa kunci "layout", satu per
+    letak wajah. Kunci lain tidak disentuh.
+    """
+    urut = sorted((k for k in keys or [] if isinstance(k, dict)),
+                  key=lambda k: float(k.get("t") or 0))
+    keluar: list = []
+    for i, k in enumerate(urut):
+        t0 = float(k.get("t") or 0)
+        t1 = float(urut[i + 1].get("t") or 0) if i + 1 < len(urut) else durasi
+        tata = k.get("layout") or (bawaan if (k.get("mode") or "") == "gaming" else None)
+        reaksi = (tata or {}).get("reaksi") or []
+        if (k.get("mode") or "") != "gaming" or not tata or not tata.get("frames"):
+            keluar.append(k)
+            continue
+        if len(reaksi) <= 1 or len(tata["frames"]) < 2:
+            keluar.append({**k, "layout": tata})
+            continue
+        for j, r in enumerate(reaksi):
+            a = max(t0, float(r.get("t") or 0))
+            b = min(t1, float(reaksi[j + 1].get("t") or 0) if j + 1 < len(reaksi) else t1)
+            if b - a <= 0.05:
+                continue
+            frames = [dict(f) for f in tata["frames"]]
+            frames[1]["src"] = dict(r["src"])
+            keluar.append({**k, "t": round(a, 3), "mode": "layout",
+                           "layout": {**tata, "frames": frames}})
+    return keluar
 
 
 # --- Bingkai yang berubah sepanjang klip ---------------------------------------
@@ -878,6 +987,13 @@ def render_clip(
         # usulan sutradara "gaming untuk seluruh klip" dirender sebagai ikuti
         # wajah tanpa satu pun tanda. Digandakan di tengah klip, ia melewati
         # jalur linimasa yang sama dengan kunci lainnya.
+        # Main game tanpa linimasa = satu kunci "gaming" untuk seluruh klip,
+        # supaya wajah yang berpindah di tengah klip bisa dipecah jadi potongan
+        # waktu (`pecah_reaksi`) lewat jalur linimasa yang sama.
+        if frame_mode == "gaming" and not [k for k in (frame_keys or []) if isinstance(k, dict)]:
+            frame_keys = [{"t": 0.0, "mode": "gaming",
+                           **({"layout": frame_layout}
+                              if frame_layout and frame_layout.get("frames") else {})}]
         satu = [k for k in (frame_keys or []) if isinstance(k, dict)]
         if len(satu) == 1:
             separuh = sum(float(sg["end"]) - float(sg["start"]) for sg in segments) / 2
@@ -898,7 +1014,11 @@ def render_clip(
                     frame_motion=frame_motion, subjek="gerak")
 
             kunci_plan = None
-            if any((k.get("mode") or "smart") == "smart" for k in frame_keys):
+            # Juga untuk susunan yang bingkainya membuntuti orang (reaksi dari
+            # sutradara): tanpa rencana wajah, bingkai itu diam di tempatnya.
+            if any((k.get("mode") or "smart") == "smart"
+                   or any(f.get("follow") for f in ((k.get("layout") or {}).get("frames") or []))
+                   for k in frame_keys):
                 kunci_plan = plan_reframe(str(src), segments, aspect_ratio=aspect_ratio,
                                           speaker_turns=speaker_turns,
                                           person_keys=person_keys,
@@ -908,14 +1028,15 @@ def render_clip(
 
             # Begitu pula facecam: dicari sekali, dipakai tiap kunci "gaming".
             tata_gaming = None
-            if any((k.get("mode") or "") == "gaming" for k in frame_keys):
-                from .reframe import deteksi_facecam
-                mulai_k = float(segments[0]["start"]) if segments else 0.0
-                fc = deteksi_facecam(src, mulai_k, min(durasi_klip, 30.0),
-                                     skunci_w, skunci_h,
-                                     rasio_potongan=rasio_bidang_wajah(out_w, out_h))
-                if fc:
-                    tata_gaming = susun_layout_gaming(fc)
+            if any((k.get("mode") or "") == "gaming" and not (k.get("layout") or {}).get("frames")
+                   for k in frame_keys):
+                from .reframe import deteksi_facecam_waktu
+                posisi = deteksi_facecam_waktu(src, segments, skunci_w, skunci_h,
+                                               rasio_potongan=rasio_bidang_wajah(out_w, out_h))
+                if posisi:
+                    tata_gaming = susun_layout_gaming(posisi, src_w=skunci_w, src_h=skunci_h,
+                                                      out_w=out_w, out_h=out_h)
+            frame_keys = pecah_reaksi(frame_keys, durasi_klip, tata_gaming)
 
             kunci_graf, kunci_dipakai = build_frame_keys_graph(
                 frame_keys, vlabel, "[vkeys]",
@@ -930,6 +1051,12 @@ def render_clip(
                                      for k in kunci_dipakai))
 
         dari_gaming = False
+        if (not kunci_graf and frame_mode == "gaming" and frame_layout
+                and frame_layout.get("frames")):
+            # Susunan yang sudah disetel pengguna di Studio (tinggi wajah,
+            # permainan utuh/penuh, letak kotak) — dipakai apa adanya.
+            frame_mode = "layout"
+            dari_gaming = True
         if not kunci_graf and frame_mode == "gaming":
             from .media import probe as _probe
             from .reframe import deteksi_facecam
@@ -942,7 +1069,9 @@ def render_clip(
                 int(info.get("width") or 1920), int(info.get("height") or 1080),
                 rasio_potongan=rasio_bidang_wajah(out_w, out_h))
             if facecam:
-                frame_layout = susun_layout_gaming(facecam)
+                frame_layout = susun_layout_gaming(
+                    facecam, src_w=int(info.get("width") or 1920),
+                    src_h=int(info.get("height") or 1080), out_w=out_w, out_h=out_h)
                 frame_mode = "layout"
                 dari_gaming = True
             else:

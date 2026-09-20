@@ -224,6 +224,53 @@ export default function ClipPreview({
   const secondaries = useCallback(
     () => [bgRef.current, ...extraRefs.current].filter(Boolean), []);
 
+  /**
+   * Memasang pemutar utama, dan MENYERAHKAN posisinya saat elemennya berganti.
+   *
+   * Mode biasa dan mode susunan memakai elemen <video> yang berbeda. Saat
+   * pemutaran melewati batas kunci "Susun" — misalnya bidikan reaksi dari
+   * sutradara — elemen lama dilepas dan yang baru dipasang di detik NOL video
+   * sumber, dalam keadaan berhenti. Jam editor membacanya, kuncinya kembali ke
+   * mode dasar, elemennya berganti lagi: pratinjau hitam lalu terlempar ke awal
+   * klip. Di sini posisi dan status putar elemen lama dicatat saat ia dilepas,
+   * lalu dipulihkan pada elemen penggantinya.
+   *
+   * React memanggil ref-callback sebaris ulang pada setiap render (null lalu
+   * elemen yang SAMA). Pemulihan hanya dilakukan bila elemennya memang lain —
+   * kalau tidak, video akan diseek ke posisinya sendiri sepuluh kali sedetik.
+   */
+  const lepasRef = useRef(null);
+  const posisiRef = useRef(null);
+  const pasangUtama = useCallback((el) => {
+    if (!el) {
+      const lama = videoRef.current;
+      if (lama) {
+        lepasRef.current = lama;
+        posisiRef.current = { t: lama.currentTime, main: !lama.paused };
+      }
+      videoRef.current = null;
+      return;
+    }
+    const lama = lepasRef.current;
+    lepasRef.current = null;
+    videoRef.current = el;
+    if (!lama || lama === el || !posisiRef.current) return;
+    const { t, main } = posisiRef.current;
+    posisiRef.current = null;
+    // Disetel SEKETIKA, bahkan sebelum metadatanya ada: browser menyimpannya
+    // sebagai posisi awal. Menunggu `loadedmetadata` saja tidak cukup — di
+    // sela itu penjaga "parkir" Editor melihat elemen baru di detik 0 sumber,
+    // memindahkannya ke awal klip, dan jam editor ikut terlempar ke sana.
+    // Terlacak lewat penyadap currentTime: 142,47 → 134,36 dalam satu denyut.
+    el.currentTime = t;
+    const lanjut = () => {
+      if (Math.abs(el.currentTime - t) > 0.3) el.currentTime = t;
+      if (main) el.play().catch(() => {});
+    };
+    if (el.readyState >= 1) lanjut();
+    else el.addEventListener('loadedmetadata', lanjut, { once: true });
+  }, [videoRef]);
+
   const readAspect = useCallback((e) => {
     const { videoWidth: w, videoHeight: h } = e.currentTarget;
     if (w > 0 && h > 0) setSourceAspect(w / h);
@@ -955,7 +1002,7 @@ export default function ClipPreview({
                       klip hanya boleh datang dari satu elemen. */}
                   {i === 0 ? (
                     <video ref={(el) => {
-                             videoRef.current = el;
+                             pasangUtama(el);
                              frameVideoRefs.current[f.id] = { el, geo };
                            }} src={src}
                            onTimeUpdate={handleTimeUpdate}
@@ -975,7 +1022,7 @@ export default function ClipPreview({
               );
             }) : (
               <video
-                ref={videoRef}
+                ref={pasangUtama}
                 src={src}
                 onTimeUpdate={handleTimeUpdate}
                 onLoadedMetadata={readAspect}

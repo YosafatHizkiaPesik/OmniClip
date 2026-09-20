@@ -51,6 +51,8 @@ export default function MediaPanel({
   const [unggah, setUnggah] = useState(false);
   const [sutradara, setSutradara] = useState(null);   // hasil terakhir
   const [menyusun, setMenyusun] = useState(false);
+  // {progress, message} job sutradara yang sedang berjalan.
+  const [kemajuan, setKemajuan] = useState(null);
   const [dengar, setDengar] = useState(null);
   const berkasRef = useRef(null);
   const audioRef = useRef(null);
@@ -121,38 +123,60 @@ export default function MediaPanel({
     el.play().then(() => setDengar(a.id)).catch(() => setDengar(null));
   };
 
-  const susunOtomatis = async () => {
+  const susunOtomatis = async (mesin = 'ai') => {
     if (!clip) return;
-    setMenyusun(true); setGalat(null);
+    // Kunci yang sudah Anda sunting sendiri tidak ditimpa diam-diam. Undo tetap
+    // bisa mengembalikannya, tapi keputusan menggantinya milik Anda.
+    const milikPengguna = (frameKeys ?? []).filter((k) => !k.asal && k.t > 0.05);
+    if (milikPengguna.length && !window.confirm(
+      'Lajur Bingkai klip ini sudah Anda atur sendiri. Ganti dengan susunan sutradara? '
+      + '(Bisa dikembalikan dengan Undo.)')) return;
+    setMenyusun(true); setGalat(null); setSutradara(null);
+    setKemajuan({ progress: 0, message: 'Memulai…' });
     try {
-      const r = await apiPost('/clip-sutradara', {
+      const { job_id: jobId } = await apiPost('/clip-sutradara-ai', {
         video_id: videoId, segments: clip.segments, aspect_ratio: aspectRatio,
+        subtitles: (clip.subtitles ?? []).map((l) => ({
+          start: l.start, end: l.end, text: l.text, speaker: l.speaker ?? null,
+        })),
+        mesin,
       });
+      let job;
+      for (;;) {
+        // eslint-disable-next-line no-await-in-loop
+        job = await apiGet(`/jobs/${jobId}`);
+        setKemajuan({ progress: job.progress ?? 0, message: job.message || '' });
+        if (['done', 'failed', 'cancelled'].includes(job.status)) break;
+        // eslint-disable-next-line no-await-in-loop
+        await new Promise((r) => setTimeout(r, 1200));
+      }
+      if (job.status !== 'done') throw new Error(job.error || 'Sutradara gagal.');
+      const r = job.result || {};
       setSutradara(r);
       if (r.keys?.length) {
-        // Kunci buatan pengguna dipertahankan; usulan otomatis yang lama diganti.
-        const milikPengguna = (frameKeys ?? []).filter((k) => k.asal !== 'otomatis');
-        onFrameKeys(milikPengguna.length ? milikPengguna : r.keys);
-        if (milikPengguna.length) {
-          // Pengguna sudah membelah lajur sendiri: usulan tidak menimpanya.
-          setSutradara({ ...r, catatan: [...(r.catatan ?? []),
-            'Lajur Bingkai sudah Anda atur sendiri, jadi usulan bingkainya tidak dipasang. '
-            + 'Kosongkan lajurnya dulu kalau ingin memakai usulan ini.'] });
-        }
+        // Bingkai susunan dari server tidak punya id; pratinjau memakainya
+        // sebagai kunci elemen dan penanda bingkai terpilih.
+        onFrameKeys(r.keys.map((k) => (k.layout?.frames ? {
+          ...k,
+          layout: { ...k.layout,
+                    frames: k.layout.frames.map((f, i) => ({ ...f, id: f.id ?? `ai${k.t}-${i}` })) },
+        } : k)));
       }
-      const tanpaOtomatis = lapisan.filter((l) => l.asal !== 'otomatis');
-      onLayers([...tanpaOtomatis, ...(r.layers ?? []).map((l) => ({ ...l, id: idBaru() }))]);
-    } catch (err) { setGalat(err.message); } finally { setMenyusun(false); }
+      if (r.layers?.length) {
+        const tanpaOtomatis = lapisan.filter((l) => l.asal !== 'otomatis');
+        onLayers([...tanpaOtomatis, ...r.layers.map((l) => ({ ...l, id: idBaru() }))]);
+      }
+    } catch (err) { setGalat(err.message); } finally { setMenyusun(false); setKemajuan(null); }
   };
 
   const buangOtomatis = () => {
-    onLayers(lapisan.filter((l) => l.asal !== 'otomatis'));
-    onFrameKeys((frameKeys ?? []).filter((k) => k.asal !== 'otomatis'));
+    onLayers(lapisan.filter((l) => !l.asal));
+    onFrameKeys((frameKeys ?? []).filter((k) => !k.asal));
     setSutradara(null);
   };
 
-  const adaOtomatis = lapisan.some((l) => l.asal === 'otomatis')
-    || (frameKeys ?? []).some((k) => k.asal === 'otomatis');
+  const adaOtomatis = lapisan.some((l) => l.asal)
+    || (frameKeys ?? []).some((k) => k.asal);
 
   if (!clip) return <p style={kecil}>Pilih klip dulu.</p>;
 
@@ -168,29 +192,48 @@ export default function MediaPanel({
       <div style={{ ...kartu, borderColor: 'var(--accent-cyan)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '7px', marginBottom: '6px' }}>
           <Wand2 size={15} style={{ color: 'var(--accent-cyan)' }} />
-          <b style={{ fontSize: '0.84rem' }}>Susun otomatis</b>
+          <b style={{ fontSize: '0.84rem' }}>Sutradara bingkai</b>
         </div>
         <p style={{ ...kecil, margin: '0 0 9px' }}>
-          Sistem membaca klip ini lalu memilih bingkai per momen dan efek suaranya.
-          Contohnya gameplay: wajah di atas, permainan di bawah, lalu wajah penuh
-          saat pemainnya kaget. Semua usulan muncul di lajur Bingkai dan daftar di
-          bawah, dengan alasannya, dan bisa dihapus satu per satu.
+          AI menonton klip ini dan mengganti bingkai di momen reaksi: saat semua
+          tertawa, wajah yang tertawa dipotong bergantian atau ditumpuk; saat
+          pemain game kaget, wajahnya dibuat penuh — lalu kembali normal. Semua
+          usulan muncul di lajur Bingkai bertanda ✦ dengan alasannya, dan bisa
+          dihapus satu per satu.
         </p>
         <div style={{ display: 'flex', gap: '7px', flexWrap: 'wrap' }}>
-          <button className="btn-primary" onClick={susunOtomatis} disabled={menyusun}
+          <button className="btn-primary" onClick={() => susunOtomatis('ai')} disabled={menyusun}
                   style={{ fontSize: '0.8rem', display: 'inline-flex', gap: '6px', alignItems: 'center' }}>
             {menyusun ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-            {menyusun ? 'Membaca klip…' : 'Susun otomatis'}
+            {menyusun ? 'Menonton klip…' : 'Susun bingkai dengan AI'}
           </button>
-          {adaOtomatis && (
+          <button className="btn-secondary" onClick={() => susunOtomatis('lokal')} disabled={menyusun}
+                  title="Tanpa internet dan tanpa kuota: dari tawa yang terdengar dan wajah yang terlihat"
+                  style={{ fontSize: '0.78rem' }}>
+            Mesin lokal
+          </button>
+          {adaOtomatis && !menyusun && (
             <button className="btn-secondary" onClick={buangOtomatis} style={{ fontSize: '0.78rem' }}>
-              Buang usulan otomatis
+              Buang usulan sutradara
             </button>
           )}
         </div>
+        {kemajuan && (
+          <div style={{ marginTop: '9px' }}>
+            <div style={{ height: '6px', borderRadius: '99px', background: 'var(--bg-glass)',
+                          border: '1px solid var(--border-color)', overflow: 'hidden' }}>
+              <div style={{ width: `${Math.round((kemajuan.progress || 0) * 100)}%`, height: '100%',
+                            background: 'var(--accent-cyan)', transition: 'width .4s' }} />
+            </div>
+            <p style={{ ...kecil, margin: '5px 0 0' }}>{kemajuan.message}</p>
+          </div>
+        )}
         {sutradara && (
           <ul style={{ ...kecil, margin: '9px 0 0', paddingLeft: '17px' }}>
             {(sutradara.catatan ?? []).map((c, i) => <li key={i}>{c}</li>)}
+            {sutradara.model && sutradara.pemakaian?.masuk && (
+              <li>{sutradara.pemakaian.masuk.toLocaleString('id-ID')} token dipakai.</li>
+            )}
             {(sutradara.kejutan ?? []).map((k) => (
               <li key={k.t}>Reaksi kaget di {formatTime(k.t)} — {k.di_atas_db} dB di atas kebiasaannya</li>
             ))}

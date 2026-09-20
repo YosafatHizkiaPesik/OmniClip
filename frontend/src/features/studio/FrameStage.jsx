@@ -1,7 +1,9 @@
 import React, {
   useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState,
 } from 'react';
-import { clipTimeFor, followX, frameInk, personAt, personKeyAt } from './frames';
+import {
+  clipTimeFor, followX, frameInk, personAt, personKeyAt, rasioBidang, rasioKeluaran,
+} from './frames';
 import { beginRectDrag } from './rectDrag';
 
 /**
@@ -57,7 +59,8 @@ export default function FrameStage({
   const personRefs = useRef({});
   const [drag, setDrag] = useState(null);
 
-  const editable = frameMode === 'layout' && !!layout && !!onLayoutChange;
+  const gamingSetel = frameMode === 'gaming' && !!layout?.frames?.length && !!onLayoutChange;
+  const editable = (frameMode === 'layout' && !!layout && !!onLayoutChange) || gamingSetel;
 
   // Rasio dibaca dari berkasnya, bukan ditebak 16:9. Sumber 4:3 dan rekaman
   // vertikal keduanya ada, dan menebak akan menaruh kotak crop di tempat yang
@@ -215,13 +218,16 @@ export default function FrameStage({
     beginRectDrag(e, {
       boxW: box.w, boxH: box.h, rect: frame.src, handle,
       lockX: !!frame.follow,
+      // Main game: rasio kotak dikunci ke rasio bidangnya di kanvas, supaya
+      // yang dibingkai di sini persis yang tampil — tidak ada potongan
+      // tambahan dari "cover" yang tak terlihat di meja bingkai.
       onChange: (src) => onLayoutChange({
         ...layout,
         frames: layout.frames.map((f) => (f.id === frameId ? { ...f, src } : f)),
       }),
       onEnd: () => setDrag(null),
     });
-  }, [editable, box.w, box.h, layout, onLayoutChange, onSelectFrame]);
+  }, [editable, gamingSetel, aspectRatio, box.w, box.h, layout, onLayoutChange, onSelectFrame]);
 
   /**
    * Menyeret kotak mode "Kotak tetap".
@@ -341,7 +347,9 @@ export default function FrameStage({
           <b>Video sumber</b>
           <span>
             {frameMode === 'gaming'
-              ? 'wajah pemain di atas, permainan utuh di bawah — dicari otomatis'
+              ? (gamingSetel
+                ? 'seret kotak untuk memindahkan · tarik sudutnya untuk mengubah ukuran'
+                : 'mencari kamera wajah pemain…')
               : frameMode === 'layout'
               ? `${layout?.frames?.length ?? 0} bingkai — seret kotaknya`
               : frameMode === 'original' ? 'dipakai utuh, tanpa dipotong'
@@ -397,21 +405,6 @@ export default function FrameStage({
                 {i + 1}
               </button>
             ))}
-
-          {/* Main game: kedua bidangnya digambar, tapi tidak bisa diseret —
-              letaknya memang dicari sistem, bukan disusun pengguna. */}
-          {frameMode === 'gaming' && (layout?.frames ?? []).map((f, i) => (
-            <div key={`g${i}`} className="frame-rect is-locked"
-                 style={{
-                   left: `${f.src.x}%`, top: `${f.src.y}%`,
-                   width: `${f.src.w}%`, height: `${f.src.h}%`,
-                   borderColor: frameInk(i),
-                 }}>
-              <span className="frame-rect-tag" style={{ background: frameInk(i) }}>
-                {i === 0 ? 'Permainan' : 'Reaksi'}
-              </span>
-            </div>
-          ))}
 
           {/* Kotak tetap: bisa diseret dan diubah ukurannya, sama seperti
               bingkai susun-sendiri. */}
@@ -473,8 +466,25 @@ export default function FrameStage({
                      zIndex: on ? 40 : 10 + Math.round(
                        100 - (f.src.w * f.src.h) / 100),
                    }}>
+                {(() => {
+                  // Bagian kotak yang SUNGGUH tampil. Dengan "Penuhi", kotak yang
+                  // bentuknya lain dari bidangnya di kanvas dipotong di tengah —
+                  // bebas mengatur tidak boleh berarti potongan yang tersembunyi.
+                  if ((f.fit ?? 'cover') !== 'cover' || !f.dst?.w || !f.dst?.h) return null;
+                  const kotak = (f.src.w / f.src.h) * aspect;
+                  const bidang = (f.dst.w / f.dst.h) * rasioKeluaran(aspectRatio);
+                  const r = bidang / kotak;
+                  if (Math.abs(r - 1) < 0.03) return null;
+                  const gaya = r < 1
+                    ? { left: `${(100 - r * 100) / 2}%`, width: `${r * 100}%`, top: 0, height: '100%' }
+                    : { top: `${(100 - 100 / r) / 2}%`, height: `${100 / r}%`, left: 0, width: '100%' };
+                  return (
+                    <span className="frame-rect-tampil" title="Bagian yang tampil di klip"
+                          style={{ ...gaya, borderColor: ink }} />
+                  );
+                })()}
                 <span className="frame-rect-tag" style={{ background: ink }}>
-                  {i + 1}. {f.label}{f.follow ? ' · mengikuti' : ''}
+                  {gamingSetel ? f.label : `${i + 1}. ${f.label}`}{f.follow ? ' · mengikuti' : ''}
                 </span>
                 {['nw', 'ne', 'sw', 'se'].map((h) => (
                   <span key={h} className={`frame-grip grip-${h}`}

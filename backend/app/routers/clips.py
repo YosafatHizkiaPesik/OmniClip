@@ -141,10 +141,25 @@ class FrameModel(BaseModel):
     # Bila benar, posisi mendatar jendela ini digerakkan jejak wajah; lebar,
     # tinggi, dan posisi tegaknya tetap dari kotak yang digambar pengguna.
     follow: bool = False
+    # Orang yang dibuntuti, bila ditentukan (nomor orang dari rencana wajah).
+    # Tanpa ini orangnya ditebak dari letak kotak — cukup untuk kotak yang
+    # digambar pengguna, tapi ambigu di podcast yang berganti kamera: "orang
+    # terdekat dari tengah kotak" rata-rata sepanjang klip bisa orang lain.
+    person: Optional[int] = Field(None, ge=0, le=7)
+
+
+class ReaksiModel(BaseModel):
+    """Main game: letak kotak wajah mulai detik klip `t`."""
+    t: float = Field(0.0, ge=0)
+    src: FrameRectModel = FrameRectModel()
 
 
 class FrameLayoutModel(BaseModel):
     background: str = "blur"
+    # Main game: kotak wajah yang berpindah mengikuti facecam sepanjang klip,
+    # dan setelan susunannya. Diabaikan oleh susunan biasa.
+    reaksi: List[ReaksiModel] = Field(default_factory=list, max_length=64)
+    gaming: Optional[Dict[str, Any]] = None
     # Delapan bingkai sudah jauh melewati apa pun yang masih terbaca di layar
     # ponsel, dan tiap bingkai menambah satu cabang skala di filtergraph.
     frames: List[FrameModel] = Field(default_factory=list, max_length=8)
@@ -659,6 +674,47 @@ async def clip_sutradara(req: SutradaraRequest):
     return hasil
 
 
+class SutradaraAIRequest(BaseModel):
+    video_id: str
+    segments: List[SegmentModel] = Field(..., min_length=1, max_length=20)
+    subtitles: Optional[List[Dict[str, Any]]] = None
+    aspect_ratio: str = "9:16"
+    mesin: Literal["ai", "lokal"] = "ai"
+    gemini_model: Optional[str] = None
+
+
+@router.post("/clip-sutradara-ai")
+async def clip_sutradara_ai(req: SutradaraAIRequest):
+    """
+    Sutradara yang menonton klipnya: momen reaksi → bingkai reaksi.
+
+    Pekerjaan panjang (memindai wajah, mendengar tawa, menunggu model), jadi
+    dijalankan sebagai job. Hasilnya USULAN kunci bingkai di `result.keys`;
+    Studio yang menerapkannya supaya bisa dibatalkan seperti suntingan lain.
+    """
+    import hashlib
+    import json as _json
+
+    from ..services.paths import find_local_video
+
+    vid = _resolve_video_id(req.video_id)
+    if find_local_video(vid) is None:
+        raise NotFound("Video sumber belum diunduh.")
+    segments = [{"start": round(s.start, 3), "end": round(s.end, 3)}
+                for s in req.segments if s.end - s.start > 0.2]
+    if not segments:
+        raise NotFound("Rentang klip tidak valid.")
+    sidik = hashlib.sha1(_json.dumps([segments, req.mesin]).encode()).hexdigest()[:12]
+    job_id, created = queue.enqueue(
+        "sutradara",
+        {"video_id": vid, "segments": segments, "subtitles": req.subtitles or [],
+         "aspect_ratio": req.aspect_ratio, "mesin": req.mesin,
+         "gemini_model": req.gemini_model},
+        video_id=vid, dedupe_key=f"sutradara:{vid}:{sidik}",
+    )
+    return {"job_id": job_id, "created": created}
+
+
 class TerjemahRequest(BaseModel):
     video_id: str
     bahasa: str = Field(..., min_length=2, max_length=12)
@@ -971,7 +1027,7 @@ async def clip_facecam(req: FacecamRequest):
 
     from ..services.media import probe
     from ..services.paths import find_local_video
-    from ..services.reframe import deteksi_facecam
+    from ..services.reframe import deteksi_facecam_waktu
     from ..services.render import rasio_bidang_wajah, susun_layout_gaming
 
     src = find_local_video(req.video_id)
@@ -983,13 +1039,12 @@ async def clip_facecam(req: FacecamRequest):
         info = probe(str(src))
         w = int(info.get("width") or 1920)
         h = int(info.get("height") or 1080)
-        mulai = float(segs[0]["start"])
-        panjang = sum(float(s["end"]) - float(s["start"]) for s in segs) or 30.0
-        fc = deteksi_facecam(str(src), mulai, min(panjang, 30.0), w, h,
-                             rasio_potongan=rasio_bidang_wajah(1080, 1920))
-        if not fc:
+        posisi = deteksi_facecam_waktu(str(src), segs, w, h,
+                                       rasio_potongan=rasio_bidang_wajah(1080, 1920))
+        if not posisi:
             return {"ditemukan": False, "layout": None}
-        return {"ditemukan": True, "facecam": fc,
-                "layout": susun_layout_gaming(fc)}
+        return {"ditemukan": True, "facecam": posisi[0]["facecam"],
+                "src_w": w, "src_h": h,
+                "layout": susun_layout_gaming(posisi, src_w=w, src_h=h)}
 
     return await asyncio.to_thread(kerja)
