@@ -27,6 +27,12 @@ from .events import broker
 
 log = logging.getLogger("omniclip.jobs")
 
+# Gerbang untuk pekerjaan berat: Whisper, analisis wajah, encode. Job lane `cpu`
+# melewatinya seluruhnya; auto-klip baru masuk SESUDAH unduhannya selesai
+# (`JobContext.giliran_cpu`). Jadi unduhan beberapa video bisa berjalan
+# bersamaan tanpa dua model Whisper pernah hidup bersamaan.
+gerbang_cpu = threading.BoundedSemaphore(LANE_LIMITS["cpu"])
+
 
 @dataclass
 class JobContext:
@@ -38,9 +44,11 @@ class JobContext:
     _started: float = field(default_factory=time.time)
     _last_write: float = 0.0
     _last_stage: Optional[str] = None
+    _pegang_cpu: bool = False
 
     def progress(self, frac: float, *, stage: str | None = None,
-                 message: str | None = None, eta: float | None = None) -> None:
+                 message: str | None = None, eta: float | None = None,
+                 paksa: bool = False) -> None:
         """
         Melaporkan kemajuan. Tulisan ke DB di-throttle (>=250 ms, dan selalu
         ditulis saat stage berubah) agar render yang memuntahkan puluhan baris
@@ -57,13 +65,32 @@ class JobContext:
         # Emit hanya saat benar-benar menulis ke DB. `emit()` membaca ulang dari
         # DB, jadi memancarkan event di antara tulisan hanya akan mengirim nilai
         # lama yang identik — SSE terisi duplikat tanpa informasi baru.
-        if stage_changed or (now - self._last_write) >= JOB_PROGRESS_MIN_INTERVAL:
+        # `paksa`: pesan yang menandai pergantian langkah (mis. "Menggabungkan
+        # video dan audio…") tidak boleh ikut terbuang oleh pembatas laju —
+        # pesan itu biasanya datang sepersekian detik setelah kabar unduhan
+        # terakhir, lalu langkahnya berjalan menit-menit tanpa kabar lain, dan
+        # layar tertahan di "Mengunduh … 100%" seolah macet.
+        if paksa or stage_changed or (now - self._last_write) >= JOB_PROGRESS_MIN_INTERVAL:
             repo.update_progress(self.job_id, progress=frac, stage=stage,
                                  message=message, eta_seconds=eta)
             self._last_write = now
             if stage is not None:
                 self._last_stage = stage
             self.queue.emit(self.job_id)
+
+    def giliran_cpu(self, kabar: Optional[Callable[[], None]] = None) -> None:
+        """
+        Menunggu giliran pekerjaan berat. Dilepas otomatis saat job selesai.
+        `kabar()` dipanggil sekali bila harus menunggu, supaya layar tidak diam.
+        """
+        if self._pegang_cpu:
+            return
+        if not gerbang_cpu.acquire(blocking=False):
+            if kabar is not None:
+                kabar()
+            while not gerbang_cpu.acquire(timeout=0.5):
+                self.check_cancelled()
+        self._pegang_cpu = True
 
     def check_cancelled(self) -> None:
         if self._cancel.is_set():
@@ -101,6 +128,12 @@ class JobQueue:
         recovered = repo.recover_interrupted()
         if recovered:
             log.warning("%d job ditandai gagal karena backend berhenti di tengah jalan", recovered)
+
+        # Job yang diantrekan versi lama tercatat di lajur lamanya; tanpa ini
+        # ia tidak akan pernah diambil worker mana pun.
+        for type_, (_, lane) in self._handlers.items():
+            if repo.pindah_lajur(type_, lane):
+                log.info("Job %s yang antre dipindah ke lajur %s", type_, lane)
 
         for lane, count in LANE_LIMITS.items():
             self._wake[lane] = threading.Event()
@@ -202,6 +235,7 @@ class JobQueue:
     def _run(self, job: dict) -> None:
         job_id = job["id"]
         handler, _ = self._handlers.get(job["type"], (None, None))
+        lane = job.get("lane")
 
         if handler is None:
             repo.finish(job_id, status="failed",
@@ -219,6 +253,10 @@ class JobQueue:
         self.emit(job_id)
 
         try:
+            if lane == "cpu":
+                ctx.giliran_cpu(lambda: ctx.progress(
+                    0.0, message="Menunggu giliran — video lain sedang dianalisis…",
+                    paksa=True))
             result = handler(ctx)
             if cancel_ev.is_set():
                 repo.finish(job_id, status="cancelled", error="Dibatalkan oleh pengguna.",
@@ -234,6 +272,9 @@ class JobQueue:
             message = getattr(exc, "message", None) or str(exc) or "Pekerjaan gagal."
             repo.finish(job_id, status="failed", error=message[:500], error_code=str(code)[:60])
         finally:
+            if ctx._pegang_cpu:
+                ctx._pegang_cpu = False
+                gerbang_cpu.release()
             with self._lock:
                 self._cancels.pop(job_id, None)
             self.emit(job_id)

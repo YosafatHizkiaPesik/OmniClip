@@ -99,7 +99,7 @@ async def lifespan(app: FastAPI):
     queue.register("demo", _demo_job, lane="cpu")
     queue.register("download", run_download, lane="net")
     queue.register("render", run_render, lane="cpu")
-    queue.register("auto_clip", run_auto_clip, lane="cpu")
+    queue.register("auto_clip", run_auto_clip, lane="klip")
     queue.register("diarize", run_diarize, lane="cpu")
     queue.register("upload", run_upload, lane="upload")
     queue.register("tts_voice", run_tts_voice, lane="net")

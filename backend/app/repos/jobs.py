@@ -132,6 +132,16 @@ def request_cancel(job_id: str) -> bool:
     return True
 
 
+def pindah_lajur(type_: str, lane: str) -> int:
+    """Job antre jenis ini yang tercatat di lajur lain dipindah ke `lane`."""
+    with tx() as conn:
+        cur = conn.execute(
+            "UPDATE jobs SET lane=? WHERE status='queued' AND type=? AND lane<>?",
+            (lane, type_, lane),
+        )
+        return cur.rowcount
+
+
 def recover_interrupted() -> int:
     """
     Dipanggil saat startup. Job yang masih 'running' berarti proses sebelumnya

@@ -229,6 +229,12 @@ if BUNDLED_MODELS_DIR and BUNDLED_MODELS_DIR.is_dir():
 LANE_LIMITS = {
     "net": int(os.getenv("OMNICLIP_LANE_NET", "2")),
     "cpu": int(os.getenv("OMNICLIP_LANE_CPU", "1")),
+    # Auto-klip punya jalurnya sendiri supaya beberapa video bisa MENGUNDUH
+    # bersamaan. Bagian yang berat (transkrip, analisis) tetap bergiliran
+    # dengan lane `cpu` lewat `jobs.gerbang_cpu` — lebar jalur ini hanya
+    # berarti berapa video boleh menunggu giliran dengan unduhan yang sudah
+    # berjalan, bukan berapa Whisper yang hidup bersamaan.
+    "klip": int(os.getenv("OMNICLIP_LANE_KLIP", "3")),
     # Unggahan punya jalurnya sendiri, dan lebarnya SATU. Bukan karena memori —
     # unggahan hampir tidak memakainya — melainkan karena mengirim selusin klip
     # ke satu kanal dalam satu ledakan adalah persis pola yang membuat YouTube

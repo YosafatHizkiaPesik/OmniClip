@@ -38,7 +38,8 @@ def run_download(ctx: JobContext) -> dict:
         # Dipanggil dari dalam yt-dlp; ini juga titik di mana pembatalan
         # menghentikan unduhan yang sedang berjalan.
         ctx.check_cancelled()
-        ctx.progress(0.05 + 0.90 * frac, stage="download", message=message)
+        ctx.progress(0.05 + 0.90 * frac, stage="download", message=message,
+                     paksa=not message.startswith("Mengunduh"))
 
     ctx.progress(0.05, stage="download", message=f"Mengunduh «{title[:48]}»…")
     result = download_youtube_media(video_id, resolution, on_progress=on_progress)
@@ -226,7 +227,8 @@ STAGES = {
 }
 
 
-def _stage_progress(ctx: JobContext, stage: str, frac: float, message: str) -> None:
+def _stage_progress(ctx: JobContext, stage: str, frac: float, message: str,
+                    paksa: bool = False) -> None:
     lo, hi = STAGES[stage]
     nilai = lo + (hi - lo) * max(0.0, min(1.0, frac))
     # Bar kemajuan tidak pernah mundur. Langkah bantu yang dipakai lebih dari
@@ -236,7 +238,7 @@ def _stage_progress(ctx: JobContext, stage: str, frac: float, message: str) -> N
     # sebagai "prosesnya mengulang dari awal".
     nilai = max(nilai, getattr(ctx, "_puncak", 0.0))
     ctx._puncak = nilai
-    ctx.progress(nilai, stage=stage, message=message)
+    ctx.progress(nilai, stage=stage, message=message, paksa=paksa)
 
 
 def run_auto_clip(ctx: JobContext) -> dict:
@@ -299,7 +301,8 @@ def run_auto_clip(ctx: JobContext) -> dict:
 
         def on_dl(frac: float, message: str) -> None:
             ctx.check_cancelled()
-            _stage_progress(ctx, "download", frac, message)
+            _stage_progress(ctx, "download", frac, message,
+                            paksa=not message.startswith("Mengunduh"))
 
         result = download_youtube_media(video_id, quality, on_progress=on_dl)
         if not result.get("success"):
@@ -309,6 +312,14 @@ def run_auto_clip(ctx: JobContext) -> dict:
         source = Path(result["file_path"])
     else:
         _stage_progress(ctx, "download", 1.0, "Video sudah tersedia di penyimpanan lokal.")
+
+    # Unduhan berjalan bersamaan dengan video lain; mulai dari sini pekerjaan
+    # berat (salinan analisis, Whisper, pelacakan wajah) bergiliran satu per
+    # satu dengan render, seperti sebelumnya.
+    ctx.giliran_cpu(lambda: _stage_progress(
+        ctx, "download", 1.0,
+        "Video sudah terunduh — menunggu giliran analisis (video lain sedang diproses)…",
+        paksa=True))
 
     # Salinan analisis dimulai SEKARANG, di latar, sementara transkrip dan
     # pemilihan klip berjalan. Begitu pengguna membuka Studio, pelacakan wajah

@@ -592,9 +592,91 @@ def _make_progress_hook(on_progress):
         elif status == "finished":
             state["stream"] += 1
             state["last"] = -1.0
-            on_progress(0.85 if state["stream"] == 1 else 0.98, "Menggabungkan video dan audio…")
+            on_progress(0.85 if state["stream"] == 1 else 0.98,
+                        "Aliran video selesai — mengunduh audio…" if state["stream"] == 1
+                        else "Menggabungkan video dan audio…")
 
     return hook
+
+
+# Nama langkah sesudah unduhan, untuk kabar yang bisa dibaca pengguna.
+_LANGKAH_PP = {
+    "Merger": "Menggabungkan video dan audio",
+    "MoveFiles": "Memindahkan berkas ke folder unduhan",
+    "FFmpegExtractAudio": "Mengubah audio ke MP3",
+}
+
+
+def _make_pp_hook(on_progress):
+    """
+    Kabar selama langkah sesudah unduhan.
+
+    Menggabungkan video 3 GB dengan audionya di hard disk eksternal bisa makan
+    beberapa menit, dan yt-dlp tidak melaporkan apa pun selama itu. Tanpa kabar
+    yang terus berjalan, layar tertahan di "Mengunduh … 100%" dan terbaca macet.
+    Jadi selama langkahnya berjalan, lama berjalannya dilaporkan tiap dua detik.
+    """
+    state = {"henti": None}
+
+    def detak(nama: str, henti: threading.Event) -> None:
+        mulai = time.monotonic()
+        try:
+            while not henti.wait(2.0):
+                lama = int(time.monotonic() - mulai)
+                try:
+                    on_progress(0.99, f"{nama}… ({lama // 60}:{lama % 60:02d})")
+                except Exception:
+                    return          # dibatalkan — yt-dlp akan berhenti sendiri
+        finally:
+            try:
+                from ..db import close_conn
+                close_conn()
+            except Exception:
+                pass
+
+    def hook(d):
+        status = d.get("status")
+        if status == "started":
+            nama = _LANGKAH_PP.get(d.get("postprocessor") or "", "Merapikan berkas video")
+            if state["henti"] is not None:
+                state["henti"].set()
+            henti = threading.Event()
+            state["henti"] = henti
+            on_progress(0.99, f"{nama}…")
+            threading.Thread(target=detak, args=(nama, henti), daemon=True,
+                             name="omniclip-pp-detak").start()
+        elif status == "finished" and state["henti"] is not None:
+            state["henti"].set()
+            state["henti"] = None
+
+    def berhenti():
+        if state["henti"] is not None:
+            state["henti"].set()
+
+    hook.berhenti = berhenti
+    return hook
+
+
+# Unduhan dipecah menjadi potongan yang diambil lewat beberapa sambungan
+# sekaligus. Satu sambungan ke YouTube diperlambat setelah ±30 detik — terukur
+# pada internet 100 Mbps: 9,8 MB/s di awal lalu turun ke 2-5 MB/s dan tidak
+# kembali. Delapan sambungan paralel bertahan di 8-10,7 MB/s sepanjang unduhan.
+#
+# `formats=dashy` membuat yt-dlp memperlakukan format HTTPS biasa sebagai
+# rangkaian potongan (seperti DASH), sehingga `concurrent_fragment_downloads`
+# berlaku padanya. Tanpa itu, opsi paralel hanya berlaku pada format HLS.
+SAMBUNGAN_PARALEL = int(os.getenv("OMNICLIP_SAMBUNGAN_UNDUH", "8"))
+
+
+def _opsi_paralel(opts: dict) -> dict:
+    o = dict(opts)
+    o["concurrent_fragment_downloads"] = SAMBUNGAN_PARALEL
+    ekstra = dict(o.get("extractor_args") or {})
+    yt = dict(ekstra.get("youtube") or {})
+    yt["formats"] = ["dashy"]
+    ekstra["youtube"] = yt
+    o["extractor_args"] = ekstra
+    return o
 
 
 def download_youtube_media(url_or_id: str, resolution: str = "720p", on_progress=None):
@@ -678,6 +760,9 @@ def download_youtube_media(url_or_id: str, resolution: str = "720p", on_progress
         # disimpan, jadi pengulangannya melanjutkan, bukan mulai dari nol.
         'skip_unavailable_fragments': False,
         'merge_output_format': 'mp4',
+        # Bilah progres teks yt-dlp tetap tercetak saat potongan diunduh
+        # paralel meski 'quiet' — kemajuan sudah dilaporkan lewat hook.
+        'noprogress': True,
         'restrictfilenames': True, # Hindari karakter spesial di nama file
     })
     if format_sort:
@@ -685,11 +770,37 @@ def download_youtube_media(url_or_id: str, resolution: str = "720p", on_progress
 
     if postprocessors:
         ydl_opts['postprocessors'] = postprocessors
+    pp_hook = None
     if on_progress is not None:
         ydl_opts['progress_hooks'] = [_make_progress_hook(on_progress)]
+        pp_hook = _make_pp_hook(on_progress)
+        ydl_opts['postprocessor_hooks'] = [pp_hook]
 
     try:
-        info, ydl = _unduh(url, ydl_opts)
+        try:
+            info, ydl = _unduh(url, _opsi_paralel(ydl_opts))
+        except Exception as e:
+            # Unduhan berpotongan adalah percepatan, bukan syarat. Bila gagal
+            # karena alasan yang bukan soal videonya (privat, cakram penuh,
+            # dibatalkan), ulangi sekali dengan satu sambungan seperti dulu —
+            # berkas .part yang ada dilanjutkan, bukan dimulai dari nol.
+            pesan = str(e).lower()
+            if (type(e).__name__ == "JobCancelled" or
+                    any(t in pesan for t in ("private", "members", "removed",
+                                             "does not exist", "no space",
+                                             "copyright", "geo-restrict"))):
+                raise
+            print(f"[OmniClip] Unduhan paralel gagal, mengulang dengan satu sambungan: "
+                  f"{str(e)[:200]}")
+            if on_progress is not None:
+                # Sekaligus titik periksa pembatalan: yt-dlp kadang membungkus
+                # pembatalan dari dalam hook menjadi DownloadError biasa, dan
+                # unduhan yang dibatalkan tidak boleh diulang.
+                on_progress(0.0, "Mengulang unduhan dengan satu sambungan…")
+            info, ydl = _unduh(url, ydl_opts)
+        finally:
+            if pp_hook is not None:
+                pp_hook.berhenti()
 
         # Get actual downloaded filename
         filename = ydl.prepare_filename(info)
