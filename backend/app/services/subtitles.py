@@ -196,6 +196,60 @@ def _ts(seconds: float) -> str:
     return f"{h}:{m:02d}:{s:05.2f}"
 
 
+def _ts_srt(detik: float) -> str:
+    """Format waktu SRT: HH:MM:SS,mmm (koma, bukan titik — itu bagian bakunya)."""
+    detik = max(0.0, detik)
+    h = int(detik // 3600)
+    m = int((detik % 3600) // 60)
+    s = int(detik % 60)
+    ms = int(round((detik - int(detik)) * 1000))
+    if ms == 1000:                   # pembulatan yang naik ke detik berikutnya
+        s, ms = s + 1, 0
+    return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
+
+
+def ke_srt(lines: list[dict], *, maks_baris: int = 2, per_baris: int = 40) -> str:
+    """
+    Baris subtitle → berkas .srt.
+
+    Gunanya bukan menggantikan subtitle yang dibakar ke gambar, melainkan
+    menemani hasilnya: YouTube menerima .srt sebagai takarir terpisah, dan
+    takarir terpisah bisa dimatikan penonton, dibaca mesin pencari, serta
+    diterjemahkan sendiri oleh YouTube ke bahasa mana pun.
+
+    Tanpa tag, tanpa warna, tanpa karaoke. Semua itu milik ASS; .srt yang
+    memuatnya akan ditolak atau ditampilkan mentah oleh pemutar.
+    """
+    keluar: list[str] = []
+    for i, l in enumerate(_tanpa_tumpang(lines), 1):
+        teks = (l.get("text") or "").strip()
+        if not teks:
+            kata = [w.get("w", "") for w in (l.get("words") or [])]
+            teks = sambung(kata).strip()
+        if not teks:
+            continue
+        # Dipatah memakai aturan yang sama dengan subtitle di layar, supaya
+        # keduanya membaca sama. `patah_teks` menyisipkan \N milik ASS, jadi
+        # penandanya ditukar jadi ganti baris sungguhan.
+        pecahan = patah_teks(teks, per_baris).split("\\N")
+        if len(pecahan) == 1 and len(teks) > per_baris:
+            pecahan = _wrap(teks, per_baris).split("\\N")
+        teks = "\n".join(x.strip() for x in pecahan[:maks_baris] if x.strip())
+        keluar.append(f"{i}\n{_ts_srt(float(l['start']))} --> "
+                      f"{_ts_srt(float(l['end']))}\n{teks}\n")
+    return "\n".join(keluar)
+
+
+def tulis_srt(lines: list[dict], jalur) -> bool:
+    """Menulis .srt di samping klipnya. False bila tidak ada yang bisa ditulis."""
+    isi = ke_srt(lines or [])
+    if not isi.strip():
+        return False
+    from pathlib import Path as _P
+    _P(jalur).write_text(isi, encoding="utf-8")
+    return True
+
+
 def escape_ass(text: str) -> str:
     """Hanya tiga karakter yang bermakna khusus di dalam teks ASS."""
     return (text.replace("\\", "\\\\")

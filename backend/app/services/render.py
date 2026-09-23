@@ -1495,6 +1495,22 @@ def render_clip(
             json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
         )
 
+        # Takarir terpisah di samping klipnya.
+        #
+        # Subtitle yang dibakar ke gambar tidak bisa dimatikan penonton, tidak
+        # terbaca mesin pencari, dan tidak bisa diterjemahkan YouTube. Berkas
+        # .srt ini menjawab ketiganya, ukurannya beberapa kilobita, dan tidak
+        # mengubah apa pun pada videonya. Yang gagal ditulis tidak menjatuhkan
+        # render — klipnya sendiri sudah jadi.
+        try:
+            from .subtitles import tulis_srt
+            tulis_srt(subtitles or [], folder_keluar / out_name.replace(".mp4", ".srt"))
+            kedua = (subtitle_kedua or {}).get("lines") if isinstance(subtitle_kedua, dict) else None
+            if kedua:
+                tulis_srt(kedua, folder_keluar / out_name.replace(".mp4", ".terjemahan.srt"))
+        except Exception as e:
+            log.warning("Takarir .srt tidak bisa ditulis: %s", str(e)[:200])
+
         return {
             "success": True,
             "clip_path": str(out_path),
@@ -1557,6 +1573,9 @@ def list_local_clips(folder: Optional[Path] = None) -> list[dict]:
             "file_size": stat.st_size,
             "created_at": stat.st_mtime,
             "metadata": None,
+            # Takarir terpisah, bila render menulisnya. Klip lama tidak punya,
+            # dan tombolnya tidak boleh muncul untuk berkas yang tidak ada.
+            "srt": path.with_suffix(".srt").is_file(),
         }
         sidecar = path.with_suffix(".json")
         if sidecar.is_file():

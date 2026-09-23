@@ -554,8 +554,22 @@ def run_auto_clip(ctx: JobContext) -> dict:
         else:
             _stage_progress(ctx, "transcribe", 0.0,
                             "Video tidak punya subtitle — menyalin ucapan dengan Whisper…")
-            from .whisper import transcribe_audio
+            from .whisper import deteksi_bahasa, model_untuk, transcribe_audio
             wav = need_audio()
+            # Bahasa video ikut menentukan ukuran model: aksara non-Latin
+            # dikerjakan buruk oleh model kecil, dan salinan yang salah
+            # menular ke subtitle, judul, DAN terjemahannya. Berkas impor
+            # tidak membawa keterangan bahasa sama sekali, jadi untuk itu
+            # bahasanya didengarkan dulu dari satu potongan pendek.
+            bahasa_dengar = bahasa_video
+            if not bahasa_dengar:
+                _stage_progress(ctx, "transcribe", 0.0,
+                                "Mendengarkan bahasa yang dipakai…", paksa=True)
+                bahasa_dengar = deteksi_bahasa(wav)
+            whisper_model, alasan_model = model_untuk(bahasa_dengar, whisper_model)
+            if alasan_model:
+                log.info("Whisper: %s", alasan_model)
+                _stage_progress(ctx, "transcribe", 0.0, alasan_model, paksa=True)
             words, language = transcribe_audio(
                 wav, model_size=whisper_model,
                 on_progress=lambda f: _stage_progress(

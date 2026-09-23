@@ -49,6 +49,41 @@ CHUNK_OVERLAP = 3.0
 MIN_FREE_RAM_MB = 900
 
 
+# Bahasa yang model kecil kerjakan dengan buruk.
+#
+# Terukur pada impor anime: "base" mengeluarkan kalimat Jepang yang tidak
+# berhubungan dengan yang diucapkan, dan terjemahannya ikut salah — dua
+# kesalahan yang menumpuk, dan yang kedua menyembunyikan yang pertama. Aksara
+# non-Latin memang bagian tersulitnya: satu huruf membawa lebih banyak makna,
+# jadi salah satu huruf mengubah seluruh kalimat.
+AKSARA_SULIT = {"ja", "ko", "zh", "yue", "th", "ar", "he", "fa", "hi", "bn",
+                "ta", "te", "ru", "uk", "el", "ka", "am", "my", "km"}
+NAIK_KE = "small"
+
+
+def model_untuk(bahasa: str, pilihan: str) -> tuple[str, str]:
+    """
+    (model yang dipakai, alasan bila diubah).
+
+    Model dinaikkan, tidak pernah diturunkan: pilihan pengguna yang LEBIH
+    besar selalu dihormati. Dan ia hanya naik bila RAM-nya memang cukup —
+    menaikkan model lalu mati kehabisan memori jauh lebih buruk daripada
+    transkrip yang kurang tepat.
+    """
+    bahasa = (bahasa or "").split("-")[0].lower()
+    if not bahasa or bahasa not in AKSARA_SULIT:
+        return pilihan, ""
+    if pilihan not in ("tiny", "base"):
+        return pilihan, ""
+    bebas = available_ram_mb()
+    if bebas and bebas < MODEL_RAM_MB[NAIK_KE] + MIN_FREE_RAM_MB:
+        return pilihan, (f"Bahasa ini butuh model Whisper yang lebih besar, tapi RAM "
+                         f"tersisa {bebas} MB — tetap memakai \"{pilihan}\".")
+    return NAIK_KE, (f"Bahasa \"{bahasa}\" sulit untuk model \"{pilihan}\" — "
+                     f"memakai \"{NAIK_KE}\" supaya salinannya benar. Lebih lama, "
+                     "sekitar dua kali.")
+
+
 def available_ram_mb() -> int:
     try:
         with open("/proc/meminfo") as f:
@@ -131,6 +166,43 @@ def _slice_audio(src: str, dest: str, start: float, duration: float) -> bool:
         capture_output=True, text=True, timeout=600,
     )
     return r.returncode == 0 and Path(dest).is_file()
+
+
+def deteksi_bahasa(wav_path: str, *, detik: float = 45.0) -> str:
+    """
+    Bahasa yang terdengar, dari satu potongan pendek di tengah rekaman.
+
+    Dipakai untuk berkas yang tidak membawa keterangan bahasa sama sekali —
+    video yang diimpor dari komputer. Tanpa ini, anime Jepang ditranskrip
+    dengan model terkecil dan hasilnya kalimat yang tidak pernah diucapkan.
+
+    Potongannya diambil dari TENGAH, bukan dari awal: pembukaan video sering
+    berisi musik atau logo tanpa suara orang. Modelnya yang terkecil, karena
+    yang ditanya hanya "bahasa apa ini", bukan "apa katanya".
+    """
+    try:
+        panjang = _audio_duration(wav_path)
+    except Exception:
+        panjang = 0.0
+    mulai = max(0.0, (panjang - detik) / 2) if panjang > detik else 0.0
+    with tempfile.TemporaryDirectory(prefix="omniclip_bahasa_") as tmp:
+        potong = str(Path(tmp) / "sampel.wav")
+        if not _slice_audio(wav_path, potong, mulai, detik):
+            potong = wav_path
+        try:
+            model = get_model("tiny")
+            _segmen, info = model.transcribe(potong, beam_size=1, vad_filter=True,
+                                             word_timestamps=False)
+            # Segmen faster-whisper malas: tanpa menyentuhnya, deteksinya
+            # belum tentu berjalan sampai selesai.
+            next(iter(_segmen), None)
+            bahasa = (info.language or "").split("-")[0].lower()
+            log.info("Bahasa terdeteksi: %s (keyakinan %.2f)", bahasa or "?",
+                     float(getattr(info, "language_probability", 0.0) or 0.0))
+            return bahasa
+        except Exception as e:
+            log.warning("Deteksi bahasa gagal: %s", str(e)[:200])
+            return ""
 
 
 def _transcribe_file(model, path: str, language: Optional[str],

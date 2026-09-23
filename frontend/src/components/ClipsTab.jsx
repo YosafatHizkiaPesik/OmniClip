@@ -267,6 +267,16 @@ export default function ClipsTab() {
                         ? <Loader2 size={14} className="animate-spin" />
                         : <Download size={14} />}
                     </button>
+                    {clip.srt && (
+                      <button onClick={() => simpanSatu(clip.file_name.replace(/\.mp4$/, '.srt'))}
+                              disabled={sibukBaris?.nama === clip.file_name}
+                              aria-label="Simpan takarir .srt"
+                              title="Simpan takarir .srt — untuk diunggah terpisah ke YouTube"
+                              style={{ ...iconBtn, fontSize: '0.62rem', fontWeight: 800,
+                                       letterSpacing: '0.03em' }}>
+                        SRT
+                      </button>
+                    )}
                     <button onClick={() => deleteClip(clip.file_name)} aria-label="Hapus"
                             disabled={sibukBaris?.nama === clip.file_name}
                             style={{ ...iconBtn, color: 'var(--accent-red)' }}>

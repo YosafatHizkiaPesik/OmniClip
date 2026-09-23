@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Play, Pause, RotateCcw, Loader2, Move, Maximize2, Minimize2 } from 'lucide-react';
+import { Play, Pause, RotateCcw, Loader2, Move, Maximize2, Minimize2, Frame } from 'lucide-react';
 import { apiPost } from '../../lib/api';
 import { fontStack } from '../../lib/fonts';
 import { CARD_VARIANTS } from './cardStyles';
@@ -115,6 +115,15 @@ export default function ClipPreview({
   const [dragging, setDragging] = useState(null);   // 'move' | 'size' | null
   const stageRef = useRef(null);
   const [fullscreen, setFullscreen] = useState(false);
+  // Panduan area aman: ingat pilihannya, karena yang menyalakannya sedang
+  // menata subtitle dan akan berpindah klip berkali-kali.
+  const [panduan, setPanduan] = useState(() => {
+    try { return localStorage.getItem('omniclip_area_aman') === '1'; } catch { return false; }
+  });
+  const sakelarPanduan = () => setPanduan((v) => {
+    try { localStorage.setItem('omniclip_area_aman', v ? '0' : '1'); } catch { /* mode privat */ }
+    return !v;
+  });
   // Kartu judul sebagai LAPISAN WAKTU tersendiri di depan klip.
   //
   // Sebelumnya kartunya digambar di atas detik-detik pertama klip yang sedang
@@ -1230,6 +1239,25 @@ export default function ClipPreview({
           </div>
         )}
 
+        {constrained && (
+          <button onClick={sakelarPanduan}
+                  title={panduan ? 'Sembunyikan area aman TikTok/Reels/Shorts'
+                                 : 'Tunjukkan area yang tertutup tombol TikTok/Reels/Shorts'}
+                  aria-label="Area aman"
+                  style={{
+                    position: 'absolute', right: '44px', bottom: '8px', zIndex: 3,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    width: '30px', height: '30px', borderRadius: '8px', cursor: 'pointer',
+                    background: panduan ? 'rgba(0,229,255,0.24)' : 'rgba(0,0,0,0.66)',
+                    border: '1px solid rgba(255,255,255,0.22)',
+                    color: panduan ? '#00E5FF' : '#e2e8f0',
+                  }}>
+            <Frame size={15} />
+          </button>
+        )}
+
+        {panduan && constrained && <AreaAman />}
+
         {src && (
           <button onClick={toggleFullscreen}
                   title={fullscreen ? 'Keluar dari layar penuh' : 'Lihat layar penuh'}
@@ -1547,6 +1575,52 @@ export function CaptionOverlay({
     </div>
   );
 }
+
+/**
+ * Batas yang tertutup antarmuka TikTok, Reels, dan Shorts.
+ *
+ * Angka-angkanya diambil dari petunjuk tata letak ketiga aplikasi, lalu
+ * disatukan menjadi SATU batas terburuk — subtitle yang aman di sini aman di
+ * ketiganya, dan itu yang dibutuhkan orang yang mengunggah klip yang sama ke
+ * tiga tempat. Bagian kanan tertutup deretan tombol suka/komentar/bagikan,
+ * bagian bawah oleh nama akun dan keterangannya, bagian atas oleh tombol
+ * pencarian dan kamera.
+ */
+const AMAN = { atas: 8, bawah: 20, kanan: 13, kiri: 5 };
+
+function AreaAman() {
+  const garis = '1px dashed rgba(255,80,80,0.75)';
+  const label = {
+    position: 'absolute', fontSize: '0.58rem', fontWeight: 800, letterSpacing: '0.04em',
+    color: 'rgba(255,140,140,0.95)', background: 'rgba(0,0,0,0.55)',
+    padding: '1px 5px', borderRadius: '4px', textTransform: 'uppercase',
+  };
+  return (
+    <div aria-hidden style={{ position: 'absolute', inset: 0, zIndex: 4, pointerEvents: 'none' }}>
+      <div style={{
+        position: 'absolute', top: `${AMAN.atas}%`, bottom: `${AMAN.bawah}%`,
+        left: `${AMAN.kiri}%`, right: `${AMAN.kanan}%`,
+        border: garis, borderRadius: '2px',
+      }} />
+      {/* Yang di luar kotak diredupkan, supaya terbaca sebagai "jangan di
+          sini", bukan sebagai hiasan. */}
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.30)',
+                    clipPath: `polygon(0 0, 100% 0, 100% 100%, 0 100%, 0 0,
+                      ${AMAN.kiri}% ${AMAN.atas}%, ${100 - AMAN.kanan}% ${AMAN.atas}%,
+                      ${100 - AMAN.kanan}% ${100 - AMAN.bawah}%, ${AMAN.kiri}% ${100 - AMAN.bawah}%,
+                      ${AMAN.kiri}% ${AMAN.atas}%)` }} />
+      <span style={{ ...label, bottom: `${AMAN.bawah}%`, left: `${AMAN.kiri}%`,
+                     transform: 'translateY(100%)' }}>
+        nama akun & keterangan
+      </span>
+      <span style={{ ...label, top: '38%', right: 0, transform: 'rotate(90deg) translate(0, 0)',
+                     transformOrigin: 'right center' }}>
+        tombol
+      </span>
+    </div>
+  );
+}
+
 
 /** Gagang tepi kiri/kanan untuk melebarkan dan menyempitkan kotak teks. */
 function Handle({ side, active, visible, onPointerDown }) {
