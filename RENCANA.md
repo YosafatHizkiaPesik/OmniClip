@@ -19,6 +19,12 @@ Memindahkan `OmniClip-Data` ke SSD tidak butuh kode apa pun.
 **A2. Berkas sisa 17 GB.** Satu `.f623.mp4` tanpa suara, nol klip jadi.
 Sekarang terlihat di Pengaturan → Ruang cakram, tinggal dicentang dan dihapus.
 
+**A0. Unggah tanpa setelan, untuk dijual ke publik.** Rencananya di
+[RENCANA-UNGGAH.md](RENCANA-UNGGAH.md). Yang menentukan bukan kodenya
+melainkan kuota YouTube: 10.000 unit/hari per aplikasi, 1.600 unit per
+unggahan — enam unggahan per hari untuk SELURUH pengguna digabung, sampai
+audit kuota Google lolos.
+
 **A3. Mendaftarkan aplikasi Google, TikTok, dan Meta.** Kodenya sudah ada dan
 menunggu kunci; langkahnya ada di dalam aplikasi (Akun → Tambah akun) dan di
 [PANDUAN-AKUN.md](PANDUAN-AKUN.md). Sampai ini dikerjakan, unggah ke mana pun
@@ -81,6 +87,11 @@ gameplay tanpa bicara) tidak bisa dirapatkan sama sekali.
 **E1. Unggah sungguhan ke mana pun.** Belum ada berkas OAuth Google di komputer
 ini, dan aplikasi TikTok/Meta belum didaftarkan. Yang sudah diuji hanya jalur
 galatnya: kunci kosong, akun belum tersambung, dan bentuk alamat izin.
+
+**E2a. Bundel Windows tanpa konsol.** Ikon, keterangan versi, penyembunyian
+jendela proses anak, dan tombol Keluar semuanya dikerjakan dan diuji di Linux;
+yang tidak bisa diuji dari sini justru bagian yang khusus Windows. Rilis
+berikutnya harus dicoba langsung di Windows.
 
 **E2. Semua fitur baru di Windows:** unduhan Deno dan server PO Token, encoder
 GPU, profil, impor lewat jalur, dan unduhan font Noto.
