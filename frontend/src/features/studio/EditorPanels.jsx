@@ -3,7 +3,7 @@ import { Plus, Trash2, Loader2, Star, ChevronRight, Users, Palette } from 'lucid
 import { formatTime, parseTimeString } from '../../utils/timeFormat';
 import { inkSafe } from '../../lib/contrast';
 import { cachedFonts, fontStack, loadFonts } from '../../lib/fonts';
-import { hexAlpha } from './ClipPreview';
+import { gayaKata, hexAlpha } from './ClipPreview';
 import {
   COLOR_GROUPS, COLOR_PAIRS, normalizeHex, useFavoriteColors, useRecentColors,
 } from '../../lib/colors';
@@ -536,6 +536,104 @@ function SpeakerCountPicker({ current, busy, onRedetect }) {
 // dan posisi sekaligus, karena kombinasi itulah yang membuat sebuah gaya
 // terbaca utuh — mengganti warna saja tidak mengubah kesannya.
 const STYLE_PRESETS = [
+  // --- Kotak sorot per kata -------------------------------------------------
+  // Gaya yang paling banyak ditiru orang sekarang: tiap kata mendapat kotak
+  // berwarna saat diucapkan. Di ASS ini tidak sederhana — lihat `SOROT_KOTAK`
+  // di backend/app/services/subtitles.py — tapi hasilnya memang yang membuat
+  // klip terlihat dikerjakan editor, bukan dikerjakan mesin.
+  {
+    id: 'kotak_kuning', label: 'Kotak Kuning', hint: 'Kata diucapkan masuk kotak kuning',
+    patch: { size: 86, primary: '#FFFFFF', highlight: '#FFE500', font: 'Montserrat',
+             uppercase: true, animation: 'pop_in', position: 'bottom', outline_px: 7,
+             sorot: 'kotak', kotak_warna: '#FFE500', kotak_teks: '#101010',
+             highlight_words: true, bg: false },
+  },
+  {
+    id: 'kotak_hijau', label: 'Kotak Hijau', hint: 'Kotak hijau, baris memantul masuk',
+    patch: { size: 92, primary: '#FFFFFF', highlight: '#00E676', font: 'Anton',
+             uppercase: true, animation: 'pantul', position: 'bottom', outline_px: 7,
+             sorot: 'kotak', kotak_warna: '#00E676', kotak_teks: '#06210F',
+             highlight_words: true, bg: false },
+  },
+  {
+    id: 'kotak_merah', label: 'Kotak Merah', hint: 'Kotak merah, huruf putih',
+    patch: { size: 82, primary: '#FFFFFF', highlight: '#FF3B5C', font: 'Archivo Black',
+             uppercase: true, animation: 'fade', position: 'bottom', outline_px: 7,
+             sorot: 'kotak_pop', kotak_warna: '#FF3B5C', kotak_teks: '#FFFFFF',
+             highlight_words: true, bg: false },
+  },
+  {
+    id: 'kotak_ungu', label: 'Kotak Ungu', hint: 'Kotak ungu, huruf miring ke atas',
+    patch: { size: 88, primary: '#FFFFFF', highlight: '#9B5CFF', font: 'Poppins',
+             uppercase: true, animation: 'slide_up', position: 'bottom', outline_px: 6,
+             sorot: 'kotak', kotak_warna: '#9B5CFF', kotak_teks: '#FFFFFF',
+             highlight_words: true, bg: false },
+  },
+  // --- Nyala ----------------------------------------------------------------
+  {
+    id: 'neon_biru', label: 'Neon Biru', hint: 'Kata menyala biru, masuk dari buram',
+    patch: { size: 94, primary: '#FFFFFF', highlight: '#00E5FF', font: 'Anton',
+             uppercase: true, animation: 'blur_masuk', position: 'bottom', outline_px: 7,
+             sorot: 'glow', highlight_words: true, bg: false },
+  },
+  {
+    id: 'neon_pink', label: 'Neon Pink', hint: 'Nyala merah muda, gaya klub malam',
+    patch: { size: 106, primary: '#FFFFFF', highlight: '#FF3DCB', font: 'Bebas Neue',
+             uppercase: true, animation: 'fade', position: 'bottom', outline_px: 6,
+             sorot: 'glow', highlight_words: true, bg: false },
+  },
+  // --- Gerak ----------------------------------------------------------------
+  {
+    id: 'satu_kata', label: 'Satu Kata', hint: 'Satu kata besar, berganti cepat',
+    patch: { size: 150, primary: '#FFFFFF', highlight: '#FFE500', font: 'Anton',
+             uppercase: true, animation: 'satu_kata', position: 'middle', outline_px: 9,
+             highlight_words: true, bg: false, margin_v: 300 },
+  },
+  {
+    id: 'pantul', label: 'Pantul', hint: 'Baris melompat masuk, kata memantul',
+    patch: { size: 92, primary: '#FFFFFF', highlight: '#FFE500', font: 'Montserrat',
+             uppercase: true, animation: 'pantul', position: 'bottom', outline_px: 7,
+             sorot: 'pop', highlight_words: true, bg: false },
+  },
+  {
+    id: 'putar', label: 'Putar', hint: 'Baris masuk sambil berputar',
+    patch: { size: 90, primary: '#FFFFFF', highlight: '#5BC8FF', font: 'Rubik',
+             uppercase: true, animation: 'putar', position: 'bottom', outline_px: 7,
+             sorot: 'pop', highlight_words: true, bg: false },
+  },
+  {
+    id: 'geser', label: 'Geser', hint: 'Baris meluncur dari kiri',
+    patch: { size: 88, primary: '#FFFFFF', highlight: '#B8FF3A', font: 'Oswald',
+             uppercase: true, animation: 'geser_kiri', position: 'bottom', outline_px: 7,
+             sorot: 'warna', highlight_words: true, bg: false },
+  },
+  {
+    id: 'getar', label: 'Getar', hint: 'Hentakan kecil — untuk klip game dan reaksi',
+    patch: { size: 84, primary: '#FFFFFF', highlight: '#FF4D5E', font: 'Bungee',
+             uppercase: true, animation: 'getar', position: 'bottom', outline_px: 8,
+             sorot: 'pop', highlight_words: true, bg: false },
+  },
+  {
+    id: 'fokus', label: 'Fokus', hint: 'Masuk dari buram jadi tajam',
+    patch: { size: 88, primary: '#FFFFFF', highlight: '#FFD166', font: 'Poppins',
+             uppercase: false, animation: 'blur_masuk', position: 'bottom', outline_px: 6,
+             sorot: 'warna', highlight_words: true, bg: false },
+  },
+  // --- Penanda kata ----------------------------------------------------------
+  {
+    id: 'garis_bawah', label: 'Garis Bawah', hint: 'Kata diucapkan digarisbawahi',
+    patch: { size: 80, primary: '#FFFFFF', highlight: '#FFE500', font: 'Poppins',
+             uppercase: false, animation: 'fade', position: 'bottom', outline_px: 6,
+             sorot: 'garis_bawah', highlight_words: true, bg: false },
+  },
+  {
+    id: 'retro', label: 'Retro', hint: 'Bayangan berwarna yang digeser',
+    patch: { size: 88, primary: '#FFFFFF', highlight: '#FFE500', font: 'Lilita One',
+             uppercase: true, animation: 'putar', position: 'bottom', outline_px: 0,
+             shadow_px: 9, bayang_warna: '#FF00AA',
+             sorot: 'warna', highlight_words: true, bg: false },
+  },
+  // --- Gaya awal -------------------------------------------------------------
   {
     id: 'tebal', label: 'Tebal', hint: 'Putih tebal, kata aktif kuning',
     patch: { size: 96, primary: '#FFFFFF', highlight: '#FFE500', font: 'Montserrat',
@@ -630,6 +728,16 @@ const STYLE_PRESETS = [
  * dengan mencoba satu per satu berarti melewati render tiap kali. Petak ini
  * memakai nilai preset yang persis sama dengan yang dikirim ke ffmpeg.
  */
+/** Mode sorot preset — cermin dari `_normalkan` di backend. */
+function modeSorot(p) {
+  if (p.sorot) return p.sorot;
+  if (p.highlight_words === false || p.animation === 'none' || p.animation === 'block') {
+    return 'mati';
+  }
+  return p.animation === 'karaoke_pop' ? 'pop' : 'warna';
+}
+
+
 function PresetTile({ preset, active, onPick }) {
   const p = preset.patch;
   const words = p.uppercase ? ['AYO', 'MULAI'] : ['Ayo', 'mulai'];
@@ -664,7 +772,13 @@ function PresetTile({ preset, active, onPick }) {
           }),
         }}>
           <span style={{ color: p.primary }}>{words[0]}</span>
-          <span style={{ color: p.highlight_words === false ? p.primary : p.highlight }}>
+          {/* Kata kedua digambar dengan fungsi yang SAMA dengan pratinjau dan
+              hasil render. Petak yang menjanjikan kotak lalu mengeluarkan
+              warna saja adalah petak yang berbohong. */}
+          <span style={gayaKata(true, modeSorot(p), {
+            highlight: p.highlight, dasar: p.primary,
+            kotak: p.kotak_warna ?? '#FFE500', kotakTeks: p.kotak_teks ?? '#101010',
+          })}>
             {words[1]}
           </span>
         </span>
@@ -685,14 +799,35 @@ function PresetTile({ preset, active, onPick }) {
   );
 }
 
+// Cara BARIS masuk. Sorotan per kata diatur terpisah, karena keduanya memang
+// dua hal yang berbeda: satu mengatur bagaimana baris datang, satu lagi
+// bagaimana kata yang sedang diucapkan ditandai.
 const ANIMATIONS = [
   ['karaoke_pop', 'Karaoke pantul'],
   ['karaoke_wipe', 'Karaoke warna'],
   ['fade', 'Memudar'],
   ['slide_up', 'Naik'],
   ['pop_in', 'Membesar'],
+  ['pantul', 'Pantul'],
+  ['putar', 'Putar'],
+  ['geser_kiri', 'Geser kiri'],
+  ['geser_kanan', 'Geser kanan'],
+  ['blur_masuk', 'Fokus'],
+  ['getar', 'Getar'],
   ['typewriter', 'Ketik'],
+  ['satu_kata', 'Satu kata'],
   ['none', 'Tanpa animasi'],
+];
+
+// Cara KATA yang sedang diucapkan ditandai.
+const SOROT = [
+  ['warna', 'Warna'],
+  ['pop', 'Warna + pantul'],
+  ['kotak', 'Kotak'],
+  ['kotak_pop', 'Kotak + pantul'],
+  ['glow', 'Nyala'],
+  ['garis_bawah', 'Garis bawah'],
+  ['mati', 'Tidak disorot'],
 ];
 
 function Segmented({ options, value, onChange, columns = 3, size = '0.76rem' }) {
@@ -1183,6 +1318,30 @@ export function StylePanel({
           <div style={{ ...label, marginBottom: '8px' }}>Animasi</div>
           <Segmented columns={2} options={ANIMATIONS} value={style.animation}
                      onChange={(v) => set({ animation: v })} />
+
+          <div style={{ ...label, marginTop: '14px' }}>Sorotan kata yang diucapkan</div>
+          <Segmented columns={2} options={SOROT} value={modeSorot(style)}
+                     onChange={(v) => set({ sorot: v, highlight_words: v !== 'mati' })} />
+
+          {(modeSorot(style) === 'kotak' || modeSorot(style) === 'kotak_pop') && (
+            <div style={{ marginTop: '12px' }}>
+              <div style={label}>Warna kotak</div>
+              <div style={{ display: 'flex', gap: '7px', flexWrap: 'wrap' }}>
+                {[['#FFE500', '#101010'], ['#00E676', '#06210F'], ['#FF3B5C', '#FFFFFF'],
+                  ['#9B5CFF', '#FFFFFF'], ['#00E5FF', '#04222A'], ['#FFFFFF', '#101010'],
+                  ['#101010', '#FFFFFF']].map(([kotak, teks]) => (
+                  <button key={kotak} onClick={() => set({ kotak_warna: kotak, kotak_teks: teks })}
+                          title={kotak}
+                          style={{
+                            width: '30px', height: '24px', borderRadius: '6px', cursor: 'pointer',
+                            background: kotak, color: teks, fontSize: '0.6rem', fontWeight: 900,
+                            border: (style.kotak_warna ?? '#FFE500') === kotak
+                              ? '2px solid var(--accent-cyan)' : '1px solid var(--border-color)',
+                          }}>Aa</button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </Section>
 

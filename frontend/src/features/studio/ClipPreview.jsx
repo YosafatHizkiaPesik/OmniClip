@@ -1462,7 +1462,16 @@ export function CaptionOverlay({
   // Sorotan per kata adalah saklarnya SENDIRI, terpisah dari animasi masuk.
   // Gaya bersih berpelat memakai animasi masuk tanpa sorotan; tanpa pemisahan
   // ini kedua hal itu tidak bisa dipilih sendiri-sendiri.
-  const sorot = style?.highlight_words !== false && anim !== 'none' && anim !== 'block';
+  // Cermin dari `_normalkan` di backend: gaya lama menyatakan sorotan lewat
+  // nama animasinya, gaya baru menyatakannya sendiri. Keduanya harus sampai
+  // pada jawaban yang sama, kalau tidak pratinjau berbohong tentang hasilnya.
+  const modeSorot = style?.sorot ?? (
+    style?.highlight_words === false || anim === 'none' || anim === 'block'
+      ? 'mati'
+      : anim === 'karaoke_pop' ? 'pop' : 'warna');
+  const sorot = modeSorot !== 'mati';
+  const warnaKotak = style?.kotak_warna ?? '#FFE500';
+  const warnaKotakTeks = style?.kotak_teks ?? '#101010';
 
   // "Ketik": kata yang belum diucapkan belum ada di layar sama sekali.
   const tampil = anim === 'typewriter' && activeWordIndex >= 0
@@ -1532,13 +1541,17 @@ export function CaptionOverlay({
           const active = sorot && i === activeWordIndex;
           return (
             <span key={i} style={{
-              color: active ? (style?.highlight ?? '#FFE500') : speakerColor,
+              ...gayaKata(active, modeSorot, {
+                highlight: style?.highlight ?? '#FFE500',
+                dasar: speakerColor,
+                kotak: warnaKotak,
+                kotakTeks: warnaKotakTeks,
+              }),
               // Tanpa jarak antarhuruf Jepang/Mandarin — sama dengan render
               // (backend services/teks.py).
               marginRight: i === tampil.length - 1 || !berjarak(w.w, tampil[i + 1]?.w)
                 ? 0 : '0.28em',
               display: 'inline-block',
-              transform: active && anim === 'karaoke_pop' ? 'scale(1.09)' : 'none',
               transition: 'transform 90ms ease, color 60ms linear',
             }}>{w.w}</span>
           );
@@ -1643,6 +1656,45 @@ function Handle({ side, active, visible, onPointerDown }) {
   );
 }
 
+/**
+ * Tampilan satu kata menurut mode sorotnya.
+ *
+ * Cermin dari `_tag_sorot` di backend. Yang digambar di sini harus sama dengan
+ * yang dibakar ffmpeg, karena inilah satu-satunya tempat pengguna memilih
+ * gayanya — pratinjau yang berbeda dari hasil berarti setiap pilihan dibuat
+ * dengan informasi yang keliru.
+ */
+export function gayaKata(aktif, mode, warna) {
+  if (!aktif) return { color: warna.dasar };
+  const pop = { transform: 'scale(1.09)' };
+  if (mode === 'pop') return { color: warna.highlight, ...pop };
+  if (mode === 'garis_bawah') {
+    return { color: warna.highlight, textDecoration: 'underline',
+             textDecorationThickness: '0.09em', textUnderlineOffset: '0.12em' };
+  }
+  if (mode === 'glow') {
+    // `\blur` pada garis luar berwarna di ASS; di CSS padanannya beberapa
+    // lapis text-shadow dengan warna yang sama.
+    const g = warna.highlight;
+    return { color: g,
+             textShadow: `0 0 4px ${g}, 0 0 10px ${g}, 0 0 20px ${g}` };
+  }
+  if (mode === 'kotak' || mode === 'kotak_pop') {
+    return {
+      color: warna.kotakTeks,
+      background: warna.kotak,
+      // Kotak sedikit lebih lebar daripada hurufnya, sama seperti empuk pelat
+      // di ASS. Margin negatif menjaga jarak antar kata tetap sama.
+      padding: '0.02em 0.12em',
+      margin: '0 -0.02em',
+      WebkitTextStroke: '0',
+      ...(mode === 'kotak_pop' ? pop : {}),
+    };
+  }
+  return { color: warna.highlight };
+}
+
+
 /** Animasi masuk per baris. Durasinya sengaja pendek supaya tidak mengganggu. */
 function lineEntryStyle(anim, age) {
   const d = 0.26;
@@ -1655,6 +1707,30 @@ function lineEntryStyle(anim, age) {
   }
   if (anim === 'pop_in') {
     return { opacity: ease, transform: `scale(${0.86 + 0.14 * ease})` };
+  }
+  if (anim === 'pantul') {
+    // Melewati ukuran aslinya lalu kembali — lewatan itu yang membuatnya
+    // terbaca sebagai pantulan, bukan sebagai zoom biasa.
+    const s = p < 0.55 ? 0.72 + (1.12 - 0.72) * (p / 0.55)
+      : 1.12 - 0.12 * ((p - 0.55) / 0.45);
+    return { opacity: Math.min(1, ease * 1.6), transform: `scale(${s})` };
+  }
+  if (anim === 'putar') {
+    return { opacity: ease,
+             transform: `rotate(${(1 - ease) * -13}deg) scale(${0.88 + 0.12 * ease})` };
+  }
+  if (anim === 'blur_masuk') {
+    return { opacity: ease, filter: `blur(${(1 - ease) * 7}px)` };
+  }
+  if (anim === 'geser_kiri') {
+    return { opacity: ease, transform: `translateX(${(1 - ease) * -46}px)` };
+  }
+  if (anim === 'geser_kanan') {
+    return { opacity: ease, transform: `translateX(${(1 - ease) * 46}px)` };
+  }
+  if (anim === 'getar') {
+    const sudut = [-5, 4, -2.5, 0][Math.min(3, Math.floor(p * 4))];
+    return { transform: `rotate(${sudut}deg)` };
   }
   return {};
 }

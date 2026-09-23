@@ -59,15 +59,45 @@ class CaptionStyle:
     # klip tanpa subtitle justru sering tetap membutuhkan hook-nya.
     aktif: bool = True
 
-    # karaoke_pop  : kata aktif berganti warna dan memantul (bawaan)
-    # karaoke_wipe : kata aktif hanya berganti warna, tanpa memantul
-    # fade         : baris masuk dengan pudar
-    # slide_up     : baris naik dari bawah lalu diam
-    # pop_in       : baris membesar dari kecil
-    # typewriter   : kata muncul satu per satu, barisnya tumbuh
-    # block/none   : tanpa animasi apa pun
+    # fade/pop_in/pantul/putar/blur_masuk/getar : cara baris masuk
+    # slide_up/geser_kiri/geser_kanan           : baris meluncur dari satu arah
+    # typewriter  : kata muncul satu per satu, barisnya tumbuh
+    # satu_kata   : hanya kata yang sedang diucapkan yang ada di layar
+    # block/none  : tanpa animasi masuk
+    #
+    # Animasi MASUK satu baris. Nilai "karaoke_pop"/"karaoke_wipe" adalah
+    # peninggalan dari masa ketika animasi masuk dan sorotan kata masih satu
+    # kolom; keduanya diterjemahkan ke `sorot` oleh `_normalkan`.
     animation: Literal["karaoke_pop", "karaoke_wipe", "fade", "slide_up",
-                       "pop_in", "typewriter", "block", "none"] = "karaoke_pop"
+                       "pop_in", "typewriter", "block", "none",
+                       "putar", "geser_kiri", "geser_kanan", "blur_masuk",
+                       "pantul", "getar", "satu_kata"] = "karaoke_pop"
+
+    # --- Cara kata yang sedang diucapkan disorot ------------------------------
+    #
+    # Dipisahkan dari animasi masuk karena keduanya memang dua hal: satu
+    # mengatur bagaimana BARIS datang, satu lagi bagaimana KATA ditandai. Gaya
+    # yang dipakai kreator populer hampir selalu campuran keduanya — baris
+    # memudar masuk, lalu tiap kata mendapat kotak berwarna saat diucapkan.
+    #
+    # "kotak" adalah yang paling banyak ditiru orang, dan yang paling sulit:
+    # ASS tidak punya "kotak di belakang sepotong teks". Yang ada BorderStyle 3,
+    # yang mengganti garis luar huruf dengan pelat — sehingga memakainya berarti
+    # kehilangan garis luar, dan teks putih tanpa garis luar hilang di atas
+    # latar terang. Karena itu mode kotak menggambar DUA lapis: pelat di bawah
+    # dengan hurufnya dibuat tembus pandang, lalu teks bergaris luar di atasnya.
+    # Terverifikasi dengan merender di atas latar terang dan gelap.
+    # None = belum dipilih; `_normalkan` menurunkannya dari gaya lama. Tanpa
+    # pembedaan ini, klip lama bergaya "tanpa animasi" akan tiba-tiba menyorot
+    # kata — perubahan yang tidak diminta siapa pun.
+    sorot: Optional[Literal["warna", "pop", "kotak", "kotak_pop", "glow",
+                            "garis_bawah", "mati"]] = None
+    # Warna kotak dan warna huruf di dalamnya (mode kotak saja).
+    kotak_warna: str = "#FFE500"
+    kotak_teks: str = "#101010"
+    # Warna bayangan. Bayangan berwarna yang digeser jauh adalah seluruh isi
+    # gaya retro/riso; dengan hitam ia hanya menambah keterbacaan.
+    bayang_warna: str = "#000000"
 
     # Sorotan per kata, TERPISAH dari animasi masuk.
     #
@@ -291,9 +321,71 @@ def _wrap(text: str, max_chars: int = 17) -> str:
 # Animasi yang hanya membungkus baris (bukan menyorot kata). Dipisah dari
 # animasi karaoke karena keduanya bisa dipakai bersamaan: baris boleh masuk
 # dengan pudar SEKALIGUS menyorot kata satu per satu.
-LINE_ENTRY = {"fade", "slide_up", "pop_in"}
+LINE_ENTRY = {"fade", "slide_up", "pop_in", "putar", "geser_kiri",
+              "geser_kanan", "blur_masuk", "pantul", "getar"}
 TANPA_ANIMASI = {"none", "block"}
 KARAOKE = {"karaoke_pop", "karaoke_wipe"}
+# Mode sorot yang butuh lapis pelat di bawah teks.
+SOROT_KOTAK = {"kotak", "kotak_pop"}
+# Semua mode yang menggambar sesuatu DI BAWAH hurufnya. Keduanya memakai akal
+# yang sama: baris yang sama persis digambar dua kali, yang bawah membawa
+# hiasannya dengan huruf dibuat tembus pandang, yang atas membawa hurufnya.
+# Karena teksnya identik, pemutusan barisnya pasti sama dan keduanya bertumpuk
+# tepat — tidak ada cara lain di ASS untuk menaruh sesuatu di belakang
+# sepotong teks tanpa mengorbankan garis luar hurufnya.
+SOROT_LAPIS = SOROT_KOTAK | {"glow"}
+
+
+def _normalkan(st: CaptionStyle) -> CaptionStyle:
+    """
+    Menerjemahkan gaya lama ke bentuk sekarang.
+
+    Klip yang sudah tersimpan memakai `animation="karaoke_pop"` untuk
+    menyatakan "kata memantul saat diucapkan" — sesuatu yang sekarang milik
+    `sorot`. Diterjemahkan di sini, sekali, supaya seluruh kode di bawahnya
+    hanya mengenal satu bentuk.
+    """
+    animasi = st.animation
+    sorot = st.sorot
+    if sorot is None:
+        if not st.highlight_words or animasi in TANPA_ANIMASI:
+            sorot = "mati"
+        elif animasi == "karaoke_pop":
+            sorot = "pop"
+        else:
+            sorot = "warna"
+    if animasi in KARAOKE:
+        # Nama lama itu menyatakan sorotan, bukan cara baris masuk.
+        animasi = "none"
+    return replace(st, animation=animasi, sorot=sorot)
+
+
+def _tag_sorot(st: CaptionStyle, hl: str) -> str:
+    """
+    Tag ASS untuk kata yang sedang diucapkan.
+
+    `hl` warna sorot yang sudah dalam bentuk ASS. Mode kotak memakai warna
+    hurufnya sendiri, karena huruf putih di atas kotak kuning tidak terbaca.
+    """
+    pop = "\\fscx112\\fscy112\\t(0,90,\\fscx100\\fscy100)"
+    if st.sorot == "warna":
+        return f"{{\\c{hl}}}"
+    if st.sorot == "pop":
+        return f"{{\\c{hl}{pop}}}"
+    if st.sorot == "garis_bawah":
+        return f"{{\\c{hl}\\u1}}"
+    if st.sorot == "glow":
+        # Hurufnya sendiri tetap tajam; nyalanya digambar sebagai lapis
+        # terpisah di bawahnya (lihat SOROT_LAPIS). Versi pertama mengaburkan
+        # hurufnya langsung, dan kata yang disorot jadi gumpalan yang tidak
+        # terbaca sama sekali — terukur dengan merendernya.
+        return f"{{\\c{hl}}}"
+    if st.sorot in SOROT_KOTAK:
+        # Garis luar dimatikan di dalam kotak. Huruf gelap bergaris hitam di
+        # atas kotak kuning terbaca sebagai gumpalan, bukan sebagai kata.
+        warna = hex_to_ass(st.kotak_teks)
+        return f"{{\\c{warna}\\bord0\\shad0{pop if st.sorot == 'kotak_pop' else ''}}}"
+    return ""
 
 
 def _entry_tag(animation: str, *, play_res: tuple[int, int], margin_v: int,
@@ -313,7 +405,25 @@ def _entry_tag(animation: str, *, play_res: tuple[int, int], margin_v: int,
     if animation == "pop_in":
         return (rf"{{\fscx62\fscy62\t(0,{ms},\fscx100\fscy100)"
                 rf"\fad({ms // 2},0)}}")
-    # slide_up butuh koordinat absolut, jadi posisinya dihitung dari alignment.
+    if animation == "pantul":
+        # Membesar melewati ukuran aslinya lalu kembali. Lewatan itu yang
+        # membuat gerakannya terbaca sebagai pantulan, bukan sebagai zoom.
+        naik = int(ms * 0.55)
+        return (rf"{{\fscx68\fscy68\t(0,{naik},1.7,\fscx110\fscy110)"
+                rf"\t({naik},{ms},\fscx100\fscy100)\fad({ms // 2},0)}}")
+    if animation == "putar":
+        return (rf"{{\frz13\fscx86\fscy86\t(0,{ms},\frz0\fscx100\fscy100)"
+                rf"\fad({ms // 2},0)}}")
+    if animation == "blur_masuk":
+        return rf"{{\blur16\t(0,{ms},\blur0)\fad({ms},0)}}"
+    if animation == "getar":
+        # Tiga hentakan cepat. Dipakai untuk kata seru dan klip game; pada
+        # podcast ia mengganggu, dan preset yang memakainya mengatakan begitu.
+        a, b = ms // 3, (ms * 2) // 3
+        return (rf"{{\frz-5\t(0,{a},\frz4)\t({a},{b},\frz-2.5)"
+                rf"\t({b},{ms},\frz0)}}")
+
+    # Sisanya butuh koordinat absolut, jadi posisinya dihitung dari alignment.
     w, h = play_res
     cx = center_x if center_x is not None else w // 2
     if align in (7, 8, 9):        # atas
@@ -322,6 +432,10 @@ def _entry_tag(animation: str, *, play_res: tuple[int, int], margin_v: int,
         cy = h // 2
     else:                         # bawah
         cy = h - margin_v
+    if animation == "geser_kiri":
+        return rf"{{\move({cx - 110},{cy},{cx},{cy},0,{ms})\fad({ms // 2},0)}}"
+    if animation == "geser_kanan":
+        return rf"{{\move({cx + 110},{cy},{cx},{cy},0,{ms})\fad({ms // 2},0)}}"
     return rf"{{\move({cx},{cy + 34},{cx},{cy},0,{ms})\fad({ms // 2},0)}}"
 
 
@@ -418,7 +532,8 @@ def _style_line(nama: str, st: CaptionStyle, lebar: int) -> str:
         bs, tebal, bayang = 1, st.outline_px, st.shadow_px
         garis = "&H00000000"
     return (f"Style: {nama},{st.font},{st.size},{hex_to_ass(st.primary)},&H000000FF,"
-            f"{garis},&H80000000,-1,0,0,0,100,100,0,0,{bs},{tebal},{bayang},"
+            f"{garis},{hex_to_ass(st.bayang_warna or '#000000')},"
+            f"-1,0,0,0,100,100,0,0,{bs},{tebal},{bayang},"
             f"{align},{ml},{mr},{st.margin_v},1")
 
 
@@ -494,7 +609,7 @@ def build_ass(
     [{start, end, text, words: [{w, s, e}]}] dengan waktu dalam linimasa KLIP
     (dimulai dari 0).
     """
-    st = style or CaptionStyle()
+    st = _normalkan(style or CaptionStyle())
     w, h = play_res
 
     primary = hex_to_ass(st.primary)
@@ -529,6 +644,20 @@ def build_ass(
     # pada anime, baris aslinya Jepang sementara terjemahannya Latin.
     st = _font_aksara(st, lines)
 
+    # Gaya kembar untuk lapis pelat: ukuran, font, dan margin yang sama persis
+    # supaya barisnya terputus di tempat yang sama dan kedua lapis bertumpuk
+    # tepat. Yang berbeda hanya BorderStyle 3 dan pelat yang mulai tembus
+    # pandang; tiap kata yang sedang diucapkan menyalakannya sendiri.
+    bayang_ass = hex_to_ass(st.bayang_warna) if st.bayang_warna else "&H80000000"
+
+    gaya_kotak = ""
+    if st.sorot in SOROT_KOTAK:
+        empuk = max(6, int(round(st.size * 0.16)))
+        gaya_kotak = (
+            f"Style: CaptionKotak,{st.font},{st.size},{primary},&H000000FF,"
+            f"&HFF000000,&H00000000,-1,0,0,0,100,100,0,0,3,{empuk},0,"
+            f"{align},{margin_l},{margin_r},{st.margin_v},1\n")
+
     gaya_kedua = ""
     ada_kedua = bool(kedua_lines) and kedua_style is not None and kedua_style.aktif
     if ada_kedua:
@@ -545,8 +674,8 @@ YCbCr Matrix: TV.709
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Caption,{st.font},{st.size},{primary},&H000000FF,{garis_warna},&H80000000,-1,0,0,0,100,100,0,0,{border_style},{garis_tebal},{bayang},{align},{margin_l},{margin_r},{st.margin_v},1
-{gaya_kedua}Style: Hook,{st.font},{hook.size if hook else 64},{hook_color},&H000000FF,&H00000000,&HB4000000,-1,0,0,0,100,100,0,0,3,0,0,8,100,100,150,1
+Style: Caption,{st.font},{st.size},{primary},&H000000FF,{garis_warna},{bayang_ass},-1,0,0,0,100,100,0,0,{border_style},{garis_tebal},{bayang},{align},{margin_l},{margin_r},{st.margin_v},1
+{gaya_kotak}{gaya_kedua}Style: Hook,{st.font},{hook.size if hook else 64},{hook_color},&H000000FF,&H00000000,&HB4000000,-1,0,0,0,100,100,0,0,3,0,0,8,100,100,150,1
 Style: Mark,{wm_font},{st.wm_size},{wm_warna},&H000000FF,&H80000000,&H00000000,0,0,0,0,100,100,0,0,1,{st.wm_outline},0,5,0,0,0,1
 
 [Events]
@@ -604,6 +733,26 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         # Kata muncul satu per satu dan barisnya tumbuh. Berbeda dari karaoke:
         # di sini kata yang belum diucapkan belum ada di layar sama sekali,
         # bukan sekadar belum berwarna.
+        if st.animation == "satu_kata" and words:
+            # Satu kata memenuhi layar, berganti mengikuti ucapan. Gaya yang
+            # dipakai untuk potongan cepat: mata tidak perlu memindai baris,
+            # dan tiap kata mendapat seluruh perhatian. Tanpa kata lain di
+            # layar, sorotan per kata tidak berarti apa-apa di sini.
+            for idx, word in enumerate(words):
+                mulai = word["s"]
+                selesai = words[idx + 1]["s"] if idx + 1 < len(words) else line["end"]
+                if selesai <= mulai:
+                    selesai = mulai + 0.08
+                teks = escape_ass(word["w"].upper() if st.uppercase else word["w"])
+                masuk = _entry_tag("pop_in", play_res=play_res, margin_v=st.margin_v,
+                                   align=align, center_x=int(round(center / 100.0 * w)),
+                                   budget=max(0.16, selesai - mulai))
+                events.append(
+                    f"Dialogue: 0,{_ts(mulai)},{_ts(selesai)},Caption,,0,0,0,,"
+                    f"{masuk}{base_tag}{{\\c{highlight}}}{teks}"
+                )
+            continue
+
         if st.animation == "typewriter" and words:
             for idx, word in enumerate(words):
                 mulai = word["s"]
@@ -620,37 +769,63 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 )
             continue
 
-        if st.highlight_words and st.animation not in TANPA_ANIMASI and words:
-            bounce = st.animation == "karaoke_pop"
+        if st.sorot != "mati" and words:
             masuk = _entry_tag(st.animation, play_res=play_res,
                                margin_v=st.margin_v, align=align,
                                center_x=int(round(center / 100.0 * w)),
                                budget=max(0.2, float(words[0]["e"]) - float(words[0]["s"])))
+            berlapis = st.sorot in SOROT_LAPIS
+            if st.sorot in SOROT_KOTAK:
+                # Pelat: hurufnya tembus pandang, pelatnya yang menyala.
+                hias_nyala = rf"{{\3a&H00&\3c{hex_to_ass(st.kotak_warna)}}}"
+                hias_sembunyi = r"{\3a&HFF&}"
+                sembunyi_awal = r"{\1a&HFF&}"
+                gaya_lapis = "CaptionKotak"
+            else:
+                # Nyala: garis luar berwarna yang dikaburkan, hurufnya ikut
+                # berwarna supaya cahayanya penuh — lalu ditutup huruf tajam
+                # dari lapis di atasnya.
+                nyala = hex_to_ass(st.highlight)
+                hias_nyala = (rf"{{\1a&H00&\3a&H00&\c{nyala}\3c{nyala}"
+                              rf"\bord{max(8, st.outline_px + 4)}\blur9}}")
+                hias_sembunyi = r"{\1a&HFF&\3a&HFF&\4a&HFF&}"
+                sembunyi_awal = hias_sembunyi
+                gaya_lapis = "Caption"
+            mentah = [x["w"] for x in words]
             for idx, word in enumerate(words):
                 start = word["s"]
                 end = words[idx + 1]["s"] if idx + 1 < len(words) else line["end"]
                 if end <= start:
                     end = start + 0.08
 
-                parts = []
+                parts, pelat = [], []
                 for k, other in enumerate(words):
                     token = other["w"].upper() if st.uppercase else other["w"]
                     token = escape_ass(token)
                     if k == idx:
-                        pop = ("\\fscx112\\fscy112\\t(0,90,\\fscx100\\fscy100)"
-                               if bounce else "")
-                        parts.append(f"{{\\c{highlight}{pop}}}{token}"
+                        parts.append(f"{_tag_sorot(st, highlight)}{token}"
                                      f"{{\\r}}{base_tag}")
+                        # Di lapis bawah, hanya kata inilah yang terlihat.
+                        pelat.append(f"{hias_nyala}{token}{hias_sembunyi}")
                     else:
                         parts.append(token)
+                        pelat.append(token)
+                # Lapis teks ada di atas pelat, jadi Layer-nya lebih besar.
                 events.append(
-                    f"Dialogue: 0,{_ts(start)},{_ts(end)},Caption,,0,0,0,,"
+                    f"Dialogue: {1 if berlapis else 0},{_ts(start)},{_ts(end)},"
+                    "Caption,,0,0,0,,"
                     # Animasi masuk hanya pada kejadian PERTAMA baris itu.
                     # Menaruhnya di tiap kata berarti barisnya memantul ulang
                     # setiap kali sorotan berpindah.
                     f"{masuk if idx == 0 else ''}{base_tag}"
-                    f"{sambung_bagian(parts, [w['w'] for w in words], patah)}"
+                    f"{sambung_bagian(parts, mentah, patah)}"
                 )
+                if berlapis:
+                    events.append(
+                        f"Dialogue: 0,{_ts(start)},{_ts(end)},{gaya_lapis},,0,0,0,,"
+                        f"{masuk if idx == 0 else ''}{sembunyi_awal}"
+                        f"{sambung_bagian(pelat, mentah, patah)}"
+                    )
         else:
             text = raw_text.upper() if st.uppercase else raw_text
             entry = _entry_tag(st.animation, play_res=play_res,

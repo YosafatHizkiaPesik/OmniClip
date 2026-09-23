@@ -86,6 +86,12 @@ class CaptionStyleModel(BaseModel):
     aktif: Optional[bool] = None
     # False = tidak ada kata yang disorot; baris tampil satu warna.
     highlight_words: Optional[bool] = None
+    # Cara kata yang sedang diucapkan ditandai: warna saja, memantul, kotak
+    # berwarna di belakangnya, nyala neon, atau garis bawah. Kosong berarti
+    # diturunkan dari `animation` demi klip lama.
+    sorot: Optional[str] = None
+    kotak_warna: Optional[str] = None
+    kotak_teks: Optional[str] = None
     # Pelat tembus pandang di belakang teks, pengganti garis luar tebal.
     bg: Optional[bool] = None
     bg_color: Optional[str] = None
