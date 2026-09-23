@@ -1768,7 +1768,9 @@ export default function Editor({ project, onBack }) {
                                 lapisan={selected?.media_layers ?? []}
                                 onLayers={(next) => selected
                                   && editor.updateClip(selected.clip_id, { media_layers: next })}
-                                frameKeys={frameKeys} onFrameKeys={setFrameKeys} />
+                                frameKeys={frameKeys} onFrameKeys={setFrameKeys}
+                                onSegments={(segs) => selected
+                                  && editor.recomputeSubtitles(selected.clip_id, segs)} />
               )}
               {tab === 'frame' && (
                 <FramePanel frameMode={frameModeEfektif} onFrameModeChange={pilihCaraBingkai}

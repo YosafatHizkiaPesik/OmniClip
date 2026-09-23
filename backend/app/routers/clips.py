@@ -886,6 +886,58 @@ async def clip_preview(req: ClipPreviewRequest):
     }
 
 
+class RapatRequest(BaseModel):
+    video_id: str
+    segments: List[SegmentModel]
+    gumaman: bool = True
+
+
+@router.post("/clip-rapatkan")
+async def clip_rapatkan(req: RapatRequest):
+    """
+    Membuang jeda dan gumaman dari sebuah klip, lalu mengembalikan segmen dan
+    subtitle barunya.
+
+    Hasilnya usulan, bukan perubahan: Studio yang menerapkannya, sehingga bisa
+    dibatalkan seperti suntingan lain. Itu penting karena penilaian "jeda ini
+    layak dibuang" tidak pernah bisa benar seratus persen — yang bisa dilakukan
+    program adalah menunjukkan hasilnya dan membiarkan orangnya memutuskan.
+    """
+    import asyncio
+
+    from ..repos import transcripts as tx_repo
+    from ..services.clipmodel import rebuild_subtitles_for_segments
+    from ..services.paths import find_local_video
+    from ..services.rapat import rapatkan, ringkas
+
+    video_id = _resolve_video_id(req.video_id)
+    stored = tx_repo.get_best(video_id)
+    if not stored:
+        raise NotFound("Video ini belum punya transkrip, jadi jedanya tidak bisa diukur.")
+    segments = [{"start": s.start, "end": s.end} for s in req.segments if s.end - s.start > 0.2]
+    if not segments:
+        raise NotFound("Rentang klip tidak valid.")
+    durasi_lama = sum(s["end"] - s["start"] for s in segments)
+
+    src = find_local_video(video_id)
+    from ..services import suara
+    sumber = (suara.tersimpan(src) or src) if src else None
+
+    hasil = await asyncio.to_thread(rapatkan, segments, stored["words"],
+                                    sumber=sumber, gumaman=req.gumaman)
+    subtitles, words = rebuild_subtitles_for_segments(hasil["segments"], stored["words"])
+    return {
+        "segments": hasil["segments"],
+        "subtitles": subtitles,
+        "words": words,
+        "duration": round(sum(s["end"] - s["start"] for s in hasil["segments"]), 3),
+        "dibuang": hasil["dibuang"],
+        "potongan": hasil["potongan"],
+        "ditahan": hasil.get("ditahan", 0),
+        "pesan": ringkas(hasil, durasi_lama),
+    }
+
+
 @router.post("/render-clip", status_code=202)
 async def render_clip(req: RenderClipRequest):
     """Mengantrekan render dan mengembalikan job_id untuk dipantau lewat SSE."""

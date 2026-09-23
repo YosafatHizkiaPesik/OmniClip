@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Loader2, Sparkles, Wand2 } from 'lucide-react';
+import { Loader2, Scissors, Sparkles, Wand2 } from 'lucide-react';
 import { apiGet, apiPost } from '../../lib/api';
 import { formatTime } from '../../utils/timeFormat';
 
@@ -27,7 +27,7 @@ const idBaru = () => `l${Date.now().toString(36)}${(urutId += 1)}`;
  */
 export default function SutradaraPanel({
   clip, videoId, aspectRatio, lapisan = [], onLayers,
-  frameKeys = [], onFrameKeys,
+  frameKeys = [], onFrameKeys, onSegments,
 }) {
   const [hasil, setHasil] = useState(null);
   const [menyusun, setMenyusun] = useState(false);
@@ -35,6 +35,35 @@ export default function SutradaraPanel({
   const [galat, setGalat] = useState(null);
   // Hasil milik klip tertentu; berpindah klip mengosongkannya.
   useEffect(() => { setHasil(null); setGalat(null); }, [clip?.clip_id]);
+
+  const [rapat, setRapat] = useState(null);
+  const [merapat, setMerapat] = useState(false);
+
+  /**
+   * Membuang jeda dan gumaman.
+   *
+   * Hasilnya langsung diterapkan, bukan ditawarkan lebih dulu, karena apa yang
+   * berubah paling jelas terlihat dengan MENONTONNYA — dan Undo mengembalikan
+   * semuanya dalam satu tekan. Yang ditampilkan sesudahnya adalah angkanya:
+   * berapa detik hilang, dan berapa potongan yang dibatalkan karena di sana
+   * ternyata masih ada suara.
+   */
+  const rapatkan = async () => {
+    if (!clip?.segments?.length || !onSegments) return;
+    setMerapat(true);
+    setGalat(null);
+    try {
+      const r = await apiPost('/clip-rapatkan', {
+        video_id: videoId, segments: clip.segments,
+      });
+      setRapat(r);
+      if (r.potongan) onSegments(r.segments);
+    } catch (e) {
+      setGalat(e.message);
+    } finally {
+      setMerapat(false);
+    }
+  };
 
   const susun = async (mesin) => {
     if (!clip?.segments?.length) return;
@@ -102,6 +131,34 @@ export default function SutradaraPanel({
 
   return (
     <div>
+      <div style={kartu}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '7px', marginBottom: '6px' }}>
+          <Scissors size={15} style={{ color: 'var(--reh)' }} />
+          <b style={{ fontSize: '0.84rem' }}>Rapatkan jeda</b>
+        </div>
+        <p style={{ ...kecil, margin: '0 0 9px' }}>
+          Membuang diam di antara kalimat dan gumaman "eee". Dalam video sejam
+          jeda satu detik terasa wajar; dalam klip enam puluh detik ia terasa
+          seperti video yang macet. Yang dibuang hanya yang benar-benar sunyi —
+          tawa, musik, dan suara permainan ditahan walau tidak ada yang bicara.
+        </p>
+        <button className="btn-secondary" onClick={rapatkan}
+                disabled={merapat || !onSegments}
+                style={{ fontSize: '0.8rem', display: 'inline-flex', gap: '6px',
+                         alignItems: 'center' }}>
+          {merapat ? <Loader2 size={14} className="animate-spin" /> : <Scissors size={14} />}
+          {merapat ? 'Mengukur jeda…' : 'Rapatkan klip ini'}
+        </button>
+        {rapat && (
+          <p style={{ ...kecil, margin: '9px 0 0',
+                      color: rapat.potongan ? 'var(--entry)' : 'var(--text-secondary)' }}>
+            {rapat.pesan}
+            {rapat.ditahan > 0 && ` ${rapat.ditahan} jeda dibiarkan karena di sana masih ada suara.`}
+            {rapat.potongan > 0 && ' Tekan Undo untuk mengembalikannya.'}
+          </p>
+        )}
+      </div>
+
       <div style={{ ...kartu, borderColor: 'var(--accent-cyan)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '7px', marginBottom: '6px' }}>
           <Wand2 size={15} style={{ color: 'var(--accent-cyan)' }} />
