@@ -8,6 +8,8 @@ import { apiDelete, apiGet, apiPost } from '../lib/api';
 import { Link } from 'react-router-dom';
 import SecurityCard from './SecurityCard';
 import StorageCard from './StorageCard';
+import PemeliharaanCard from './PemeliharaanCard';
+import KesehatanCard from './KesehatanCard';
 import CookiesCard from './CookiesCard';
 import TerjemahOtomatisCard from './TerjemahOtomatisCard';
 import OpenRouterCard from './OpenRouterCard';
@@ -560,7 +562,11 @@ export default function ProfileTab() {
 
       <TerjemahOtomatisCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
 
+      <KesehatanCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
+
       <StorageCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
+
+      <PemeliharaanCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
 
       <SecurityCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
 

@@ -295,6 +295,17 @@ export default function Profil() {
                   <option value="unlisted">YouTube: Tidak publik</option>
                   <option value="public">YouTube: Publik</option>
                 </select>
+                <select value={u.jadwal_jam ?? 0}
+                        onChange={(e) => ubahUnggah({ jadwal_jam: Number(e.target.value) })}
+                        title="Jarak waktu antar unggahan. Sepuluh klip yang naik dalam sepuluh menit adalah pola yang membuat kanal ditandai."
+                        style={{ ...masukan, padding: '5px 8px' }}>
+                  <option value={0}>Naik langsung, semuanya</option>
+                  <option value={1}>Berjarak 1 jam</option>
+                  <option value={3}>Berjarak 3 jam</option>
+                  <option value={6}>Berjarak 6 jam</option>
+                  <option value={12}>Berjarak 12 jam</option>
+                  <option value={24}>Berjarak 1 hari</option>
+                </select>
               </div>
               <div style={{ ...helpText, marginTop: '12px', marginBottom: '4px' }}>
                 Deskripsi video — <code>{'{judul}'}</code> dan <code>{'{hashtag}'}</code> diganti otomatis:

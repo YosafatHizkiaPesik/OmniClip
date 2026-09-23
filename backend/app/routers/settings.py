@@ -444,6 +444,166 @@ async def set_bahasa(req: BahasaRequest):
     return {"status": "ok", "langs": list(get_caption_langs())}
 
 
+# --- Kesehatan sistem -----------------------------------------------------------
+@router.get("/kesehatan")
+async def kesehatan():
+    """
+    Satu layar untuk "apakah semuanya baik-baik saja".
+
+    Sebelum ini, semua yang dilaporkan di sini hanya terlihat di log: encoder
+    mana yang dipakai, apakah server PO Token menyala, cookies masih hidup atau
+    tidak. Artinya satu-satunya cara pemiliknya tahu ada yang rusak adalah
+    dengan menemukan hasil yang salah — dan itu selalu terjadi di tengah
+    pekerjaan.
+
+    Tiap baris menyebut keadaan DAN akibatnya bila ia mati, karena "POT: mati"
+    tidak berarti apa-apa bagi yang tidak menulis kodenya.
+    """
+    import asyncio
+
+    from ..services import cookies as ck
+    from ..services import alat_yt, enkoder, fonts, google_upload, sosial
+    from ..version import __version__
+
+    def _kumpul() -> dict:
+        baris = []
+
+        enc = enkoder.pilih()
+        baris.append({
+            "nama": "Encoder video",
+            "nilai": f"{enc['nama']} ({enc.get('ffmpeg', '')})",
+            "baik": enc["nama"] != "x264",
+            "akibat": "Render tetap jalan memakai prosesor, sekitar 1,6 kali lebih lambat.",
+        })
+
+        alat = dict(getattr(alat_yt, "_status", {}) or {})
+        pot = str(alat.get("pot") or "belum disiapkan")
+        baris.append({
+            "nama": "PO Token YouTube",
+            "nilai": pot,
+            "baik": pot.startswith("http"),
+            "akibat": "Tanpa ini YouTube bisa menolak unduhan dengan "
+                      "\"Sign in to confirm you're not a bot\".",
+        })
+        deno = str(alat.get("deno") or "belum disiapkan")
+        baris.append({
+            "nama": "Runtime JavaScript (Deno)",
+            "nilai": "terpasang" if deno.startswith("/") or ":\\" in deno else deno,
+            "baik": deno.startswith("/") or ":\\" in deno,
+            "akibat": "Sama seperti PO Token: unduhan YouTube bisa ditolak.",
+        })
+
+        aktif = ck.aktif()
+        baris.append({
+            "nama": "Cookies YouTube",
+            "nilai": "dipakai" if aktif else "tidak dipakai",
+            "baik": aktif,
+            "akibat": "Video berumur dan video yang dibatasi wilayah bisa gagal diunduh.",
+        })
+
+        g = google_upload.status()
+        baris.append({
+            "nama": "Akun Google profil ini",
+            "nilai": g.get("email") or ("tersambung" if g.get("connected") else "belum tersambung"),
+            "baik": bool(g.get("connected")),
+            "akibat": "Unggah ke YouTube dan Drive tidak bisa jalan.",
+        })
+
+        for pf in sosial.PLATFORM:
+            st = sosial.status(pf)
+            baris.append({
+                "nama": f"Akun {st['label']}",
+                "nilai": (st["akun"] or "tersambung") if st["tersambung"]
+                         else ("aplikasi siap, akun belum disambung" if st["siap"]
+                               else "kunci aplikasi belum diisi"),
+                "baik": st["tersambung"],
+                "akibat": f"Unggah ke {st['label']} tidak bisa jalan.",
+            })
+
+        kunci_ai = bool(get_api_key())
+        from ..services import openrouter
+        baris.append({
+            "nama": "Kunci AI",
+            "nilai": ("Gemini" + (" + OpenRouter" if openrouter.aktif() else "")) if kunci_ai
+                     else ("OpenRouter saja" if openrouter.aktif() else "belum diisi"),
+            "baik": kunci_ai or openrouter.aktif(),
+            "akibat": "Pemilihan klip dan sutradara bingkai memakai mesin lokal.",
+        })
+
+        ada_font = [f for f in fonts.terpasang() if f["ada"]]
+        baris.append({
+            "nama": "Font aksara non-Latin",
+            "nilai": ", ".join(f["keluarga"] for f in ada_font) or "belum ada (diunduh saat dipakai)",
+            "baik": True,
+            "akibat": "Diunduh sendiri saat pertama kali ada subtitle Jepang, Korea, "
+                      "Mandarin, atau Arab.",
+        })
+
+        import shutil as _sh
+        from .. import config as cfg
+        try:
+            _, _, sisa = _sh.disk_usage(cfg.STORAGE_DIR)
+        except OSError:
+            sisa = 0
+        baris.append({
+            "nama": "Sisa ruang cakram",
+            "nilai": f"{sisa / 1e9:.0f} GB",
+            "baik": sisa > 15e9,
+            "akibat": "Render dan unduhan gagal di tengah jalan bila ruangnya habis.",
+        })
+        return {"versi": __version__, "baris": baris}
+
+    return await asyncio.to_thread(_kumpul)
+
+
+# --- Ruang cakram dan cadangan --------------------------------------------------
+class BuangRequest(BaseModel):
+    folder: str
+    berkas: List[str]
+
+
+class PulihRequest(BaseModel):
+    berkas: str
+
+
+@router.get("/ruang")
+async def ruang():
+    """Pemakaian cakram per folder, dan video sumber terbesar."""
+    from ..services.pemeliharaan import rinci
+    return await asyncio.to_thread(rinci)
+
+
+@router.post("/ruang/buang")
+async def ruang_buang(req: BuangRequest):
+    from ..services.pemeliharaan import buang
+    return await asyncio.to_thread(buang, req.folder, req.berkas)
+
+
+@router.get("/cadangan")
+async def cadangan_daftar():
+    from ..services.pemeliharaan import daftar_cadangan
+    return {"cadangan": await asyncio.to_thread(daftar_cadangan)}
+
+
+@router.post("/cadangan")
+async def cadangan_buat():
+    from ..services.pemeliharaan import cadangkan
+    return await asyncio.to_thread(cadangkan)
+
+
+@router.post("/cadangan/pulihkan")
+async def cadangan_pulihkan(req: PulihRequest):
+    from ..services.pemeliharaan import siapkan_pulih
+    return await asyncio.to_thread(siapkan_pulih, req.berkas)
+
+
+@router.delete("/cadangan/pulihkan")
+async def cadangan_batal():
+    from ..services.pemeliharaan import batalkan_pulih
+    batalkan_pulih()
+    return {"status": "ok"}
+
+
 # --- Lokasi penyimpanan -------------------------------------------------------
 
 class PenyimpananRequest(BaseModel):

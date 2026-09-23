@@ -29,6 +29,7 @@ def create(
     parent_id: str | None = None,
     video_id: str | None = None,
     dedupe_key: str | None = None,
+    mulai_setelah: float = 0.0,
 ) -> tuple[str, bool]:
     """
     Membuat job. Mengembalikan (job_id, dibuat_baru).
@@ -42,10 +43,11 @@ def create(
         with tx() as conn:
             conn.execute(
                 """INSERT INTO jobs (id, type, status, lane, priority, parent_id,
-                                     video_id, dedupe_key, payload_json, created_at)
-                   VALUES (?,?,'queued',?,?,?,?,?,?,?)""",
+                                     video_id, dedupe_key, payload_json, created_at,
+                                     mulai_setelah)
+                   VALUES (?,?,'queued',?,?,?,?,?,?,?,?)""",
                 (job_id, type_, lane, priority, parent_id, video_id, dedupe_key,
-                 json.dumps(payload, ensure_ascii=False), ts),
+                 json.dumps(payload, ensure_ascii=False), ts, mulai_setelah or 0.0),
             )
         return job_id, True
     except sqlite3.IntegrityError:
@@ -72,13 +74,31 @@ def children(job_id: str) -> list[dict]:
     return [_row_to_dict(r) for r in rows]
 
 
+def jadwal_terakhir(type_: str, profil_id: int) -> float:
+    """
+    Jam tayang terjauh yang sudah diantre untuk jenis job ini, atau 0.
+
+    Dipakai penjadwal unggah supaya klip kelima tidak dijadwalkan pada jam yang
+    sama dengan klip pertama. Dibaca dari basis data, bukan dari memori, karena
+    jadwalnya harus tetap benar sesudah aplikasi ditutup dan dibuka lagi.
+    """
+    row = get_conn().execute(
+        """SELECT MAX(mulai_setelah) AS t FROM jobs
+           WHERE type = ? AND status = 'queued'
+             AND json_extract(payload_json, '$.profil_id') = ?""",
+        (type_, profil_id),
+    ).fetchone()
+    return float((row["t"] if row else 0) or 0)
+
+
 def claim_next(lane: str) -> Optional[dict]:
     """Mengambil satu job antre pada lane tertentu dan menandainya running (atomik)."""
     with tx() as conn:
         row = conn.execute(
             """SELECT * FROM jobs WHERE status = 'queued' AND lane = ?
+                 AND mulai_setelah <= ?
                ORDER BY priority ASC, created_at ASC LIMIT 1""",
-            (lane,),
+            (lane, now()),
         ).fetchone()
         if row is None:
             return None

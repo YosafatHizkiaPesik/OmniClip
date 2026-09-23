@@ -18,7 +18,8 @@ log = logging.getLogger("omniclip.unggah")
 
 def antrekan(*, clip_name: str, target: str, title: str = "", description: str = "",
              tags: Optional[list[str]] = None, privacy: str = "private",
-             folder_id: str = "", profil_id: Optional[int] = None) -> tuple[str, bool]:
+             folder_id: str = "", profil_id: Optional[int] = None,
+             mulai_setelah: float = 0.0) -> tuple[str, bool]:
     from ..repos import uploads as uploads_repo
     from . import profil
     from .jobs import queue
@@ -35,6 +36,7 @@ def antrekan(*, clip_name: str, target: str, title: str = "", description: str =
          "folder_id": folder_id, "upload_id": upload_id, "profil_id": pid},
         # Satu klip tidak boleh naik dua kali ke tujuan yang sama.
         dedupe_key=f"upload:{pid}:{target}:{clip_name}",
+        mulai_setelah=mulai_setelah,
     )
     if created:
         uploads_repo.attach_job(upload_id, job_id)
@@ -86,10 +88,33 @@ def setelah_render(*, clip_name: str, judul: str, hashtag: list[str],
                               "galat": f"Akun {sosial.PLATFORM[target]['label']} "
                                        "profil ini belum tersambung."})
                 continue
+        jam = _jam_tayang(target, pid, float(pilihan.get("jadwal_jam") or 0))
         job_id, _ = antrekan(
             clip_name=clip_name, target=target, title=judul,
             description=deskripsi(setel.get("deskripsi", ""), judul=judul, hashtag=tagar),
             tags=[h.lstrip("#") for h in tagar][:15],
-            privacy=pilihan.get("privasi") or "private", profil_id=pid)
-        hasil.append({"target": target, "job_id": job_id})
+            privacy=pilihan.get("privasi") or "private", profil_id=pid,
+            mulai_setelah=jam)
+        hasil.append({"target": target, "job_id": job_id, "mulai_setelah": jam})
     return hasil
+
+
+def _jam_tayang(target: str, pid: int, jarak_jam: float) -> float:
+    """
+    Kapan unggahan ini boleh mulai.
+
+    Nol berarti sekarang. Dengan jarak yang disetel profil, tiap klip berikutnya
+    dijadwalkan sekian jam sesudah yang terakhir diantrekan — bukan sesudah
+    yang terakhir SELESAI, karena yang terakhir mungkin belum jalan sama
+    sekali. Sepuluh klip yang selesai dirender bersamaan karena itu naik
+    berjarak, bukan berombongan: kanal baru yang menerbitkan sepuluh video
+    dalam sepuluh menit adalah kanal yang minta ditandai.
+    """
+    if jarak_jam <= 0:
+        return 0.0
+    import time
+
+    from ..repos import jobs as jobs_repo
+    sebelumnya = jobs_repo.jadwal_terakhir("upload", pid)
+    dasar = max(sebelumnya, time.time())
+    return round(dasar + jarak_jam * 3600, 3)

@@ -85,3 +85,6 @@ OmniClip_Storage/*.db.cadangan*
 # Font aksara non-Latin yang diunduh saat dipakai (services/fonts.py), 4-8 MB.
 backend/app/assets/fonts/NotoSans*
 OmniClip_Storage/fonts/
+
+# Cadangan basis data (services/pemeliharaan.py) — puluhan MB per berkas.
+OmniClip_Storage/cadangan/

@@ -243,7 +243,8 @@ export default function ClipsTab() {
                            className="chip" style={{
                              fontSize: '.64rem', padding: '2px 7px', textDecoration: 'none',
                            }}>
-                          ↗ {u.target === 'youtube' ? 'YouTube' : 'Drive'}
+                          ↗ {({ youtube: 'YouTube', drive: 'Drive', tiktok: 'TikTok',
+                                facebook: 'Facebook', instagram: 'Instagram' })[u.target] || u.target}
                         </a>
                       ))}
                     </div>

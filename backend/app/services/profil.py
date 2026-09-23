@@ -41,6 +41,8 @@ UNGGAH_BAWAAN = {
     # Tujuan lain, masing-masing perlu akun yang tersambung sendiri
     # (services/sosial.py). Bawaannya mati: menyalakannya berarti klip terbit
     # ke tempat umum tanpa ditinjau lagi.
+    # Jarak jam antar unggahan otomatis; 0 = semuanya langsung naik.
+    "jadwal_jam": 0,
     "tiktok": False,
     "facebook": False,
     "instagram": False,

@@ -186,7 +186,8 @@ class JobQueue:
     # --- API publik ----------------------------------------------------------
     def enqueue(self, type_: str, payload: dict, *, lane: str | None = None,
                 priority: int = 100, parent_id: str | None = None,
-                video_id: str | None = None, dedupe_key: str | None = None) -> tuple[str, bool]:
+                video_id: str | None = None, dedupe_key: str | None = None,
+                mulai_setelah: float = 0.0) -> tuple[str, bool]:
         if type_ not in self._handlers:
             raise ValueError(f"tidak ada handler untuk job '{type_}'")
         # Job mencatat profil yang memintanya: ia berjalan di latar, jauh
@@ -198,6 +199,7 @@ class JobQueue:
         job_id, created = repo.create(
             type_=type_, payload=payload, lane=resolved_lane, priority=priority,
             parent_id=parent_id, video_id=video_id, dedupe_key=dedupe_key,
+            mulai_setelah=mulai_setelah,
         )
         if created:
             self._wake[resolved_lane].set()

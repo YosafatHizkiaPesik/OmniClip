@@ -287,6 +287,18 @@ MIGRATIONS: list[str] = [
     CREATE INDEX idx_search_profil ON search_history(profil_id, created_at DESC);
     ALTER TABLE uploads ADD COLUMN profil_id INTEGER NOT NULL DEFAULT 1;
     """,
+    # 5 — job berjadwal.
+    #
+    # Mengirim selusin klip ke satu kanal dalam sepuluh menit adalah persis
+    # pola yang membuat kanal ditandai, dan sampai sekarang satu-satunya
+    # pengamannya adalah jeda tetap antar unggahan YouTube yang menahan lajur
+    # antrean. Dengan kolom ini job bisa DIJADWALKAN: ia menunggu di basis
+    # data, bukan di dalam pekerja, jadi antreannya tetap bebas untuk
+    # pekerjaan lain dan jadwalnya selamat kalau aplikasi ditutup.
+    """
+    ALTER TABLE jobs ADD COLUMN mulai_setelah REAL NOT NULL DEFAULT 0;
+    CREATE INDEX idx_jobs_jadwal ON jobs(status, lane, mulai_setelah);
+    """,
 ]
 
 
@@ -314,6 +326,16 @@ def _split_statements(script: str) -> list[str]:
 
 
 def run_migrations() -> None:
+    # Pemulihan cadangan terjadi DI SINI, sebelum satu pun kueri dijalankan.
+    # Ini satu-satunya saat tidak ada pekerjaan yang memegang basis datanya.
+    try:
+        from .services.pemeliharaan import pulihkan_bila_diminta
+        dipulihkan = pulihkan_bila_diminta()
+        if dipulihkan:
+            print(f"[OmniClip] Basis data dipulihkan dari cadangan {dipulihkan}")
+    except Exception as e:      # pemulihan gagal bukan alasan aplikasi tidak jalan
+        print(f"[OmniClip] Pemulihan cadangan dilewati: {e}")
+
     conn = get_conn()
     conn.execute("CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)")
     row = conn.execute("SELECT version FROM schema_version").fetchone()
