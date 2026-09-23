@@ -14,6 +14,7 @@ Hook juga ditulis sebagai event ASS, bukan drawtext. Ini menghilangkan seluruh
 masalah escaping drawtext dan memberi word-wrap gratis.
 """
 
+from .teks import pecah, patah_teks, sambung, sambung_bagian, titik_patah
 import logging
 from dataclasses import dataclass, replace
 from typing import Literal, Optional
@@ -211,7 +212,16 @@ def _wrap(text: str, max_chars: int = 17) -> str:
     pada ukuran font hook, baris yang lebih panjang akan dibungkus ulang oleh
     libass dan hasilnya menumpuk sampai enam baris.
     """
-    words = text.split()
+    from .teks import cjk
+    # Teks Jepang/Mandarin tidak berspasi: dipecah per huruf, dan hurufnya
+    # selebar dua huruf Latin.
+    words = []
+    for w in text.split():
+        if any(cjk(c) for c in w):
+            langkah = max(1, max_chars // 2)
+            words += [w[i:i + langkah] for i in range(0, len(w), langkah)]
+        else:
+            words.append(w)
     lines, cur = [], ""
     for w in words:
         if cur and len(cur) + 1 + len(w) > max_chars:
@@ -278,8 +288,13 @@ def reconcile_words(line: dict) -> list[dict]:
     text = (line.get("text") or "").strip()
     if not text:
         return words
-    tokens = text.split()
-    if not words or [w["w"] for w in words] == tokens:
+    # Dipecah sadar-aksara: teks Jepang tidak berspasi, dan `split()` akan
+    # membacanya sebagai SATU kata — lalu lima belas kata Whisper dibuang dan
+    # sorotan serta pemutusan barisnya hilang (terukur pada impor anime).
+    tokens = pecah(text)
+    if words and sambung(w["w"] for w in words) == sambung(tokens):
+        return words
+    if not words or [w["w"].strip() for w in words] == tokens:
         return words if words else _spread(tokens, line)
 
     # Jumlah kata sama: hampir selalu satu kata salah dengar yang ditukar, jadi
@@ -351,6 +366,36 @@ def _style_line(nama: str, st: CaptionStyle, lebar: int) -> str:
     return (f"Style: {nama},{st.font},{st.size},{hex_to_ass(st.primary)},&H000000FF,"
             f"{garis},&H80000000,-1,0,0,0,100,100,0,0,{bs},{tebal},{bayang},"
             f"{align},{ml},{mr},{st.margin_v},1")
+
+
+def _tanpa_tumpang(lines: list[dict]) -> list[dict]:
+    """
+    Baris yang tidak saling menimpa waktu: tiap baris berakhir paling lambat
+    saat baris berikutnya mulai.
+
+    Takarir "rolling" YouTube menaruh dua kalimat BERBEDA pada rentang yang
+    tumpang tindih, dan libass menggambar keduanya sekaligus — dua baris
+    bertumpuk di layar. Kata yang jatuh sesudah batas baru dibuang dari baris
+    ini: kata-kata itu memang muncul lagi di awal baris berikutnya.
+    """
+    urut = sorted((l for l in lines or [] if l.get("start") is not None and l.get("end") is not None),
+                  key=lambda l: float(l["start"]))
+    keluar = []
+    for i, l in enumerate(urut):
+        l = dict(l)
+        mulai, akhir = float(l["start"]), float(l["end"])
+        if i + 1 < len(urut):
+            berikut = float(urut[i + 1]["start"])
+            if berikut < akhir:
+                akhir = max(mulai + 0.1, berikut)
+                kata = [w for w in (l.get("words") or []) if float(w.get("s", mulai)) < akhir - 0.02]
+                if l.get("words"):
+                    l["words"] = kata
+                    if kata:
+                        l["text"] = sambung(w.get("w", "") for w in kata) or l.get("text")
+        l["end"] = akhir
+        keluar.append(l)
+    return keluar
 
 
 def build_ass(
@@ -447,9 +492,12 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     # Saklar mati menahan TEKSNYA saja. Hook dan tanda air di atas sudah
     # terlanjur ditulis, dan memang harus: klip tanpa subtitle sering justru
     # yang paling butuh hook-nya.
-    for line in (lines if st.aktif else []):
+    # Huruf Jepang/Mandarin per baris: kira-kira selebar ukuran fontnya.
+    per_baris_cjk = int(w * max(20.0, min(100.0, st.box_w)) / 100.0 / max(24, st.size))
+    for line in (_tanpa_tumpang(lines) if st.aktif else []):
         words = reconcile_words(line)
-        raw_text = (line.get("text") or "").strip() or " ".join(w["w"] for w in words)
+        patah = titik_patah([x["w"] for x in words], per_baris_cjk) if words else frozenset()
+        raw_text = (line.get("text") or "").strip() or sambung(w["w"] for w in words)
         if not raw_text:
             continue
 
@@ -482,10 +530,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 if selesai <= mulai:
                     selesai = mulai + 0.08
                 tampil = words[:idx + 1]
-                teks = " ".join(
-                    escape_ass(w["w"].upper() if st.uppercase else w["w"])
-                    for w in tampil
-                )
+                teks = sambung_bagian(
+                    [escape_ass(x["w"].upper() if st.uppercase else x["w"]) for x in tampil],
+                    [x["w"] for x in tampil], patah)
                 events.append(
                     f"Dialogue: 0,{_ts(mulai)},{_ts(selesai)},Caption,,0,0,0,,"
                     f"{base_tag}{teks}"
@@ -520,7 +567,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     # Animasi masuk hanya pada kejadian PERTAMA baris itu.
                     # Menaruhnya di tiap kata berarti barisnya memantul ulang
                     # setiap kali sorotan berpindah.
-                    f"{masuk if idx == 0 else ''}{base_tag}{' '.join(parts)}"
+                    f"{masuk if idx == 0 else ''}{base_tag}"
+                    f"{sambung_bagian(parts, [w['w'] for w in words], patah)}"
                 )
         else:
             text = raw_text.upper() if st.uppercase else raw_text
@@ -530,7 +578,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                                budget=max(0.2, line["end"] - line["start"]))
             events.append(
                 f"Dialogue: 0,{_ts(line['start'])},{_ts(line['end'])},Caption,,0,0,0,,"
-                f"{entry}{base_tag}{escape_ass(text)}"
+                f"{entry}{base_tag}{patah_teks(escape_ass(text), per_baris_cjk)}"
             )
 
     # --- Subtitle kedua ---------------------------------------------------------

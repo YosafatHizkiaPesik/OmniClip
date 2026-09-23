@@ -8,6 +8,7 @@ menyambungnya. Klip hasil AI hampir selalu punya satu segmen; segmen kedua dan
 seterusnya muncul saat pengguna mengedit.
 """
 
+from .teks import AKHIR_KALIMAT, bobot_kata, lebar_teks, sambung
 import re
 import uuid
 from typing import Any, Optional
@@ -88,7 +89,7 @@ def sanitize_caption_lines(lines: list[dict]) -> list[dict]:
             if not kept:
                 continue
             out.append({**line, "words": kept,
-                        "text": " ".join(w["w"] for w in kept).strip(),
+                        "text": sambung(w["w"] for w in kept),
                         "start": kept[0]["s"], "end": kept[-1]["e"]})
             continue
         text = _BRACKETED.sub("", line.get("text") or "").strip(_STRIP_CHARS)
@@ -177,8 +178,9 @@ def _merge_runts(lines: list[dict], *, max_words: int, max_chars: int,
                 return False
             if b["start"] - a["end"] > max_gap:
                 return False
-            n_kata = len(a.get("words") or []) + len(b.get("words") or [])
-            n_huruf = len(a["text"]) + 1 + len(b["text"])
+            n_kata = (bobot_kata(w["w"] for w in a.get("words") or [])
+                      + bobot_kata(w["w"] for w in b.get("words") or []))
+            n_huruf = lebar_teks([a["text"], b["text"]])
             return n_kata <= lebar_kata and n_huruf <= lebar_huruf
 
         kiri = out[i - 1] if i > 0 else None
@@ -287,7 +289,7 @@ def words_to_caption_lines(words: list[Word], *, max_words: int = 5,
         lines.append({
             "start": buf[0]["s"],
             "end": buf[-1]["e"],
-            "text": " ".join(w["w"] for w in buf).strip(),
+            "text": sambung(w["w"] for w in buf),
             "speaker": speaker,
             "words": [{"w": w["w"], "s": w["s"], "e": w["e"]} for w in buf],
         })
@@ -296,10 +298,12 @@ def words_to_caption_lines(words: list[Word], *, max_words: int = 5,
     for i, w in enumerate(words):
         buf.append(w)
         nxt = words[i + 1] if i + 1 < len(words) else None
-        chars = sum(len(x["w"]) + 1 for x in buf)
-        if (len(buf) >= max_words
+        # Dihitung sadar-aksara: huruf Jepang/Mandarin sepertiga kata dan
+        # selebar dua huruf Latin (services/teks.py).
+        chars = lebar_teks(x["w"] for x in buf)
+        if (bobot_kata(x["w"] for x in buf) >= max_words
                 or chars >= max_chars
-                or w["w"].endswith((".", "!", "?", "…"))
+                or w["w"].endswith(AKHIR_KALIMAT)
                 or (nxt and nxt["s"] - w["e"] > max_gap)
                 or nxt is None):
             flush()

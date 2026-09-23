@@ -7,6 +7,7 @@ kalimat, sehingga klip tidak pernah dimulai atau berhenti di tengah kata —
 artefak paling mencolok dari sistem lama.
 """
 
+from .teks import sambung
 import logging
 import re
 from typing import Optional, TypedDict
@@ -56,7 +57,7 @@ def words_to_sentences(
         nonlocal start_idx, buf
         if end_idx <= start_idx:
             return
-        text = " ".join(buf).strip()
+        text = sambung(buf)
         if text:
             sentences.append({
                 "s": words[start_idx]["s"],
@@ -93,6 +94,7 @@ def get_transcript(
     audio_path: Optional[str] = None,
     whisper_model: str = WHISPER_MODEL_DEFAULT,
     langs=None,
+    bahasa_asli: Optional[str] = None,
     allow_whisper: bool = True,
     on_progress=None,
     should_cancel=None,
@@ -113,7 +115,8 @@ def get_transcript(
     if on_progress:
         on_progress(0.1, "Mencari transkrip di YouTube…")
 
-    result = fetch_youtube_captions(video_id, langs or get_caption_langs())
+    result = fetch_youtube_captions(video_id, langs or get_caption_langs(),
+                                    asli=bahasa_asli)
 
     if result is None and allow_whisper and audio_path:
         if on_progress:

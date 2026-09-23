@@ -65,7 +65,11 @@ def get_best(video_id: str) -> Optional[dict]:
     ).fetchall()
     if not rows:
         return None
-    best = max(rows, key=lambda r: SOURCE_RANK.get(r["source"], 0))
+    # Sumber yang lebih baik menang; bila setara, yang TERBARU. Dua caption
+    # tulisan manusia dalam bahasa berbeda punya peringkat sama, dan tanpa
+    # pemutus ini yang lama — dari aturan yang meminta bahasa Indonesia lebih
+    # dulu — terus terpilih meski yang berbahasa asli sudah diambil.
+    best = max(rows, key=lambda r: (SOURCE_RANK.get(r["source"], 0), r["created_at"] or 0))
     return _hydrate(best)
 
 

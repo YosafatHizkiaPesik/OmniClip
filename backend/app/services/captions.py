@@ -290,6 +290,8 @@ def _try_language(video_id: str, lang: str,
         "words": words,
         "language": lang,
         "source": "youtube_manual" if is_manual else "youtube_asr",
+        # Bahasa yang diucapkan di video, untuk mengenali terjemahan mesin.
+        "asli": info.get("language") or None,
     }, tersedia
 
 
@@ -300,11 +302,28 @@ def _try_language(video_id: str, lang: str,
 MAKS_PERCOBAAN_BAHASA = 5
 
 
+def _pokok(lang: str) -> str:
+    """"en-US" -> "en". Perbandingan bahasa selalu pada bagian pokoknya."""
+    return (lang or "").split("-")[0].lower()
+
+
 def fetch_youtube_captions(
-    video_id: str, langs: Iterable[str] = CAPTION_LANGS
+    video_id: str, langs: Iterable[str] = CAPTION_LANGS,
+    asli: Optional[str] = None,
 ) -> Optional[TranscriptResult]:
     """
-    Mengambil transkrip word-level dari caption YouTube.
+    Mengambil transkrip word-level dari caption YouTube, dalam bahasa yang
+    DIUCAPKAN di videonya.
+
+    `asli` adalah bahasa video menurut YouTube, bila pemanggil sudah tahu.
+    Tanpa itu, bahasa pilihan dicoba lebih dulu dan hasilnya diperiksa: YouTube
+    menerjemahkan caption otomatis ke bahasa apa pun yang diminta, jadi meminta
+    "id" pada video berbahasa Inggris memang MENGHASILKAN subtitle Indonesia —
+    terjemahan mesin, bukan ucapan yang sebenarnya. Terlapor pada video "I
+    Survived 100 Days on One Block". Kalau yang kembali ternyata terjemahan,
+    permintaannya diulang dalam bahasa aslinya. Menerjemahkan klip tetap bisa
+    dilakukan sesudahnya, lewat panel Terjemah — tapi itu pilihan pengguna,
+    bukan sesuatu yang terjadi diam-diam.
 
     Mengembalikan None (bukan melempar exception) bila video tidak punya caption
     — pemanggil akan jatuh ke faster-whisper.
@@ -312,6 +331,8 @@ def fetch_youtube_captions(
     tmpdir = tempfile.mkdtemp(prefix=f"omni_sub_{video_id}_")
     try:
         antre = list(langs)
+        if asli:
+            antre = [asli] + [l for l in antre if _pokok(l) != _pokok(asli)]
         seen: set[str] = set()
         dicoba = 0
         while antre and dicoba < MAKS_PERCOBAAN_BAHASA:
@@ -322,6 +343,17 @@ def fetch_youtube_captions(
             dicoba += 1
             result, tersedia = _try_language(video_id, lang, tmpdir)
             if result:
+                bahasa_video = result.pop("asli", None) or asli
+                # Hasil ASR dalam bahasa yang BUKAN bahasa videonya adalah
+                # terjemahan mesin. Ambil yang aslinya sekali lagi.
+                if (bahasa_video and result["source"] == "youtube_asr"
+                        and _pokok(lang) != _pokok(bahasa_video)
+                        and _pokok(bahasa_video) not in seen):
+                    log.info("Caption '%s' ternyata terjemahan mesin; "
+                             "mengambil bahasa asli '%s'", lang, bahasa_video)
+                    antre.insert(0, bahasa_video)
+                    asli = bahasa_video
+                    continue
                 log.info("Transkrip dari caption %s (%s): %d kata",
                          lang, result["source"], len(result["words"]))
                 return result

@@ -27,7 +27,28 @@ function sidikUtama(lines) {
  * bersamaan: Inggris di atas, Indonesia di bawah, atau terjemahannya saja bila
  * subtitle utama dimatikan.
  */
-export default function TerjemahPanel({ clip, videoId, styleUtama, onStyleUtama, onChange }) {
+// Terjemahan DI ATAS subtitle asli — sama dengan terjemahan otomatis di
+// backend (terjemah.GAYA_KEDUA_OTOMATIS). Bukan di bawahnya: anime fansub
+// membawa subtitle tertanam di bagian bawah gambar, dan terjemahan di sana
+// tertimpa.
+export const GAYA_KEDUA_BAWAAN = {
+  font: 'Poppins', size: 70, primary: '#FFE500', uppercase: false,
+  position: 'bottom', margin_v: 560, outline_px: 6, animation: 'fade', bg: false,
+};
+
+/** Isi subtitle_kedua untuk satu klip dari hasil /clip-terjemah. */
+export function buatKedua(clip, bahasa, teks, gayaLama) {
+  const utama = clip?.subtitles ?? [];
+  return {
+    aktif: true, bahasa,
+    lines: utama.map((l, i) => ({ start: l.start, end: l.end, text: teks[i] ?? l.text })),
+    style: gayaLama ?? GAYA_KEDUA_BAWAAN,
+    sumber_sidik: sidikUtama(utama),
+  };
+}
+
+export default function TerjemahPanel({ clip, videoId, styleUtama, onStyleUtama, onChange,
+                                        onSemua = null }) {
   const [bahasaList, setBahasaList] = useState([]);
   const [bahasa, setBahasa] = useState('id');
   const [sibuk, setSibuk] = useState(false);
@@ -56,20 +77,12 @@ export default function TerjemahPanel({ clip, videoId, styleUtama, onStyleUtama,
       const r = await apiPost('/clip-terjemah', {
         video_id: videoId, bahasa, teks: utama.map((l) => l.text || ''),
       });
-      // Posisi bawaan: sisi yang BERLAWANAN dengan subtitle utama, supaya
-      // keduanya tidak bertumpuk begitu terjemahannya muncul.
+      // Posisi bawaan: di ATAS subtitle asli bila aslinya di bawah; bila
+      // aslinya di atas, terjemahannya ke bawah layar.
       const posUtama = styleUtama?.position ?? 'bottom';
-      const gaya = kedua?.style ?? {
-        font: 'Poppins', size: 72, primary: '#FFE500', uppercase: false,
-        position: posUtama === 'bottom' ? 'top' : 'bottom', margin_v: 260,
-        outline_px: 6, animation: 'fade', bg: false,
-      };
-      onChange({
-        aktif: true, bahasa,
-        lines: utama.map((l, i) => ({ start: l.start, end: l.end, text: r.teks[i] ?? l.text })),
-        style: gaya,
-        sumber_sidik: sidikUtama(utama),
-      });
+      const gaya = kedua?.style ?? (posUtama === 'bottom'
+        ? GAYA_KEDUA_BAWAAN : { ...GAYA_KEDUA_BAWAAN, margin_v: 300 });
+      onChange(buatKedua(clip, bahasa, r.teks, gaya));
     } catch (e) {
       setGalat(e.message);
     } finally {
@@ -95,9 +108,10 @@ export default function TerjemahPanel({ clip, videoId, styleUtama, onStyleUtama,
         <b style={{ fontSize: '0.84rem' }}>Subtitle kedua / terjemahan</b>
       </div>
       <p style={{ ...kecil, margin: '0 0 9px' }}>
-        Baris subtitle di bawah diterjemahkan satu per satu dan muncul bersamaan
-        dengan aslinya — misalnya Inggris di atas, Indonesia di bawah. Untuk
-        subtitle terjemahan saja, matikan subtitle utama.
+        Baris subtitle diterjemahkan satu per satu dan muncul bersamaan dengan
+        aslinya — misalnya Indonesia di atas, Jepang di bawahnya. Video berbahasa
+        asing diterjemahkan otomatis saat dianalisis (atur di Pengaturan). Untuk
+        terjemahan saja, matikan subtitle asli.
       </p>
 
       <div style={{ display: 'flex', gap: '7px', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -110,6 +124,13 @@ export default function TerjemahPanel({ clip, videoId, styleUtama, onStyleUtama,
           {sibuk ? <Loader2 size={13} className="animate-spin" /> : <Languages size={13} />}
           {sibuk ? 'Menerjemahkan…' : kedua ? 'Terjemahkan ulang' : `Terjemahkan ${utama.length} baris`}
         </button>
+        {onSemua && (
+          <button className="btn-secondary" onClick={() => onSemua(bahasa)} disabled={sibuk}
+                  title="Klip yang belum punya terjemahan (atau terjemahannya usang) diterjemahkan semuanya"
+                  style={{ fontSize: '0.76rem' }}>
+            Terjemahkan semua klip
+          </button>
+        )}
       </div>
       {galat && <p style={{ ...kecil, color: 'var(--danger)', margin: '8px 0 0' }}>{galat}</p>}
       {usang && (
