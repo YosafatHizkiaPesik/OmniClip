@@ -1267,8 +1267,7 @@ def run_upload(ctx: JobContext) -> dict:
             _time.sleep(min(2.0, wait))
             wait -= 2.0
 
-    label = {"youtube": "YouTube", "drive": "Google Drive", "tiktok": "TikTok",
-             "facebook": "Facebook", "instagram": "Instagram"}.get(target, target)
+    label = "YouTube" if target == "youtube" else "Google Drive"
     ctx.progress(0.02, stage="upload",
                  message=f"Mengirim {clip_name} ke {label}… ({size_mb:.1f} MB)")
 
@@ -1277,15 +1276,7 @@ def run_upload(ctx: JobContext) -> dict:
                      message=f"Mengirim ke {label}… {int(frac * 100)}%")
 
     try:
-        if target in ("tiktok", "facebook", "instagram"):
-            from .sosial import unggah as unggah_sosial
-            result = unggah_sosial(
-                target, path,
-                judul=ctx.payload.get("title") or path.stem,
-                deskripsi=ctx.payload.get("description", ""),
-                privasi=ctx.payload.get("privacy", "private"),
-                lapor=on_progress, batal=lambda: ctx.cancelled)
-        elif target == "youtube":
+        if target == "youtube":
             result = upload_to_youtube(
                 path,
                 title=ctx.payload.get("title") or path.stem,

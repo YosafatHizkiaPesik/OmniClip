@@ -74,7 +74,6 @@ Tiap akun punya **miliknya sendiri**:
 - folder klip hasil render,
 - riwayat pencarian dan beranda (jadi akun "Horor" tidak menampilkan podcast),
 - kanal YouTube dan Drive tujuan unggahan,
-- akun TikTok, Facebook, dan Instagram,
 - setelan unggah otomatis, termasuk jam tayang dan templat deskripsi.
 
 Yang **dipakai bersama** hanya satu: aplikasi Google yang Anda daftarkan di
@@ -82,27 +81,20 @@ langkah 1, beserta kuota hariannya.
 
 ---
 
-## TikTok, Facebook, dan Instagram
+## TikTok, Instagram, dan Facebook
 
-Polanya sama persis — daftarkan aplikasi sekali, lalu sambungkan akun per
-akun — hanya portalnya yang berbeda:
+**Tidak perlu akun apa pun.** Ketiganya diterbitkan dengan tangan, dan OmniClip
+menyiapkan semuanya sampai satu langkah terakhir: buka **Klip jadi → tombol
+kirim** pada sebuah klip, lalu salin captionnya dan simpan berkasnya.
 
-- **TikTok**: <https://developers.tiktok.com/apps>
-- **Facebook dan Instagram**: <https://developers.facebook.com/apps> (satu
-  aplikasi Meta untuk keduanya)
+Itu keputusan, bukan kekurangan. Unggah otomatis ke ketiganya menuntut
+pendaftaran aplikasi, peninjauan berminggu-minggu, dan badan usaha — sementara
+yang dihemat cuma dua menit per klip. Dan unggahan lewat API tidak bisa memakai
+sound yang sedang tren, stiker, atau efek, padahal di TikTok dan Reels justru
+itu yang sering menentukan.
 
-Semuanya ada di **Akun → TikTok, Facebook, dan Instagram**, lengkap dengan
-alamat pengalihan yang harus didaftarkan.
-
-Dua hal yang perlu diketahui sebelum mencoba:
-
-- **TikTok** memasukkan unggahan ke **kotak draf**; Anda yang menekan terbit di
-  aplikasinya. Terbit langsung butuh izin yang harus ditinjau TikTok lebih
-  dulu.
-- **Instagram** hanya menerima akun **Bisnis/Kreator** yang tertaut ke Halaman
-  Facebook, dan yang terkirim lewat API **pasti terbit** — tidak ada draf.
-
----
+Akun Google tetap dibutuhkan untuk YouTube dan Drive, dan itu yang dijelaskan
+di atas.
 
 ## Kalau ada yang tidak jalan
 

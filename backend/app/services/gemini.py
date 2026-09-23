@@ -86,6 +86,16 @@ Aturan lain:
 - Dua potongan tidak boleh berisi bagian yang sama.
 - hook_text harus SETIA pada isi klip. Dilarang menjanjikan sesuatu yang tidak
   ada di dalam potongan tersebut.
+- suggested_title adalah kalimat yang akan dibaca orang sambil menggulir, bukan
+  nama berkas. Maksimal 70 karakter, memuat hal KONKRET dari klipnya (angka,
+  nama, kejadian, pernyataan yang mengejutkan), dan memuat kata yang akan
+  diketik orang saat MENCARI topik ini — orang sekarang mencari di TikTok
+  seperti mencari di Google. Menarik tapi tidak heboh: tanpa huruf kapital
+  semua, tanpa tanda seru bertumpuk, tanpa "WAJIB NONTON".
+- hashtags: lima sampai delapan, semuanya dari ISI klip — topiknya, bidangnya,
+  nama orang atau tempat yang disebut. Dilarang memakai #fyp, #viral, #foryou,
+  atau #trending: keduanya tidak menaikkan apa pun dan membuat unggahan
+  terlihat seperti spam.
 - reason maksimal 20 kata, bahasa Indonesia, sebutkan gagasan apa yang dibahas.
 - score adalah 0-100 dan harus mencerminkan penilaian jujur; potongan biasa
   memang pantas mendapat nilai sedang."""

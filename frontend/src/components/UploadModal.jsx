@@ -7,9 +7,6 @@ import { apiGet, apiPost } from '../lib/api';
 const TARGETS = [
   { id: 'drive', label: 'Google Drive', hint: 'Masuk ke folder OmniClip di Drive Anda.' },
   { id: 'youtube', label: 'YouTube', hint: 'Naik sebagai video di kanal Anda sendiri.' },
-  { id: 'tiktok', label: 'TikTok', hint: 'Masuk ke draf TikTok; Anda yang menekan terbit.' },
-  { id: 'facebook', label: 'Facebook', hint: 'Reels di Halaman Facebook Anda.' },
-  { id: 'instagram', label: 'Instagram', hint: 'Reels — langsung terbit, tidak bisa privat.' },
 ];
 
 const NAMA_TUJUAN = Object.fromEntries(TARGETS.map((t) => [t.id, t.label]));

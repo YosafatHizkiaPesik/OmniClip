@@ -90,71 +90,9 @@ async def disconnect():
     return {"status": "ok"}
 
 
-# --- TikTok, Facebook, Instagram ----------------------------------------------
-class SosialKunciRequest(BaseModel):
-    platform: str
-    nilai: dict
-
-
-@router.get("/sosial/status")
-async def sosial_status():
-    """Keadaan ketiga platform untuk profil yang sedang dipakai."""
-    from ..services import sosial
-    return {"platform": [sosial.status(p) for p in sosial.PLATFORM]}
-
-
-@router.post("/sosial/kunci")
-async def sosial_kunci(req: SosialKunciRequest):
-    from ..services import sosial
-    sosial.simpan_kredensial(req.platform, req.nilai)
-    return {"status": "ok", "platform": [sosial.status(p) for p in sosial.PLATFORM]}
-
-
-@router.post("/sosial/{platform}/connect")
-async def sosial_connect(platform: str):
-    from ..services import sosial
-    return {"authorization_url": sosial.mulai_izin(platform)}
-
-
-@router.get("/sosial/{penyedia}/callback", response_class=HTMLResponse)
-async def sosial_callback(penyedia: str, code: str = "", state: str = "",
-                          error: str = "", error_description: str = ""):
-    """
-    Satu alamat balik untuk Meta (Facebook + Instagram) dan satu untuk TikTok.
-
-    Halaman kecil, bukan JSON — yang membacanya orang di dalam tab browser.
-    Profil yang dipakai adalah profil yang sedang aktif saat tombol
-    "Sambungkan" ditekan; itu sama dengan perilaku akun Google.
-    """
-    from ..services import sosial
-    if error:
-        return _page("Izin ditolak", error_description or error, ok=False)
-    if not code:
-        return _page("Gagal menyambungkan", "Tidak ada kode izin yang dikirim.", ok=False)
-    try:
-        hasil = sosial.selesaikan_izin(code, state)
-    except AppError as e:
-        return _page("Gagal menyambungkan", e.message, ok=False)
-    except Exception as e:  # noqa: BLE001 — halaman ini tidak boleh 500
-        log.exception("Callback %s gagal", penyedia)
-        return _page("Gagal menyambungkan", str(e)[:300], ok=False)
-    terhubung = hasil.get("terhubung") or {}
-    rincian = ", ".join(f"{k}: {v}" for k, v in terhubung.items() if v) or hasil.get("akun") or ""
-    return _page("Akun tersambung",
-                 f"{rincian} siap dipakai. Tutup tab ini dan kembali ke OmniClip.",
-                 ok=True)
-
-
-@router.post("/sosial/{platform}/disconnect")
-async def sosial_disconnect(platform: str):
-    from ..services import sosial
-    sosial.putus(platform)
-    return {"status": "ok"}
-
-
 class UploadRequest(BaseModel):
     clip_name: str
-    target: str = Field("drive", pattern="^(drive|youtube|tiktok|facebook|instagram)$")
+    target: str = Field("drive", pattern="^(drive|youtube)$")
     title: str = ""
     description: str = ""
     tags: List[str] = Field(default_factory=list)
@@ -171,15 +109,9 @@ async def start_upload(req: UploadRequest):
     antarmuka yang menerima daftar akan membuat "unggah semua" terasa seperti
     satu tombol yang wajar, padahal itu justru yang harus dihindari.
     """
-    if req.target in ("drive", "youtube") and not google.status()["connected"]:
+    if not google.status()["connected"]:
         raise AppError("Akun Google belum tersambung. Sambungkan dulu di Pengaturan.",
                        code="GOOGLE_NOT_CONNECTED", status=409)
-    if req.target not in ("drive", "youtube"):
-        from ..services import sosial
-        st = sosial.status(req.target)
-        if not st["tersambung"]:
-            raise AppError(f"Akun {st['label']} profil ini belum tersambung.",
-                           code="SOSIAL_BELUM_SAMBUNG", status=409)
 
     # Memastikan klipnya ada SEBELUM barisnya dicatat, supaya riwayat tidak
     # terisi baris gagal untuk nama berkas yang salah ketik.

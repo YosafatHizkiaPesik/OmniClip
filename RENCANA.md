@@ -19,12 +19,6 @@ Memindahkan `OmniClip-Data` ke SSD tidak butuh kode apa pun.
 **A2. Berkas sisa 17 GB.** Satu `.f623.mp4` tanpa suara, nol klip jadi.
 Sekarang terlihat di Pengaturan → Ruang cakram, tinggal dicentang dan dihapus.
 
-**A0. Unggah tanpa setelan, untuk dijual ke publik.** Rencananya di
-[RENCANA-UNGGAH.md](RENCANA-UNGGAH.md). Yang menentukan bukan kodenya
-melainkan kuota YouTube: 10.000 unit/hari per aplikasi, 1.600 unit per
-unggahan — enam unggahan per hari untuk SELURUH pengguna digabung, sampai
-audit kuota Google lolos.
-
 **A3. Mendaftarkan aplikasi Google, TikTok, dan Meta.** Kodenya sudah ada dan
 menunggu kunci; langkahnya ada di dalam aplikasi (Akun → Tambah akun) dan di
 [PANDUAN-AKUN.md](PANDUAN-AKUN.md). Sampai ini dikerjakan, unggah ke mana pun
@@ -53,6 +47,9 @@ pratinjau tidak semulus hasil rendernya.
 
 **C2. Templat deskripsi per platform.** Sekarang satu templat dipakai untuk
 semua tujuan; TikTok dan YouTube punya kebiasaan tagar yang berbeda.
+
+**C3a. Tandai terbit dari halaman Klip jadi** tanpa harus membuka "Siapkan
+terbit" dulu — sekarang penandanya hanya ada di dalam jendela itu.
 
 **C3. Statistik sesudah unggah.** Berapa tayangan tiap klip, ditarik dari API
 masing-masing, supaya terlihat jenis klip mana yang berhasil.
@@ -112,9 +109,10 @@ aplikasi dimulai belum pernah dijalankan sungguhan.
 cd backend && ./venv/bin/python -m unittest discover -s tests -t .
 ```
 
-81 uji, tanpa memasang apa pun, selesai dalam sepersekian detik. Yang diuji
+100 uji, tanpa memasang apa pun, selesai dalam sepersekian detik. Yang diuji
 adalah bagian yang rusaknya paling tidak terlihat: penyusun teks dan subtitle,
-tema dan sorotan kata, perapatan jeda, geometri bingkai, penilaian isi klip,
+tema dan sorotan kata, caption dan tagar, perapatan jeda, geometri bingkai,
+penilaian isi klip,
 skema dan jawaban model AI, pemilihan model Whisper, serta pemeriksaan jalur
 berkas yang datang dari peramban.
 

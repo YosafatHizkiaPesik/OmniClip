@@ -5,7 +5,6 @@ import {
 import { apiDelete, apiGet, apiPatch, apiPost, pilihProfil, profilAktif } from '../lib/api';
 import GoogleAccountCard from '../components/GoogleAccountCard';
 import TambahAkun from '../components/TambahAkun';
-import SosialCard from '../components/SosialCard';
 
 const card = { padding: '18px 20px', borderBottom: '1px solid var(--rule-2)' };
 const sectionTitle = {
@@ -283,9 +282,6 @@ export default function Profil() {
             {/* --- Akun Google profil aktif --- */}
             <GoogleAccountCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
 
-            {/* --- Akun TikTok / Facebook / Instagram --- */}
-            <SosialCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
-
             {/* --- Unggah otomatis --- */}
             <div style={card}>
               <div style={sectionTitle}><UploadCloud size={18} style={{ color: 'var(--reh)' }} />Unggah otomatis setelah render</div>
@@ -306,18 +302,6 @@ export default function Profil() {
                 <label className="studio-check">
                   <input type="checkbox" checked={!!u.drive} onChange={(e) => ubahUnggah({ drive: e.target.checked })} />
                   Google Drive
-                </label>
-                <label className="studio-check">
-                  <input type="checkbox" checked={!!u.tiktok} onChange={(e) => ubahUnggah({ tiktok: e.target.checked })} />
-                  TikTok
-                </label>
-                <label className="studio-check">
-                  <input type="checkbox" checked={!!u.facebook} onChange={(e) => ubahUnggah({ facebook: e.target.checked })} />
-                  Facebook
-                </label>
-                <label className="studio-check">
-                  <input type="checkbox" checked={!!u.instagram} onChange={(e) => ubahUnggah({ instagram: e.target.checked })} />
-                  Instagram
                 </label>
                 <select value={u.privasi || 'private'} onChange={(e) => ubahUnggah({ privasi: e.target.value })}
                         style={{ ...masukan, padding: '5px 8px' }}>

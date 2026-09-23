@@ -497,7 +497,7 @@ async def kesehatan():
     import asyncio
 
     from ..services import cookies as ck
-    from ..services import alat_yt, enkoder, fonts, google_upload, sosial
+    from ..services import alat_yt, enkoder, fonts, google_upload
     from ..version import __version__
 
     def _kumpul() -> dict:
@@ -543,17 +543,6 @@ async def kesehatan():
             "baik": bool(g.get("connected")),
             "akibat": "Unggah ke YouTube dan Drive tidak bisa jalan.",
         })
-
-        for pf in sosial.PLATFORM:
-            st = sosial.status(pf)
-            baris.append({
-                "nama": f"Akun {st['label']}",
-                "nilai": (st["akun"] or "tersambung") if st["tersambung"]
-                         else ("aplikasi siap, akun belum disambung" if st["siap"]
-                               else "kunci aplikasi belum diisi"),
-                "baik": st["tersambung"],
-                "akibat": f"Unggah ke {st['label']} tidak bisa jalan.",
-            })
 
         kunci_ai = bool(get_api_key())
         from ..services import openrouter

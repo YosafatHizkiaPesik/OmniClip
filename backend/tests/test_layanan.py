@@ -9,7 +9,7 @@ tidak boleh hilang tanpa ada yang menyadarinya.
 import unittest
 from pathlib import Path
 
-from app.services import fonts, openrouter, pemeliharaan, sosial
+from app.services import fonts, openrouter, pemeliharaan
 from app.services.whisper import AKSARA_SULIT, model_untuk
 
 
@@ -141,25 +141,6 @@ class KeamananJalur(unittest.TestCase):
         # Yang dijaga: nama dari peramban yang menunjuk ke basis data.
         hasil = pemeliharaan.buang("proksi", ["../../omniclip.db", "/etc/passwd"])
         self.assertEqual(hasil["dibuang"], 0)
-
-
-class Sosial(unittest.TestCase):
-    def test_alamat_balik_meta_dipakai_bersama(self):
-        # Facebook dan Instagram satu aplikasi, jadi satu alamat balik.
-        self.assertEqual(sosial.redirect_uri("facebook"), sosial.redirect_uri("instagram"))
-        self.assertNotEqual(sosial.redirect_uri("tiktok"), sosial.redirect_uri("facebook"))
-
-    def test_pesan_galat_meta_terbaca_orang(self):
-        pesan = sosial._pesan_galat('{"error": {"message": "Invalid OAuth token"}}')
-        self.assertIn("Invalid OAuth token", pesan)
-
-    def test_pesan_galat_yang_bukan_json_tetap_ditampilkan(self):
-        self.assertIn("Bad Gateway", sosial._pesan_galat("Bad Gateway"))
-
-    def test_tiap_platform_menyebut_kunci_yang_dibutuhkannya(self):
-        for nama, p in sosial.PLATFORM.items():
-            self.assertTrue(p["kunci"], nama)
-            self.assertTrue(p["catatan"], nama)
 
 
 if __name__ == "__main__":

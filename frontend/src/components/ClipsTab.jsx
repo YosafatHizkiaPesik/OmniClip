@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Film, Download, Trash2, RefreshCw, Loader2, AlertTriangle, Layers, X, UploadCloud,
+  Film, Download, Trash2, RefreshCw, Loader2, AlertTriangle, Layers, X, UploadCloud, Send
 } from 'lucide-react';
 import { apiGet, apiDelete, downloadToDisk, mediaUrl, kategoriKlip } from '../lib/api';
 import { formatTime } from '../utils/timeFormat';
 import UploadModal from './UploadModal';
+import SiapkanTerbit from './SiapkanTerbit';
 
 function formatBytes(bytes) {
   if (!bytes) return '';
@@ -48,6 +49,7 @@ export default function ClipsTab() {
   // Klip yang sedang dibuka jendela unggahnya. Satu per satu — tidak ada
   // bentuk jamaknya, dan itu disengaja.
   const [uploading, setUploading] = useState(null);
+  const [siapkan, setSiapkan] = useState(null);
   // Klip mana yang sudah pernah naik ke mana, dibaca dari riwayat server.
   const [sent, setSent] = useState({});
 
@@ -243,8 +245,7 @@ export default function ClipsTab() {
                            className="chip" style={{
                              fontSize: '.64rem', padding: '2px 7px', textDecoration: 'none',
                            }}>
-                          ↗ {({ youtube: 'YouTube', drive: 'Drive', tiktok: 'TikTok',
-                                facebook: 'Facebook', instagram: 'Instagram' })[u.target] || u.target}
+                          ↗ {u.target === 'youtube' ? 'YouTube' : 'Drive'}
                         </a>
                       ))}
                     </div>
@@ -256,6 +257,11 @@ export default function ClipsTab() {
                              style={{ accentColor: 'var(--accent-cyan)' }} />
                       Pilih
                     </label>
+                    <button onClick={() => setSiapkan(clip)} style={iconBtn}
+                            aria-label="Siapkan untuk diterbitkan"
+                            title="Siapkan caption dan tagar untuk TikTok, Reels, atau Shorts">
+                      <Send size={14} />
+                    </button>
                     <button onClick={() => setUploading(clip)} style={iconBtn}
                             aria-label="Unggah ke Drive atau YouTube"
                             title="Unggah ke Drive atau YouTube">
@@ -297,6 +303,9 @@ export default function ClipsTab() {
       {uploading && (
         <UploadModal clip={uploading} onClose={() => setUploading(null)}
                      onDone={loadUploads} />
+      )}
+      {siapkan && (
+        <SiapkanTerbit clip={siapkan} onClose={() => setSiapkan(null)} onSelesai={load} />
       )}
     </div>
   );

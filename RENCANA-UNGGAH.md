@@ -4,8 +4,19 @@ Tujuannya satu kalimat: **pengguna memasang OmniClip, menekan "Masuk dengan
 YouTube", dan klipnya naik.** Tidak ada kunci API, tidak ada Google Cloud
 Console, tidak ada istilah yang harus dipelajari dulu.
 
-Ditulis 23 September 2026 sebagai rencana, bukan sebagai pekerjaan yang sudah
-jadi. Angka-angka di dalamnya diperiksa hari itu juga.
+> **Keputusan, 23 September 2026: jalur setengah otomatis yang dipilih.**
+> Unggah otomatis ke TikTok, Instagram, dan Facebook DIBUANG dari kode —
+> bukan ditunda. Yang menggantikannya "Siapkan terbit": OmniClip menulis
+> caption dan tagar per platform, menyiapkan berkasnya, lalu pemiliknya yang
+> menerbitkan dari aplikasi resminya. Sisa dokumen ini disimpan sebagai
+> catatan apa yang harus dikerjakan bila suatu saat unggah otomatis
+> dihidupkan lagi.
+>
+> YouTube dan Drive TIDAK ikut dibuang: keduanya sudah bekerja dengan kunci
+> milik pemiliknya sendiri.
+
+Ditulis sebagai rencana, bukan sebagai pekerjaan yang sudah jadi. Angka-angka
+di dalamnya diperiksa hari itu juga.
 
 ---
 

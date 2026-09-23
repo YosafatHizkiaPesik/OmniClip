@@ -69,25 +69,14 @@ def setelah_render(*, clip_name: str, judul: str, hashtag: list[str],
     pilihan = {**setel, **(minta or {})}
     tagar = list(dict.fromkeys([*(setel.get("hashtag") or []), *(hashtag or [])]))
     hasil = []
-    # Tujuan Google dan tujuan sosial diperiksa terpisah. Sebelumnya akun
-    # Google yang belum tersambung membatalkan SELURUH unggahan otomatis —
-    # termasuk ke TikTok, yang sama sekali tidak ada hubungannya.
     google_siap = google_upload.status(pid)["connected"]
-    for target in ("youtube", "drive", "tiktok", "facebook", "instagram"):
+    for target in ("youtube", "drive"):
         if not pilihan.get(target):
             continue
-        if target in ("youtube", "drive"):
-            if not google_siap:
-                hasil.append({"target": target,
-                              "galat": "Akun Google profil ini belum tersambung."})
-                continue
-        else:
-            from . import sosial
-            if not sosial.status(target, pid)["tersambung"]:
-                hasil.append({"target": target,
-                              "galat": f"Akun {sosial.PLATFORM[target]['label']} "
-                                       "profil ini belum tersambung."})
-                continue
+        if not google_siap:
+            hasil.append({"target": target,
+                          "galat": "Akun Google profil ini belum tersambung."})
+            continue
         jam = _jam_tayang(target, pid, float(pilihan.get("jadwal_jam") or 0))
         job_id, _ = antrekan(
             clip_name=clip_name, target=target, title=judul,

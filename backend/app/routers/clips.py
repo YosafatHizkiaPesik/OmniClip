@@ -944,6 +944,110 @@ async def clip_rapatkan(req: RapatRequest):
     }
 
 
+class TerbitRequest(BaseModel):
+    clip_name: str
+    platform: str
+    sudah: bool = True
+
+
+@router.post("/clip-terbit")
+async def clip_terbit(req: TerbitRequest):
+    """
+    Menandai bahwa klip ini sudah diterbitkan ke sebuah platform.
+
+    Ditulis ke sidecar klipnya sendiri, bukan ke basis data: penandanya milik
+    berkas itu, dan harus ikut ke mana pun berkasnya disalin. Ini yang
+    mencegah klip yang sama naik dua kali ke tempat yang sama — kesalahan
+    yang paling mudah terjadi saat mengunggah dengan tangan.
+    """
+    import json as _json
+
+    from ..services import keterangan as kt
+    from ..services import profil
+    from ..services.paths import safe_media_path
+
+    if req.platform not in kt.PLATFORM:
+        raise InvalidInput(f"Platform '{req.platform}' tidak dikenali.")
+    jalur = safe_media_path(profil.kategori_klip(profil.kini()), req.clip_name)
+    sidecar = jalur.with_suffix(".json")
+    try:
+        meta = _json.loads(sidecar.read_text(encoding="utf-8")) if sidecar.is_file() else {}
+    except (OSError, _json.JSONDecodeError):
+        meta = {}
+    terbit = [p for p in (meta.get("terbit") or []) if p != req.platform]
+    if req.sudah:
+        terbit.append(req.platform)
+    meta["terbit"] = terbit
+    sidecar.write_text(_json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+    # Daftar klip dibaca dari cache berbasis waktu ubah folder; sidecar yang
+    # berubah tidak mengubahnya, jadi cachenya dikosongkan di sini.
+    from ..services import render as render_svc
+    render_svc._DAFTAR_KLIP = None
+    return {"status": "ok", "terbit": terbit}
+
+
+class KeteranganRequest(BaseModel):
+    clip_name: str
+    pakai_ai: bool = True
+    # True = tulis ulang, walau sudah pernah disusun. Dipakai tombol "tulis
+    # ulang" saat captionnya kurang pas.
+    segarkan: bool = False
+
+
+@router.post("/clip-keterangan")
+async def clip_keterangan(req: KeteranganRequest):
+    """
+    Caption dan tagar siap tempel untuk satu klip yang sudah jadi.
+
+    Dihitung dari sidecar klipnya (judul, subtitle, durasi), bukan dari yang
+    dikirim peramban — supaya yang jadi caption benar-benar isi klip itu, dan
+    supaya hasilnya sama siapa pun yang memintanya.
+
+    Disimpan sesudahnya: menekan tombol yang sama dua kali tidak memanggil
+    model dua kali.
+    """
+    import asyncio
+    import json as _json
+
+    from ..config import get_api_key, get_model_override
+    from ..repos import cache as cache_repo
+    from ..services import keterangan as kt
+    from ..services import profil
+    from ..services.paths import safe_media_path
+    from ..services.peringkat_model import rantai
+
+    jalur = safe_media_path(profil.kategori_klip(profil.kini()), req.clip_name)
+    sidecar = jalur.with_suffix(".json")
+    if not sidecar.is_file():
+        raise NotFound("Klip ini tidak punya catatan isinya, jadi captionnya "
+                       "tidak bisa disusun.")
+    try:
+        meta = _json.loads(sidecar.read_text(encoding="utf-8"))
+    except (OSError, _json.JSONDecodeError) as e:
+        raise NotFound("Catatan klip ini tidak terbaca.") from e
+
+    # Judul dan kanal video sumber ikut, karena keduanya konteks yang tidak ada
+    # di dalam klipnya sendiri.
+    vid = meta.get("video_id") or ""
+    if vid:
+        video = media_repo.get_video(vid) or {}
+        meta.setdefault("video_title", video.get("title") or "")
+        meta.setdefault("channel", video.get("channel") or "")
+
+    kunci = f"keterangan:{req.clip_name}:v{kt.VERSI}:{'ai' if req.pakai_ai else 'lokal'}"
+    tersimpan = None if req.segarkan else cache_repo.ambil(kunci, ttl=30 * 24 * 3600)
+    if tersimpan:
+        return {**tersimpan, "dari_simpanan": True}
+
+    api_key = get_api_key() if req.pakai_ai else ""
+    hasil = await asyncio.to_thread(
+        kt.paket, meta, api_key=api_key,
+        models=rantai(api_key, get_model_override() or None) if api_key else [],
+        pakai_ai=req.pakai_ai)
+    cache_repo.simpan(kunci, hasil)
+    return {**hasil, "dari_simpanan": False}
+
+
 @router.post("/render-clip", status_code=202)
 async def render_clip(req: RenderClipRequest):
     """Mengantrekan render dan mengembalikan job_id untuk dipantau lewat SSE."""
