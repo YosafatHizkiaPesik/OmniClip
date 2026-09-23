@@ -79,6 +79,7 @@ async def get_settings():
         "ai_model": get_model_override(),
         "cookies_aktif": _cookies_aktif(),
         "gemini_models": GEMINI_MODELS,
+        "render_suara": (settings_repo.get("render.suara") or "seimbang"),
         **_openrouter_ringkas(),
     }
 
@@ -442,6 +443,22 @@ async def set_bahasa(req: BahasaRequest):
     else:
         settings_repo.delete("transcript.langs")
     return {"status": "ok", "langs": list(get_caption_langs())}
+
+
+class SuaraRequest(BaseModel):
+    nilai: str
+
+
+@router.post("/suara")
+async def set_suara(req: SuaraRequest):
+    """Perapian suara saat render: mati, seimbang, atau bersih."""
+    from ..services.render import SUARA_RANTAI
+    nilai = req.nilai.strip()
+    if nilai not in SUARA_RANTAI:
+        raise AppError(f"Pilihan suara '{nilai}' tidak dikenali.",
+                       code="SUARA_TIDAK_DIKENAL", status=422)
+    settings_repo.set_value("render.suara", nilai)
+    return {"status": "ok", "nilai": nilai}
 
 
 # --- Kesehatan sistem -----------------------------------------------------------

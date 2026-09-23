@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Search, Loader2, Video, RefreshCw, History, X } from 'lucide-react';
-import { apiDelete, apiGet } from '../lib/api';
+import { Search, Loader2, Video, RefreshCw, History, X, Scissors, CheckCircle2 } from 'lucide-react';
+import { apiDelete, apiGet, apiPost } from '../lib/api';
 import { VideoCard } from '../components/VideoCards';
 
 // Tahun sengaja tidak dicantumkan: menempelkan "2024" ke setiap kueri menyaring
@@ -39,6 +39,50 @@ const PLAFON = 100;   // batas atas ytsearchN yang masih murah
 export default function Home() {
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
+
+  // Klip banyak video sekaligus. Kosong = mode pilih mati, jadi satu klik pada
+  // kartu tetap berarti "tonton video ini" seperti sebelumnya.
+  const [pilih, setPilih] = useState(new Set());
+  const [mengantre, setMengantre] = useState(false);
+  const [hasilAntre, setHasilAntre] = useState(null);
+
+  const togglePilih = (id) => setPilih((s) => {
+    const n = new Set(s);
+    if (n.has(id)) n.delete(id); else n.add(id);
+    return n;
+  });
+
+  /**
+   * Mengantrekan auto-klip untuk semua yang dicentang.
+   *
+   * Satu per satu, berurutan, bukan Promise.all: sepuluh permintaan
+   * bersamaan hanya membuat server mengunduh metadata sepuluh video
+   * sekaligus, dan yang paling mungkin gagal justru yang terakhir.
+   * Antreannya sendiri di server yang mengatur giliran pengerjaannya.
+   */
+  const klipSemua = async () => {
+    const daftar = [...pilih];
+    if (!daftar.length) return;
+    setMengantre(true);
+    let masuk = 0; let sudah = 0; let gagal = 0;
+    for (const id of daftar) {
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        const res = await apiPost('/auto-clip', {
+          video_id: id,
+          max_clips: Number(localStorage.getItem('omniclip_max_clips') || 0),
+          whisper_model: localStorage.getItem('omniclip_whisper_model') || 'base',
+          gemini_model: localStorage.getItem('omniclip_gemini_model') || null,
+        });
+        if (res.cached) sudah += 1; else masuk += 1;
+      } catch {
+        gagal += 1;
+      }
+    }
+    setPilih(new Set());
+    setMengantre(false);
+    setHasilAntre({ masuk, sudah, gagal });
+  };
   const q = params.get('q') ?? '';
   const [draft, setDraft] = useState(q);
   const [feed, setFeed] = useState([]);
@@ -377,11 +421,30 @@ export default function Home() {
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px 16px' }}>
           {feed.map((video) => (
-            <VideoCard
-              key={video.id}
-              video={{ ...video, ...(dates[video.id] ?? {}) }}
-              onClick={() => navigate(`/watch/${video.id}`, { state: { video } })}
-            />
+            <div key={video.id} style={{ position: 'relative' }}>
+              <VideoCard
+                video={{ ...video, ...(dates[video.id] ?? {}) }}
+                isSelected={pilih.has(video.id)}
+                onClick={() => (pilih.size
+                  ? togglePilih(video.id)
+                  : navigate(`/watch/${video.id}`, { state: { video } }))}
+              />
+              {/* Kotak centang selalu ada, supaya memilih yang PERTAMA tidak
+                  perlu mencari mode tersembunyi lebih dulu. */}
+              <label onClick={(e) => e.stopPropagation()}
+                     title="Pilih untuk diklip bersama"
+                     style={{
+                       position: 'absolute', top: '8px', left: '8px', zIndex: 2,
+                       display: 'flex', alignItems: 'center', justifyContent: 'center',
+                       width: '26px', height: '26px', borderRadius: '7px', cursor: 'pointer',
+                       background: pilih.has(video.id) ? 'var(--accent-cyan)' : 'rgba(0,0,0,0.55)',
+                       border: '1px solid rgba(255,255,255,0.35)',
+                     }}>
+                <input type="checkbox" checked={pilih.has(video.id)}
+                       onChange={() => togglePilih(video.id)}
+                       style={{ margin: 0, accentColor: 'var(--accent-cyan)', cursor: 'pointer' }} />
+              </label>
+            </div>
           ))}
         </div>
       )}
@@ -403,6 +466,50 @@ export default function Home() {
               : habis || batas >= PLAFON
                 ? 'Sudah sampai ujung hasil.'
                 : ''}
+        </div>
+      )}
+
+      {/* Bilah aksi: hanya muncul saat ada yang dipilih, menempel di bawah
+          layar supaya tetap terjangkau setelah menggulir jauh. */}
+      {pilih.size > 0 && (
+        <div style={{
+          position: 'fixed', left: '50%', bottom: '22px', transform: 'translateX(-50%)',
+          zIndex: 40, display: 'flex', alignItems: 'center', gap: '12px',
+          padding: '10px 14px', borderRadius: '999px',
+          background: 'var(--bg-card)', border: '1px solid var(--border-color)',
+          boxShadow: '0 6px 24px rgba(0,0,0,0.35)',
+        }}>
+          <span style={{ fontSize: '0.8rem', fontWeight: 700 }}>
+            {pilih.size} video dipilih
+          </span>
+          <button className="btn-primary" onClick={klipSemua} disabled={mengantre}
+                  style={{ fontSize: '0.8rem', display: 'inline-flex', gap: '6px',
+                           alignItems: 'center' }}>
+            {mengantre ? <Loader2 size={14} className="animate-spin" /> : <Scissors size={14} />}
+            {mengantre ? 'Mengantre…' : 'Klip semuanya'}
+          </button>
+          <button onClick={() => setPilih(new Set())}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer',
+                           color: 'var(--text-muted)', display: 'flex' }}
+                  aria-label="Batalkan pilihan">
+            <X size={16} />
+          </button>
+        </div>
+      )}
+
+      {hasilAntre && (
+        <div onClick={() => setHasilAntre(null)} style={{
+          position: 'fixed', left: '50%', bottom: '22px', transform: 'translateX(-50%)',
+          zIndex: 40, display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer',
+          padding: '10px 16px', borderRadius: '999px', fontSize: '0.8rem',
+          background: 'var(--bg-card)', border: '1px solid var(--border-color)',
+          boxShadow: '0 6px 24px rgba(0,0,0,0.35)',
+        }}>
+          <CheckCircle2 size={15} style={{ color: 'var(--entry)' }} />
+          {hasilAntre.masuk} video diantrekan
+          {hasilAntre.sudah > 0 && `, ${hasilAntre.sudah} sudah pernah diklip`}
+          {hasilAntre.gagal > 0 && `, ${hasilAntre.gagal} gagal`}
+          . Lihat kemajuannya di Partitur.
         </div>
       )}
     </div>

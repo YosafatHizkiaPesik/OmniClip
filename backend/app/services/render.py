@@ -968,6 +968,34 @@ def build_sisipan_graph(lapisan: list[dict], vin: str, ain: str, *,
     return inputs, ";".join(bagian), video, audio
 
 
+# --- Perapian suara -----------------------------------------------------------
+# Tiga tingkat, dan yang kedua adalah bawaannya.
+#
+# "seimbang" hanya meratakan kekerasan ke -16 LUFS: aman untuk apa pun,
+# termasuk musik dan suara permainan. "bersih" menambah tiga filter yang
+# ditujukan pada SUARA ORANG — desis dihilangkan, gemuruh di bawah 80 Hz
+# dipotong, dan jarak antara bisikan dan teriakan dirapatkan. Ketiganya membuat
+# rekaman HP terdengar jauh lebih rapi, dan ketiganya juga merusak musik. Itu
+# sebabnya ia pilihan, bukan bawaan.
+SUARA_RANTAI = {
+    "mati": "anull",
+    "seimbang": "loudnorm=I=-16:TP=-1.5:LRA=11",
+    "bersih": ("highpass=f=80,afftdn=nf=-25,"
+               "acompressor=threshold=-18dB:ratio=3:attack=12:release=220,"
+               "loudnorm=I=-16:TP=-1.5:LRA=9"),
+}
+
+
+def _rantai_suara() -> str:
+    """Rantai filter suara menurut setelan. Salah nama = kembali ke bawaan."""
+    try:
+        from ..repos import settings as settings_repo
+        pilihan = (settings_repo.get("render.suara") or "").strip()
+    except Exception:
+        pilihan = ""
+    return SUARA_RANTAI.get(pilihan) or SUARA_RANTAI["seimbang"]
+
+
 def build_clip_filename(*, title: str, index: Optional[int], start: float,
                         existing: Path) -> str:
     """
@@ -1393,7 +1421,7 @@ def render_clip(
         # together for the same stream."
         aout = alabel
         if loudnorm:
-            graph += f";{alabel}loudnorm=I=-16:TP=-1.5:LRA=11[aout]"
+            graph += f";{alabel}{_rantai_suara()}[aout]"
             aout = "[aout]"
         if sisipan_a and sisipan_a != "[SISIPAN_A]":
             # Ucapan dinormalisasi DULU, baru dicampur. Kalau dicampur lebih
