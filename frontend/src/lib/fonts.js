@@ -16,9 +16,25 @@ const FALLBACK = [
   { family: 'Montserrat', label: 'Montserrat', note: 'tebal & bulat, gaya CapCut' },
 ];
 
-/** Rantai fallback untuk CSS: font display dulu, lalu sans-serif sistem. */
+/**
+ * Rantai fallback untuk CSS: font display dulu, lalu font aksara, lalu
+ * sans-serif sistem.
+ *
+ * Font display yang dibundel semuanya hanya memuat huruf Latin, jadi tanpa
+ * mata rantai tengah ini pratinjau video Jepang memakai font apa pun yang
+ * kebetulan ada di komputernya — dan bentuknya berbeda dari hasil render.
+ * Noto disebut lebih dulu karena itu yang dipakai libass; nama-nama
+ * sesudahnya adalah font bawaan Windows, macOS, dan Linux.
+ */
+const AKSARA = [
+  'Noto Sans JP', 'Noto Sans KR', 'Noto Sans SC', 'Noto Sans Arabic',
+  'Yu Gothic', 'Hiragino Sans', 'Meiryo',
+  'Malgun Gothic', 'Apple SD Gothic Neo',
+  'Microsoft YaHei', 'PingFang SC',
+].map((f) => `'${f}'`).join(', ');
+
 export function fontStack(family) {
-  return `'${family || 'Montserrat'}', 'Segoe UI', system-ui, sans-serif`;
+  return `'${family || 'Montserrat'}', ${AKSARA}, 'Segoe UI', system-ui, sans-serif`;
 }
 
 export function cachedFonts() {

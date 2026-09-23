@@ -452,6 +452,25 @@ def _tanpa_tumpang(lines: list[dict]) -> list[dict]:
     return keluar
 
 
+def _font_aksara(st: CaptionStyle, lines: Optional[list[dict]]) -> CaptionStyle:
+    """Gaya yang sama, dengan font yang sanggup menggambar hurufnya."""
+    if st is None:
+        return st
+    teks = " ".join((l.get("text") or "") for l in (lines or []))[:4000]
+    if not teks.strip():
+        return st
+    try:
+        from .fonts import keluarga_untuk
+        keluarga = keluarga_untuk(teks)
+    except Exception as e:                # font bukan alasan render gagal
+        log.warning("Font aksara tidak bisa disiapkan: %s", str(e)[:200])
+        return st
+    if not keluarga or keluarga == st.font:
+        return st
+    log.info("Subtitle memakai font %s (aksara non-Latin)", keluarga)
+    return replace(st, font=keluarga)
+
+
 def build_ass(
     *,
     lines: list[dict],
@@ -503,9 +522,17 @@ def build_ass(
         border_style, garis_tebal, bayang = 1, st.outline_px, st.shadow_px
         garis_warna = "&H00000000"
 
+    # Font untuk aksara yang tiga belas font display bawaan tidak punya
+    # hurufnya. Tanpa ini, subtitle Jepang keluar sebagai barisan kotak kosong
+    # di komputer yang tidak kebetulan punya font Jepang sistem — dan
+    # kegagalan itu tidak terlihat sampai render selesai. Dinilai per gaya:
+    # pada anime, baris aslinya Jepang sementara terjemahannya Latin.
+    st = _font_aksara(st, lines)
+
     gaya_kedua = ""
     ada_kedua = bool(kedua_lines) and kedua_style is not None and kedua_style.aktif
     if ada_kedua:
+        kedua_style = _font_aksara(kedua_style, kedua_lines)
         gaya_kedua = _style_line("Caption2", kedua_style, w) + "\n"
 
     head = f"""[Script Info]

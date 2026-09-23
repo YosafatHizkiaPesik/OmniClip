@@ -22,17 +22,27 @@ async def list_fonts():
     yang PERSIS sama dengan yang dibakar libass ke dalam video. Tanpa ini,
     mengganti font tidak mengubah apa pun di layar sampai render selesai.
     """
-    return {"fonts": [{**f, "url": f"/api/fonts/{f['file']}"}
-                      for f in BUNDLED_FONTS
-                      if (FONTS_DIR / f["file"]).is_file()]}
+    from ..services import fonts as fonts_svc
+    d = fonts_svc.dir_font()
+    daftar = [{**f, "url": f"/api/fonts/{f['file']}"}
+              for f in BUNDLED_FONTS if (FONTS_DIR / f["file"]).is_file()]
+    # Font aksara yang sudah diunduh ikut disajikan, supaya pratinjau memakai
+    # berkas yang PERSIS sama dengan yang dipakai libass — bukan font Jepang
+    # bawaan sistem, yang bentuknya berbeda dan lebarnya berbeda.
+    daftar += [{"file": v[0], "family": v[1], "label": v[1],
+                "note": "aksara non-Latin", "url": f"/api/fonts/{v[0]}"}
+               for v in fonts_svc.NOTO.values() if (d / v[0]).is_file()]
+    return {"fonts": daftar}
 
 
 @router.get("/fonts/{filename}")
 async def get_font(filename: str):
     """Berkas font. Hanya nama yang ada di daftar bundel yang dilayani."""
-    if filename not in FONT_FILES:
+    from ..services import fonts as fonts_svc
+    noto = {v[0] for v in fonts_svc.NOTO.values()}
+    if filename not in FONT_FILES and filename not in noto:
         raise NotFound("Font tidak dikenali.")
-    path = FONTS_DIR / filename
+    path = (fonts_svc.dir_font() if filename in noto else FONTS_DIR) / filename
     if not path.is_file():
         raise NotFound("Berkas font tidak ada.")
     return FileResponse(path=path, media_type="font/ttf",
