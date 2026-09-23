@@ -28,7 +28,28 @@ Ini bentuk yang dipakai semua produk sejenis. Tidak ada jalan lain yang sah.
 
 ## 2. Tiga hal yang menghalangi, dan besarnya
 
-### 2.1 Kuota YouTube — ini yang paling menentukan
+### 2.0 Video terkunci privat — ini yang paling menentukan
+
+Diperiksa 23 September 2026, dan ini lebih menentukan daripada kuota:
+
+> **Video yang diunggah lewat API dari proyek yang BELUM lolos audit dikunci
+> sebagai privat.** Bukan "bawaannya privat" — dikunci, dan menurut aturan
+> Google tidak bisa dijadikan publik sampai auditnya lolos. Berlaku untuk
+> semua proyek yang dibuat sejak 28 Juli 2020.
+
+Akibatnya langsung ke keputusan bisnisnya:
+
+- Model "tiap pengguna pasang kunci sendiri" **tidak pernah bisa menghasilkan
+  video publik**, berapa pun pengguna yang memasangnya. Tiap pengguna membuat
+  proyek baru, dan tiap proyek baru belum diaudit.
+- Jadi audit itu **bukan** cara menaikkan kuota saja. Ia satu-satunya cara
+  membuat unggahan YouTube berguna sama sekali.
+
+Yang TIDAK terkena aturan ini: Google Drive, TikTok, Facebook, dan Instagram.
+Ketiganya punya urusan reviewnya sendiri, tapi tidak ada yang mengunci
+hasilnya jadi privat selamanya.
+
+### 2.1 Kuota YouTube
 
 Tiap proyek Google mendapat **10.000 unit per hari**. Satu unggahan video
 memakan **1.600 unit**.
@@ -128,11 +149,15 @@ kuotanya habis karena dipakai bersama.
 Bisa dikerjakan **sekarang**, sebelum satu pun pendaftaran selesai: selama ID
 bawaannya kosong, perilakunya persis seperti hari ini.
 
-### Tahap 2 — Google/YouTube berjalan penuh (menunggu Google)
+### Tahap 2 — ajukan audit YouTube SEKARANG, bukan nanti
 
-Daftarkan Desktop app, jalankan dengan 100 test user lebih dulu (cukup untuk
-menguji dan untuk pembeli pertama), sambil mengajukan verifikasi dan audit
-kuota.
+Daftarkan Desktop app dan ajukan audit kepatuhan **paling awal**, karena ia
+yang paling lama dan yang paling menentukan. Sampai lolos, unggahan YouTube
+hanya menghasilkan video terkunci privat — jadi jangan menjanjikannya ke
+pembeli, dan jangan menjadikannya fitur utama di halaman jualan.
+
+Sementara menunggu, yang bisa dijanjikan: Drive, TikTok (draf), dan nanti
+Reels.
 
 ### Tahap 3 — relay TikTok (kode ±1 hari + review TikTok)
 
