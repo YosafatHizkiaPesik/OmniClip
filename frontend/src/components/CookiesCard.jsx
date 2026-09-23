@@ -83,9 +83,9 @@ export default function CookiesCard({ card, sectionTitle, helpText }) {
         Cookies YouTube
       </div>
       <p style={helpText}>
-        Hampir selalu tidak perlu disentuh. OmniClip sudah berpindah-pindah cara masuk
-        ke YouTube sendiri saat ditolak, dan mematikan cookies sendiri kalau ternyata
-        cookies yang jadi penyebabnya. Ini pilihan darurat kalau semua itu gagal.
+        Biasanya tidak perlu. Nyalakan bila YouTube terus meminta &ldquo;confirm
+        you&rsquo;re not a bot&rdquo; untuk banyak video — tandanya jaringan Anda
+        sedang ditandai, dan sesi login adalah jalan keluarnya.
       </p>
 
       {/* Peringatan ini ditulis dari pengukuran, bukan dari dugaan, dan
@@ -100,11 +100,10 @@ export default function CookiesCard({ card, sectionTitle, helpText }) {
       }}>
         <Info size={15} style={{ flexShrink: 0, marginTop: '2px' }} />
         <span>
-          Coba <strong>tanpa cookies dulu</strong>. Verifikasi bot hampir selalu soal
-          jumlah permintaan, bukan akun: video yang sama biasanya berhasil 2–3 menit
-          kemudian. Dan cookies dari browser yang sedang login sering membuat YouTube
-          mengembalikan <strong>nol</strong> format yang bisa diunduh. Tekan
-          &ldquo;Uji sekarang&rdquo; untuk melihat keadaan hari ini.
+          Pakai browser yang login dengan <strong>akun Google cadangan</strong>,
+          bukan akun utama: akun yang dipakai mengunduh bisa ikut ditandai YouTube.
+          Cookies tidak pernah keluar dari komputer ini. Tekan &ldquo;Uji
+          sekarang&rdquo; untuk membandingkan dengan dan tanpa cookies hari ini.
         </span>
       </div>
 

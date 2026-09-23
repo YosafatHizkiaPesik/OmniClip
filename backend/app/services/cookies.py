@@ -11,13 +11,14 @@ yt-dlp bisa membaca basis data cookie browser sendiri (`cookiesfrombrowser`),
 jadi tidak ada berkas yang perlu diekspor siapa pun. Itu jalur utama di sini;
 unggah cookies.txt disediakan untuk kasus browsernya ada di komputer lain.
 
-PERINGATAN YANG DIUKUR, bukan diduga (16 September 2026, yt-dlp 2026.08.19):
-cookies dari browser yang SEDANG LOGIN justru membuat ekstraksi lebih buruk.
-Diuji pada tiga video, permintaan polos mengembalikan 37/34/32 format video;
-permintaan yang sama dengan cookies Firefox mengembalikan NOL untuk ketiganya.
-Sesi yang terautentikasi menuntut proof-of-origin token yang tidak bisa dibuat
-yt-dlp sendiri, dan tanpa token itu YouTube membalas dengan metadata tanpa satu
-pun format yang bisa diunduh.
+PENGUKURAN (yt-dlp 2026.08.19). 16 September 2026: cookies dari browser yang
+login membuat YouTube mengembalikan NOL format pada tiga video, sementara
+permintaan polos memberi 32-37. 21 September 2026 terungkap sebabnya: yt-dlp
+berjalan TANPA runtime JavaScript. Dengan Deno terpasang (services/alat_yt.py),
+dari IP yang sedang ditandai "not a bot", permintaan polos ditolak dan
+permintaan dengan cookies memberi 1080p. Cookies kini jalan keluar yang sah
+dari IP yang ditandai — sebaiknya dari akun Google cadangan, karena akun yang
+dipakai mengunduh bisa ikut ditandai.
 
 Karena itu dua hal di modul ini tidak boleh dilepas:
   * `uji()` menjalankan perbandingan yang sama secara nyata dan melaporkan
@@ -189,7 +190,9 @@ def lupakan_cookies(opts: dict) -> dict:
 
 # Video yang dipakai menguji. Dipilih karena sudah ada belasan tahun, publik,
 # tanpa pembatasan umur maupun wilayah — jadi kegagalannya pasti soal cookies.
-VIDEO_UJI = "dQw4w9WgXcQ"
+# Bukan Rick Astley: video itu tetap lolos saat IP sudah ditandai (21 Sep 2026,
+# 1 dari 6 video yang masih lolos), jadi uji memakainya selalu berkata "aman".
+VIDEO_UJI = "jNQXAC9IVRw"
 
 
 def _hitung_format(opts: dict) -> tuple[int, str]:
@@ -197,6 +200,11 @@ def _hitung_format(opts: dict) -> tuple[int, str]:
     import yt_dlp
     o = {"quiet": True, "no_warnings": True, "skip_download": True,
          "socket_timeout": 30, "ignore_no_formats_error": True, **opts}
+    try:
+        from . import alat_yt
+        alat_yt.terapkan(o)     # tanpa runtime JS, sesi login selalu gagal
+    except Exception:
+        pass
     try:
         with yt_dlp.YoutubeDL(o) as ydl:
             info = ydl.extract_info(VIDEO_UJI, download=False, process=False)
@@ -244,11 +252,14 @@ def uji() -> dict:
     elif dengan == 0 and polos > 0:
         saran = (f"Cookies terbaca ({terbaca} butir), tapi dengan cookies ini YouTube "
                  f"tidak memberi satu pun format video — sementara tanpa cookies ia "
-                 f"memberi {polos}. Jangan dipakai sekarang: sesi yang login menuntut "
-                 "token yang tidak bisa dibuat yt-dlp. Matikan cookies.")
+                 f"memberi {polos}. Pastikan akun di browser itu masih login dan bisa "
+                 "memutar video, atau matikan cookies.")
     elif dengan == 0 and polos == 0:
-        saran = ("Keduanya gagal. Ini bukan soal cookies — YouTube sedang membatasi "
-                 "komputer ini. Tunggu beberapa menit.")
+        saran = ("Keduanya gagal. Bila cookies terbaca tapi tetap gagal, buka YouTube "
+                 "di browser itu dan pastikan akunnya masih login.")
+    elif polos == 0 and dengan > 0:
+        saran = (f"YouTube sedang menandai jaringan ini: tanpa cookies nol format, "
+                 f"dengan cookies {dengan}. Biarkan cookies menyala.")
     elif dengan >= polos:
         saran = (f"Cookies bekerja: {dengan} format dengan cookies, {polos} tanpa. "
                  "Aman dipakai.")

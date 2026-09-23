@@ -89,6 +89,14 @@ def urutan_coba() -> list[tuple[str, tuple[str, ...]]]:
     urut = list(STRATEGI)
     if pilihan:
         urut.sort(key=lambda s: s[0] != pilihan)
+    try:
+        from . import cookies as cookies_svc
+        if cookies_svc.aktif():
+            # visionos/ios/android tidak menerima cookies sama sekali; dengan
+            # sesi login, pilihan bawaan yt-dlp (client web) yang bekerja.
+            urut.sort(key=lambda s: s[0] != "bawaan")
+    except Exception:
+        pass
     return urut
 
 

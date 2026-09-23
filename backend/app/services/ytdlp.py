@@ -5,6 +5,7 @@ import subprocess
 import threading
 import time
 import yt_dlp
+from typing import Optional
 from urllib.parse import quote_plus
 
 from ..config import DOWNLOAD_DIR as _DOWNLOAD_DIR, STORAGE_DIR as _STORAGE_DIR
@@ -54,14 +55,17 @@ def classify_ytdlp_error(exc: Exception) -> YtdlpError:
             raw,
         )
     if "sign in to confirm" in low or "not a bot" in low or "captcha" in low:
-        return YtdlpError(
-            "YTDLP_BOT_CHECK",
-            "YouTube menolak semua cara masuk yang OmniClip punya untuk video "
-            "ini. Sepuluh player client sudah dicoba bergantian. Biasanya ini "
-            "hilang sendiri; kalau terus muncul untuk banyak video, yt-dlp perlu "
-            "diperbarui — itu perbaikan yang selalu datang dari sisi yt-dlp.",
-            raw,
-        )
+        if cookies_svc.aktif():
+            pesan = ("YouTube masih meminta verifikasi walau cookies sudah dipakai. "
+                     "Buka YouTube di browser yang cookies-nya dipilih, pastikan akunnya "
+                     "masih login dan bisa memutar video, lalu coba lagi.")
+        else:
+            pesan = ("YouTube sedang menandai jaringan internet Anda sebagai bot — "
+                     "bukan hanya video ini. Pilihan: (1) tunggu beberapa jam, tanda ini "
+                     "biasanya hilang sendiri; (2) ganti jaringan: nyalakan ulang modem "
+                     "atau pakai VPN di tingkat sistem; (3) sambungkan cookies browser "
+                     "di Pengaturan → YouTube, sebaiknya dari akun Google cadangan.")
+        return YtdlpError("YTDLP_BOT_CHECK", pesan, raw)
     if "429" in raw or "too many requests" in low or "rate" in low and "limit" in low:
         return YtdlpError(
             "YTDLP_RATE_LIMIT",
@@ -112,7 +116,19 @@ def _base_opts() -> dict:
     except Exception:
         # Pengaturan yang tidak terbaca tidak boleh mematikan pencarian.
         pass
+    # Runtime JS (Deno) dan server PO Token. Tanpa runtime JS, cookies pun
+    # gagal — lihat services/alat_yt.py untuk angkanya.
+    try:
+        from . import alat_yt
+        alat_yt.terapkan(opts)
+    except Exception:
+        pass
     return opts
+
+
+def _galat_bot(e: Exception) -> bool:
+    low = str(e).lower()
+    return "sign in to confirm" in low or "not a bot" in low
 
 
 # ---------------------------------------------------------------------------
@@ -174,6 +190,12 @@ def _ekstrak(url: str, opts: dict, **kw):
                 info = ydl.extract_info(url, download=False, **kw)
         except Exception as e:
             galat = galat or e
+            if _galat_bot(e):
+                # IP yang sudah ditandai menolak SEMUA client. Memutar sepuluh
+                # client lagi hanya menambah permintaan yang memperdalam
+                # tandanya — terukur 21 September 2026: 5 dari 6 video ditolak
+                # di setiap kumpulan.
+                raise
             continue
         if _punya_format_video(info):
             yt_klien.catat_berhasil(nama)
@@ -231,6 +253,8 @@ def _unduh(url: str, opts: dict):
             return info, ydl
         except Exception as e:
             galat = galat or e
+            if _galat_bot(e):
+                raise
             pesan = str(e).lower()
             # Kegagalan yang jelas bukan soal client tidak perlu diulang: video
             # privat tetap privat di client mana pun, dan cakram penuh tetap
@@ -286,7 +310,40 @@ SEARCH_SORTS = {
 }
 
 
-def search_youtube_videos(query: str, limit: int = 20, sort: str = "relevan"):
+# Penyaring pencarian YouTube. `sp` adalah protobuf SearchParams milik
+# halaman pencarian YouTube: field 1 = urutan, field 2 = pesan penyaring
+# {1: tanggal unggah, 2: jenis (1 = video), 3: durasi}. Dicocokkan dengan nilai
+# yang dipakai youtube.com sendiri: "EgQIAxAB" = minggu ini + video,
+# "EgIYAQ" = di bawah 4 menit, "CAI=" = urut terbaru.
+URUT_KODE = {"relevan": 0, "rating": 1, "terbaru": 2, "terpopuler": 3}
+TANGGAL_KODE = {"jam": 1, "hari": 2, "minggu": 3, "bulan": 4, "tahun": 5}
+DURASI_KODE = {"pendek": 1, "panjang": 2, "sedang": 3}
+
+
+def sp_pencarian(sort: str = "relevan", durasi: Optional[str] = None,
+                 tanggal: Optional[str] = None) -> Optional[str]:
+    import base64
+    from urllib.parse import quote
+    isi = bytearray()
+    kode = URUT_KODE.get(sort or "relevan", 0)
+    if kode:
+        isi += bytes([0x08, kode])
+    saring = bytearray()
+    if tanggal in TANGGAL_KODE:
+        saring += bytes([0x08, TANGGAL_KODE[tanggal]])
+    if durasi in DURASI_KODE or tanggal in TANGGAL_KODE:
+        saring += bytes([0x10, 0x01])          # hanya video, bukan kanal/playlist
+    if durasi in DURASI_KODE:
+        saring += bytes([0x18, DURASI_KODE[durasi]])
+    if saring:
+        isi += bytes([0x12, len(saring)]) + saring
+    if not isi:
+        return None
+    return quote(base64.b64encode(bytes(isi)).decode())
+
+
+def search_youtube_videos(query: str, limit: int = 20, sort: str = "relevan",
+                          durasi: Optional[str] = None, tanggal: Optional[str] = None):
     """
     Melakukan pencarian video YouTube menggunakan yt-dlp tanpa YouTube API Key.
 
@@ -305,7 +362,8 @@ def search_youtube_videos(query: str, limit: int = 20, sort: str = "relevan"):
     results = []
     channels: list[tuple[str, str]] = []
     is_url = query.startswith("http://") or query.startswith("https://")
-    sp = SEARCH_SORTS.get(sort)
+    sp = sp_pencarian(sort, durasi, tanggal)
+    tersaring = bool(durasi or tanggal)
     if is_url:
         search_target = query
     elif sp:
@@ -370,7 +428,7 @@ def search_youtube_videos(query: str, limit: int = 20, sort: str = "relevan"):
     # mengunggah dua video sesudah itu — yang paling baru bahkan tidak ada di
     # hasil pencarian sama sekali. Tab video sebuah kanal selalu urut dari yang
     # terbaru, dan mengambilnya cuma butuh setengah detik.
-    if sort == "terbaru" and channels and not is_url:
+    if sort == "terbaru" and channels and not is_url and not tersaring:
         fresh = _channel_latest(channels[0][0], limit)
         if fresh:
             seen = {v["id"] for v in fresh}
@@ -533,6 +591,12 @@ def get_video_info(url_or_id: str):
             # (yang lambat) diperlukan. Frontend memakainya untuk memberi
             # perkiraan waktu yang jujur SEBELUM pengguna menunggu.
             "has_captions": _has_usable_captions(info),
+            # Bahasa yang DIUCAPKAN di video, menurut YouTube. Dipakai untuk
+            # meminta caption dalam bahasa aslinya — lihat captions.py.
+            "language": info.get("language") or None,
+            # Jalur audio (sulih suara). Video besar seperti MrBeast punya
+            # belasan; yang asli ditandai.
+            "audio_tracks": jalur_audio(info),
             "caption_langs": sorted(
                 set((info.get("subtitles") or {}))
                 | set((info.get("automatic_captions") or {}))
@@ -679,17 +743,88 @@ def _opsi_paralel(opts: dict) -> dict:
     return o
 
 
-def download_youtube_media(url_or_id: str, resolution: str = "720p", on_progress=None):
+_BAHASA_SAH = re.compile(r"^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$")
+
+
+def jalur_audio(info: dict) -> list[dict]:
+    """
+    Jalur audio yang ditawarkan YouTube: [{"lang", "nama", "asli"}], asli dulu.
+
+    Video dengan sulih suara menawarkan satu jalur per bahasa, dengan bitrate
+    yang NYARIS SAMA — terukur pada "I Survived 100 Days on One Block": tiga
+    belas jalur 129,474-129,476 kbps. Memilih "audio terbaik" berdasarkan
+    bitrate karena itu memilih bahasa secara acak, dan salah satu unduhan
+    keluar dengan suara Indonesia hasil sulih suara, bukan suara aslinya.
+    """
+    jalur: dict[str, dict] = {}
+    for f in info.get("formats") or []:
+        if f.get("vcodec") not in (None, "none") or f.get("acodec") in (None, "none"):
+            continue
+        lang = (f.get("language") or "").strip()
+        if not lang:
+            continue
+        catatan = f.get("format_note") or ""
+        asli = (f.get("language_preference") or -1) >= 10 or "original" in catatan.lower()
+        nama = catatan.split(",")[0].replace("original", "").replace("(default)", "").strip() or lang
+        lama = jalur.get(lang)
+        if lama is None:
+            jalur[lang] = {"lang": lang, "nama": nama, "asli": asli}
+        elif asli:
+            lama["asli"] = True
+    if len(jalur) <= 1:
+        return list(jalur.values())
+    return sorted(jalur.values(), key=lambda j: (not j["asli"], j["nama"]))
+
+
+# Kode dua huruf (YouTube) -> tiga huruf (tag bahasa di berkas mp4).
+_ISO3 = {"en": "eng", "id": "ind", "es": "spa", "pt": "por", "hi": "hin", "ar": "ara",
+         "th": "tha", "pl": "pol", "bn": "ben", "tr": "tur", "vi": "vie", "it": "ita",
+         "ru": "rus", "ja": "jpn", "ko": "kor", "fr": "fra", "de": "deu", "zh": "zho",
+         "ms": "msa", "nl": "nld", "uk": "ukr", "fil": "fil", "ta": "tam", "te": "tel"}
+_ISO3_LAIN = {"fre": "fra", "ger": "deu", "chi": "zho", "may": "msa", "dut": "nld"}
+
+
+def bahasa_audio(path) -> Optional[str]:
+    """Tag bahasa jalur audio pertama sebuah berkas ("eng"), atau None."""
+    try:
+        out = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "a:0",
+             "-show_entries", "stream_tags=language", "-of", "json", str(path)],
+            capture_output=True, text=True, timeout=20)
+        tags = (json.loads(out.stdout or "{}").get("streams") or [{}])[0].get("tags") or {}
+        lang = (tags.get("language") or "").strip().lower()
+        return None if lang in ("", "und") else _ISO3_LAIN.get(lang, lang)
+    except Exception:
+        return None
+
+
+def audio_cocok(tag: Optional[str], diminta: Optional[str]) -> bool:
+    """Apakah berkas bertag `tag` memuat audio berbahasa `diminta`?"""
+    if not diminta or not tag:
+        return True          # tidak diminta apa-apa, atau tidak bisa diketahui
+    pokok = diminta.split("-")[0].lower()
+    return tag == _ISO3.get(pokok, pokok) or tag[:2] == pokok
+
+
+def download_youtube_media(url_or_id: str, resolution: str = "720p", on_progress=None,
+                           audio_lang: Optional[str] = None):
     """
     Mengunduh media dari YouTube berdasarkan opsi resolusi (360p, 480p, 720p, 1080p, Audio MP3).
     Format output disimpan ke OmniClip_Storage/local_downloads/
     """
     url = url_or_id if url_or_id.startswith("http") else f"https://www.youtube.com/watch?v={url_or_id}"
 
+    # Jalur audio: bahasa yang diminta bila sah, selain itu yang ASLI — lewat
+    # 'lang' di depan urutan format (YouTube memberi jalur asli
+    # language_preference 10, sulih suara -1).
+    if audio_lang and not _BAHASA_SAH.match(audio_lang):
+        audio_lang = None
+    ba = f"ba[language^={audio_lang}]" if audio_lang else "ba"
+
     # Setup format selector
     format_sort = None
     if resolution == "Audio MP3":
-        fmt = "bestaudio[ext=m4a]/bestaudio/best"
+        fmt = (f"{ba}/" if audio_lang else "") + "bestaudio[ext=m4a]/bestaudio/best"
         postprocessors = [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
@@ -708,14 +843,15 @@ def download_youtube_media(url_or_id: str, resolution: str = "720p", on_progress
         # tinggi dari 2160p tidak menambah satu piksel pun pada hasil, hanya
         # menambah berkas raksasa dan waktu decode di mesin tanpa GPU.
         res_height = MAX_BEST_HEIGHT
-        fmt = (f"bv*[height<=?{res_height}]+ba/b[height<=?{res_height}]/"
+        fmt = ((f"bv*[height<=?{res_height}]+{ba}/" if audio_lang else "")
+               + f"bv*[height<=?{res_height}]+ba/b[height<=?{res_height}]/"
                f"bv*+ba/b")
         # Urutan pemilihan, bukan penyaringan: resolusi tertinggi dulu, lalu
         # H.264 di antara yang tingginya sama. H.264 didahulukan karena decode-
         # nya jauh lebih murah di CPU tanpa GPU — tapi hanya sebagai preferensi,
         # sebab di atas 1080p YouTube umumnya hanya menyediakan VP9 atau AV1 dan
         # menolaknya berarti menolak resolusi terbaiknya.
-        format_sort = ['res', 'fps', 'vcodec:h264', 'ext:mp4:m4a', 'br']
+        format_sort = ['lang', 'res', 'fps', 'vcodec:h264', 'ext:mp4:m4a', 'br']
         postprocessors = []
     else:
         try:
@@ -733,10 +869,13 @@ def download_youtube_media(url_or_id: str, resolution: str = "720p", on_progress
         # tanpa GPU dan langsung kompatibel dengan pipeline ffmpeg berikutnya.
         # `<=?` berarti "abaikan filter ini bila field height tidak ada".
         fmt = (
-            f"bv*[height<=?{res_height}][vcodec^=avc1]+ba[ext=m4a]/"
+            (f"bv*[height<=?{res_height}][vcodec^=avc1]+{ba}[ext=m4a]/"
+             f"bv*[height<=?{res_height}]+{ba}/" if audio_lang else "")
+            + f"bv*[height<=?{res_height}][vcodec^=avc1]+ba[ext=m4a]/"
             f"bv*[height<=?{res_height}]+ba/"
             f"b[height<=?{res_height}]/b"
         )
+        format_sort = ['lang']
         postprocessors = []
 
     # Sanitize output template (use safe ASCII title)
@@ -871,6 +1010,57 @@ def delete_local_download(filename: str) -> dict:
     except Exception as e:
         return {"success": False, "error": str(e)}
 
+SISA_UMUR_MIN = 24 * 3600
+
+
+def bersihkan_sisa_unduhan() -> dict:
+    """
+    Membuang pecahan unduhan yang terputus: .part, .part-FragN, .ytdl.
+
+    Terukur di folder pengembang: tiga unduhan yang terputus 16 September
+    meninggalkan ±1 GB pecahan yang tidak pernah dipakai lagi. Hanya yang
+    berumur lebih dari sehari, dan hanya saat tidak ada unduhan berjalan —
+    pecahan milik unduhan yang sedang jalan tidak boleh tersentuh.
+
+    Berkas perantara `.fNNN.mp4` yang SELESAI tidak dihapus: yt-dlp memakainya
+    ulang bila video itu diunduh lagi, jadi yang tersisa tinggal audionya.
+    Ukurannya dilaporkan supaya pemiliknya bisa memutuskan sendiri.
+    """
+    import re as _re
+    import time as _time
+    dibuang, lega, perantara = 0, 0, []
+    if not os.path.isdir(DOWNLOAD_DIR):
+        return {"dibuang": 0, "lega_mb": 0, "perantara": []}
+    try:
+        from ..db import get_conn
+        aktif = get_conn().execute(
+            "SELECT COUNT(*) AS n FROM jobs WHERE status IN ('queued','running') "
+            "AND type IN ('download','auto_clip')").fetchone()["n"]
+    except Exception:
+        aktif = 1
+    batas = _time.time() - SISA_UMUR_MIN
+    from .paths import berkas_perantara
+    for fname in os.listdir(DOWNLOAD_DIR):
+        fpath = os.path.join(DOWNLOAD_DIR, fname)
+        if not os.path.isfile(fpath):
+            continue
+        st = os.stat(fpath)
+        sisa = fname.endswith((".part", ".ytdl")) or _re.search(r"\.part-Frag\d+$", fname)
+        if sisa and not aktif and st.st_mtime < batas:
+            try:
+                os.remove(fpath)
+                dibuang += 1
+                lega += st.st_size
+            except OSError:
+                pass
+        elif berkas_perantara(fname):
+            perantara.append({"file_name": fname, "mb": round(st.st_size / 1e6)})
+    if dibuang:
+        import logging
+        logging.getLogger("omniclip.ytdlp").info("Sisa unduhan terputus dibuang: %d berkas, %.0f MB", dibuang, lega / 1e6)
+    return {"dibuang": dibuang, "lega_mb": round(lega / 1e6), "perantara": perantara}
+
+
 def list_local_downloads():
     """
     Mendaftar semua file yang ada di folder local_downloads/ (kecuali .part)
@@ -884,6 +1074,9 @@ def list_local_downloads():
         # tanpa filter ini `.gitkeep` ikut terdaftar sebagai video.
         ext = os.path.splitext(fname)[1].lower()
         if ext not in MEDIA_EXTS:
+            continue
+        from .paths import berkas_perantara
+        if berkas_perantara(fname):
             continue
         fpath = os.path.join(DOWNLOAD_DIR, fname)
         if os.path.isfile(fpath):

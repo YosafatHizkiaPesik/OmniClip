@@ -14,6 +14,9 @@ python-dotenv>=1.0.0
 # adalah HTTP 403 di tengah unduhan atau "Sign in to confirm you're not a bot".
 # Perbaikannya selalu: pip install -U yt-dlp
 yt-dlp>=2026.8.19
+# Skrip pemecah tantangan JavaScript YouTube, versinya berpasangan dengan
+# yt-dlp. Runtime-nya (Deno) diunduh saat pertama jalan: services/alat_yt.py.
+yt-dlp-ejs==0.8.0
 
 # --- Transkripsi lokal (cadangan bila video tidak punya caption) ---
 # Dijalankan int8 di CPU. Model 'base' butuh ~400 MB RAM, 'small' ~900 MB.
