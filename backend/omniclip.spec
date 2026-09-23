@@ -120,6 +120,47 @@ a.datas = _buang_discovery_tak_terpakai(a.datas)
 
 pyz = PYZ(a.pure)
 
+# --- Identitas berkas untuk Windows ------------------------------------------
+#
+# Bukan hiasan. Berkas .exe tanpa tanda tangan DAN tanpa keterangan versi
+# adalah bentuk yang paling mirip malware bagi Windows Defender: tidak ada
+# nama penerbit, tidak ada nama produk, tidak ada apa pun untuk dibandingkan.
+# Mengisinya tidak membuat peringatannya hilang sendiri — hanya tanda tangan
+# yang bisa — tapi ia satu dari sedikit hal yang bisa dikerjakan tanpa
+# membayar, dan ia juga yang membuat Properties berkasnya masuk akal dibaca.
+import sys as _sys
+
+_versi = "1.0.0"
+for _baris in (HERE / "app" / "version.py").read_text(encoding="utf-8").splitlines():
+    if _baris.startswith("__version__"):
+        _versi = _baris.split('"')[1]
+        break
+_v = tuple(int(x) for x in (_versi.split(".") + ["0", "0", "0"])[:3]) + (0,)
+
+_berkas_versi = None
+if _sys.platform == "win32":
+    _berkas_versi = HERE / "build" / "versi_windows.txt"
+    _berkas_versi.parent.mkdir(parents=True, exist_ok=True)
+    _berkas_versi.write_text(f"""VSVersionInfo(
+  ffi=FixedFileInfo(filevers={_v}, prodvers={_v}, mask=0x3f, flags=0x0,
+                    OS=0x40004, fileType=0x1, subtype=0x0, date=(0, 0)),
+  kids=[
+    StringFileInfo([StringTable('040904B0', [
+      StringStruct('CompanyName', 'OmniClip'),
+      StringStruct('FileDescription', 'OmniClip — pemotong klip otomatis'),
+      StringStruct('FileVersion', '{_versi}'),
+      StringStruct('InternalName', 'OmniClip'),
+      StringStruct('OriginalFilename', 'OmniClip.exe'),
+      StringStruct('ProductName', 'OmniClip'),
+      StringStruct('ProductVersion', '{_versi}'),
+    ])]),
+    VarFileInfo([VarStruct('Translation', [1033, 1200])]),
+  ]
+)
+""", encoding="utf-8")
+
+_ikon = HERE / "app" / "assets" / "omniclip.ico"
+
 exe = EXE(
     pyz, a.scripts, [],
     exclude_binaries=True,
@@ -128,8 +169,14 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=False,          # UPX memicu peringatan antivirus di Windows
-    console=True,       # render bisa bermenit-menit; kemajuannya harus terlihat
-    icon=None,
+    # Jendela konsol disembunyikan di Windows: yang dilihat pemiliknya cuma
+    # kotak hitam berisi teks yang tidak ia mengerti, muncul bersama
+    # aplikasinya dan tidak boleh ditutup. Kemajuan render ada di halamannya
+    # sendiri. Di Linux ia dibiarkan — di sana aplikasi memang dijalankan dari
+    # terminal, dan tidak ada jendela yang muncul sendiri.
+    console=_sys.platform != "win32",
+    icon=str(_ikon) if _ikon.is_file() else None,
+    version=str(_berkas_versi) if _berkas_versi else None,
 )
 
 coll = COLLECT(

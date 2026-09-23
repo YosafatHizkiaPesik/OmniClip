@@ -10,6 +10,7 @@ import SecurityCard from './SecurityCard';
 import StorageCard from './StorageCard';
 import PemeliharaanCard from './PemeliharaanCard';
 import KesehatanCard from './KesehatanCard';
+import KeluarCard from './KeluarCard';
 import SuaraCard from './SuaraCard';
 import CookiesCard from './CookiesCard';
 import TerjemahOtomatisCard from './TerjemahOtomatisCard';
@@ -566,6 +567,8 @@ export default function ProfileTab() {
       <SuaraCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
 
       <KesehatanCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
+
+      <KeluarCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
 
       <StorageCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
 

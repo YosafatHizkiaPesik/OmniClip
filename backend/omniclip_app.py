@@ -10,9 +10,19 @@ matang; membungkusnya lagi dengan kerangka desktop hanya akan menambah puluhan
 megabita dan satu lapis yang bisa rusak sendiri. Peramban yang sudah ada di
 komputer pengguna mengerjakannya lebih baik.
 
-Jendela konsol sengaja dibiarkan terlihat. Render bisa berjalan bermenit-menit,
-dan aplikasi yang tidak menunjukkan apa pun selama itu terlihat seperti
-aplikasi yang menggantung.
+Sejak 1.0.8 jendela konsolnya TIDAK ditampilkan di Windows. Dulu ia dibiarkan
+terlihat supaya render yang berjalan bermenit-menit tidak terlihat menggantung
+— tapi yang dilihat pemiliknya bukan itu: sebuah jendela hitam berisi teks yang
+tidak ia mengerti, muncul bersama aplikasinya dan tidak boleh ditutup. Kemajuan
+render sudah ada di halamannya sendiri, jauh lebih jelas daripada di konsol.
+
+Konsekuensinya ditangani di sini, bukan diabaikan:
+  - keluarannya dialihkan ke berkas log, karena `print` ke konsol yang tidak
+    ada akan menjatuhkan aplikasi di Windows;
+  - galat yang menjatuhkan aplikasi ditampilkan sebagai kotak pesan, karena
+    tanpa konsol tidak ada tempat lain untuk melihatnya;
+  - proses anak (ffmpeg dan kawan-kawan) ikut disembunyikan — tanpa itu setiap
+    pemanggilan ffmpeg memunculkan jendela hitam yang berkedip.
 """
 
 import logging
@@ -22,6 +32,45 @@ import sys
 import threading
 import time
 import webbrowser
+
+
+def _alihkan_keluaran() -> None:
+    """
+    Menyediakan tempat menulis saat aplikasi berjalan tanpa konsol.
+
+    Di Windows tanpa konsol, PyInstaller menyetel `sys.stdout` dan `sys.stderr`
+    menjadi None. Satu `print` saja sesudah itu menjatuhkan aplikasi dengan
+    "NoneType has no attribute write" — dan tanpa konsol, tidak ada yang
+    melihatnya. Jadi keduanya diarahkan ke berkas, sebelum apa pun dicetak.
+    """
+    if sys.stdout is not None and sys.stderr is not None:
+        return None
+    from pathlib import Path
+    try:
+        from app.config import LOGS_DIR
+        folder = Path(LOGS_DIR)
+    except Exception:
+        import tempfile
+        folder = Path(tempfile.gettempdir())
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+        berkas = open(folder / "omniclip.log", "a", encoding="utf-8", buffering=1)
+    except OSError:
+        berkas = open(os.devnull, "w", encoding="utf-8")
+    sys.stdout = berkas
+    sys.stderr = berkas
+    return berkas
+
+
+def _kotak_pesan(judul: str, isi: str) -> None:
+    """Kotak pesan Windows. Satu-satunya cara bicara saat tidak ada konsol."""
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+        ctypes.windll.user32.MessageBoxW(None, isi, judul, 0x10)   # MB_ICONERROR
+    except Exception:
+        pass
 
 PORT_AWAL = 8000
 PORT_DICOBA = 20
@@ -259,7 +308,7 @@ def main() -> int:
     if host not in ("127.0.0.1", "::1", "localhost"):
         print(f"  Terbuka di jaringan ({host}) — pastikan kata sandi sudah dipasang.")
     print()
-    print("  Tutup jendela ini untuk mematikan OmniClip.")
+    print("  Matikan lewat tombol Keluar di halaman Pengaturan.")
     print("  Saat pertama dipakai, beberapa model akan diunduh (± 150 MB).")
     print("=" * 62, flush=True)
 
@@ -272,6 +321,26 @@ def main() -> int:
     config = uvicorn.Config(app, host=host, port=port, log_level="info",
                             proxy_headers=True, forwarded_allow_ips="127.0.0.1")
     server = uvicorn.Server(config)
+
+    # Halaman Pengaturan punya tombol Keluar; inilah yang dipanggilnya. Tanpa
+    # jendela konsol, tombol itu satu-satunya cara mematikan aplikasi tanpa
+    # Task Manager.
+    from app.services.hidup import daftarkan
+
+    def _minta_berhenti() -> None:
+        """
+        Berhenti dengan wajar, lalu paksa bila perlu.
+
+        `should_exit` saja tidak cukup: halaman OmniClip memegang satu
+        sambungan peristiwa (SSE) yang memang dirancang tidak pernah tertutup,
+        dan uvicorn menunggu semua sambungan selesai sebelum keluar. Terukur —
+        prosesnya tetap hidup di "Waiting for connections to close" selamanya,
+        dan tombol Keluar jadi tombol yang tidak melakukan apa-apa.
+        """
+        server.should_exit = True
+        threading.Timer(3.0, lambda: setattr(server, "force_exit", True)).start()
+
+    daftarkan(_minta_berhenti)
 
     # Menandai "siap" hanya setelah uvicorn benar-benar menerima sambungan.
     # Membuka peramban lebih awal memberi halaman galat, dan pengguna yang
@@ -294,10 +363,28 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    # Urutannya penting: tempat menulis disiapkan SEBELUM baris pertama dicetak.
+    _alihkan_keluaran()
+    try:
+        from app.services.proses import sembunyikan_konsol_anak
+        sembunyikan_konsol_anak()
+    except Exception:       # jangan sampai ini yang menjatuhkan aplikasinya
+        pass
+
     if "--periksa" in sys.argv:
         raise SystemExit(periksa())
 
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s %(levelname)-7s %(name)s: %(message)s",
                         datefmt="%H:%M:%S")
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except SystemExit:
+        raise
+    except BaseException as e:      # noqa: BLE001 — pesan terakhir sebelum mati
+        import traceback
+        traceback.print_exc()
+        _kotak_pesan("OmniClip gagal dijalankan",
+                     f"{type(e).__name__}: {e}\n\n"
+                     "Rinciannya tercatat di berkas log di folder penyimpanan.")
+        raise

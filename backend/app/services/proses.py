@@ -26,6 +26,54 @@ _hidup: "weakref.WeakSet" = weakref.WeakSet()
 _kunci = threading.Lock()
 
 
+# Windows: nilai bendera yang dipakai di bawah, ditulis di sini supaya tidak
+# tersebar sebagai angka ajaib.
+CREATE_NO_WINDOW = 0x08000000
+CREATE_NEW_CONSOLE = 0x00000010
+DETACHED_PROCESS = 0x00000008
+BELOW_NORMAL = 0x00004000
+
+_konsol_disembunyikan = False
+
+
+def sembunyikan_konsol_anak() -> None:
+    """
+    Semua proses anak berjalan tanpa jendela konsol sendiri (Windows saja).
+
+    Dibutuhkan sejak aplikasi dibungkus tanpa konsol. Selama induknya punya
+    konsol, anak-anaknya ikut menumpang dan tidak ada jendela baru yang muncul;
+    begitu induknya tidak punya, SETIAP pemanggilan ffmpeg memunculkan jendela
+    hitam yang berkedip lalu hilang — puluhan kali per render.
+
+    Ini menambal `subprocess.Popen` secara global, bukan menambahkan bendera di
+    tiap pemanggilan, dan itu disengaja: yt-dlp, faster-whisper, dan Piper
+    memanggil ffmpeg SENDIRI dari dalam pustakanya. Bendera yang dipasang di
+    tiap pemanggilan milik kita tidak akan pernah sampai ke sana.
+
+    `CREATE_NEW_CONSOLE` dan `DETACHED_PROCESS` dihormati: Windows mengabaikan
+    CREATE_NO_WINDOW bila salah satunya ada, dan penolong pembaruan memang
+    sengaja meminta konsolnya sendiri.
+    """
+    global _konsol_disembunyikan
+    if sys.platform != "win32" or _konsol_disembunyikan:
+        return
+    _konsol_disembunyikan = True
+
+    asli = subprocess.Popen.__init__
+
+    def dengan_bendera(self, *args, **kw):
+        bendera = kw.get("creationflags", 0)
+        if not bendera & (CREATE_NEW_CONSOLE | DETACHED_PROCESS):
+            kw["creationflags"] = bendera | CREATE_NO_WINDOW
+        si = kw.get("startupinfo") or subprocess.STARTUPINFO()
+        si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        si.wShowWindow = 0            # SW_HIDE
+        kw["startupinfo"] = si
+        return asli(self, *args, **kw)
+
+    subprocess.Popen.__init__ = dengan_bendera
+
+
 def _anak_linux(rendah: bool):
     def siapkan():
         try:
@@ -51,7 +99,7 @@ def popen(cmd: list, *, rendah: bool = False, **kw) -> subprocess.Popen:
     if sys.platform.startswith("linux"):
         kw.setdefault("preexec_fn", _anak_linux(rendah))
     elif sys.platform == "win32" and rendah:
-        kw.setdefault("creationflags", 0x00004000)   # BELOW_NORMAL_PRIORITY_CLASS
+        kw["creationflags"] = kw.get("creationflags", 0) | BELOW_NORMAL
     proc = subprocess.Popen(cmd, **kw)
     with _kunci:
         _hidup.add(proc)

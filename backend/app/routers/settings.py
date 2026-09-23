@@ -15,7 +15,7 @@ import os
 import sys
 from pathlib import Path
 
-from fastapi import APIRouter, File, UploadFile
+from fastapi import APIRouter, File, Request, UploadFile
 from typing import List
 
 from pydantic import BaseModel, Field
@@ -459,6 +459,24 @@ async def set_suara(req: SuaraRequest):
                        code="SUARA_TIDAK_DIKENAL", status=422)
     settings_repo.set_value("render.suara", nilai)
     return {"status": "ok", "nilai": nilai}
+
+
+@router.post("/mati")
+async def matikan(request: Request):
+    """
+    Mematikan OmniClip.
+
+    Hanya dari komputer yang menjalankannya. OmniClip bisa dibuka dari HP lewat
+    jaringan, dan tombol mati yang bisa ditekan dari sana berarti siapa pun di
+    jaringan yang sama bisa menghentikan render orang lain.
+    """
+    from ..services.hidup import berhenti
+    asal = (request.client.host if request.client else "") or ""
+    if asal not in ("127.0.0.1", "::1", "localhost"):
+        raise AppError("OmniClip hanya bisa dimatikan dari komputer yang menjalankannya.",
+                       code="MATI_BUKAN_LOKAL", status=403)
+    berhenti()
+    return {"status": "ok", "pesan": "OmniClip berhenti. Tab ini boleh ditutup."}
 
 
 # --- Kesehatan sistem -----------------------------------------------------------
