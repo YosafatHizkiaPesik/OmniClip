@@ -2382,6 +2382,131 @@ def _peta_dari_mulut(people, motion, speaker_turns, n_samples, speakers,
     return dipakai
 
 
+PETA_MULUT_MIN_SAMPEL = 12   # bukti mulut minimum (1,5 dtk) untuk memetakan penutur
+PETA_MULUT_PORSI = 0.6       # porsi bukti untuk satu orang
+
+
+def _lengkapi_peta_dari_mulut(mapping, people, motion, seen, speaker_turns, n,
+                              boxes=None, source_w=0):
+    """
+    Penutur yang TIDAK terpetakan ke wajah dicarikan wajahnya dari mulut yang
+    paling sering bergerak selama giliran penutur itu.
+
+    `assign_faces_to_speakers` sengaja ketat (statistik-t >= 2), dan di klip
+    pendek penutur utamanya bisa gagal lolos. Terukur di Sule klip D (18 dtk):
+    peta {1: 2} — Sule, yang bicara 11 dari 18 detik, tanpa wajah — sehingga
+    di separuh gilirannya bingkai menyorot orang yang mendengarkan. Syarat di
+    sini: bukti mulut kuat (selisih >= MOUTH_EVIDENCE_MARGIN) di bidikan
+    beberapa orang, minimal 1,5 dtk, dan satu orang memegang >= 60%-nya; wajah
+    yang sudah dipakai penutur lain tidak diambil.
+    """
+    from collections import Counter
+    bukti = speaking_evidence(people, motion, seen, n)
+    terpakai = set(mapping.values())
+    hasil = dict(mapping)
+    penutur = sorted({sp for _, _, sp in speaker_turns if sp not in mapping},
+                     key=lambda sp: -sum(b - a for a, b, s in speaker_turns if s == sp))
+    for sp in penutur:
+        suara: Counter = Counter()
+        for a, b, s in speaker_turns:
+            if s != sp:
+                continue
+            for i in range(max(0, int(a * SAMPLE_FPS)), min(n, int(b * SAMPLE_FPS) + 1)):
+                vis = sum(1 for p in range(len(people)) if p < len(seen) and i < len(seen[p]) and seen[p][i])
+                if vis >= 2 and bukti[i] is not None:
+                    p = bukti[i][0]
+                    kotak = boxes[p][i] if boxes and p < len(boxes) and i < len(boxes[p]) else None
+                    if source_w and kotak is not None and float(kotak[1]) < MULUT_WAJAH_MIN * source_w:
+                        continue
+                    suara[p] += 1
+        jumlah = sum(suara.values())
+        if jumlah < PETA_MULUT_MIN_SAMPEL:
+            continue
+        p, v = suara.most_common(1)[0]
+        if v >= PETA_MULUT_PORSI * jumlah and p not in terpakai:
+            hasil[sp] = p
+            terpakai.add(p)
+            log.info("Penutur %d dipetakan ke orang %d dari gerak mulut (%d/%d)", sp, p + 1, v, jumlah)
+    return hasil
+
+
+MULUT_JENDELA = 0.75        # detik ke kiri dan kanan untuk pemungutan suara
+MULUT_SUARA_MIN = 4         # sampel berbukti minimum di jendela
+MULUT_PORSI_MIN = 0.6       # porsi suara untuk satu orang agar dianggap bicara
+MULUT_PORSI_TIMPA = 0.8     # ... dan untuk menimpa subjek dari peta suara-wajah
+# Wajah lebih sempit dari ini (pecahan lebar bingkai) tidak dinilai dari
+# mulutnya. Di bidikan lebar enam orang yang tertawa bersama, wajah selebar
+# ±40 piksel memberi "bukti" yang lebih banyak deraunya daripada isinya.
+MULUT_WAJAH_MIN = 0.045
+
+
+def _ikuti_mulut(centers, subject, people, motion, seen, n, boxes=None, source_w=0):
+    """
+    Di bidikan berisi beberapa orang, bingkai pindah ke wajah yang mulutnya
+    JELAS bergerak — bila peta suara tidak tahu siapa yang bicara, atau
+    menunjuk orang lain.
+
+    Diukur 21 September 2026 pada 7 klip podcast: di sampel yang bukti mulutnya
+    kuat (selisih >= MOUTH_EVIDENCE_MARGIN, yang sebelumnya terukur 90% sepakat
+    dengan pemeriksaan mata), bingkai menyorot orang LAIN 46% waktunya. Dua
+    sebab: penutur yang tidak berhasil dipetakan ke wajah (ohJbKVkrZ4U: tiga
+    penutur, satu terpetakan) jatuh ke wajah cadangan; dan diarisasi yang
+    menukar giliran dua orang bersuara mirip.
+
+    Hanya bidikan dengan dua wajah atau lebih yang disentuh: di close-up satu
+    orang, potongan penyuntingnya sendiri sudah menjawab siapa yang bicara.
+    Pemungutan suara per jendela ±MULUT_JENDELA membuat anggukan dan tawa
+    sesaat pendengar tidak memindahkan kamera.
+    """
+    bukti = speaking_evidence(people, motion, seen, n)
+    k = len(people)
+    banyak = [sum(1 for p in range(k) if p < len(seen) and i < len(seen[p]) and seen[p][i]) >= 2
+              for i in range(n)]
+    lebar = max(1, int(round(MULUT_JENDELA * SAMPLE_FPS)))
+    pilih: list[Optional[int]] = [None] * n
+    for i in range(n):
+        if not banyak[i]:
+            continue
+        suara: dict[int, int] = {}
+        jumlah = 0
+        for j in range(max(0, i - lebar), min(n, i + lebar + 1)):
+            if banyak[j] and bukti[j] is not None:
+                suara[bukti[j][0]] = suara.get(bukti[j][0], 0) + 1
+                jumlah += 1
+        if jumlah < MULUT_SUARA_MIN:
+            continue
+        p, v = max(suara.items(), key=lambda kv: kv[1])
+        dipetakan = subject[i] if i < len(subject) else None
+        if dipetakan is not None and dipetakan != p:
+            # Subjek dari peta suara ke wajah hanya ditimpa bila mulut orang
+            # itu sama sekali tidak terbaca bergerak di jendela ini, dan orang
+            # lain jelas mendominasi. Terukur di Sule klip D: tanpa syarat ini
+            # anggukan pendengar menimpa peta yang benar di dua dari enam titik.
+            if suara.get(dipetakan, 0) > 0 or v < MULUT_PORSI_TIMPA * jumlah:
+                continue
+        if v >= MULUT_PORSI_MIN * jumlah and seen[p][i] and people[p][i] is not None:
+            kotak = (boxes[p][i] if boxes and p < len(boxes) and i < len(boxes[p]) else None)
+            if source_w and kotak is not None and float(kotak[1]) < MULUT_WAJAH_MIN * source_w:
+                continue
+            pilih[i] = p
+    # Pilihan yang bertahan kurang dari MIN_SUBJECT_HOLD dibuang.
+    pilih = _settle_subject(pilih)
+    out, subj = list(centers), list(subject)
+    ganti = 0
+    for i in range(n):
+        p = pilih[i]
+        if p is None or not banyak[i] or people[p][i] is None or not seen[p][i]:
+            continue
+        if subj[i] != p:
+            ganti += 1
+        out[i] = people[p][i]
+        subj[i] = p
+    if ganti:
+        log.info("Gerak mulut membetulkan %.1f dtk bingkai ke orang yang bicara",
+                 ganti / SAMPLE_FPS)
+    return out, subj
+
+
 def _hold_person(centers: list, track: list) -> list:
     """
     Titik tengah yang selalu menunjuk satu orang.
@@ -2666,6 +2791,8 @@ def plan_reframe(source_video_path: str, segments: list[dict], *,
     if speaker_turns and people:
         mapping = assign_faces_to_speakers(people, motion, speaker_turns,
                                            len(centers), seen=seen)
+        mapping = _lengkapi_peta_dari_mulut(mapping, people, motion, seen,
+                                            speaker_turns, len(centers), boxes, source_w)
 
     # Siapa yang sedang dibidik, per sampel. Inilah yang membedakan "orang ini
     # bergerak" dari "sekarang giliran orang lain" — dua hal yang terlihat sama
@@ -2687,6 +2814,10 @@ def plan_reframe(source_video_path: str, segments: list[dict], *,
                                                   seen=seen, cuts=cuts)
         log.info("Wajah dicocokkan ke penutur: %s",
                  {f"penutur {k}": f"orang {v + 1}" for k, v in mapping.items()})
+
+    if lock_person is None and people and len(people) >= 2:
+        centers, subject = _ikuti_mulut(centers, subject, people, motion, seen,
+                                        len(centers), boxes=boxes, source_w=source_w)
 
     # Tanda tangan pengguna di linimasa mengalahkan keduanya, tapi hanya pada
     # rentang yang benar-benar ditandainya. Di luar rentang itu hasil otomatis

@@ -386,9 +386,104 @@ def _pas_rasio(r: dict, rasio_px: float, src_aspek: float, dalam: bool = False) 
     return {"x": round(x, 2), "y": round(y, 2), "w": round(w, 2), "h": round(h, 2)}
 
 
+# Ruang di sekitar petak wajah (pecahan tinggi/lebar petak) yang harus ikut
+# masuk bidang reaksi. Petaknya dari YuNet: alis sampai dagu. Tanpa ruang ini
+# rambut dan dahi terpotong — terlapor, dan terukur pada klip Devour: 3% dari
+# tinggi bingkai di atas alis, sementara kepalanya butuh ±6%.
+KEPALA_ATAS = 0.35
+KEPALA_BAWAH = 0.22
+KEPALA_SAMPING = 0.25
+# Batas tinggi bidang wajah otomatis, persen kanvas.
+GAMING_WAJAH_MIN, GAMING_WAJAH_MAKS = 40.0, 50.0
+# Porsi kotak reaksi yang boleh berada di luar panel facecam (berisi permainan).
+REAKSI_LUAR_MAKS = 0.08
+# Geser potongan permainan sejauh ini (persen) demi menghindari seluruh panel
+# masih diterima; lebih jauh dari itu hanya WAJAH yang dihindari.
+PERMAINAN_GESER_MAKS = 3.0
+
+
+def _ruang_wajah(muka) -> Optional[dict]:
+    """Petak wajah [x1,y1,x2,y2] (persen) -> kotak kepala utuh yang harus terlihat."""
+    if not muka or len(muka) != 4:
+        return None
+    x1, y1, x2, y2 = (float(v) for v in muka)
+    fw, fh = max(0.1, x2 - x1), max(0.1, y2 - y1)
+    a = max(0.0, x1 - KEPALA_SAMPING * fw)
+    b = min(100.0, x2 + KEPALA_SAMPING * fw)
+    c = max(0.0, y1 - KEPALA_ATAS * fh)
+    d = min(100.0, y2 + KEPALA_BAWAH * fh)
+    return {"x": a, "y": c, "w": b - a, "h": d - c}
+
+
+def _pilih(lo: float, hi: float, plo: float, phi: float, ingin: float) -> float:
+    """Nilai di [lo,hi] (syarat) yang sebisanya juga di [plo,phi], sedekat mungkin ke `ingin`."""
+    if lo > hi:
+        lo = hi = (lo + hi) / 2
+    a, b = max(lo, plo), min(hi, phi)
+    if a <= b:
+        return min(max(ingin, a), b)
+    # Tidak bisa dua-duanya: syarat menang, dan sedekat mungkin ke panel.
+    return min(max((plo + phi) / 2, lo), hi)
+
+
+def kotak_reaksi(kotak: dict, muka, rasio_px: float, src_aspek: float) -> dict:
+    """
+    Potongan bidang reaksi: rasionya sama dengan bidangnya, memuat SELURUH
+    kepala, dan sebisanya tetap di dalam panel facecam.
+
+    Tanpa `muka` (petak wajah tidak diketahui — kotak yang diseret pengguna)
+    sama dengan `_pas_rasio(..., dalam=True)` seperti dulu.
+    """
+    dasar = _pas_rasio(kotak, rasio_px, src_aspek, dalam=True)
+    butuh = _ruang_wajah(muka)
+    if butuh is None:
+        return dasar
+    k = rasio_px / max(1e-6, src_aspek)
+    h = max(float(dasar["h"]), butuh["h"], butuh["w"] / k)
+    w = h * k
+    if w > 100.0:
+        w, h = 100.0, 100.0 / k
+    if h > 100.0:
+        h, w = 100.0, 100.0 * k
+    px, py = float(kotak["x"]), float(kotak["y"])
+    pw, ph = float(kotak["w"]), float(kotak["h"])
+    x = _pilih(butuh["x"] + butuh["w"] - w, butuh["x"], px, px + pw - w,
+               butuh["x"] + butuh["w"] / 2 - w / 2)
+    y = _pilih(butuh["y"] + butuh["h"] - h, butuh["y"], py, py + ph - h,
+               butuh["y"] + butuh["h"] / 2 - h / 2)
+    x = min(max(0.0, x), 100.0 - w)
+    y = min(max(0.0, y), 100.0 - h)
+    return {"x": round(x, 2), "y": round(y, 2), "w": round(w, 2), "h": round(h, 2)}
+
+
+def _porsi_luar(r: dict, panel: dict) -> float:
+    """Porsi luas `r` yang berada di luar `panel`."""
+    ix = max(0.0, min(r["x"] + r["w"], panel["x"] + panel["w"]) - max(r["x"], panel["x"]))
+    iy = max(0.0, min(r["y"] + r["h"], panel["y"] + panel["h"]) - max(r["y"], panel["y"]))
+    luas = max(1e-6, r["w"] * r["h"])
+    return 1.0 - (ix * iy) / luas
+
+
+def tinggi_wajah_otomatis(posisi: list, src_aspek: float, out_w: int, out_h: int) -> float:
+    """Tinggi bidang wajah terendah (40-50%) yang kotak reaksinya tetap di panel."""
+    terbaik, nilai_terbaik = GAMING_WAJAH_TINGGI, None
+    langkah = [GAMING_WAJAH_MIN + 2.5 * i
+               for i in range(int((GAMING_WAJAH_MAKS - GAMING_WAJAH_MIN) / 2.5) + 1)]
+    for wajah in langkah:
+        rasio = out_w / max(1.0, out_h * wajah / 100.0)
+        luar = max(_porsi_luar(kotak_reaksi(p["facecam"], p["facecam"].get("awan_kotak"),
+                                            rasio, src_aspek), p["facecam"])
+                   for p in posisi)
+        if luar <= REAKSI_LUAR_MAKS:
+            return wajah
+        if nilai_terbaik is None or luar < nilai_terbaik - 1e-6:
+            terbaik, nilai_terbaik = wajah, luar
+    return terbaik
+
+
 def susun_layout_gaming(facecam, *, src_w: int = 1920, src_h: int = 1080,
                         out_w: int = 1080, out_h: int = 1920,
-                        wajah: float = GAMING_WAJAH_TINGGI,
+                        wajah: Optional[float] = None,
                         permainan: str = "isi") -> dict:
     """
     Kotak facecam -> susunan dua bidang yang dimengerti build_layout_graph.
@@ -410,6 +505,11 @@ def susun_layout_gaming(facecam, *, src_w: int = 1920, src_h: int = 1080,
     posisi = facecam if isinstance(facecam, list) else [{"t": 0.0, "facecam": facecam}]
     src_aspek = src_w / max(1, src_h)
     out_aspek = out_w / max(1, out_h)
+    if wajah is None:
+        # Tinggi bidang wajah mengikuti BENTUK panelnya: panel tegak butuh
+        # bidang yang lebih tinggi supaya kepalanya muat tanpa ikut menyedot
+        # permainan di sebelahnya.
+        wajah = tinggi_wajah_otomatis(posisi, src_aspek, out_w, out_h)
     wajah = max(15.0, min(75.0, float(wajah)))
     if permainan == "utuh":
         main_src = {"x": 0, "y": 0, "w": 100, "h": 100}
@@ -421,14 +521,23 @@ def susun_layout_gaming(facecam, *, src_w: int = 1920, src_h: int = 1080,
         main_dst = {"x": 0, "y": round(wajah, 2), "w": 100, "h": round(100 - wajah, 2)}
         main_src = _permainan_tanpa_wajah(
             [p["facecam"] for p in posisi],
-            (out_w * main_dst["w"]) / (out_h * main_dst["h"]), src_aspek)
+            (out_w * main_dst["w"]) / (out_h * main_dst["h"]), src_aspek,
+            wajah_saja=[_ruang_wajah(p["facecam"].get("awan_kotak")) or p["facecam"]
+                        for p in posisi])
     wajah_dst = {"x": 0, "y": 0, "w": 100, "h": round(wajah, 2)}
     rasio_wajah = (out_w * wajah_dst["w"]) / (out_h * wajah_dst["h"])
     reaksi = []
     for p in posisi:
         kotak = {k: round(float(p["facecam"][k]), 2) for k in ("x", "y", "w", "h")}
-        reaksi.append({"t": round(float(p["t"]), 2), "kotak": kotak,
-                       "src": _pas_rasio(kotak, rasio_wajah, src_aspek, dalam=True)})
+        muka = p["facecam"].get("awan_kotak")
+        muka = [round(float(v), 2) for v in muka] if muka else None
+        r = {"t": round(float(p["t"]), 2), "kotak": kotak,
+             "src": kotak_reaksi(kotak, muka, rasio_wajah, src_aspek)}
+        if muka:
+            # Disimpan supaya editor menghitung ulang potongan yang sama saat
+            # tinggi bidang wajah digeser.
+            r["muka"] = muka
+        reaksi.append(r)
     return {
         "background": "blur",
         # Setelan susunan, supaya editor bisa menampilkan dan mengubahnya.
@@ -443,12 +552,27 @@ def susun_layout_gaming(facecam, *, src_w: int = 1920, src_h: int = 1080,
     }
 
 
-def _permainan_tanpa_wajah(facecams: list, rasio_px: float, src_aspek: float) -> dict:
+def _permainan_tanpa_wajah(facecams: list, rasio_px: float, src_aspek: float,
+                          wajah_saja: Optional[list] = None) -> dict:
     """
     Potongan permainan setinggi bingkai berasio `rasio_px`, sedekat mungkin ke
     tengah, yang tidak bersinggungan dengan facecam mana pun di klip ini.
     Bila tidak ada tempat seperti itu, potongan tengah.
+
+    Menghindari SELURUH panel bisa mendorong permainan jauh dari tengah —
+    terukur 4,6% pada The Empty Eye, padahal wajahnya di x >= 81% dan tidak
+    akan pernah masuk potongan tengah. Jadi bila menghindari panel menuntut
+    geser lebih dari PERMAINAN_GESER_MAKS, yang dihindari hanya kepala di
+    dalamnya (`wajah_saja`): sepotong tepi panel di pojok bawah jauh lebih
+    ringan daripada permainan yang tidak di tengah.
     """
+    if wajah_saja:
+        hasil = _permainan_tanpa_wajah(facecams, rasio_px, src_aspek)
+        k = rasio_px / max(1e-6, src_aspek)
+        w = min(100.0, 100.0 * k)
+        if abs(hasil["x"] - (50.0 - w / 2)) > PERMAINAN_GESER_MAKS:
+            return _permainan_tanpa_wajah(wajah_saja, rasio_px, src_aspek)
+        return hasil
     k = rasio_px / max(1e-6, src_aspek)
     h = 100.0
     w = min(100.0, h * k)
@@ -606,7 +730,11 @@ def _cabang_kunci(k: dict, i: int, masuk: str, keluar: str, *,
             name=f"fk{i}", person=int(orang) if orang is not None else None)
         return f"{masuk}{rantai},setsar=1{keluar}"
 
-    if mode == "center":
+    # Usulan sutradara tidak pernah jatuh ke bilah kabur — pemiliknya
+    # memutuskan layar harus selalu penuh. Rencana wajah/gerakan yang tidak
+    # terpakai di kunci sutradara jadi potong tengah, yang tetap memenuhi layar.
+    if mode == "center" or (k.get("asal") in ("ai", "otomatis")
+                            and mode in ("smart", "motion")):
         f = CENTER_FILTERS.get(aspect_ratio) or CENTER_FILTERS["9:16"]
         return f"{masuk}{f}{keluar}"
 
@@ -925,13 +1053,16 @@ def render_clip(
 
     vid = video_id or extract_id_from_filename(src.name) or "clip"
     first = segments[0]
+    # Folder klip milik profil yang meminta render ini (services/profil.py).
+    from . import profil as _profil
+    folder_keluar = _profil.folder_klip(_profil.kini())
     out_name = build_clip_filename(
         title=title or vid,
         index=clip_index,
         start=float(first["start"]),
-        existing=CLIPS_DIR,
+        existing=folder_keluar,
     )
-    out_path = CLIPS_DIR / out_name
+    out_path = folder_keluar / out_name
 
     workdir = Path(tempfile.mkdtemp(prefix="omniclip_render_"))
     try:
@@ -1288,25 +1419,41 @@ def render_clip(
             vout, aout = "[vjadi]", "[ajadi]"
             total_duration += card.seconds
 
-        cmd = ["ffmpeg", "-y", "-hide_banner", "-nostdin", "-loglevel", "error",
-               "-progress", "pipe:1", *inputs,
-               "-filter_complex", graph,
-               "-map", vout, "-map", aout]
+        from . import enkoder
 
-        cmd += [
-            "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
-            "-pix_fmt", "yuv420p", "-profile:v", "high", "-level", "4.1",
-            # Tanpa `-threads`: x264 memilih sendiri, dan terukur 10% lebih
-            # cepat daripada patokan 4 yang dulu. Antrean render sudah menjamin
-            # hanya satu render berjalan, jadi tidak ada yang perlu dijatah.
-            "-r", "30", "-g", "60",
-            "-c:a", "aac", "-b:a", "128k", "-ar", "48000", "-ac", "2",
-            "-movflags", "+faststart",
-            str(out_path),
-        ]
+        def perintah(enc: dict) -> list[str]:
+            graf, v = graph, vout
+            if enc["saring"]:
+                graf += f";{vout}{enc['saring']}[venc]"
+                v = "[venc]"
+            return [enc["ffmpeg"], "-y", "-hide_banner", "-nostdin", "-loglevel", "error",
+                    "-progress", "pipe:1", *enc["global"], *inputs,
+                    "-filter_complex", graf,
+                    "-map", v, "-map", aout,
+                    # Encoder GPU bila ada dan terbukti bekerja — lihat
+                    # services/enkoder.py. x264 tanpa `-threads`: ia memilih
+                    # sendiri, terukur 10% lebih cepat daripada patokan 4.
+                    *enc["video"],
+                    "-r", "30", "-g", "60",
+                    "-c:a", "aac", "-b:a", "128k", "-ar", "48000", "-ac", "2",
+                    "-movflags", "+faststart",
+                    str(out_path)]
 
+        enc = enkoder.pilih()
+        cmd = perintah(enc)
         rc, stderr_text = _run_ffmpeg(cmd, duration=total_duration,
                                       on_progress=on_progress, should_cancel=should_cancel)
+        batal = bool(should_cancel and should_cancel())
+        if rc != 0 and enc["nama"] != "x264" and not batal:
+            # GPU yang lolos uji satu detik masih bisa gagal pada klip nyata
+            # (memori video habis, driver). Pengguna tidak boleh menanggungnya.
+            log.warning("Render dengan %s gagal: %s", enc["nama"], stderr_text[-300:])
+            enkoder.tandai_gagal(enc)
+            if out_path.exists():
+                out_path.unlink()
+            cmd = perintah(enkoder.X264)
+            rc, stderr_text = _run_ffmpeg(cmd, duration=total_duration,
+                                          on_progress=on_progress, should_cancel=should_cancel)
 
         if rc != 0:
             log_path = LOGS_DIR / f"render_{out_name}.log"
@@ -1344,7 +1491,7 @@ def render_clip(
             "subtitle_kedua": subtitle_kedua,
             "created_at": time.time(),
         }
-        (CLIPS_DIR / out_name.replace(".mp4", ".json")).write_text(
+        (folder_keluar / out_name.replace(".mp4", ".json")).write_text(
             json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
         )
 
@@ -1352,6 +1499,8 @@ def render_clip(
             "success": True,
             "clip_path": str(out_path),
             "clip_name": out_name,
+            "profil_id": _profil.kini(),
+            "kategori": _profil.kategori_klip(_profil.kini()),
             "duration": round(total_duration, 3),
             "file_size": out_path.stat().st_size if out_path.exists() else 0,
             "frame_mode": frame_used,
@@ -1383,24 +1532,25 @@ def render_clip(
 _DAFTAR_KLIP: tuple[float, int, list[dict]] | None = None
 
 
-def list_local_clips() -> list[dict]:
-    """Klip hasil render beserta metadata sidecar-nya."""
+def list_local_clips(folder: Optional[Path] = None) -> list[dict]:
+    """Klip hasil render beserta metadata sidecar-nya, dari folder satu profil."""
     global _DAFTAR_KLIP
 
     clips: list[dict] = []
-    if not CLIPS_DIR.is_dir():
+    folder = Path(folder or CLIPS_DIR)
+    if not folder.is_dir():
         return clips
 
     try:
-        tanda = CLIPS_DIR.stat().st_mtime
+        tanda = (str(folder), folder.stat().st_mtime)
     except OSError:
-        tanda = 0.0
+        tanda = (str(folder), 0.0)
     if _DAFTAR_KLIP is not None and _DAFTAR_KLIP[0] == tanda:
         # Salinan dangkal: pemanggil menambahkan `web_url` ke tiap entri, dan
         # menyerahkan objek simpanan berarti ia ikut tertulis berkali-kali.
         return [dict(c) for c in _DAFTAR_KLIP[2]]
 
-    for path in CLIPS_DIR.glob("*.mp4"):
+    for path in folder.glob("*.mp4"):
         stat = path.stat()
         entry = {
             "file_name": path.name,

@@ -42,13 +42,22 @@ INTI = 2
 
 _antrean: "queue.Queue[Path]" = queue.Queue()
 _diantre: set[str] = set()
+# Sumber yang sedang ditunggu Studio: dibuat tanpa prioritas rendah dan
+# didahulukan dari antrean.
+_diburu: set[str] = set()
 _kunci = threading.Lock()
 _pekerja: threading.Thread | None = None
 
 
+# Naik setiap kali bentuk salinannya berubah. v2: ikut membawa suara, supaya
+# salinan yang sama bisa diputar di Studio (lihat `untuk_pratinjau`).
+VERSI = "v2"
+
+
 def _nama(src: Path) -> Path:
     st = src.stat()
-    sidik = hashlib.sha1(f"{src.resolve()}|{st.st_size}|{int(st.st_mtime)}".encode()).hexdigest()[:16]
+    sidik = hashlib.sha1(f"{src.resolve()}|{st.st_size}|{int(st.st_mtime)}|{VERSI}"
+                         .encode()).hexdigest()[:16]
     return PROKSI_DIR / f"{sidik}.mp4"
 
 
@@ -95,8 +104,13 @@ def _buat(src: Path, tujuan: Path) -> None:
         return
     sementara = tujuan.with_suffix(".tmp.mp4")
     cmd = ["ffmpeg", "-y", "-hide_banner", "-nostdin", "-loglevel", "error",
-           "-threads", str(INTI), "-i", str(src), "-an",
+           "-threads", str(INTI), "-i", str(src),
            "-vf", f"scale={LEBAR}:-2",
+           # Suara ikut: salinan ini juga yang diputar Studio. Firefox
+           # memutar sumber 4K VP9 pada 0,44x kecepatan — terlihat macet atau
+           # hitam (terukur 21 September 2026).
+           "-map", "0:v:0", "-map", "0:a:0?", "-c:a", "aac", "-b:a", "128k",
+           "-movflags", "+faststart",
            # veryfast/crf 30: 9 MB per menit; deteksi wajah tidak berubah
            # (66,7% / 66,9% / 66,0% pada crf 26/30/33).
            "-c:v", "libx264", "-preset", "veryfast", "-crf", "30",
@@ -106,7 +120,9 @@ def _buat(src: Path, tujuan: Path) -> None:
            str(sementara)]
     try:
         log.info("Membuat salinan analisis: %s", src.name)
-        hasil = jalankan(cmd, rendah=True)
+        with _kunci:
+            buru = str(src) in _diburu
+        hasil = jalankan(cmd, rendah=not buru)
         if hasil.returncode == 0 and sementara.is_file():
             sementara.replace(tujuan)
             tujuan.with_suffix(".sumber").write_text(str(src.resolve()), encoding="utf-8")
@@ -119,9 +135,23 @@ def _buat(src: Path, tujuan: Path) -> None:
         tujuan.with_suffix(".kunci").unlink(missing_ok=True)
 
 
-def _kerja() -> None:
+def _ambil_berikut() -> Path:
+    """Antrean berikutnya, dengan yang sedang ditunggu Studio didahulukan."""
     while True:
         src = _antrean.get()
+        with _kunci:
+            if str(src) in _diburu:
+                return src
+            buru = [q for q in list(_antrean.queue) if str(q) in _diburu]
+        if not buru:
+            return src
+        # Kembalikan ke belakang; yang diburu keluar lebih dulu di putaran ini.
+        _antrean.put(src)
+
+
+def _kerja() -> None:
+    while True:
+        src = _ambil_berikut()
         try:
             _buat(src, _nama(src))
         except Exception as e:                       # jangan pernah mematikan pekerja
@@ -129,6 +159,7 @@ def _kerja() -> None:
         finally:
             with _kunci:
                 _diantre.discard(str(src))
+                _diburu.discard(str(src))
 
 
 def bersihkan_yatim() -> int:
@@ -141,7 +172,11 @@ def bersihkan_yatim() -> int:
             asal = Path(catatan.read_text(encoding="utf-8").strip())
         except OSError:
             continue
-        if not asal.is_file():
+        try:
+            usang = asal.is_file() and _nama(asal).stem != catatan.stem
+        except OSError:
+            usang = False
+        if not asal.is_file() or usang:
             catatan.with_suffix(".mp4").unlink(missing_ok=True)
             catatan.unlink(missing_ok=True)
             dibuang += 1
@@ -199,3 +234,26 @@ def untuk_analisis(src: Path) -> Path:
         return tujuan
     siapkan(src)
     return src
+
+
+def untuk_pratinjau(src: Path) -> Path | None:
+    """
+    Salinan yang diputar Studio bila sudah siap; None bila belum (pembuatannya
+    didahulukan). Sumber kecil (<= AMBANG_LEBAR) tidak butuh salinan dan
+    tidak pernah mendapatkannya — pemanggil memutar sumbernya saja.
+    """
+    src = Path(src)
+    try:
+        tujuan = _nama(src)
+    except OSError:
+        return None
+    if tujuan.is_file():
+        return tujuan
+    with _kunci:
+        _diburu.add(str(src))
+    siapkan(src)
+    return None
+
+
+def butuh_salinan(src: Path) -> bool:
+    return _lebar(Path(src)) > AMBANG_LEBAR

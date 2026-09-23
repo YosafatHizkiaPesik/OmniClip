@@ -43,6 +43,8 @@ class AutoClipRequest(BaseModel):
     # Nama model Gemini pilihan pengguna; kosong = pakai urutan bawaan.
     gemini_model: Optional[str] = None
     force: bool = False  # abaikan hasil analisis yang sudah tersimpan
+    # Jalur audio (sulih suara) yang diunduh, mis. "en". Kosong = suara asli.
+    audio_lang: Optional[str] = Field(None, max_length=16, pattern=r"^[A-Za-z0-9-]*$")
 
 
 class SegmentModel(BaseModel):
@@ -308,6 +310,9 @@ class RenderClipRequest(BaseModel):
     title: str = ""
     hashtags: List[str] = Field(default_factory=list)
     caption_style: Optional[CaptionStyleModel] = None
+    # Unggah sesudah render, untuk render ini saja: {"youtube", "drive",
+    # "privasi"}. None = ikut setelan unggah otomatis profil.
+    unggah: Optional[Dict[str, Any]] = None
 
 
 def _resolve_video_id(reference: str) -> str:
@@ -326,8 +331,22 @@ async def start_auto_clip(req: AutoClipRequest):
     tahapan datang dari server — tidak ada progres yang disimulasikan di klien.
     """
     video_id = _resolve_video_id(req.video_id)
+    # Kartu Partitur-nya milik profil yang meminta — termasuk bila hasil
+    # analisis video ini sudah ada dari profil lain dan langsung dipakai ulang.
+    from ..repos import profil as profil_repo
+    from ..services import profil
+    profil_repo.tandai_video(profil.kini(), video_id)
 
-    if not req.force:
+    # Jalur audio yang diminta tidak sama dengan yang ada di disk: videonya
+    # harus diunduh ulang, jadi hasil tersimpan tidak boleh langsung dipakai.
+    beda_audio = False
+    if req.audio_lang:
+        from ..services.paths import find_local_video
+        from ..services.ytdlp import audio_cocok, bahasa_audio
+        lokal = find_local_video(video_id)
+        beda_audio = lokal is not None and not audio_cocok(bahasa_audio(lokal), req.audio_lang)
+
+    if not req.force and not beda_audio:
         cached = analyses_repo.latest_for_video(video_id)
         if cached:
             if cached["result"].get("has_transcript") is False:
@@ -355,9 +374,10 @@ async def start_auto_clip(req: AutoClipRequest):
             "speakers": req.speakers,
             "use_gemini": req.use_gemini,
             "gemini_model": req.gemini_model,
+            "audio_lang": req.audio_lang,
         },
         video_id=video_id,
-        dedupe_key=f"auto_clip:{video_id}:{req.gemini_model or 'auto'}",
+        dedupe_key=f"auto_clip:{video_id}:{req.gemini_model or 'auto'}:{req.audio_lang or 'asli'}",
     )
     return {"job_id": job_id, "created": created, "cached": False, "video_id": video_id}
 
@@ -734,16 +754,14 @@ async def clip_terjemah(req: TerjemahRequest):
     from ..services.peringkat_model import rantai
     from ..services.terjemah import terjemahkan
 
-    api_key = get_api_key()
-    if not api_key:
-        raise AppError("Terjemahan butuh kunci Gemini. Isi di Pengaturan → Model AI.",
-                       code="AI_KEY_MISSING", status=409)
+    # Tanpa kunci Gemini tetap bisa: terjemah.py jatuh ke Google Terjemahan.
+    api_key = get_api_key() or ""
     vid = _resolve_video_id(req.video_id)
     video = media_repo.get_video(vid) or {}
     try:
         return await asyncio.to_thread(
             terjemahkan, req.teks, req.bahasa.strip(), api_key=api_key,
-            models=rantai(api_key, get_model_override() or None),
+            models=rantai(api_key, get_model_override() or None) if api_key else [],
             konteks=(video.get("title") or "")[:200])
     except Exception as e:
         raise AppError(f"Terjemahan gagal: {str(e)[:200]}",
@@ -911,6 +929,8 @@ async def render_clip(req: RenderClipRequest):
             "clip_index": req.clip_index,
             "caption_style": (req.caption_style.model_dump(exclude_none=True)
                               if req.caption_style else None),
+            # Pilihan unggah untuk render ini saja; None = setelan profil.
+            "unggah": req.unggah,
         },
         video_id=video_id,
     )
@@ -919,9 +939,13 @@ async def render_clip(req: RenderClipRequest):
 
 @router.get("/clips")
 async def get_clips():
-    clips = list_local_clips()
+    from ..services import profil
+    pid = profil.kini()
+    kategori = profil.kategori_klip(pid)
+    clips = list_local_clips(profil.folder_klip(pid))
     for c in clips:
-        c["web_url"] = f"/api/media/edited_clips/{c['file_name']}"
+        c["kategori"] = kategori
+        c["web_url"] = f"/api/media/{kategori}/{c['file_name']}"
         # Subtitle dan sisipan tiap klip tidak ditampilkan di halaman ini, tapi
         # ikut terkirim: 357 KB untuk 51 klip, dan halaman ini dibuka tiap kali
         # pengguna kembali ke daftar. Keduanya ada di dalam `metadata`, dan
@@ -936,7 +960,8 @@ async def get_clips():
 
 @router.delete("/clips/{filename}")
 async def delete_clip(filename: str):
-    path = safe_media_path("edited_clips", filename)
+    from ..services import profil
+    path = safe_media_path(profil.kategori_klip(profil.kini()), filename)
     path.unlink()
     sidecar = path.with_suffix(".json")
     if sidecar.exists():
@@ -1007,6 +1032,37 @@ async def save_clips(video_id: str, req: SaveClipsRequest):
 class FacecamRequest(BaseModel):
     video_id: str
     segments: List[SegmentModel]
+
+
+# Isi klip tidak berubah selama segmennya sama; Studio menanyakannya setiap
+# kali klip dibuka.
+_JENIS_CACHE: dict[tuple, dict] = {}
+
+
+@router.post("/clip-jenis")
+async def clip_jenis(req: FacecamRequest):
+    """Bingkai bawaan untuk klip ini: game, ikuti gerakan, atau ikuti wajah."""
+    import asyncio
+
+    from ..services.paths import find_local_video
+    from ..services.sutradara_ai import jenis_klip_tersimpan
+
+    video_id = _resolve_video_id(req.video_id)
+    segments = [{"start": round(s.start, 3), "end": round(s.end, 3)}
+                for s in req.segments if s.end - s.start > 0.2]
+    if not segments:
+        raise NotFound("Rentang klip tidak valid.")
+    key = (video_id, tuple((s["start"], s["end"]) for s in segments))
+    if key in _JENIS_CACHE:
+        return _JENIS_CACHE[key]
+    src = find_local_video(video_id)
+    if not src:
+        raise NotFound("Video sumber belum diunduh.")
+    hasil = await asyncio.to_thread(jenis_klip_tersimpan, video_id, src, segments)
+    if len(_JENIS_CACHE) >= 200:
+        _JENIS_CACHE.clear()
+    _JENIS_CACHE[key] = hasil
+    return hasil
 
 
 @router.post("/clip-facecam")

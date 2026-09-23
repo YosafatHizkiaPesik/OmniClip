@@ -276,3 +276,94 @@ def perkiraan_pemain(src, durasi: float) -> Optional[int]:
     log.info("Rekaman gameplay: facecam di x=%.0f%% y=%.0f%%, sebaran wajah %.3f -> %d orang",
              kecil[0]["x"], kecil[0]["y"], sebaran, jumlah)
     return jumlah
+
+
+# --- Video tanpa wajah: penutur kecil adalah suara lain, bukan orang ---------------
+PENUTUR_KECIL = 0.12      # porsi baris di bawah ini dilebur pada video tanpa wajah
+TANPA_WAJAH_TITIK = (0.15, 0.35, 0.55, 0.75)
+# Kartun dan rekaman game sesekali memunculkan "wajah" palsu (tokoh gambar);
+# yang dihitung porsinya, bukan ada-tidaknya.
+TANPA_WAJAH_PORSI = 0.25     # terukur: kartun tanpa orang 0,18; video berorang 0,62-1,00
+
+
+def tanpa_wajah(src, durasi: float) -> bool:
+    """
+    True bila di empat titik video (masing-masing 3 dtk) tidak ada satu wajah
+    pun — gameplay tanpa facecam, kartun, rekaman layar.
+
+    Di video seperti itu jumlah penutur hanya bisa ditebak dari suara, dan
+    tebakannya memecah efek suara serta suara tokoh game menjadi "orang".
+    """
+    import numpy as np
+
+    from .media import probe
+    from .reframe import DETECT_NMS, MODEL_PATH, _sample_frames
+
+    try:
+        import cv2
+        info = probe(src)
+        w, h = int(info.get("width") or 0), int(info.get("height") or 0)
+    except Exception:
+        return False
+    if not w or not h or durasi <= 20 or not MODEL_PATH.is_file():
+        return False
+    sw = 480
+    sh = max(2, int(round(sw * h / w / 2)) * 2)
+    return porsi_berwajah(src, durasi) < TANPA_WAJAH_PORSI
+
+
+def porsi_berwajah(src, durasi: float) -> float:
+    """Porsi bingkai contoh (empat titik x 3 dtk) yang memuat wajah."""
+    import numpy as np
+
+    from .media import probe
+    from .reframe import DETECT_NMS, MODEL_PATH, _sample_frames
+    import cv2
+    info = probe(src)
+    w, h = int(info.get("width") or 0), int(info.get("height") or 0)
+    sw = 480
+    sh = max(2, int(round(sw * h / w / 2)) * 2)
+    det = cv2.FaceDetectorYN.create(str(MODEL_PATH), "", (sw, sh), 0.7, DETECT_NMS, 5000)
+    ada = total = 0
+    for bagian in TANPA_WAJAH_TITIK:
+        for buf in _sample_frames(src, durasi * bagian, 3.0, sw, sh):
+            frame = np.frombuffer(buf, dtype=np.uint8).reshape(sh, sw, 3)
+            _, faces = det.detect(frame)
+            total += 1
+            ada += int(faces is not None and len(faces) > 0)
+    return ada / max(1, total)
+
+
+def lebur_penutur_kecil(labels: list[int]) -> tuple[list[int], int]:
+    """
+    Label penutur yang porsinya < PENUTUR_KECIL dilebur ke penutur besar
+    terdekat dalam waktu. Mengembalikan (label baru, jumlah penutur).
+    """
+    from collections import Counter
+    n = len(labels)
+    if not n:
+        return labels, 0
+    porsi = Counter(labels)
+    besar = {k for k, v in porsi.items() if v / n >= PENUTUR_KECIL and k >= 0}
+    if not besar:
+        besar = {porsi.most_common(1)[0][0]}
+    keluar = list(labels)
+    for i, l in enumerate(labels):
+        if l in besar:
+            continue
+        # Tetangga terdekat yang milik penutur besar.
+        for d in range(1, n):
+            kiri = labels[i - d] if i - d >= 0 else None
+            kanan = labels[i + d] if i + d < n else None
+            if kiri in besar:
+                keluar[i] = kiri
+                break
+            if kanan in besar:
+                keluar[i] = kanan
+                break
+    # Nomor dirapatkan 0..k-1 menurut kemunculan pertama.
+    peta: dict[int, int] = {}
+    for l in keluar:
+        if l not in peta:
+            peta[l] = len(peta)
+    return [peta[l] for l in keluar], len(peta)

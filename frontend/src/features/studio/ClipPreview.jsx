@@ -80,6 +80,8 @@ export default function ClipPreview({
   reframe = null,          // {available, crop_w, source_w, keyframes:[[t,x]]}
   reframeLoading = false,
   layout = null,           // {background, frames:[{id,label,src,dst,fit}]}
+  cerminSiap = 0,          // bidang terbanyak di potongan Susun/game klip ini
+  onKeduaStyleChange = null, // menggeser/mengubah ukuran subtitle KEDUA di atas gambar
   onLayoutChange = null,   // menggeser kotak TUJUAN langsung di atas hasil
   frameEditing = false,    // kotak bingkai hanya bisa dipegang di tab Bingkai
   selectedFrameId = null,
@@ -91,8 +93,11 @@ export default function ClipPreview({
   const videoRef = externalRef ?? innerRef;
   const bgRef = useRef(null);
   const boxRef = useRef(null);
-  // Elemen video tambahan untuk bingkai ke-2 dan seterusnya. Bingkai pertama
-  // memakai pemutar utama supaya suara dan waktu tetap datang dari satu tempat.
+  // Pemutar cermin untuk TIAP bidang susunan. Selalu terpasang (disembunyikan
+  // saat tidak dipakai) dan tetap disinkronkan, supaya masuk ke potongan
+  // "Susun" tidak memuat video dari nol — dulu terlihat sebagai setengah
+  // detik hitam tiap kali sutradara berpindah ke bidikan reaksi. Suara dan
+  // waktu klip selalu datang dari satu pemutar utama yang tidak pernah diganti.
   const extraRefs = useRef([]);
   // Elemen video tiap bingkai, dipetakan dari id-nya. Bingkai pengikut
   // menggeser videonya tiap frame lewat ref.
@@ -222,7 +227,10 @@ export default function ClipPreview({
   const canvasAspect = CANVAS_ASPECT[aspectRatio] ?? 9 / 16;
 
   const secondaries = useCallback(
-    () => [bgRef.current, ...extraRefs.current].filter(Boolean), []);
+    () => [bgRef.current, ...extraRefs.current.filter((el) => el && el.dataset.tampil === '1')]
+      .filter(Boolean), []);
+  const cerminTersembunyi = useCallback(
+    () => extraRefs.current.filter((el) => el && el.dataset.tampil !== '1'), []);
 
   /**
    * Memasang pemutar utama, dan MENYERAHKAN posisinya saat elemennya berganti.
@@ -279,9 +287,12 @@ export default function ClipPreview({
   // Daftar cermin dipangkas saat jumlah bingkai berkurang. Tanpa ini, elemen
   // yang sudah dilepas React tetap tercatat di sini dan loop sinkronisasi
   // menyetel `currentTime` pada node yang tidak lagi ada di halaman.
-  useEffect(() => {
-    extraRefs.current.length = Math.max(0, frames.length - 1);
-  }, [frames.length]);
+  // Jumlah cermin: sebanyak bidang yang sedang tampil, atau sebanyak yang
+  // AKAN dibutuhkan klip ini (`cerminSiap`, dari potongan Susun/game di lajur
+  // Bingkai). Cermin yang menunggu tetap dirender transparan supaya siap
+  // pakai — tapi itu berbiaya: terukur 111 lawan 61 bingkai terbuang per 6
+  // dtk di Firefox. Klip tanpa potongan susunan tidak menanggungnya sama sekali.
+  const jumlahCermin = Math.max(useLayout ? frames.length : 0, cerminSiap);
 
   /**
    * Posisi crop pada waktu klip tertentu.
@@ -372,6 +383,12 @@ export default function ClipPreview({
           if (v.paused && !m.paused) m.pause();
           else if (!v.paused && m.paused) m.play().catch(() => { /* diabaikan */ });
         }
+        // Cermin yang sedang tidak tampil: diam, tapi detiknya dijaga dekat
+        // pemutar utama. Begitu potongan "Susun" tiba, gambarnya sudah ada.
+        for (const m of cerminTersembunyi()) {
+          if (!m.paused) m.pause();
+          if (Math.abs(m.currentTime - v.currentTime) > 1.0) m.currentTime = v.currentTime;
+        }
         if (Math.abs(t - lastPushed) > 0.05) {
           lastPushed = t;
           setClipTime(t);
@@ -382,7 +399,7 @@ export default function ClipPreview({
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, [videoRef, segments, segIndex, offsets, constrained, useReframe, cropXAt,
-      reframe, secondaries, useLayout, frames]);
+      reframe, secondaries, cerminTersembunyi, useLayout, frames]);
 
   const handleTimeUpdate = () => {
     const v = videoRef.current;
@@ -635,12 +652,14 @@ export default function ClipPreview({
    * benar-benar nilai yang dikirim ke ffmpeg — bukan angka pratinjau yang nanti
    * diterjemahkan lagi.
    */
-  const startDrag = useCallback((mode) => (e) => {
-    if (!onStyleChange || !boxH || !boxW) return;
+  // Satu mesin seret untuk dua subtitle: `gaya` dan `ubah` milik subtitle
+  // utama (gaya klip) atau subtitle kedua (terjemahan, gayanya sendiri).
+  const seret = (gaya, ubah, penanda = '') => (mode) => (e) => {
+    if (!ubah || !boxH || !boxW) return;
     e.preventDefault();
     e.stopPropagation();
     e.currentTarget.setPointerCapture?.(e.pointerId);
-    setDragging(mode);
+    setDragging(penanda + mode);
 
     const y0 = e.clientY;
     const x0 = e.clientX;
@@ -648,13 +667,13 @@ export default function ClipPreview({
     // yaitu kotak subtitle itu sendiri — karena tingginya bergantung pada
     // berapa baris yang terbentuk, dan itu hanya diketahui setelah dirender.
     const captionRect = e.currentTarget.parentElement?.getBoundingClientRect();
-    const startWmX = style?.wm_x ?? 92;
-    const startWmY = style?.wm_y ?? 95;
-    const startMargin = style?.margin_v ?? 300;
-    const startPosX = style?.pos_x ?? 50;
-    const startSize = style?.size ?? 96;
-    const startBoxW = style?.box_w ?? 84;
-    const anchorTop = style?.position === 'top';
+    const startWmX = gaya?.wm_x ?? 92;
+    const startWmY = gaya?.wm_y ?? 95;
+    const startMargin = gaya?.margin_v ?? 300;
+    const startPosX = gaya?.pos_x ?? 50;
+    const startSize = gaya?.size ?? 96;
+    const startBoxW = gaya?.box_w ?? 84;
+    const anchorTop = gaya?.position === 'top';
     const perPx = CANVAS_H / boxH;      // piksel layar -> satuan kanvas
 
     // Tepi kotak saat seretan dimulai. Menahan salah satu tepi tetap di
@@ -675,7 +694,7 @@ export default function ClipPreview({
         // menjadi acuan. Dijepit 1% dari tiap sisi supaya tidak bisa
         // diseret sampai keluar bingkai dan hilang.
         const dyPct = ((ev.clientY - y0) / boxH) * 100;
-        onStyleChange({
+        ubah({
           wm_x: Math.round(Math.max(1, Math.min(99, startWmX + dx)) * 10) / 10,
           wm_y: Math.round(Math.max(1, Math.min(99, startWmY + dyPct)) * 10) / 10,
         });
@@ -687,7 +706,7 @@ export default function ClipPreview({
         // margin. Mendatar dibatasi setengah lebar kotak dari tiap tepi supaya
         // teksnya tidak bisa diseret sampai keluar bingkai.
         const half = startBoxW / 2;
-        onStyleChange({
+        ubah({
           margin_v: Math.round(Math.max(20, Math.min(1700,
             anchorTop ? startMargin + dy : startMargin - dy))),
           pos_x: Math.round(Math.max(half, Math.min(100 - half, startPosX + dx)) * 10) / 10,
@@ -697,7 +716,7 @@ export default function ClipPreview({
 
       if (mode === 'width-right') {
         const right = Math.max(left0 + MIN_W, Math.min(100, right0 + dx));
-        onStyleChange({
+        ubah({
           box_w: Math.round((right - left0) * 10) / 10,
           pos_x: Math.round(((left0 + right) / 2) * 10) / 10,
         });
@@ -706,7 +725,7 @@ export default function ClipPreview({
 
       if (mode === 'width-left') {
         const left = Math.min(right0 - MIN_W, Math.max(0, left0 + dx));
-        onStyleChange({
+        ubah({
           box_w: Math.round((right0 - left) * 10) / 10,
           pos_x: Math.round(((left + right0) / 2) * 10) / 10,
         });
@@ -731,7 +750,7 @@ export default function ClipPreview({
 
         const width = Math.max(MIN_W, Math.min(100, startBoxW * factor));
         const left = Math.max(0, Math.min(100 - width, left0));
-        onStyleChange({
+        ubah({
           box_w: Math.round(width * 10) / 10,
           pos_x: Math.round((left + width / 2) * 10) / 10,
           size: Math.round(Math.max(36, Math.min(220, startSize * factor))),
@@ -740,7 +759,7 @@ export default function ClipPreview({
       }
 
       // mode === 'size': ukuran huruf saja, menyeret ke atas memperbesar.
-      onStyleChange({ size: Math.round(Math.max(36, Math.min(220, startSize - dy))) });
+      ubah({ size: Math.round(Math.max(36, Math.min(220, startSize - dy))) });
     };
     const onUp = () => {
       setDragging(null);
@@ -749,8 +768,9 @@ export default function ClipPreview({
     };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
-  }, [onStyleChange, boxH, boxW, style?.margin_v, style?.pos_x, style?.size,
-      style?.box_w, style?.position]);
+  };
+  const startDrag = seret(style, onStyleChange);
+  const startDragKedua = seret(gayaKedua, onKeduaStyleChange, 'kedua-');
 
   // Bingkai orisinal mengabaikan pilihan rasio: kotaknya harus mengikuti bentuk
   // video sumber, bukan 9:16, atau pratinjaunya berbohong soal hasil akhir.
@@ -974,11 +994,25 @@ export default function ClipPreview({
               />
             )}
 
-            {useLayout ? frames.map((f, i) => {
+            {/* Pemutar utama: SATU elemen yang tidak pernah diganti. Di mode
+                susunan ia tetap memutar (suara dan jam klip) tapi tidak
+                terlihat — gambarnya datang dari cermin di bawah. */}
+            <video
+              ref={pasangUtama}
+              src={src}
+              onTimeUpdate={handleTimeUpdate}
+              onLoadedMetadata={readAspect}
+              onPlay={() => setPlaying(true)}
+              onPause={() => setPlaying(false)}
+              playsInline
+              style={useLayout ? { ...videoStyle, opacity: 0 } : videoStyle}
+            />
+            {Array.from({ length: jumlahCermin }, (_, i) => {
+              const f = useLayout ? frames[i] : null;
               // Semuanya persen kotak tujuan: tidak ada satu pun angka di sini
               // yang berasal dari pengukuran, jadi tidak ada yang bisa basi
               // ketika kotaknya berubah lebar.
-              const geo = coverPercent(f.src, f.dst, sourceAspect, canvasAspect, f.fit);
+              const geo = f ? coverPercent(f.src, f.dst, sourceAspect, canvasAspect, f.fit) : null;
               const inner = geo
                 ? {
                   position: 'absolute',
@@ -988,50 +1022,31 @@ export default function ClipPreview({
                 }
                 : {
                   position: 'absolute', inset: 0, width: '100%', height: '100%',
-                  objectFit: f.fit === 'contain' ? 'contain' : 'cover',
+                  objectFit: f?.fit === 'contain' ? 'contain' : 'cover',
                   transform: 'none', background: '#000',
                 };
               return (
-                <div key={f.id} style={{
+                // Kunci per URUTAN, bukan per id bingkai: id berganti di tiap
+                // potongan, dan kunci yang berganti berarti elemen baru.
+                <div key={`cermin-${i}`} style={f ? {
                   position: 'absolute',
                   left: `${f.dst.x}%`, top: `${f.dst.y}%`,
                   width: `${f.dst.w}%`, height: `${f.dst.h}%`,
                   overflow: 'hidden', background: '#000',
-                }}>
-                  {/* Bingkai pertama memakai pemutar utama: suara dan waktu
-                      klip hanya boleh datang dari satu elemen. */}
-                  {i === 0 ? (
-                    <video ref={(el) => {
-                             pasangUtama(el);
-                             frameVideoRefs.current[f.id] = { el, geo };
-                           }} src={src}
-                           onTimeUpdate={handleTimeUpdate}
-                           onLoadedMetadata={readAspect}
-                           onPlay={() => setPlaying(true)}
-                           onPause={() => setPlaying(false)}
-                           playsInline style={inner} />
-                  ) : (
-                    <video ref={(el) => {
-                             extraRefs.current[i - 1] = el;
-                             frameVideoRefs.current[f.id] = { el, geo };
-                           }}
-                           src={src} muted playsInline aria-hidden="true"
-                           style={inner} />
-                  )}
+                  // Tersembunyi = transparan, BUKAN display:none: Firefox tidak
+                  // mendekode video yang tidak dirender, dan cermin seperti itu
+                  // tetap hitam ±1 dtk saat akhirnya ditampilkan (terukur).
+                } : { position: 'absolute', inset: 0, opacity: 0, pointerEvents: 'none' }}>
+                  <video ref={(el) => {
+                           extraRefs.current[i] = el;
+                           if (el) el.dataset.tampil = f ? '1' : '0';
+                           if (f) frameVideoRefs.current[f.id] = { el, geo };
+                         }}
+                         src={src} muted playsInline preload="auto" aria-hidden="true"
+                         style={inner} />
                 </div>
               );
-            }) : (
-              <video
-                ref={pasangUtama}
-                src={src}
-                onTimeUpdate={handleTimeUpdate}
-                onLoadedMetadata={readAspect}
-                onPlay={() => setPlaying(true)}
-                onPause={() => setPlaying(false)}
-                playsInline
-                style={videoStyle}
-              />
-            )}
+            })}
 
             {/* Kotak tujuan yang bisa dipegang. Hanya hidup di tab Bingkai —
                 di tab lain ia akan berebut jari dengan kotak subtitle yang
@@ -1243,14 +1258,21 @@ export default function ClipPreview({
             saklarnya tidak ada. */}
         {barisKedua && boxH > 0 && (
           <CaptionOverlay line={{ ...barisKedua, words: [] }} activeWordIndex={-1}
-                          style={gayaKedua} clipTime={clipTime} boxH={boxH} />
+                          style={gayaKedua} clipTime={clipTime} boxH={boxH}
+                          draggable={Boolean(onKeduaStyleChange)}
+                          dragging={dragging?.startsWith?.('kedua-') ? dragging.slice(6) : null}
+                          onMoveStart={startDragKedua('move')}
+                          onSizeStart={startDragKedua('size')}
+                          onScaleStart={startDragKedua('scale')}
+                          onWidthLeftStart={startDragKedua('width-left')}
+                          onWidthRightStart={startDragKedua('width-right')} />
         )}
         {shownLine && boxH > 0 && style?.aktif !== false && (
           <CaptionOverlay line={shownLine} activeWordIndex={activeWordIndex}
                           style={style} clipTime={clipTime} boxH={boxH}
                           ghost={!activeLine}
                           draggable={Boolean(onStyleChange)}
-                          dragging={dragging}
+                          dragging={dragging?.startsWith?.('kedua-') ? null : dragging}
                           onMoveStart={startDrag('move')}
                           onSizeStart={startDrag('size')}
                           onScaleStart={startDrag('scale')}
@@ -1325,6 +1347,15 @@ export default function ClipPreview({
  * kanvas 1920 yang sama dengan file ASS, jadi yang terlihat di sini benar-benar
  * proporsi hasil akhirnya — bukan perkiraan berbasis lebar layar.
  */
+// Aksara Jepang/Mandarin: kata-katanya tidak dipisah spasi.
+const CJK = /[\u3000-\u303f\u3040-\u30ff\u31f0-\u31ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff00-\uffef]/;
+function berjarak(kiri, kanan) {
+  const a = (kiri || '').trim();
+  const b = (kanan || '').trim();
+  if (!a || !b) return false;
+  return !CJK.test(a[a.length - 1]) && !CJK.test(b[0]);
+}
+
 export function CaptionOverlay({
   line, activeWordIndex, style, clipTime, boxH, ghost,
   draggable, dragging, onMoveStart, onSizeStart, onScaleStart,
@@ -1473,7 +1504,10 @@ export function CaptionOverlay({
           return (
             <span key={i} style={{
               color: active ? (style?.highlight ?? '#FFE500') : speakerColor,
-              marginRight: i === tampil.length - 1 ? 0 : '0.28em',
+              // Tanpa jarak antarhuruf Jepang/Mandarin — sama dengan render
+              // (backend services/teks.py).
+              marginRight: i === tampil.length - 1 || !berjarak(w.w, tampil[i + 1]?.w)
+                ? 0 : '0.28em',
               display: 'inline-block',
               transform: active && anim === 'karaoke_pop' ? 'scale(1.09)' : 'none',
               transition: 'transform 90ms ease, color 60ms linear',

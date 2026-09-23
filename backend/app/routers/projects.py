@@ -15,7 +15,7 @@ from ..repos import analyses as analyses_repo
 from ..repos import jobs as jobs_repo
 from ..repos import projects as projects_repo
 from ..services.jobs import queue
-from ..services.paths import extract_youtube_id, find_local_video
+from ..services.paths import extract_youtube_id, find_local_video, url_sumber
 
 router = APIRouter(prefix="/api", tags=["projects"])
 
@@ -27,9 +27,25 @@ def _resolve(video_id: str) -> str:
     return vid
 
 
+def _pratinjau(local, vid: str = "") -> dict:
+    if local is None:
+        return {"preview_url": None, "pratinjau_disiapkan": False}
+    from ..services import proksi
+    try:
+        if not proksi.butuh_salinan(local):
+            return {"preview_url": url_sumber(vid, local), "pratinjau_disiapkan": False}
+        salinan = proksi.untuk_pratinjau(local)
+    except Exception:
+        salinan = None
+    if salinan is not None:
+        return {"preview_url": f"/api/media/proksi/{salinan.name}", "pratinjau_disiapkan": False}
+    return {"preview_url": url_sumber(vid, local), "pratinjau_disiapkan": True}
+
+
 @router.get("/projects")
 async def list_projects(limit: int = Query(60, le=200)):
-    return await asyncio.to_thread(projects_repo.list_projects, limit)
+    from ..services import profil
+    return await asyncio.to_thread(projects_repo.list_projects, limit, profil.kini())
 
 
 @router.get("/projects/{video_id}")
@@ -114,11 +130,18 @@ async def get_project(video_id: str):
         "video_id": vid,
         "analysis_id": cached["id"],
         "created_at": cached["created_at"],
-        # local_url ikut dihitung ulang di sini, bukan hanya dibaca dari hasil
-        # tersimpan: file bisa saja sudah dihapus sejak analisis dibuat.
-        "local_url": f"/api/media/local_downloads/{local.name}" if local else None,
-        "downloaded": local is not None,
         **result,
+        # local_url dihitung ulang di sini, bukan dibaca dari hasil tersimpan:
+        # berkasnya bisa saja sudah dihapus sejak analisis dibuat. Dan ia
+        # ditaruh SESUDAH `**result` — sebelumnya di depannya, sehingga
+        # `local_url` lama dari hasil tersimpan menimpanya, dan Studio
+        # memutar berkas yang tidak ada: layar hitam tanpa keterangan apa pun.
+        "local_url": url_sumber(vid, local) if local else None,
+        "downloaded": local is not None,
+        # Yang diputar Studio: salinan ringan untuk sumber besar (4K VP9
+        # macet di Firefox), sumbernya sendiri untuk yang kecil. Render selalu
+        # memakai sumber asli.
+        **_pratinjau(local, vid),
     }
 
 
@@ -138,11 +161,26 @@ async def delete_project(video_id: str):
     """
     vid = _resolve(video_id)
 
+    # Kartu yang juga dipakai profil lain hanya dilepas dari profil ini:
+    # analisisnya milik bersama, dan menghapusnya akan mengosongkan Partitur
+    # profil yang tidak pernah meminta penghapusan itu.
+    from ..repos import profil as profil_repo
+    from ..services import profil
+    await asyncio.to_thread(profil_repo.lepas_video, profil.kini(), vid)
+    pemilik_lain = await asyncio.to_thread(
+        lambda: [p["id"] for p in profil_repo.semua() if vid in profil_repo.video_milik(p["id"])])
+    if pemilik_lain:
+        return {"success": True, "video_id": vid, "jobs_dihapus": 0, "hanya_dilepas": True}
+
     for job_id in await asyncio.to_thread(jobs_repo.ids_for_video, vid, only_active=True):
         queue.cancel(job_id)
 
     await asyncio.to_thread(analyses_repo.delete_for_video, vid)
     jobs_dihapus = await asyncio.to_thread(jobs_repo.delete_for_video, vid)
+    # Salinan video impor ikut dibuang — tanpa kartunya ia tidak terlihat di
+    # mana pun dan hanya memakan ruang. Berkas asli pengguna tidak disentuh.
+    from ..services.paths import buang_salinan_impor
+    await asyncio.to_thread(buang_salinan_impor, vid)
     return {"success": True, "video_id": vid, "jobs_dihapus": jobs_dihapus}
 
 

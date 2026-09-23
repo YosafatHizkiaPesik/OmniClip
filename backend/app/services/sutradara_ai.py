@@ -58,10 +58,11 @@ sopan TIDAK perlu diubah. Lebih baik sedikit momen yang kuat daripada bingkai
 yang terus berpindah.
 
 Yang ingin ditonjolkan adalah WAJAH yang bereaksi. Pakai "wajah" atau
-"reaksi_terbagi" untuk orang-orang yang bereaksi. "lebar" hanya bila wajah
-mereka tidak bisa dibingkai sendiri-sendiri (terlalu kecil atau tertutup), dan
-bila bidikan kamera saat itu sudah close-up satu orang yang bereaksi, momen itu
-tidak perlu diubah sama sekali.
+"reaksi_terbagi" untuk orang-orang yang bereaksi. Bila wajah mereka tidak bisa
+dibingkai sendiri-sendiri (terlalu kecil atau tertutup), lewati momen itu. Bila
+bidikan kamera saat itu sudah close-up satu orang yang bereaksi, momen itu
+tidak perlu diubah sama sekali. JANGAN PERNAH memakai latar kabur — gambar
+selalu memenuhi layar.
 
 kekuatan (0-1): 0,9 tawa pecah/kaget besar; 0,7 tawa lepas yang jelas; 0,5
 tawa biasa; di bawah itu jangan dimasukkan.
@@ -72,7 +73,8 @@ Pilihan bingkai (hanya ini):
 - "reaksi_penuh": (gameplay) wajah pemain dari facecam memenuhi layar.
 - "gameplay": (gameplay) permainan + facecam seperti biasa.
 - "ikuti_penutur": bingkai dasar podcast, mengikuti yang sedang bicara.
-- "lebar": seluruh gambar asli dengan latar kabur.
+- "ikuti_gerakan": kamera mengikuti bagian yang paling banyak bergerak — untuk
+  bidikan tanpa wajah (pemandangan, permainan tanpa facecam, kartun, hewan).
 
 Satu momen boleh berisi beberapa bidikan berurutan ("gaya"):
 - "potong_bergantian": wajah orang yang bereaksi satu per satu, masing-masing
@@ -100,7 +102,7 @@ def _schema():
         properties={
             "bingkai": types.Schema(type=T.STRING, enum=[
                 "wajah", "reaksi_terbagi", "reaksi_penuh", "gameplay",
-                "ikuti_penutur", "lebar"]),
+                "ikuti_penutur", "ikuti_gerakan"]),
             "orang": types.Schema(type=T.ARRAY, items=types.Schema(type=T.STRING)),
             "durasi": types.Schema(type=T.NUMBER),
         })
@@ -123,7 +125,8 @@ def _schema():
         property_ordering=["jenis_video", "bingkai_dasar", "momen"],
         properties={
             "jenis_video": types.Schema(type=T.STRING, enum=["podcast", "gameplay", "lainnya"]),
-            "bingkai_dasar": types.Schema(type=T.STRING, enum=["ikuti_penutur", "gameplay", "lebar"]),
+            "bingkai_dasar": types.Schema(type=T.STRING, enum=["ikuti_penutur", "gameplay",
+                                                                                "ikuti_gerakan"]),
             "momen": types.Schema(type=T.ARRAY, items=momen),
         })
 
@@ -296,6 +299,66 @@ def _terlihat(plan, p: int, t0: float, t1: float) -> bool:
     return b > a and sum(1 for v in s[a:b] if v) >= max(1, (b - a) // 3)
 
 
+# Sepanjang apa layar boleh tanpa wajah sebelum bingkainya dilebarkan. Di
+# bawah ini, melebarkan lalu menyempit lagi terbaca sebagai kedipan.
+TANPA_WAJAH_MIN = 2.5
+# Wajah yang terlihat kurang dari ini di antara dua bagian kosong diabaikan.
+JEDA_WAJAH_MIN = 1.5
+
+
+# Cara membingkai yang boleh dipakai sutradara. Bilah kabur, potong tengah,
+# orisinal, dan kotak tetap tidak termasuk: pemiliknya menunggu lama lalu hanya
+# mendapat bingkai kabur, dan memutuskan sutradara tidak boleh memakainya.
+MODE_SUTRADARA = ("smart", "motion", "gaming", "layout")
+
+
+def _tanpa_kabur(kunci: list[dict]) -> list[dict]:
+    """
+    Jaring terakhir: apa pun jalannya, hanya `MODE_SUTRADARA` yang keluar.
+    Kotak tetap diubah jadi susunan satu bingkai (hasilnya sama persis); yang
+    lain jadi "ikuti gerakan".
+    """
+    for k in kunci:
+        mode = k.get("mode") or "smart"
+        if mode == "box" and k.get("rect"):
+            k["mode"] = "layout"
+            k["layout"] = {"background": "black", "frames": [{
+                "label": "Bingkai", "src": k.pop("rect"),
+                "dst": {"x": 0, "y": 0, "w": 100, "h": 100}, "fit": "cover"}]}
+        elif mode not in MODE_SUTRADARA:
+            k["mode"] = "motion"
+            k.pop("rect", None)
+    return kunci
+
+
+def _tanpa_wajah(plan, durasi: float) -> list[tuple[float, float]]:
+    """Rentang waktu (detik klip) ketika tidak satu wajah pun terlihat."""
+    from .reframe import SAMPLE_FPS
+    if plan is None or not getattr(plan, "people_seen", None):
+        return []
+    n = min(len(s) for s in plan.people_seen)
+    ada = [any(s[i] for s in plan.people_seen) for i in range(n)]
+    keluar: list[tuple[float, float]] = []
+    i = 0
+    while i < n:
+        if ada[i]:
+            i += 1
+            continue
+        j = i
+        while j < n and not ada[j]:
+            j += 1
+        a, b = i / SAMPLE_FPS, min(j / SAMPLE_FPS, durasi)
+        # Wajah yang muncul sekejap di antara dua bagian kosong tidak layak
+        # dikejar: kembali ke wajah 0,8 detik lalu pergi lagi terbaca sebagai
+        # kedipan. Terukur pada klip Minecraft (27,1-27,9 dtk).
+        if keluar and a - keluar[-1][1] < JEDA_WAJAH_MIN:
+            keluar[-1] = (keluar[-1][0], b)
+        elif b - a >= TANPA_WAJAH_MIN:
+            keluar.append((a, b))
+        i = j
+    return [r for r in keluar if r[1] - r[0] >= TANPA_WAJAH_MIN]
+
+
 def _lebar_wajah(plan, p: int, t0: float, t1: float) -> float:
     """Median lebar wajah orang `p` (piksel sumber) selama [t0, t1]."""
     from .reframe import SAMPLE_FPS
@@ -337,8 +400,56 @@ def _wajah_tunggal(plan, p: int, t0: float, t1: float, out_w: int, out_h: int
          "fit": "cover", "follow": True, "person": p}]}}
 
 
+def _saring_bersamaan(plan, orang: list[int], t0: float, t1: float) -> list[int]:
+    """
+    Orang yang BENAR-BENAR terlihat bersamaan selama momen, tanpa kembaran.
+
+    Kamera yang berpindah di tengah momen membuat pelacak mencatat "P0" sebelum
+    potongan dan "P1" sesudahnya — bisa orang yang sama dari sudut lain. Dua
+    sel berisi wajah yang sama terlihat seperti galat. Jadi orang yang tidak
+    pernah muncul bersama di layar (< 30% waktu bersama) atau kotaknya
+    bertumpuk lebih dari separuh tidak dipasangkan.
+    """
+    from .reframe import SAMPLE_FPS
+    i0, i1 = int(t0 * SAMPLE_FPS), max(int(t0 * SAMPLE_FPS) + 1, int(t1 * SAMPLE_FPS))
+
+    def tampak(p):
+        lane = plan.people_seen[p] if p < len(plan.people_seen) else []
+        return {i for i in range(i0, min(i1, len(lane))) if lane[i]}
+
+    def kotak(p):
+        return plan.kotak_orang(p, t0, t1, aspek=1.0)
+
+    def tumpuk(a, b):
+        if not a or not b:
+            return 0.0
+        ix = max(0.0, min(a["x"] + a["w"], b["x"] + b["w"]) - max(a["x"], b["x"]))
+        iy = max(0.0, min(a["y"] + a["h"], b["y"] + b["h"]) - max(a["y"], b["y"]))
+        kecil = min(a["w"] * a["h"], b["w"] * b["h"]) or 1.0
+        return ix * iy / kecil
+
+    urut = sorted(dict.fromkeys(orang), key=lambda p: -len(tampak(p)))
+    diambil: list[int] = []
+    for p in urut:
+        tp = tampak(p)
+        if not tp:
+            continue
+        cocok = True
+        for q in diambil:
+            tq = tampak(q)
+            bersama = len(tp & tq) / max(1, min(len(tp), len(tq)))
+            if bersama < 0.3 or tumpuk(kotak(p), kotak(q)) > 0.5:
+                cocok = False
+                break
+        if cocok:
+            diambil.append(p)
+    # Urutan asli dipertahankan (kiri ke kanan seperti yang diminta).
+    return [p for p in orang if p in diambil]
+
+
 def _susunan_terbagi(plan, orang: list[int], t0: float, t1: float,
                      out_w: int, out_h: int) -> Optional[dict]:
+    orang = _saring_bersamaan(plan, orang, t0, t1)
     n = len(orang)
     if n < 2:
         return None
@@ -360,9 +471,309 @@ def _susunan_terbagi(plan, orang: list[int], t0: float, t1: float,
     return {"background": "black", "frames": frames}
 
 
+# --- Bingkai dasar per saat: game, wajah, atau gerakan ---------------------------
+#
+# Video campuran (MrBeast "100 Days on One Block") berganti jenis bidikan tiap
+# beberapa detik: permainan dengan facecam kecil di pojok, permainan saja,
+# rekaman kamera orang sungguhan, bidikan drone. Satu bingkai dasar untuk
+# seluruh klip pasti salah di sebagian besar klipnya — dan facecam yang hanya
+# muncul sebagian waktu tidak pernah lolos deteksi "facecam sepanjang klip",
+# sehingga bagian game ikut dibingkai sebagai wajah. Aturan pemiliknya:
+#
+#   game + wajah terlihat bersamaan  -> bingkai game
+#   hanya game (tanpa wajah)         -> ikuti gerakan
+#   hanya wajah                      -> ikuti wajah
+#
+# Ciri facecam diukur dari rekaman itu sendiri (0-40 dtk): wajah pemain 6-12,6%
+# lebar bingkai, selalu di pojok (x 9-20% atau 83-91%; y 24-27% atau 68-81%);
+# wajah pada rekaman kamera orang ada di tengah (x 52-55%).
+FACECAM_WAJAH_MAKS = 0.14      # lebar wajah maksimum, pecahan lebar bingkai
+FACECAM_TEPI_X = 0.25          # pusat wajah di luar 25-75% lebar
+FACECAM_ATAS_Y = 0.30          # ... dan di atas 30% atau
+FACECAM_BAWAH_Y = 0.55         # ... di bawah 55% tinggi
+POTONGAN_DASAR_MIN = 1.5       # potongan lebih pendek disatukan ke tetangganya
+
+
+def _wajah_pojok(x: float, cy: float, w: float, sw: int, sh: int) -> bool:
+    fx, fy = x / max(1, sw), cy / max(1, sh)
+    return (w / max(1, sw) <= FACECAM_WAJAH_MAKS
+            and (fx < FACECAM_TEPI_X or fx > 1 - FACECAM_TEPI_X)
+            and (fy < FACECAM_ATAS_Y or fy > FACECAM_BAWAH_Y))
+
+
+def _label_per_sampel(plan) -> list[str]:
+    """'game' / 'wajah' / 'gerak' untuk tiap sampel rencana wajah."""
+    sw, sh = plan.source_w, plan.source_h
+    n = min((len(s) for s in plan.people_seen), default=0)
+    label = []
+    for i in range(n):
+        ada_wajah = ada_pojok = False
+        for p in range(len(plan.people)):
+            if not plan.people_seen[p][i]:
+                continue
+            kotak = plan.people_box[p][i] if p < len(plan.people_box) and i < len(plan.people_box[p]) else None
+            x = plan.people[p][i]
+            if kotak is None or x is None:
+                continue
+            ada_wajah = True
+            if _wajah_pojok(float(x), float(kotak[0]), float(kotak[1]), sw, sh):
+                ada_pojok = True
+        label.append("game" if ada_pojok else "wajah" if ada_wajah else "gerak")
+    return label
+
+
+def _rapikan_potongan(runs: list[list]) -> list[list]:
+    """Potongan [label, a, b] yang terlalu pendek disatukan ke tetangga terpanjang."""
+    runs = [r[:] for r in runs]
+    while len(runs) > 1:
+        pendek = min(range(len(runs)), key=lambda i: runs[i][2] - runs[i][1])
+        if runs[pendek][2] - runs[pendek][1] >= POTONGAN_DASAR_MIN:
+            break
+        kiri = runs[pendek - 1] if pendek > 0 else None
+        kanan = runs[pendek + 1] if pendek + 1 < len(runs) else None
+        tuju = max((r for r in (kiri, kanan) if r is not None), key=lambda r: r[2] - r[1])
+        if tuju is kiri:
+            kiri[2] = runs[pendek][2]
+        else:
+            kanan[1] = runs[pendek][1]
+        runs.pop(pendek)
+        # Tetangga berlabel sama yang kini bersentuhan disatukan.
+        gabung = [runs[0]]
+        for r in runs[1:]:
+            if r[0] == gabung[-1][0]:
+                gabung[-1][2] = r[2]
+            else:
+                gabung.append(r)
+        runs = gabung
+    return runs
+
+
+def _dasar_per_waktu(plan, src: Path, segments: list[dict], durasi: float,
+                     out_w: int, out_h: int) -> Optional[list[tuple[float, float, dict]]]:
+    """
+    Bingkai dasar per potongan waktu: [(mulai, akhir, kunci)], atau None bila
+    tidak ada data wajah untuk menilainya.
+    """
+    from .reframe import SAMPLE_FPS, deteksi_facecam
+    from .render import rasio_bidang_wajah, susun_layout_gaming
+
+    if plan is None or not getattr(plan, "people_seen", None):
+        return None
+    label = _label_per_sampel(plan)
+    if not label:
+        return None
+    runs: list[list] = []
+    for i, l in enumerate(label):
+        t = i / SAMPLE_FPS
+        if runs and runs[-1][0] == l:
+            runs[-1][2] = t + 1 / SAMPLE_FPS
+        else:
+            runs.append([l, t, t + 1 / SAMPLE_FPS])
+    runs[-1][2] = durasi
+    runs = _rapikan_potongan(runs)
+
+    sw, sh = plan.source_w, plan.source_h
+    keluar: list[tuple[float, float, dict]] = []
+    # Letak panel sepanjang klip, dihitung sekali dan hanya bila dibutuhkan:
+    # potongan game yang pendek (±2 dtk) terlalu singkat untuk menemukan tepi
+    # panelnya sendiri, dan kotak tebakan dari ukuran wajah ikut memuat tepi
+    # panel. Panel yang sama hampir selalu terlihat di bagian lain klip.
+    klip_penuh: list = []
+    sudah_dicari = False
+
+    def panel_di(t: float) -> Optional[dict]:
+        nonlocal klip_penuh, sudah_dicari
+        if not sudah_dicari:
+            sudah_dicari = True
+            try:
+                from .reframe import deteksi_facecam_waktu
+                klip_penuh = deteksi_facecam_waktu(src, segments, sw, sh,
+                                                   rasio_potongan=rasio_bidang_wajah(out_w, out_h)) or []
+            except Exception as e:
+                log.info("Facecam sepanjang klip tidak terbaca: %s", str(e)[:120])
+        pilih = None
+        for p in klip_penuh:
+            if float(p["t"]) <= t + 1e-6:
+                pilih = p["facecam"]
+        return pilih or (klip_penuh[0]["facecam"] if klip_penuh else None)
+
+    for l, a, b in runs:
+        if l == "game":
+            # Panel facecam untuk potongan INI: dicari dari potongan itu saja,
+            # karena letaknya bisa berbeda dari potongan game sebelumnya.
+            fc = None
+            try:
+                fc = deteksi_facecam(src, _ke_sumber(segments, a), max(0.5, b - a), sw, sh,
+                                     rasio_potongan=rasio_bidang_wajah(out_w, out_h))
+            except Exception as e:
+                log.info("Facecam potongan %.1f-%.1f tidak terbaca: %s", a, b, str(e)[:120])
+            if fc is None:
+                fc = panel_di(a)
+            if fc is None:
+                fc = _kotak_dari_wajah(plan, a, b)
+            if fc is None:
+                keluar.append((a, b, {"mode": "motion", "alasan": "Permainan — kamera mengikuti gerakan"}))
+                continue
+            tata = susun_layout_gaming(fc, src_w=sw, src_h=sh, out_w=out_w, out_h=out_h)
+            keluar.append((a, b, {"mode": "gaming", "layout": tata,
+                                  "alasan": "Permainan dan wajah pemain — bingkai game"}))
+        elif l == "wajah":
+            keluar.append((a, b, {"mode": "smart", "alasan": "Hanya wajah — mengikuti wajah"}))
+        else:
+            keluar.append((a, b, {"mode": "motion",
+                                  "alasan": "Tanpa wajah — kamera mengikuti gerakan"}))
+    return keluar
+
+
+JENIS_GAME_MIN = 0.30          # porsi sampel "wajah di pojok" untuk disebut klip game
+JENIS_GAME_YAKIN = 0.70        # ... tanpa perlu memeriksa panel facecam
+JENIS_GERAK_MIN = 0.60         # porsi sampel tanpa wajah untuk disebut klip tanpa wajah
+
+
+def jenis_klip(src: Path, segments: list[dict]) -> dict:
+    """
+    Bingkai bawaan untuk SATU klip, dari isinya: {"mode", "alasan", "porsi"}.
+
+    Studio dulu membuka setiap klip dengan "ikut wajah" — cara yang benar
+    untuk podcast, tapi klip game jadi close-up wajah di kamera pojok, dan
+    klip tanpa orang jadi pusat layar yang diam. Aturannya dari pemilik:
+      - ada permainan dan wajah pemain (facecam)  → bingkai game;
+      - tidak ada wajah                            → ikuti gerakan;
+      - wajah jelas (podcast, vlog, wawancara)     → ikuti wajah.
+    Penggolongnya sama dengan yang dipakai sutradara per momen
+    (`_label_per_sampel`), jadi keduanya tidak saling membantah.
+    """
+    from .media import probe
+    from .reframe import deteksi_facecam_waktu, plan_reframe
+    from .render import rasio_bidang_wajah
+
+    info = probe(str(src))
+    sw, sh = int(info.get("width") or 1920), int(info.get("height") or 1080)
+
+    def facecam() -> bool:
+        try:
+            return bool(deteksi_facecam_waktu(str(src), segments, sw, sh,
+                                              rasio_potongan=rasio_bidang_wajah(1080, 1920)))
+        except Exception as e:
+            log.info("Facecam tidak terbaca: %s", str(e)[:120])
+            return False
+
+    # Rencana yang SAMA dengan yang diminta pratinjau (track_only, 9:16), jadi
+    # pindaian wajahnya tersimpan di cache dan jejak ikut-wajah berikutnya
+    # tidak menghitung ulang.
+    plan = plan_reframe(str(src), segments, aspect_ratio="9:16", track_only=True)
+    label = _label_per_sampel(plan) if plan is not None and plan.people else []
+    if not label:
+        # Tanpa satu wajah pun, facecam juga tidak ada. Pemindai panel tidak
+        # ditanya di sini: pada kartun ia menemukan "panel" di mana-mana.
+        return {"mode": "motion", "porsi": {"gerak": 1.0},
+                "alasan": "Tidak ada wajah — kamera mengikuti gerakan"}
+
+    n = len(label)
+    porsi = {k: round(label.count(k) / n, 2) for k in ("game", "wajah", "gerak")}
+    # Wajah kecil di pojok hampir sepanjang klip sudah cukup jadi bukti;
+    # panelnya baru diperiksa bila buktinya setengah-setengah.
+    if porsi["game"] >= JENIS_GAME_YAKIN or (porsi["game"] >= JENIS_GAME_MIN and facecam()):
+        return {"mode": "gaming", "porsi": porsi,
+                "alasan": "Klip game — permainan dan kamera wajah pemain"}
+    if porsi["gerak"] + porsi["game"] >= JENIS_GERAK_MIN:
+        # Wajah di pojok tanpa panel facecam yang terbaca dihitung sebagai
+        # "tanpa wajah jelas": mengikuti wajah sekecil itu memotong gambarnya.
+        return {"mode": "motion", "porsi": porsi,
+                "alasan": "Wajah jarang terlihat — kamera mengikuti gerakan"}
+    return {"mode": "smart", "porsi": porsi, "alasan": "Wajah terlihat jelas — mengikuti wajah"}
+
+
+def jenis_klip_tersimpan(video_id: str, src: Path, segments: list[dict]) -> dict:
+    """`jenis_klip` yang diingat: menghitungnya memakan 10-60 detik per klip."""
+    from ..repos import cache as cache_repo
+
+    kunci = "jenis:" + video_id + ":" + ",".join(
+        f"{float(s['start']):.2f}-{float(s['end']):.2f}" for s in segments)
+    try:
+        lama = cache_repo.ambil(kunci, ttl=float("inf"))
+        if lama:
+            return lama
+    except Exception:
+        pass
+    hasil = jenis_klip(src, segments)
+    try:
+        cache_repo.simpan(kunci, hasil)
+    except Exception as e:
+        log.info("Jenis klip tidak tersimpan: %s", e)
+    return hasil
+
+
+def _kotak_dari_wajah(plan, a: float, b: float) -> Optional[dict]:
+    """Kotak facecam perkiraan dari wajah pojok yang paling sering terlihat."""
+    from .reframe import SAMPLE_FPS
+    sw, sh = plan.source_w, plan.source_h
+    i0, i1 = int(a * SAMPLE_FPS), int(b * SAMPLE_FPS)
+    terbaik = None
+    for p in range(len(plan.people)):
+        titik = []
+        for i in range(i0, min(i1, len(plan.people_seen[p]))):
+            kotak = plan.people_box[p][i] if i < len(plan.people_box[p]) else None
+            x = plan.people[p][i]
+            if plan.people_seen[p][i] and kotak and x is not None \
+                    and _wajah_pojok(float(x), float(kotak[0]), float(kotak[1]), sw, sh):
+                titik.append((float(x), float(kotak[0]), float(kotak[1])))
+        if titik and (terbaik is None or len(titik) > len(terbaik)):
+            terbaik = titik
+    if not terbaik:
+        return None
+    titik = sorted(terbaik)
+    x, cy, w = titik[len(titik) // 2]
+    lebar, tinggi = 2.4 * w, 2.4 * w * 0.9
+    x0 = min(max(0.0, x - lebar / 2), sw - lebar)
+    y0 = min(max(0.0, cy - tinggi * 0.45), sh - tinggi)
+    return {"x": x0 / sw * 100, "y": y0 / sh * 100, "w": lebar / sw * 100, "h": tinggi / sh * 100}
+
+
+def _pasang_dasar_waktu(kunci: list[dict], dasar_waktu: list, terpilih: list[dict]) -> list[dict]:
+    """
+    Mengganti bingkai dasar tunggal dengan bingkai dasar per potongan waktu.
+    Momen reaksi tetap di atasnya; sesudah momen, bingkai kembali ke dasar
+    yang berlaku PADA DETIK ITU, bukan dasar awal klip.
+    """
+    rentang = [(float(u["mulai"]), float(u["selesai"])) for u in terpilih]
+
+    def dasar_di(t: float) -> dict:
+        for a, b, k in dasar_waktu:
+            if a - 1e-6 <= t < b:
+                return k
+        return dasar_waktu[-1][2]
+
+    baru: list[dict] = []
+    for k in kunci:
+        if k.get("_dasar"):
+            continue
+        if k.get("_kembali"):
+            d = dasar_di(k["t"])
+            k = {"t": k["t"], **{x: v for x, v in d.items() if x != "alasan"},
+                 "asal": "otomatis", "alasan": d.get("alasan", "Kembali ke bingkai dasar")}
+        baru.append(k)
+    for a, b, d in dasar_waktu:
+        if any(m0 - 1e-6 <= a < m1 for m0, m1 in rentang):
+            continue
+        baru.append({"t": round(a, 2), **{x: v for x, v in d.items() if x != "alasan"},
+                     "asal": "otomatis", "alasan": d.get("alasan", "")})
+    baru.sort(key=lambda k: k["t"])
+    # Kunci berurutan dengan bingkai yang sama tidak mengubah apa pun.
+    ringkas: list[dict] = []
+    for k in baru:
+        if ringkas and ringkas[-1].get("mode") == k.get("mode") \
+                and ringkas[-1].get("layout") == k.get("layout") and not k.get("momen_id"):
+            continue
+        ringkas.append(k)
+    if ringkas:
+        ringkas[0]["t"] = 0.0
+    return ringkas
+
+
 def jadikan_kunci(hasil: dict, *, plan, facecam: Optional[dict], momen_lokal: list[dict],
                   durasi: float, src_w: int, src_h: int, out_w: int, out_h: int,
-                  model: str) -> tuple[list[dict], list[str]]:
+                  model: str, dasar_waktu: Optional[list] = None) -> tuple[list[dict], list[str]]:
     """(kunci bingkai, catatan) dari jawaban model — divalidasi, bukan dipercaya."""
     from .momen import jangkar_terdekat
     from .sutradara import kotak_reaksi
@@ -372,10 +783,15 @@ def jadikan_kunci(hasil: dict, *, plan, facecam: Optional[dict], momen_lokal: li
     dasar_nama = hasil.get("bingkai_dasar") or ("gameplay" if gameplay else "ikuti_penutur")
     if dasar_nama == "gameplay" and not gameplay:
         dasar_nama = "ikuti_penutur"
-    dasar = {"gameplay": {"mode": "gaming"}, "lebar": {"mode": "blur"}}.get(
-        dasar_nama, {"mode": "smart"})
+    # Sutradara TIDAK memakai bilah kabur, di mana pun — keputusan pemiliknya,
+    # setelah menunggu lama dan hanya mendapat bingkai kabur. Pilihannya
+    # empat: ikuti wajah, ikuti gerakan, game, dan susunan. Wajah yang jarang
+    # terlihat berarti yang diikuti adalah GERAKAN, bukan gambar utuh berlatar
+    # kabur.
+    dasar = {"gameplay": {"mode": "gaming"}, "ikuti_gerakan": {"mode": "motion"},
+             "lebar": {"mode": "motion"}}.get(dasar_nama, {"mode": "smart"})
     if dasar["mode"] == "smart" and (plan is None or not plan.usable):
-        dasar = {"mode": "blur"}
+        dasar = {"mode": "motion"}
 
     def bingkai(b: dict, t0: float, t1: float) -> Optional[dict]:
         jenis = b.get("bingkai")
@@ -383,21 +799,30 @@ def jadikan_kunci(hasil: dict, *, plan, facecam: Optional[dict], momen_lokal: li
                  if p is not None and _terlihat(plan, p, t0, t1)]
         cukup = [p for p in orang if _lebar_wajah(plan, p, t0, t1) >= WAJAH_MIN_PX]
         if jenis in ("wajah", "reaksi_terbagi") and orang and not cukup:
-            return {"mode": "blur"}              # wajahnya terlalu kecil untuk diperbesar
+            return dict(dasar)                   # wajahnya terlalu kecil untuk diperbesar
         orang = cukup if jenis in ("wajah", "reaksi_terbagi") else orang
         if jenis in ("wajah", "reaksi_terbagi") and len(orang) == 1 and plan is not None:
             return _wajah_tunggal(plan, orang[0], t0, t1, out_w, out_h)
         if jenis == "wajah" and orang and plan is not None:
             return _wajah_tunggal(plan, orang[0], t0, t1, out_w, out_h)
         if jenis == "reaksi_terbagi" and plan is not None:
+            orang = _saring_bersamaan(plan, orang, t0, t1)
+            if len(orang) == 1:
+                # Yang tersisa satu orang (sisanya kembaran dari bidikan lain):
+                # wajah tunggal, bukan momen yang dibuang.
+                return _wajah_tunggal(plan, orang[0], t0, t1, out_w, out_h)
             lay = _susunan_terbagi(plan, orang, t0, t1, out_w, out_h)
             return {"mode": "layout", "layout": lay} if lay else None
         if jenis == "reaksi_penuh" and facecam:
-            return {"mode": "box", "rect": kotak_reaksi(facecam, src_w, src_h)}
+            # Satu bingkai susunan yang memenuhi layar — sama dengan "kotak
+            # tetap" di hasilnya, tapi termasuk cara yang boleh dipakai sutradara.
+            return {"mode": "layout", "layout": {"background": "black", "frames": [{
+                "label": "Reaksi", "src": kotak_reaksi(facecam, src_w, src_h),
+                "dst": {"x": 0, "y": 0, "w": 100, "h": 100}, "fit": "cover"}]}}
         if jenis == "gameplay" and gameplay:
             return {"mode": "gaming"}
-        if jenis == "lebar":
-            return {"mode": "blur"}
+        if jenis in ("ikuti_gerakan", "lebar"):
+            return {"mode": "motion"}
         if jenis == "ikuti_penutur" and plan is not None and plan.usable:
             return {"mode": "smart"}
         return None
@@ -437,6 +862,14 @@ def jadikan_kunci(hasil: dict, *, plan, facecam: Optional[dict], momen_lokal: li
             kekuatan = 0.5
         if kekuatan > 1.0:                       # model yang menjawab 0-100
             kekuatan /= 100.0
+        kekuatan = max(0.0, min(1.0, kekuatan))
+        # Model memberi 1,0 hampir ke semua momen (terukur), jadi angkanya
+        # sendirian tidak bisa memilih. Ia diimbangi bukti yang TERDENGAR:
+        # tawa/sorak/lonjakan suara lokal di titik itu. Momen tanpa bukti apa
+        # pun masih boleh lolos, tapi kalah dari yang terbukti saat berebut
+        # tempat (JARAK_MOMEN_MIN).
+        bukti = float(jangkar["kuat"]) if jangkar is not None else 0.35
+        kekuatan = round(0.5 * kekuatan + 0.5 * bukti, 3)
         if kekuatan < KEKUATAN_MIN:
             lemah += 1
             continue
@@ -454,8 +887,10 @@ def jadikan_kunci(hasil: dict, *, plan, facecam: Optional[dict], momen_lokal: li
     terpilih.sort(key=lambda u: u["mulai"])
 
     alasan_dasar = {"smart": "Mengikuti yang sedang bicara", "gaming": "Permainan + facecam",
-                    "blur": "Gambar utuh"}.get(dasar["mode"], "Bingkai dasar")
-    kunci: list[dict] = [{"t": 0.0, **dasar, "asal": "ai", "alasan": alasan_dasar}]
+                    "motion": "Wajah jarang terlihat — mengikuti gerakan"}.get(
+                        dasar["mode"], "Bingkai dasar")
+    kunci: list[dict] = [{"t": 0.0, **dasar, "asal": "ai", "alasan": alasan_dasar,
+                          "_dasar": True}]
     for u in terpilih:
         t = u["mulai"]
         bidikan = []
@@ -491,11 +926,55 @@ def jadikan_kunci(hasil: dict, *, plan, facecam: Optional[dict], momen_lokal: li
             kunci.append({"t": tt, **k, "asal": "ai", "momen_id": u["momen_id"],
                           "alasan": u["alasan"] if i == 0 else f"{u['alasan']} (lanjutan)"})
         kunci.append({"t": round(u["selesai"], 2), **dasar, "asal": "ai",
-                      "alasan": "Kembali ke bingkai dasar"})
+                      "alasan": "Kembali ke bingkai dasar", "_kembali": True})
 
     # Bidikan terakhir yang terlalu pendek karena terpotong batas klip dibuang,
     # dan kunci yang jatuh persis di ujung klip tidak berguna.
     kunci = [k for k in kunci if k["t"] < durasi - BIDIKAN_MIN or k["t"] == 0.0]
+
+    # Bagian tanpa wajah: kamera mengikuti GERAKAN.
+    #
+    # "Ikut wajah" pada bagian yang TIDAK ada wajahnya hanya membekukan
+    # jendela sempit di tempat wajah terakhir terlihat — terlapor pada klip
+    # Minecraft: bidikan drone atas menara, dan yang masuk klip cuma sepotong
+    # rumput di tengah. Versi pertama melebarkannya jadi gambar utuh berlatar
+    # kabur; itu juga ditolak — layar harus tetap penuh. Yang diikuti di
+    # bagian itu adalah apa yang bergerak.
+    if dasar_waktu:
+        kunci = _pasang_dasar_waktu(kunci, dasar_waktu, terpilih)
+        jenis_ada = {k["mode"] for _a, _b, k in dasar_waktu}
+        nama = {"gaming": "game", "smart": "ikuti wajah", "motion": "ikuti gerakan"}
+        catatan.append("Bingkai dasar per bagian: "
+                       + ", ".join(f"{sum(1 for _a, _b, k in dasar_waktu if k['mode'] == m)}× {nama[m]}"
+                                   for m in ("gaming", "smart", "motion") if m in jenis_ada) + ".")
+    elif dasar["mode"] == "smart":
+        n_gerak = 0
+        for a, b in _tanpa_wajah(plan, durasi):
+            alasan = f"Tidak ada wajah di layar ({b - a:.0f} dtk) — kamera mengikuti gerakan"
+            bentrok = [k for k in kunci if abs(k["t"] - a) < 0.4]
+            if bentrok:
+                # Klip yang DIBUKA tanpa wajah: kunci dasar di detik 0 yang
+                # diganti, bukan bagiannya yang dilewati.
+                awal = bentrok[0]
+                if awal["t"] == 0.0 and awal.get("mode") == "smart" and not awal.get("momen_id"):
+                    awal.update({"mode": "motion", "asal": "otomatis", "alasan": alasan})
+                else:
+                    continue
+            else:
+                kunci.append({"t": round(a, 2), "mode": "motion", "asal": "otomatis",
+                              "alasan": alasan})
+            if b < durasi - BIDIKAN_MIN:
+                kunci.append({"t": round(b, 2), **dasar, "asal": "otomatis",
+                              "alasan": "Wajah terlihat lagi"})
+            n_gerak += 1
+        if n_gerak:
+            catatan.append(f"{n_gerak} bagian tanpa wajah mengikuti gerakan.")
+
+    for k in kunci:
+        k.pop("_dasar", None)
+        k.pop("_kembali", None)
+    _tanpa_kabur(kunci)
+    kunci.sort(key=lambda k: k["t"])
     catatan.append(f"{len(terpilih)} momen disusun oleh {model}"
                    + (f" ({sum(1 for u in terpilih if u['berbukti'])} cocok dengan bukti suara/gambar)"
                       if terpilih else "") + ".")
@@ -573,9 +1052,13 @@ def susun_ai(src: Path, segments: list[dict], *, subtitles: list[dict],
         kabar=lambda p: lapor(p, 0.6), batal=batal)
 
     lapor("Menyusun bingkai…", 0.95)
+    # Facecam yang ada sepanjang klip memakai bingkai game untuk seluruhnya;
+    # selain itu bingkai dasarnya dinilai per saat (game / wajah / gerakan).
+    dasar_waktu = None if facecam else _dasar_per_waktu(plan, src, segments, durasi, out_w, out_h)
     kunci, catatan = jadikan_kunci(hasil, plan=plan, facecam=facecam,
                                    momen_lokal=momen_lokal, durasi=durasi,
-                                   src_w=sw, src_h=sh, out_w=out_w, out_h=out_h, model=model)
+                                   src_w=sw, src_h=sh, out_w=out_w, out_h=out_h, model=model,
+                                   dasar_waktu=dasar_waktu)
     jenis = hasil.get("jenis_video") or ("gameplay" if facecam else "podcast")
     log.info("Sutradara AI (%s): %s, %d kunci, %d momen lokal, token %s",
              model, jenis, len(kunci), len(momen_lokal), pakai)
@@ -602,6 +1085,7 @@ def susun_lokal(src: Path, segments: list[dict], *, subtitles: list[dict],
     hasil = sutradara.susun(src, segments, out_w=out_w, out_h=out_h)
     if hasil.get("keys"):
         hasil.pop("facecam", None)
+        _tanpa_kabur(hasil["keys"])
         return hasil
 
     info = probe(src)
@@ -611,7 +1095,12 @@ def susun_lokal(src: Path, segments: list[dict], *, subtitles: list[dict],
              for l in subtitles or [] if l.get("speaker") is not None and l.get("end") is not None]
     plan = plan_reframe(str(src), segments, aspect_ratio="9:16", speaker_turns=turns)
     if plan is None or not plan.people:
-        return {**hasil, "catatan": ["Tidak ada wajah yang bisa dibingkai di klip ini."]}
+        # Tidak ada wajah sama sekali (pemandangan, permainan tanpa facecam):
+        # seluruh klip mengikuti gerakan — bukan gambar utuh berlatar kabur.
+        return {**hasil, "jenis": "lainnya", "layers": [],
+                "keys": [{"t": 0.0, "mode": "motion", "asal": "otomatis",
+                          "alasan": "Tidak ada wajah — kamera mengikuti gerakan"}],
+                "catatan": ["Tidak ada wajah di klip ini — kamera mengikuti gerakan."]}
     kata = [{"s": float(l["start"]), "e": float(l["end"])} for l in subtitles or []
             if l.get("start") is not None and l.get("end") is not None]
     momen = cari_momen(src, segments, plan=plan, words=kata)
@@ -633,9 +1122,16 @@ def susun_lokal(src: Path, segments: list[dict], *, subtitles: list[dict],
                          "durasi": t1 - t0}]})
     kunci, catatan = jadikan_kunci(tiruan, plan=plan, facecam=None, momen_lokal=momen,
                                    durasi=durasi, src_w=sw, src_h=sh, out_w=out_w, out_h=out_h,
-                                   model="mesin lokal")
+                                   model="mesin lokal",
+                                   dasar_waktu=_dasar_per_waktu(plan, src, segments, durasi,
+                                                                out_w, out_h))
     for k in kunci:
         k["asal"] = "otomatis"
+    if len(kunci) == 1 and kunci[0].get("mode") != "smart":
+        # Satu kunci yang BUKAN ikut wajah tetap sebuah keputusan: wajahnya
+        # jarang terlihat, jadi seluruh klip mengikuti gerakan.
+        return {"jenis": "lainnya", "keys": kunci, "layers": [], "momen": [],
+                "catatan": catatan}
     if len(kunci) <= 1:
         return {"jenis": "podcast", "keys": [], "layers": [], "momen": momen,
                 "catatan": ["Tidak ada tawa atau sorak yang cukup kuat dengan beberapa wajah terlihat."]}

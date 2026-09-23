@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, Trash2, ArrowUp, ArrowDown, ScanFace } from 'lucide-react';
+import { Plus, Trash2, ArrowUp, ArrowDown, ScanFace, Loader2 } from 'lucide-react';
 import FrameKeysPanel from './FrameKeysPanel';
 import {
   LAYOUT_PRESETS, addedFrame, clampRect, frameInk, presetLayout,
@@ -41,6 +41,10 @@ export default function FramePanel({
   onAimPerson = null,
   keyCount = 0,
   onClearKeys = null,
+  // Bingkai bawaan klip ini dari isinya: 'memuat' | {mode, alasan} | null.
+  jenisKlip = null,
+  // Pengguna sudah memilih sendiri untuk klip ini; `onOtomatis` membuangnya.
+  pilihanSendiri = false, onOtomatis = null,
 }) {
   const frames = layout?.frames ?? [];
   const selected = frames.find((f) => f.id === selectedFrameId) ?? frames[0] ?? null;
@@ -74,6 +78,23 @@ export default function FramePanel({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '9px' }}>
       <div className="mark" style={{ color: 'var(--ink)' }}>Cara membingkai</div>
+      {jenisKlip === 'memuat' && !pilihanSendiri && (
+        <div className="choice-h" style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+          <Loader2 size={12} className="animate-spin" />
+          Membaca isi klip — game, wajah, atau tanpa wajah…
+        </div>
+      )}
+      {jenisKlip?.mode && !pilihanSendiri && (
+        <div className="choice-h">Dipilih otomatis: {jenisKlip.alasan}.</div>
+      )}
+      {pilihanSendiri && onOtomatis && (
+        <div className="choice-h">
+          Dipilih sendiri untuk klip ini.{' '}
+          <button className="chip" onClick={onOtomatis} style={{ fontSize: '0.7rem' }}>
+            Kembali ke otomatis
+          </button>
+        </div>
+      )}
       {FRAME_MODES.map((m) => (
         <button key={m.id} onClick={() => onFrameModeChange(m.id)}
                 className={`choice${frameMode === m.id ? ' is-on' : ''}`}>

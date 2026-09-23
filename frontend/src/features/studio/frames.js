@@ -674,8 +674,70 @@ export function bidangPermainan(src, wajah, srcAspek, outAspek) {
   return { x: 0, y: wajah, w: 100, h };
 }
 
-/** Cermin `render._permainan_tanpa_wajah`: potongan permainan tanpa facecam. */
-export function permainanTanpaWajah(facecams, rasioPx, srcAspek) {
+// Cermin konstanta render.py: ruang kepala di sekitar petak wajah YuNet.
+const KEPALA_ATAS = 0.35;
+const KEPALA_BAWAH = 0.22;
+const KEPALA_SAMPING = 0.25;
+const PERMAINAN_GESER_MAKS = 3.0;
+
+/** Cermin `render._ruang_wajah`: petak wajah [x1,y1,x2,y2] -> kepala utuh. */
+function ruangWajah(muka) {
+  if (!Array.isArray(muka) || muka.length !== 4) return null;
+  const [x1, y1, x2, y2] = muka.map(Number);
+  const fw = Math.max(0.1, x2 - x1);
+  const fh = Math.max(0.1, y2 - y1);
+  const a = Math.max(0, x1 - KEPALA_SAMPING * fw);
+  const b = Math.min(100, x2 + KEPALA_SAMPING * fw);
+  const c = Math.max(0, y1 - KEPALA_ATAS * fh);
+  const d = Math.min(100, y2 + KEPALA_BAWAH * fh);
+  return { x: a, y: c, w: b - a, h: d - c };
+}
+
+function pilihDalam(lo, hi, plo, phi, ingin) {
+  if (lo > hi) { const m = (lo + hi) / 2; lo = m; hi = m; }
+  const a = Math.max(lo, plo);
+  const b = Math.min(hi, phi);
+  if (a <= b) return Math.min(Math.max(ingin, a), b);
+  return Math.min(Math.max((plo + phi) / 2, lo), hi);
+}
+
+/**
+ * Cermin `render.kotak_reaksi`: potongan bidang reaksi yang memuat SELURUH
+ * kepala dan sebisanya tetap di dalam panel facecam.
+ */
+export function kotakReaksi(kotak, muka, rasioPx, srcAspek) {
+  const dasar = pasRasio(kotak, rasioPx, srcAspek, { dalam: true });
+  const butuh = ruangWajah(muka);
+  if (!butuh) return dasar;
+  const k = rasioPx / Math.max(1e-6, srcAspek);
+  let h = Math.max(dasar.h, butuh.h, butuh.w / k);
+  let w = h * k;
+  if (w > 100) { w = 100; h = 100 / k; }
+  if (h > 100) { h = 100; w = 100 * k; }
+  let x = pilihDalam(butuh.x + butuh.w - w, butuh.x, kotak.x, kotak.x + kotak.w - w,
+    butuh.x + butuh.w / 2 - w / 2);
+  let y = pilihDalam(butuh.y + butuh.h - h, butuh.y, kotak.y, kotak.y + kotak.h - h,
+    butuh.y + butuh.h / 2 - h / 2);
+  x = Math.min(Math.max(0, x), 100 - w);
+  y = Math.min(Math.max(0, y), 100 - h);
+  const bulat = (v) => Math.round(v * 100) / 100;
+  return { x: bulat(x), y: bulat(y), w: bulat(w), h: bulat(h) };
+}
+
+/**
+ * Cermin `render._permainan_tanpa_wajah`: potongan permainan tanpa facecam.
+ * Bila menghindari seluruh panel mendorongnya lebih dari 3% dari tengah, yang
+ * dihindari hanya kepala di dalamnya (`wajahSaja`).
+ */
+export function permainanTanpaWajah(facecams, rasioPx, srcAspek, wajahSaja = null) {
+  if (wajahSaja?.length) {
+    const hasil = permainanTanpaWajah(facecams, rasioPx, srcAspek);
+    const w = Math.min(100, 100 * (rasioPx / Math.max(1e-6, srcAspek)));
+    if (Math.abs(hasil.x - (50 - w / 2)) > PERMAINAN_GESER_MAKS) {
+      return permainanTanpaWajah(wajahSaja, rasioPx, srcAspek);
+    }
+    return hasil;
+  }
   const k = rasioPx / Math.max(1e-6, srcAspek);
   const w = Math.min(100, 100 * k);
   if (w >= 100) {
@@ -714,7 +776,8 @@ export function susunGaming(lama, { wajah, permainan = 'isi', srcAspek, outAspek
   const reaksi = (lama.reaksi?.length ? lama.reaksi : [{ t: 0, src: muka.src }])
     .map((r) => {
       const kotak = r.kotak ?? r.src;
-      return { t: r.t, kotak, src: pasRasio(kotak, rasioMuka, srcAspek, { dalam: true }) };
+      return { t: r.t, kotak, ...(r.muka ? { muka: r.muka } : {}),
+               src: kotakReaksi(kotak, r.muka, rasioMuka, srcAspek) };
     });
   let mainSrc;
   let mainDst;
@@ -724,7 +787,8 @@ export function susunGaming(lama, { wajah, permainan = 'isi', srcAspek, outAspek
   } else {
     mainDst = { x: 0, y: tinggiWajah, w: 100, h: 100 - tinggiWajah };
     mainSrc = permainanTanpaWajah(reaksi.map((r) => r.kotak),
-      rasioBidang(mainDst, outAspek), srcAspek);
+      rasioBidang(mainDst, outAspek), srcAspek,
+      reaksi.map((r) => ruangWajah(r.muka) ?? r.kotak));
   }
   return {
     ...lama,
@@ -761,6 +825,7 @@ export function susunanDariServer(l) {
     gaming: l.gaming ?? null,
     reaksi: (l.reaksi ?? []).map((r) => ({
       t: Number(r.t) || 0, src: { ...r.src }, ...(r.kotak ? { kotak: { ...r.kotak } } : {}),
+      ...(Array.isArray(r.muka) ? { muka: [...r.muka] } : {}),
     })),
     frames: l.frames.map((f, i) => ({
       ...makeFrame(f.label || (i === 0 ? 'Permainan' : 'Reaksi'), f.src, f.dst),
