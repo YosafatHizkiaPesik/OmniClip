@@ -55,7 +55,11 @@ async def callback(request: Request, state: str = "", error: str = ""):
     if error:
         return _page("Izin ditolak", f"Google menjawab: {error}", ok=False)
     try:
-        email = google.finish_authorization(str(request.url), state)
+        email, pid = google.finish_authorization(str(request.url), state)
+        from ..services import profil as profil_svc
+        nama = profil_svc.namai_dari_akun(pid, email)
+        if nama:
+            log.info("Akun %s dinamai dari surelnya: %s", pid, nama)
     except AppError as e:
         return _page("Gagal menyambungkan", e.message, ok=False)
     except Exception as e:  # noqa: BLE001 — halaman ini tidak boleh 500

@@ -52,6 +52,30 @@ UNGGAH_BAWAAN = {
 }
 
 
+# Nama yang dipakai saat sebuah akun baru dibuat, SEBELUM ia masuk ke Google.
+# Begitu akunnya tersambung, namanya diganti alamat surelnya sendiri —
+# meminta orang mengarang nama untuk akun yang sudah punya nama adalah
+# pekerjaan yang tidak perlu ada.
+NAMA_SEMENTARA = "Akun baru"
+
+
+def namai_dari_akun(pid: int, email: str) -> Optional[str]:
+    """
+    Memberi nama akun dari alamat surelnya, bila namanya masih sementara.
+
+    Nama yang sudah diketik pemiliknya sendiri tidak pernah ditimpa.
+    """
+    from ..repos import profil as repo
+    p = repo.ambil(pid)
+    if not p or not email:
+        return None
+    if (p.get("nama") or "").strip() not in ("", NAMA_SEMENTARA):
+        return None
+    nama = email.split("@")[0].replace(".", " ").strip()[:40] or email[:40]
+    repo.ubah(pid, nama=nama)
+    return nama
+
+
 def kini() -> int:
     return _kini.get()
 

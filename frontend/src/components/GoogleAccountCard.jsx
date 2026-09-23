@@ -105,25 +105,26 @@ export default function GoogleAccountCard({ card, sectionTitle, helpText }) {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '14px' }}>
           <StatusLine
-            ok={status.client_configured}
-            okText="Berkas OAuth client terpasang."
-            offText="Belum ada berkas OAuth client." />
-          <StatusLine
             ok={status.connected}
             okText={`Tersambung${status.email ? ` sebagai ${status.email}` : ''}.`}
-            offText="Akun Google belum tersambung." />
+            offText="Akun ini belum masuk ke Google." />
 
+          {/* Pemasangan berkas OAuth client tinggal di kartu "Tambah akun",
+              tempat orang memang mencarinya. Di sini yang tersisa hanya
+              menyambungkan AKUN INI — dua tombol yang mengerjakan hal
+              berbeda tapi terlihat sama adalah sumber kebingungan, dan
+              pemiliknya sudah bertanya "di mana saya menambahkan akun?". */}
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             <input ref={fileRef} type="file" accept="application/json,.json"
                    onChange={pickFile} style={{ display: 'none' }} />
-            <button className="btn-secondary" disabled={busy}
-                    onClick={() => fileRef.current?.click()}>
-              {busy ? <Loader2 size={14} className="animate-spin" /> : null}
-              {status.client_configured ? 'Ganti berkas client' : 'Pasang berkas client'}
-            </button>
+            {!status.client_configured && (
+              <span style={helpText}>
+                Aplikasi Google belum didaftarkan — lihat kartu <b>Tambah akun</b> di atas.
+              </span>
+            )}
             {status.client_configured && !status.connected && (
               <button className="btn-primary" disabled={busy} onClick={connect}>
-                <ExternalLink size={14} /> Sambungkan akun Google
+                <ExternalLink size={14} /> Masuk dengan Google untuk akun ini
               </button>
             )}
             {status.connected && (

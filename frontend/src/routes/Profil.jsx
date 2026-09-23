@@ -4,6 +4,7 @@ import {
 } from 'lucide-react';
 import { apiDelete, apiGet, apiPatch, apiPost, pilihProfil, profilAktif } from '../lib/api';
 import GoogleAccountCard from '../components/GoogleAccountCard';
+import TambahAkun from '../components/TambahAkun';
 import SosialCard from '../components/SosialCard';
 
 const card = { padding: '18px 20px', borderBottom: '1px solid var(--rule-2)' };
@@ -93,6 +94,7 @@ export default function Profil() {
   const [sibuk, setSibuk] = useState(false);
   const [baru, setBaru] = useState({ nama: '', warna: WARNA[1], minat: [] });
   const [draf, setDraf] = useState(null);         // salinan profil aktif yang sedang diubah
+  const [tanpaAkun, setTanpaAkun] = useState(false);
 
   const muat = useCallback(async () => {
     try {
@@ -137,7 +139,7 @@ export default function Profil() {
   };
 
   const hapus = async (p) => {
-    if (!window.confirm(`Hapus profil "${p.nama}"?\n\nKlip yang sudah dirender TIDAK dihapus — tetap ada di:\n${p.folder_klip}\n\nSambungan akun Google profil ini diputus.`)) return;
+    if (!window.confirm(`Hapus akun "${p.nama}" dari OmniClip?\n\nKlip yang sudah dirender TIDAK dihapus — tetap ada di:\n${p.folder_klip}\n\nYang diputus hanya sambungannya ke OmniClip; akun Google, TikTok, dan Meta Anda sendiri tidak disentuh.`)) return;
     setSibuk(true);
     try {
       await apiDelete(`/profil/${p.id}`);
@@ -165,9 +167,10 @@ export default function Profil() {
     <div className="page" style={{ maxWidth: '780px' }}>
       <div className="work-block">
         <div style={{ minWidth: 0 }}>
-          <h1 className="work-title">Profil</h1>
+          <h1 className="work-title">Akun</h1>
           <div className="sub">
-            Tiap profil punya akun Google, folder klip, riwayat pencarian, dan beranda sendiri.
+            Tiap akun punya folder klip, riwayat pencarian, beranda, dan kanal
+            unggahannya sendiri — jadi satu akun bisa fokus pada satu jenis konten.
           </div>
         </div>
       </div>
@@ -175,7 +178,7 @@ export default function Profil() {
       <div className="plate" style={{ overflow: 'hidden' }}>
         {/* --- Semua profil --- */}
         <div style={card}>
-          <div style={sectionTitle}><UserRound size={18} style={{ color: 'var(--reh)' }} />Pilih profil</div>
+          <div style={sectionTitle}><UserRound size={18} style={{ color: 'var(--reh)' }} />Akun Anda</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '7px', marginTop: '8px' }}>
             {data.profil.map((p) => (
               <div key={p.id} style={{
@@ -197,7 +200,7 @@ export default function Profil() {
                   : <button className="btn-secondary" onClick={() => pilihProfil(p.id)}>Pakai</button>}
                 {p.id !== 1 && (
                   <button className="btn-secondary" onClick={() => hapus(p)} disabled={sibuk}
-                          title="Hapus profil (klipnya tetap ada)" aria-label={`Hapus ${p.nama}`}>
+                          title="Hapus akun dari OmniClip (klipnya tetap ada)" aria-label={`Hapus ${p.nama}`}>
                     <Trash2 size={14} />
                   </button>
                 )}
@@ -206,29 +209,56 @@ export default function Profil() {
           </div>
 
           <div style={{ marginTop: '14px', paddingTop: '12px', borderTop: '1px dashed var(--rule-2)' }}>
-            <div style={{ fontWeight: 800, fontSize: '0.82rem', marginBottom: '8px' }}>Profil baru</div>
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-              <input value={baru.nama} onChange={(e) => setBaru((b) => ({ ...b, nama: e.target.value }))}
-                     placeholder="Nama, mis. Horor atau Podcast" maxLength={40}
-                     style={{ ...masukan, flex: '1 1 200px' }} />
-              <PilihWarna nilai={baru.warna} onChange={(w) => setBaru((b) => ({ ...b, warna: w }))} />
-            </div>
-            <div style={{ marginTop: '8px' }}>
-              <DaftarKata nilai={baru.minat} onChange={(m) => setBaru((b) => ({ ...b, minat: m }))}
-                          contoh="Minat untuk beranda, mis. gameplay horor indonesia" />
-            </div>
-            <button className="btn-primary" onClick={buat} disabled={sibuk || !baru.nama.trim()}
-                    style={{ marginTop: '10px', display: 'inline-flex', gap: '6px', alignItems: 'center' }}>
-              <Plus size={14} />Buat dan pakai
-            </button>
+            {/* Menambah akun sekarang berarti MASUK, bukan mengarang nama.
+                Membuat ruang kerja tanpa akun tetap bisa, tapi ia jalan
+                sampingan — tanpa akun, klipnya tidak bisa diunggah ke mana
+                pun, dan itu yang membuat pemiliknya bertanya "di mana saya
+                menambahkan akun?". */}
+            {tanpaAkun ? (
+              <>
+                <div style={{ fontWeight: 800, fontSize: '0.82rem', marginBottom: '8px' }}>
+                  Ruang kerja tanpa akun
+                </div>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                  <input value={baru.nama} onChange={(e) => setBaru((b) => ({ ...b, nama: e.target.value }))}
+                         placeholder="Nama, mis. Horor atau Podcast" maxLength={40}
+                         style={{ ...masukan, flex: '1 1 200px' }} />
+                  <PilihWarna nilai={baru.warna} onChange={(w) => setBaru((b) => ({ ...b, warna: w }))} />
+                </div>
+                <div style={{ marginTop: '8px' }}>
+                  <DaftarKata nilai={baru.minat} onChange={(m) => setBaru((b) => ({ ...b, minat: m }))}
+                              contoh="Minat untuk beranda, mis. gameplay horor indonesia" />
+                </div>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '10px' }}>
+                  <button className="btn-primary" onClick={buat} disabled={sibuk || !baru.nama.trim()}
+                          style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }}>
+                    <Plus size={14} />Buat dan pakai
+                  </button>
+                  <button onClick={() => setTanpaAkun(false)}
+                          style={{ background: 'none', border: 0, cursor: 'pointer', padding: 0,
+                                   fontSize: '0.76rem', fontFamily: 'inherit', color: 'var(--text-muted)' }}>
+                    Kembali
+                  </button>
+                </div>
+              </>
+            ) : (
+              <button onClick={() => setTanpaAkun(true)}
+                      style={{ background: 'none', border: 0, cursor: 'pointer', padding: 0,
+                               fontSize: '0.76rem', fontFamily: 'inherit', color: 'var(--text-muted)' }}>
+                Buat ruang kerja tanpa akun Google
+              </button>
+            )}
           </div>
         </div>
+
+        <TambahAkun card={card} sectionTitle={sectionTitle} helpText={helpText}
+                    onSelesai={() => window.location.reload()} />
 
         {draf && (
           <>
             {/* --- Profil aktif: identitas dan minat --- */}
             <div style={card}>
-              <div style={sectionTitle}><Lencana profil={draf} />Profil aktif: {aktif?.nama}</div>
+              <div style={sectionTitle}><Lencana profil={draf} />Akun aktif: {aktif?.nama}</div>
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center', marginTop: '8px' }}>
                 <input value={draf.nama} maxLength={40}
                        onChange={(e) => setDraf((d) => ({ ...d, nama: e.target.value }))}

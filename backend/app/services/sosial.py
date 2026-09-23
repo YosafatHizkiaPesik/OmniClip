@@ -309,9 +309,16 @@ def mulai_izin(platform: str) -> str:
         raise _gagal(f"Kunci aplikasi {PLATFORM[platform]['label']} belum diisi.",
                      code="SOSIAL_BELUM_SIAP", status=409)
     k = kredensial(platform)
+    from . import profil as profil_svc
     state = secrets.token_urlsafe(24)
     with _kunci:
-        _menunggu[state] = {"platform": platform, "waktu": time.time()}
+        # Profil peminta diingat bersama sesinya. Halaman balik dari TikTok
+        # atau Meta datang sebagai kunjungan biasa dari peramban dan TIDAK
+        # membawa header profil — tanpa ini, akun kedua selalu tersimpan ke
+        # profil pertama, dan pemiliknya baru sadar saat klipnya naik ke kanal
+        # yang salah.
+        _menunggu[state] = {"platform": platform, "waktu": time.time(),
+                            "profil": profil_svc.kini()}
         # Sesi izin yang ditinggalkan tidak perlu disimpan selamanya.
         for s, v in list(_menunggu.items()):
             if time.time() - v["waktu"] > 900:
@@ -343,6 +350,7 @@ def selesaikan_izin(code: str, state: str, pid: Optional[int] = None) -> dict:
     if not sesi:
         raise _gagal("Sesi izin sudah kedaluwarsa. Coba sambungkan lagi.", status=409)
     platform = sesi["platform"]
+    pid = pid or sesi.get("profil")
     return (_tiktok_token(code, pid) if platform == "tiktok"
             else _meta_token(code, platform, pid))
 

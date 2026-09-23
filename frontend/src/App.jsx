@@ -16,7 +16,7 @@ const NAV = [
   { to: '/studio', label: 'Partitur', Icon: Music4 },
   { to: '/clips', label: 'Klip jadi', Icon: Film },
   { to: '/downloads', label: 'Unduhan', Icon: Download },
-  { to: '/profil', label: 'Profil', Icon: UserRound },
+  { to: '/profil', label: 'Akun', Icon: UserRound },
   { to: '/settings', label: 'Pengaturan', Icon: SlidersHorizontal },
 ];
 

@@ -201,8 +201,14 @@ def begin_authorization() -> str:
     return url
 
 
-def finish_authorization(full_url: str, state: str) -> str:
-    """Menukar kode izin jadi token. Mengembalikan alamat surel akunnya."""
+def finish_authorization(full_url: str, state: str) -> tuple[str, int]:
+    """
+    Menukar kode izin jadi token. Mengembalikan (alamat surel, id profil).
+
+    Profilnya ikut dikembalikan karena pemanggilnya perlu tahu akun SIAPA yang
+    baru saja tersambung — halaman balik dari Google tidak membawa header
+    profil, jadi menebaknya di sana akan selalu menunjuk profil pertama.
+    """
     with _lock:
         tunggu = _pending.pop(state, None)
     if tunggu is None:
@@ -226,7 +232,7 @@ def finish_authorization(full_url: str, state: str) -> str:
     tujuan = _token_path(pid)
     tujuan.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     os.chmod(tujuan, 0o600)
-    return email
+    return email, pid
 
 
 def disconnect(pid: Optional[int] = None) -> None:

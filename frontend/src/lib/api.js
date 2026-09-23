@@ -59,9 +59,20 @@ export function profilAktif() {
   }
 }
 
+/**
+ * Menunjuk profil aktif TANPA memuat ulang halaman.
+ *
+ * Dipakai alur "tambah akun": akunnya dibuat, lalu permintaan izin Google
+ * harus dikirim atas nama akun yang baru itu — dan memuat ulang di antara
+ * keduanya akan membuang keadaan wizardnya di tengah jalan.
+ */
+export function setProfilAktif(id) {
+  try { localStorage.setItem(PROFIL_KEY, String(id)); } catch { /* mode privat */ }
+}
+
 /** Pindah profil: seluruh halaman dimuat ulang supaya tidak ada data profil lama yang tertinggal di layar. */
 export function pilihProfil(id) {
-  try { localStorage.setItem(PROFIL_KEY, String(id)); } catch { /* mode privat */ }
+  setProfilAktif(id);
   window.location.reload();
 }
 

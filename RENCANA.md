@@ -19,21 +19,27 @@ Memindahkan `OmniClip-Data` ke SSD tidak butuh kode apa pun.
 **A2. Berkas sisa 17 GB.** Satu `.f623.mp4` tanpa suara, nol klip jadi.
 Sekarang terlihat di Pengaturan → Ruang cakram, tinggal dicentang dan dihapus.
 
-**A3. Mendaftarkan aplikasi TikTok dan Meta.** Kodenya sudah ada dan menunggu
-kunci. Tanpa pendaftaran, unggah ke TikTok/Facebook/Instagram tidak bisa
-dipakai sama sekali — dan tidak bisa diuji (lihat E1).
+**A3. Mendaftarkan aplikasi Google, TikTok, dan Meta.** Kodenya sudah ada dan
+menunggu kunci; langkahnya ada di dalam aplikasi (Akun → Tambah akun) dan di
+[PANDUAN-AKUN.md](PANDUAN-AKUN.md). Sampai ini dikerjakan, unggah ke mana pun
+tidak bisa dipakai — dan tidak bisa diuji (lihat E1).
 
 ---
 
 ## B. Diminta, belum dibangun
 
-**B1. Sutradara AI untuk gaya subtitle.** Font, warna, bentuk, dan posisi yang
-berbeda menurut isi dan penuturnya. Sutradara sekarang hanya mengatur bingkai.
-Ini satu-satunya permintaan lama yang masih utuh belum dikerjakan.
+**B1. Sutradara AI untuk gaya subtitle.** Tema dan sorotan katanya sekarang
+sudah banyak (26 tema, enam cara menyorot kata), tapi MEMILIHNYA masih
+pekerjaan tangan. Yang belum ada: AI yang memilih tema per klip menurut isinya,
+dan warna berbeda per penutur di dalam satu tema.
 
 ---
 
 ## C. Saran perbaikan yang belum dikerjakan
+
+**C0. Tema subtitle per bahasa.** Tema yang memakai huruf kapital semua tidak
+berlaku untuk aksara Jepang, Korea, dan Arab; sekarang pilihannya tetap
+ditawarkan walau tidak berpengaruh.
 
 **C1. Pratinjau yang benar-benar menampilkan hasil rapat.** Sesudah "Rapatkan
 jeda", pemutar Studio memutar segmen barunya, tapi peralihan antar potongan di
