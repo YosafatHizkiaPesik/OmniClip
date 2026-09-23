@@ -7,7 +7,12 @@ import { apiGet, apiPost } from '../lib/api';
 const TARGETS = [
   { id: 'drive', label: 'Google Drive', hint: 'Masuk ke folder OmniClip di Drive Anda.' },
   { id: 'youtube', label: 'YouTube', hint: 'Naik sebagai video di kanal Anda sendiri.' },
+  { id: 'tiktok', label: 'TikTok', hint: 'Masuk ke draf TikTok; Anda yang menekan terbit.' },
+  { id: 'facebook', label: 'Facebook', hint: 'Reels di Halaman Facebook Anda.' },
+  { id: 'instagram', label: 'Instagram', hint: 'Reels — langsung terbit, tidak bisa privat.' },
 ];
+
+const NAMA_TUJUAN = Object.fromEntries(TARGETS.map((t) => [t.id, t.label]));
 
 const PRIVACY = [
   { id: 'private', label: 'Privat', hint: 'Hanya Anda yang bisa melihatnya.' },
@@ -121,7 +126,7 @@ export default function UploadModal({ clip, onClose, onDone }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div style={{ display: 'flex', gap: '9px', alignItems: 'center', fontSize: '.9rem' }}>
               <CheckCircle2 size={18} style={{ color: 'var(--entry)' }} />
-              Terunggah ke {target === 'youtube' ? 'YouTube' : 'Google Drive'}.
+              Terunggah ke {NAMA_TUJUAN[target] || target}.
             </div>
             <a href={result?.remote_url} target="_blank" rel="noreferrer"
                className="btn-secondary" style={{ textDecoration: 'none', justifyContent: 'center' }}>
@@ -181,7 +186,7 @@ export default function UploadModal({ clip, onClose, onDone }) {
                      onChange={(e) => setTitle(e.target.value)} />
             </label>
 
-            {target === 'youtube' && (
+            {target !== 'drive' && (
               <>
                 <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <span className="mark" style={{ color: 'var(--ink)' }}>Deskripsi</span>
@@ -219,7 +224,7 @@ export default function UploadModal({ clip, onClose, onDone }) {
                     disabled={!title.trim() || !status}
                     style={{ justifyContent: 'center', marginTop: '2px' }}>
               <UploadCloud size={15} />
-              Unggah ke {target === 'youtube' ? 'YouTube' : 'Drive'}
+              Unggah ke {NAMA_TUJUAN[target] || target}
             </button>
           </div>
         )}
