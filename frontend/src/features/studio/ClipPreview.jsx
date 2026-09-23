@@ -1381,7 +1381,8 @@ function berjarak(kiri, kanan) {
   const a = (kiri || '').trim();
   const b = (kanan || '').trim();
   if (!a || !b) return false;
-  return !CJK.test(a[a.length - 1]) && !CJK.test(b[0]);
+  // Cermin dari services/teks.py: spasi hilang hanya bila KEDUA sisinya CJK.
+  return !(CJK.test(a[a.length - 1]) && CJK.test(b[0]));
 }
 
 export function CaptionOverlay({

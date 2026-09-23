@@ -27,11 +27,23 @@ def cjk(ch: str) -> bool:
 
 
 def pemisah(kiri: str, kanan: str) -> str:
-    """Spasi di antara dua token, atau kosong bila salah satu sisinya CJK."""
+    """
+    Spasi di antara dua token, atau kosong bila KEDUA sisinya CJK.
+
+    Aturan "salah satu sisinya CJK" yang dipakai sebelumnya benar untuk anime
+    dan salah untuk kalimat campuran: "Cek 天井 mix" jadi "Cek天井mix" — dua
+    kata Indonesia yang menempel pada kata Jepang di tengahnya. Ditemukan oleh
+    pengujian, bukan oleh mata.
+
+    Dengan syarat kedua sisi, cacat asalnya tetap tertutup: Whisper memecah
+    bahasa Jepang per huruf, dan kedua sisi tiap sambungan memang CJK.
+    Akibatnya yang tersisa kecil dan searah — "100日" ditulis "100 日" — dan itu
+    masih terbaca, sedangkan kalimat campuran yang menempel tidak.
+    """
     kiri, kanan = (kiri or "").rstrip(), (kanan or "").lstrip()
     if not kiri or not kanan:
         return ""
-    return "" if cjk(kiri[-1]) or cjk(kanan[0]) else " "
+    return "" if cjk(kiri[-1]) and cjk(kanan[0]) else " "
 
 
 def sambung(tokens) -> str:
