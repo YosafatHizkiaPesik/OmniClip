@@ -101,11 +101,11 @@ aplikasi dimulai belum pernah dijalankan sungguhan.
 cd backend && ./venv/bin/python -m unittest discover -s tests -t .
 ```
 
-67 uji, tanpa memasang apa pun, selesai dalam sepersekian detik. Yang diuji
+81 uji, tanpa memasang apa pun, selesai dalam sepersekian detik. Yang diuji
 adalah bagian yang rusaknya paling tidak terlihat: penyusun teks dan subtitle,
-perapatan jeda, geometri bingkai, penilaian isi klip, skema dan jawaban model
-AI, pemilihan model Whisper, serta pemeriksaan jalur berkas yang datang dari
-peramban.
+tema dan sorotan kata, perapatan jeda, geometri bingkai, penilaian isi klip,
+skema dan jawaban model AI, pemilihan model Whisper, serta pemeriksaan jalur
+berkas yang datang dari peramban.
 
 Uji pertama yang ditulis langsung menemukan satu cacat: `"Cek 天井 mix"`
 kehilangan kedua spasinya karena aturan lama menghapus spasi bila salah satu
