@@ -99,6 +99,59 @@ class LapisKotak(unittest.TestCase):
         self.assertIn(r"\blur", ass)
 
 
+class JarakKata(unittest.TestCase):
+    """
+    Dilaporkan pemiliknya dari klip yang sudah jadi: "KASUS TERAKHIRKU" terbaca
+    sebagai satu kata panjang. Sebabnya spasi bawaan font display memang
+    sempit, dan sempitnya berbeda-beda per font.
+    """
+
+    def test_font_berspasi_sempit_dilebarkan_lebih_banyak(self):
+        from app.services.fonts import lebar_spasi
+        from app.services.subtitles import JARAK_KATA, _sela
+        sempit = lebar_spasi("Bebas Neue")
+        lebar = lebar_spasi("Archivo Black")
+        self.assertLess(sempit, lebar, "prasyarat: kedua font memang berbeda")
+
+        def tambahan(font):
+            # "{\fspN} {\fsp0}" -> N
+            s = _sela(CaptionStyle(font=font, size=100))
+            return int(s.split("fsp")[1].split("}")[0]) if "fsp" in s else 0
+
+        self.assertGreater(tambahan("Bebas Neue"), tambahan("Archivo Black"))
+        # Hasilnya yang disamakan, bukan tambahannya.
+        for font in ("Bebas Neue", "Archivo Black", "Montserrat", "Anton"):
+            total = lebar_spasi(font) + tambahan(font) / 100.0
+            self.assertAlmostEqual(total, JARAK_KATA, delta=0.01, msg=font)
+
+    def test_spasi_dilebarkan_hanya_di_antara_kata(self):
+        ass = build_ass(lines=baris("satu dua"), clip_duration=1.5,
+                        style=CaptionStyle(font="Bebas Neue", sorot="warna"))
+        dialog = next(b for b in ass.splitlines() if b.startswith("Dialogue: "))
+        isi = dialog.split(",,", 1)[1]
+        self.assertIn(r"\fsp", isi)
+        # Yang berada di dalam lingkup \fsp yang MELEBARKAN hanya satu spasi;
+        # huruf di dalam kata tidak boleh ikut merenggang. Lingkup \fsp0 adalah
+        # penutupnya, jadi ia memang diikuti kata berikutnya.
+        for potong in isi.split("{\\fsp")[1:]:
+            angka, sisa = potong.split("}", 1)
+            if angka == "0":
+                continue
+            dalam = sisa.split("{", 1)[0]
+            self.assertEqual(dalam, " ", f"lingkup fsp memuat {dalam!r}")
+
+    def test_teks_cjk_tidak_diberi_spasi(self):
+        ass = build_ass(lines=baris("天 井"), clip_duration=1.5,
+                        style=CaptionStyle(sorot="warna"))
+        dialog = next(b for b in ass.splitlines() if b.startswith("Dialogue: "))
+        self.assertNotIn(r"\fsp", dialog.split(",,", 1)[1])
+
+    def test_pemisah_khusus_dipakai_apa_adanya(self):
+        from app.services.teks import sambung_bagian
+        self.assertEqual(sambung_bagian(["a", "b"], ["a", "b"], sela="<S>"), "a<S>b")
+        self.assertEqual(sambung_bagian(["天", "井"], ["天", "井"], sela="<S>"), "天井")
+
+
 class AnimasiMasuk(unittest.TestCase):
     def test_tiap_animasi_menghasilkan_tag_yang_berbeda(self):
         dilihat = {}

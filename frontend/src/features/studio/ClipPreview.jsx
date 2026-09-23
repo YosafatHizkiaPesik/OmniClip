@@ -1376,6 +1376,10 @@ export default function ClipPreview({
  * proporsi hasil akhirnya — bukan perkiraan berbasis lebar layar.
  */
 // Aksara Jepang/Mandarin: kata-katanya tidak dipisah spasi.
+// Jarak antar kata sebagai pecahan ukuran huruf. Cermin dari `JARAK_KATA` di
+// backend/app/services/subtitles.py — kalau yang satu berubah, yang lain ikut.
+export const JARAK_KATA = 0.40;
+
 const CJK = /[\u3000-\u303f\u3040-\u30ff\u31f0-\u31ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff00-\uffef]/;
 function berjarak(kiri, kanan) {
   const a = (kiri || '').trim();
@@ -1391,7 +1395,16 @@ export function CaptionOverlay({
   onWidthLeftStart, onWidthRightStart,
 }) {
   const [hover, setHover] = useState(false);
-  const words = line.words?.length ? line.words : [{ w: line.text }];
+  // Baris tanpa waktu per kata — subtitle kedua (terjemahan) — tetap dipecah
+  // per kata di sini, bukan digambar sebagai satu potong teks. Sebabnya jarak
+  // antar kata: yang satu potong memakai spasi bawaan font (Poppins 0,19 em),
+  // sedangkan hasil render melebarkannya sampai JARAK_KATA. Dipecah, keduanya
+  // memakai jarak yang sama persis.
+  const words = React.useMemo(() => (
+    line.words?.length
+      ? line.words
+      : String(line.text ?? '').split(/\s+/).filter(Boolean).map((w) => ({ w }))
+  ), [line.words, line.text]);
   const anim = style?.animation ?? 'karaoke_pop';
   const uppercase = style?.uppercase !== false;
   const scale = boxH / CANVAS_H;
@@ -1547,10 +1560,15 @@ export function CaptionOverlay({
                 kotak: warnaKotak,
                 kotakTeks: warnaKotakTeks,
               }),
-              // Tanpa jarak antarhuruf Jepang/Mandarin — sama dengan render
-              // (backend services/teks.py).
+              // Jarak antar kata. Angkanya SAMA dengan `JARAK_KATA` di backend
+              // (services/subtitles.py), yang melebarkan spasi tiap font
+              // sampai lebar ini — jadi pratinjau dan hasil render sepakat
+              // walau spasi bawaan tiap font berbeda dua kali lipat.
+              //
+              // Tanpa jarak sama sekali antarhuruf Jepang/Mandarin, sama
+              // seperti render (backend services/teks.py).
               marginRight: i === tampil.length - 1 || !berjarak(w.w, tampil[i + 1]?.w)
-                ? 0 : '0.28em',
+                ? 0 : `${JARAK_KATA}em`,
               display: 'inline-block',
               transition: 'transform 90ms ease, color 60ms linear',
             }}>{w.w}</span>

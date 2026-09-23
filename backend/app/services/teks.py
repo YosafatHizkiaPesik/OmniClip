@@ -57,17 +57,23 @@ def sambung(tokens) -> str:
     return keluar
 
 
-def sambung_bagian(bagian: list[str], mentah: list[str], patah: frozenset = frozenset()) -> str:
+def sambung_bagian(bagian: list[str], mentah: list[str], patah: frozenset = frozenset(),
+                   sela: str = " ") -> str:
     """
     Seperti `sambung`, tapi `bagian` boleh berisi tag ASS; `mentah` teks
     polosnya. Sebelum token berindeks di `patah` disisipkan ganti baris ASS.
+
+    `sela` menggantikan spasi biasa di antara kata — dipakai penyusun ASS untuk
+    melebarkan jaraknya. Spasi Montserrat ExtraBold sempit, dan pada huruf
+    kapital tebal dua kata bersebelahan terbaca sebagai satu kata panjang.
     """
     keluar, sebelum = "", ""
     for i, (b, m) in enumerate(zip(bagian, mentah)):
         if i in patah and keluar:
             keluar += "\\N" + b
         else:
-            keluar += (pemisah(sebelum, m) if sebelum else "") + b
+            keluar += (sela if pemisah(sebelum, m) else "") if sebelum else ""
+            keluar += b
         sebelum = m or sebelum
     return keluar
 

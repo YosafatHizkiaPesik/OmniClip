@@ -360,6 +360,36 @@ def _normalkan(st: CaptionStyle) -> CaptionStyle:
     return replace(st, animation=animasi, sorot=sorot)
 
 
+# Tambahan lebar spasi antar kata, sebagai pecahan ukuran font.
+#
+# Spasi Montserrat ExtraBold lebarnya sekitar 0,26 em, dan pada huruf kapital
+# tebal itu terlalu rapat: "KASUS TERAKHIRKU" terbaca sebagai satu kata
+# panjang — dilaporkan pemiliknya dari klip yang sudah jadi, bukan dari dugaan.
+# Yang dilebarkan HANYA spasinya, bukan jarak antar huruf: `\fsp` dipasang di
+# sekeliling satu spasi lalu dikembalikan ke nol, jadi huruf di dalam kata
+# tetap rapat seperti seharusnya.
+JARAK_KATA = 0.40
+
+
+def _sela(st: CaptionStyle) -> str:
+    """
+    Pemisah antar kata untuk ASS: satu spasi yang dilebarkan sampai JARAK_KATA.
+
+    Yang disamakan adalah HASILNYA, bukan tambahannya. Menambah jarak yang sama
+    ke semua font akan membuat Archivo Black terlalu renggang sementara Bebas
+    Neue masih rapat — lebar spasi bawaan keduanya berbeda dua kali lipat.
+    """
+    from .fonts import lebar_spasi
+    tambahan = max(0.0, JARAK_KATA - lebar_spasi(st.font))
+    n = int(round(st.size * tambahan))
+    return rf"{{\fsp{n}}} {{\fsp0}}" if n > 0 else " "
+
+
+def _lebarkan(teks: str, sela: str) -> str:
+    """Melebarkan spasi pada teks utuh (baris tanpa sorotan per kata)."""
+    return teks.replace(" ", sela) if sela != " " else teks
+
+
 def _tag_sorot(st: CaptionStyle, hl: str) -> str:
     """
     Tag ASS untuk kata yang sedang diucapkan.
@@ -662,6 +692,7 @@ def build_ass(
     ada_kedua = bool(kedua_lines) and kedua_style is not None and kedua_style.aktif
     if ada_kedua:
         kedua_style = _font_aksara(kedua_style, kedua_lines)
+        sela_kedua = _sela(kedua_style)
         gaya_kedua = _style_line("Caption2", kedua_style, w) + "\n"
 
     head = f"""[Script Info]
@@ -704,6 +735,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     # yang paling butuh hook-nya.
     # Huruf Jepang/Mandarin per baris: kira-kira selebar ukuran fontnya.
     per_baris_cjk = int(w * max(20.0, min(100.0, st.box_w)) / 100.0 / max(24, st.size))
+    sela = _sela(st)
     for line in (_tanpa_tumpang(lines) if st.aktif else []):
         words = reconcile_words(line)
         patah = titik_patah([x["w"] for x in words], per_baris_cjk) if words else frozenset()
@@ -762,7 +794,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 tampil = words[:idx + 1]
                 teks = sambung_bagian(
                     [escape_ass(x["w"].upper() if st.uppercase else x["w"]) for x in tampil],
-                    [x["w"] for x in tampil], patah)
+                    [x["w"] for x in tampil], patah, sela=sela)
                 events.append(
                     f"Dialogue: 0,{_ts(mulai)},{_ts(selesai)},Caption,,0,0,0,,"
                     f"{base_tag}{teks}"
@@ -818,13 +850,13 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     # Menaruhnya di tiap kata berarti barisnya memantul ulang
                     # setiap kali sorotan berpindah.
                     f"{masuk if idx == 0 else ''}{base_tag}"
-                    f"{sambung_bagian(parts, mentah, patah)}"
+                    f"{sambung_bagian(parts, mentah, patah, sela=sela)}"
                 )
                 if berlapis:
                     events.append(
                         f"Dialogue: 0,{_ts(start)},{_ts(end)},{gaya_lapis},,0,0,0,,"
                         f"{masuk if idx == 0 else ''}{sembunyi_awal}"
-                        f"{sambung_bagian(pelat, mentah, patah)}"
+                        f"{sambung_bagian(pelat, mentah, patah, sela=sela)}"
                     )
         else:
             text = raw_text.upper() if st.uppercase else raw_text
@@ -834,7 +866,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                                budget=max(0.2, line["end"] - line["start"]))
             events.append(
                 f"Dialogue: 0,{_ts(line['start'])},{_ts(line['end'])},Caption,,0,0,0,,"
-                f"{entry}{base_tag}{patah_teks(escape_ass(text), per_baris_cjk)}"
+                f"{entry}{base_tag}"
+                f"{_lebarkan(patah_teks(escape_ass(text), per_baris_cjk), sela)}"
             )
 
     # --- Subtitle kedua ---------------------------------------------------------
@@ -873,8 +906,12 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 sp = next((p for s0, s1, p in penutur if s0 <= tengah < s1), 0)
                 if 0 <= sp < len(speaker_ass):
                     warna = f"{{\\c{speaker_ass[sp]}}}"
+            # Subtitle kedua ikut dilebarkan spasinya, dengan ukuran dan
+            # fontnya SENDIRI. Ia sering jadi baris yang paling dibaca —
+            # terjemahan Indonesia di bawah ucapan asing — jadi ia yang paling
+            # tidak boleh terbaca sebagai satu kata panjang.
             events.append(f"Dialogue: 1,{_ts(a)},{_ts(b)},Caption2,,0,0,0,,"
-                          f"{masuk}{warna}{escape_ass(teks)}")
+                          f"{masuk}{warna}{_lebarkan(escape_ass(teks), sela_kedua)}")
 
     # --- Watermark -------------------------------------------------------------
     if watermark.strip() and clip_duration > 0:
