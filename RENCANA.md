@@ -19,10 +19,15 @@ Memindahkan `OmniClip-Data` ke SSD tidak butuh kode apa pun.
 **A2. Berkas sisa 17 GB.** Satu `.f623.mp4` tanpa suara, nol klip jadi.
 Sekarang terlihat di Pengaturan → Ruang cakram, tinggal dicentang dan dihapus.
 
-**A3. Mendaftarkan aplikasi Google, TikTok, dan Meta.** Kodenya sudah ada dan
-menunggu kunci; langkahnya ada di dalam aplikasi (Akun → Tambah akun) dan di
-[PANDUAN-AKUN.md](PANDUAN-AKUN.md). Sampai ini dikerjakan, unggah ke mana pun
-tidak bisa dipakai — dan tidak bisa diuji (lihat E1).
+**A3. Mendaftarkan aplikasi Google.** Hanya Google sekarang — TikTok dan Meta
+tidak lagi butuh pendaftaran apa pun sejak unggahannya jadi setengah otomatis.
+Langkahnya ada di dalam aplikasi (Akun → Tambah akun) dan di
+[PANDUAN-AKUN.md](PANDUAN-AKUN.md). Sampai ini dikerjakan, unggah ke YouTube
+dan Drive tidak bisa dipakai — dan tidak bisa diuji (lihat E1).
+
+**A4. Rilis 1.0.8.** Enam belas commit sejak 1.0.7 dan versinya belum naik:
+tema subtitle, jeda yang dirapatkan, jendela konsol yang hilang, akun, caption
+siap terbit. Aplikasi yang terpasang belum punya satu pun di antaranya.
 
 ---
 
@@ -44,9 +49,6 @@ ditawarkan walau tidak berpengaruh.
 **C1. Pratinjau yang benar-benar menampilkan hasil rapat.** Sesudah "Rapatkan
 jeda", pemutar Studio memutar segmen barunya, tapi peralihan antar potongan di
 pratinjau tidak semulus hasil rendernya.
-
-**C2. Templat deskripsi per platform.** Sekarang satu templat dipakai untuk
-semua tujuan; TikTok dan YouTube punya kebiasaan tagar yang berbeda.
 
 **C3a. Tandai terbit dari halaman Klip jadi** tanpa harus membuka "Siapkan
 terbit" dulu — sekarang penandanya hanya ada di dalam jendela itu.
@@ -81,9 +83,9 @@ gameplay tanpa bicara) tidak bisa dirapatkan sama sekali.
 
 ## E. Belum pernah diuji (risiko nyata)
 
-**E1. Unggah sungguhan ke mana pun.** Belum ada berkas OAuth Google di komputer
-ini, dan aplikasi TikTok/Meta belum didaftarkan. Yang sudah diuji hanya jalur
-galatnya: kunci kosong, akun belum tersambung, dan bentuk alamat izin.
+**E1. Unggah sungguhan ke YouTube dan Drive.** Belum ada berkas OAuth Google di
+komputer ini, jadi jalur unggahnya belum pernah menyentuh server Google. Yang
+sudah diuji hanya jalur galatnya.
 
 **E2a. Bundel Windows tanpa konsol.** Ikon, keterangan versi, penyembunyian
 jendela proses anak, dan tombol Keluar semuanya dikerjakan dan diuji di Linux;
