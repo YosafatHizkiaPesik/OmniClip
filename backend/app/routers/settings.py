@@ -79,7 +79,127 @@ async def get_settings():
         "ai_model": get_model_override(),
         "cookies_aktif": _cookies_aktif(),
         "gemini_models": GEMINI_MODELS,
+        **_openrouter_ringkas(),
     }
+
+
+# --- OpenRouter: cadangan saat kuota Gemini habis -----------------------------
+def _openrouter_ringkas() -> dict:
+    from ..services import openrouter
+    from ..services.pipeline import bingkai_otomatis
+    k = openrouter.kunci()
+    return {"openrouter_key_set": bool(k),
+            "openrouter_key_last4": k[-4:] if len(k) >= 4 else "",
+            "openrouter_model": openrouter.model_pilihan(),
+            "bingkai_otomatis": bingkai_otomatis()}
+
+
+@router.get("/openrouter-models")
+async def openrouter_models():
+    """
+    Model OpenRouter gratis yang bisa menonton klip.
+
+    Bukan daftar tetap: model gratis datang dan pergi tiap beberapa minggu, dan
+    daftar tangan akan menunjuk model yang sudah tidak ada.
+    """
+    from ..services import openrouter
+    try:
+        semua = await asyncio.to_thread(openrouter.daftar)
+    except Exception as e:
+        return {"tersedia": [], "galat": str(e)[:200], **_openrouter_ringkas()}
+    urut = await asyncio.to_thread(openrouter.rantai, None)
+    pilihan = [{"id": m["id"], "nama": m["nama"], "video": m["video"],
+                "suara": m["suara"], "json": m["json"]}
+               for m in openrouter.urutkan(semua)]
+    return {"tersedia": pilihan, "terkuat": (urut or [{}])[0].get("id"),
+            **_openrouter_ringkas()}
+
+
+@router.post("/openrouter-key")
+async def set_openrouter_key(req: ApiKeyRequest):
+    """
+    Kunci diuji ke OpenRouter sebelum disimpan, sama seperti kunci Gemini.
+
+    Yang ditanyakan `/api/v1/key`: ia mengembalikan sisa jatah kunci ini tanpa
+    memakai satu pun permintaan model, jadi menguji kunci tidak berbiaya.
+    """
+    import json
+    import urllib.error
+    import urllib.request
+
+    from ..services import openrouter
+
+    key = req.api_key.strip()
+    if any(c.isspace() for c in key):
+        raise AppError("Kunci tidak boleh memuat spasi atau baris baru.",
+                       code="AI_KEY_INVALID", status=422)
+
+    def _uji() -> str | None:
+        permintaan = urllib.request.Request(
+            f"{openrouter.ALAMAT}/key", headers={"Authorization": f"Bearer {key}"})
+        try:
+            with urllib.request.urlopen(permintaan, timeout=25) as r:
+                json.loads(r.read().decode("utf-8"))
+            return None
+        except urllib.error.HTTPError as e:
+            if e.code in (401, 403):
+                return ("OpenRouter tidak mengenali kunci ini. Periksa apakah "
+                        "seluruhnya tersalin, tanpa spasi di ujung.")
+            return f"OpenRouter menolak kunci ini (kode {e.code})."
+        except Exception as e:
+            # Tanpa kode status: jaringan, bukan kuncinya. Sama seperti Gemini,
+            # wifi yang sedang mati tidak boleh membatalkan penyimpanan.
+            log.warning("Kunci OpenRouter tidak bisa diuji: %s", str(e)[:200])
+            return None
+
+    galat = await asyncio.to_thread(_uji)
+    if galat:
+        raise AppError(galat, code="AI_KEY_INVALID", status=422)
+    settings_repo.set_value(openrouter.NAMA_KUNCI, key)
+    log.info("Kunci OpenRouter dipasang (berakhiran %s).", key[-4:])
+    return {"status": "ok", **_openrouter_ringkas(),
+            "message": "Kunci OpenRouter tersimpan. Dipakai saat kuota Gemini habis."}
+
+
+@router.delete("/openrouter-key")
+async def delete_openrouter_key():
+    from ..services import openrouter
+    if not settings_repo.get(openrouter.NAMA_KUNCI) and openrouter.kunci():
+        raise AppError(
+            "Kunci ini datang dari variabel lingkungan OPENROUTER_API_KEY, jadi "
+            "tidak bisa dihapus dari sini.", code="AI_KEY_FROM_ENV", status=409)
+    settings_repo.delete(openrouter.NAMA_KUNCI)
+    return {"status": "ok", **_openrouter_ringkas()}
+
+
+class SakelarRequest(BaseModel):
+    aktif: bool
+
+
+@router.post("/bingkai-otomatis")
+async def set_bingkai_otomatis(req: SakelarRequest):
+    """
+    Sutradara bingkai berjalan sendiri sesudah auto-klip.
+
+    Bawaannya mati, dan itu disengaja: tiap klip berarti satu panggilan model,
+    dan kuota harian yang sama dipakai untuk MEMILIH klip video berikutnya.
+    Menyalakannya adalah pertukaran yang harus dilakukan pemiliknya sendiri,
+    bukan diam-diam oleh program.
+    """
+    from ..services.pipeline import NAMA_BINGKAI_OTOMATIS
+    settings_repo.set_value(NAMA_BINGKAI_OTOMATIS, "1" if req.aktif else "0")
+    return {"status": "ok", "aktif": req.aktif}
+
+
+@router.post("/openrouter-model")
+async def set_openrouter_model(req: ModelRequest):
+    from ..services import openrouter
+    nilai = req.model.strip()
+    if nilai:
+        settings_repo.set_value(openrouter.NAMA_MODEL, nilai)
+    else:
+        settings_repo.delete(openrouter.NAMA_MODEL)
+    return {"status": "ok", "model": nilai}
 
 
 @router.get("/models")

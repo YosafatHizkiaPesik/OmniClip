@@ -10,6 +10,7 @@ import SecurityCard from './SecurityCard';
 import StorageCard from './StorageCard';
 import CookiesCard from './CookiesCard';
 import TerjemahOtomatisCard from './TerjemahOtomatisCard';
+import OpenRouterCard from './OpenRouterCard';
 import UpdateCard from './UpdateCard';
 
 // Bagian pada satu lembar bergaris, bukan kartu di atas kartu. Tumpukan kartu
@@ -550,6 +551,8 @@ export default function ProfileTab() {
           </div>
         )}
       </div>
+
+      <OpenRouterCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
 
       <CookiesCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
 

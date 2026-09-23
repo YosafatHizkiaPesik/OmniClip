@@ -51,12 +51,16 @@ def simpan(kunci: str, nilai: Any) -> None:
 def bersihkan(maks_umur: float = 24 * 3600) -> int:
     """Membuang entri basi. Dipanggil saat startup, bukan tiap pencarian.
 
-    Entri `jenis:` (isi klip: game / wajah / tanpa wajah) tidak ikut dibuang:
-    isi sebuah potongan video tidak pernah basi, dan menghitungnya ulang
-    memakan puluhan detik per klip.
+    Dua jenis entri tidak ikut dibuang, karena keduanya menjelaskan isi sebuah
+    potongan video — dan isi potongan video tidak pernah basi:
+
+    - `jenis:` (game / wajah / tanpa wajah), puluhan detik per klip.
+    - `sutradara:` (momen dan bingkai hasil AI). Menghitungnya ulang bukan
+      hanya lambat, tapi memakan kuota model yang jumlahnya terbatas per hari.
     """
     cur = get_conn().execute(
-        "DELETE FROM search_cache WHERE created_at < ? AND cache_key NOT LIKE 'jenis:%'",
+        "DELETE FROM search_cache WHERE created_at < ? AND cache_key NOT LIKE 'jenis:%' "
+        "AND cache_key NOT LIKE 'sutradara:%'",
         (time.time() - maks_umur,),
     )
     return cur.rowcount

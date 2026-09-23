@@ -21,6 +21,7 @@ Hasilnya kunci bingkai biasa (`asal: "ai"`, `alasan`), jadi tetap terlihat di
 lajur Bingkai dan bisa dihapus satu per satu.
 """
 
+import json
 import logging
 import tempfile
 from pathlib import Path
@@ -31,6 +32,11 @@ from .proses import jalankan
 log = logging.getLogger("omniclip.sutradara_ai")
 
 VERSI_PROMPT = 2
+# Versi penyusunan kunci — dinaikkan setiap kali hasil yang sama dari model
+# akan menghasilkan bingkai yang berbeda. Terpisah dari versi prompt karena
+# keduanya berubah karena alasan yang berbeda, dan cache harus gugur untuk
+# kedua-duanya.
+VERSI_SUSUN = 2
 PROKSI_TINGGI = 360
 PROKSI_FPS = 2              # bingkai per detik yang ditonton model
 PROKSI_MAKS_DETIK = 300.0
@@ -93,42 +99,51 @@ Aturan:
 - alasan: satu kalimat bahasa Indonesia, sebutkan apa yang terjadi."""
 
 
-def _schema():
-    from google.genai import types
-    T = types.Type
-    bidikan = types.Schema(
-        type=T.OBJECT, required=["bingkai", "orang", "durasi"],
-        property_ordering=["bingkai", "orang", "durasi"],
-        properties={
-            "bingkai": types.Schema(type=T.STRING, enum=[
+def _schema() -> dict:
+    """
+    Bentuk jawaban yang diminta, sebagai dict netral.
+
+    Bukan `types.Schema` milik google-genai lagi: jawaban yang sama harus bisa
+    diminta ke OpenRouter juga, yang memakai JSON Schema biasa. `penyedia_ai`
+    yang menerjemahkannya ke bentuk masing-masing.
+
+    Urutan properti ikut penting dan karena itu ditulis eksplisit: "alasan"
+    sengaja diminta SEBELUM angka-angkanya, supaya model menyusun kalimatnya
+    lebih dulu dan waktunya menyusul — bukan sebaliknya.
+    """
+    bidikan = {
+        "type": "OBJECT", "required": ["bingkai", "orang", "durasi"],
+        "property_ordering": ["bingkai", "orang", "durasi"],
+        "properties": {
+            "bingkai": {"type": "STRING", "enum": [
                 "wajah", "reaksi_terbagi", "reaksi_penuh", "gameplay",
-                "ikuti_penutur", "ikuti_gerakan"]),
-            "orang": types.Schema(type=T.ARRAY, items=types.Schema(type=T.STRING)),
-            "durasi": types.Schema(type=T.NUMBER),
-        })
-    momen = types.Schema(
-        type=T.OBJECT,
-        required=["alasan", "momen_id", "mulai", "selesai", "kekuatan", "gaya", "bidikan"],
-        property_ordering=["alasan", "momen_id", "mulai", "selesai", "kekuatan",
-                           "gaya", "bidikan"],
-        properties={
-            "alasan": types.Schema(type=T.STRING),
-            "momen_id": types.Schema(type=T.INTEGER),
-            "mulai": types.Schema(type=T.NUMBER),
-            "selesai": types.Schema(type=T.NUMBER),
-            "kekuatan": types.Schema(type=T.NUMBER),
-            "gaya": types.Schema(type=T.STRING, enum=["potong_bergantian", "terbagi", "tunggal"]),
-            "bidikan": types.Schema(type=T.ARRAY, items=bidikan),
-        })
-    return types.Schema(
-        type=T.OBJECT, required=["jenis_video", "bingkai_dasar", "momen"],
-        property_ordering=["jenis_video", "bingkai_dasar", "momen"],
-        properties={
-            "jenis_video": types.Schema(type=T.STRING, enum=["podcast", "gameplay", "lainnya"]),
-            "bingkai_dasar": types.Schema(type=T.STRING, enum=["ikuti_penutur", "gameplay",
-                                                                                "ikuti_gerakan"]),
-            "momen": types.Schema(type=T.ARRAY, items=momen),
-        })
+                "ikuti_penutur", "ikuti_gerakan"]},
+            "orang": {"type": "ARRAY", "items": {"type": "STRING"}},
+            "durasi": {"type": "NUMBER"},
+        }}
+    momen = {
+        "type": "OBJECT",
+        "required": ["alasan", "momen_id", "mulai", "selesai", "kekuatan", "gaya", "bidikan"],
+        "property_ordering": ["alasan", "momen_id", "mulai", "selesai", "kekuatan",
+                              "gaya", "bidikan"],
+        "properties": {
+            "alasan": {"type": "STRING"},
+            "momen_id": {"type": "INTEGER"},
+            "mulai": {"type": "NUMBER"},
+            "selesai": {"type": "NUMBER"},
+            "kekuatan": {"type": "NUMBER"},
+            "gaya": {"type": "STRING", "enum": ["potong_bergantian", "terbagi", "tunggal"]},
+            "bidikan": {"type": "ARRAY", "items": bidikan},
+        }}
+    return {
+        "type": "OBJECT", "required": ["jenis_video", "bingkai_dasar", "momen"],
+        "property_ordering": ["jenis_video", "bingkai_dasar", "momen"],
+        "properties": {
+            "jenis_video": {"type": "STRING", "enum": ["podcast", "gameplay", "lainnya"]},
+            "bingkai_dasar": {"type": "STRING",
+                              "enum": ["ikuti_penutur", "gameplay", "ikuti_gerakan"]},
+            "momen": {"type": "ARRAY", "items": momen},
+        }}
 
 
 # --- Bahan untuk model ----------------------------------------------------------
@@ -204,6 +219,39 @@ def _proksi(src: Path, segments: list[dict], keluar: Path) -> Optional[bytes]:
     hasil = jalankan(cmd, rendah=True, timeout=300)
     if hasil.returncode != 0 or not keluar.is_file():
         log.warning("Proksi gagal: %s", (hasil.stderr or "")[-400:])
+        return None
+    return keluar.read_bytes()
+
+
+def _bingkai_kunci(video: Path, durasi: float, tmp: Path, n: int = 12) -> list[bytes]:
+    """
+    Beberapa bingkai proksi sebagai JPEG, jarak waktunya sama.
+
+    Untuk model yang tidak menerima video. Yang diambil adalah bingkai proksi,
+    bukan bingkai sumber, karena di proksi sudah tertulis detik klipnya di
+    pojok — tanpa itu model harus menebak waktu dari urutan gambar saja.
+    """
+    if durasi <= 0:
+        return []
+    pola = tmp / "kunci%03d.jpg"
+    laju = max(n, 1) / max(durasi, 1.0)
+    hasil = jalankan(["ffmpeg", "-hide_banner", "-nostdin", "-loglevel", "error", "-y",
+                      "-i", str(video), "-vf", f"fps={laju:.6f}", "-frames:v", str(n),
+                      "-q:v", "4", str(pola)], rendah=True, timeout=180)
+    if hasil.returncode != 0:
+        log.warning("Bingkai kunci gagal: %s", (hasil.stderr or "")[-300:])
+        return []
+    return [p.read_bytes() for p in sorted(tmp.glob("kunci*.jpg"))]
+
+
+def _suara_klip(video: Path, keluar: Path) -> Optional[bytes]:
+    """Suara proksi sebagai MP3 mono — tawa dan sorak terdengar di sini."""
+    hasil = jalankan(["ffmpeg", "-hide_banner", "-nostdin", "-loglevel", "error", "-y",
+                      "-i", str(video), "-vn", "-ac", "1", "-ar", "16000",
+                      "-c:a", "libmp3lame", "-b:a", "48k", str(keluar)],
+                     rendah=True, timeout=180)
+    if hasil.returncode != 0 or not keluar.is_file():
+        log.warning("Suara klip gagal: %s", (hasil.stderr or "")[-300:])
         return None
     return keluar.read_bytes()
 
@@ -491,7 +539,12 @@ FACECAM_WAJAH_MAKS = 0.14      # lebar wajah maksimum, pecahan lebar bingkai
 FACECAM_TEPI_X = 0.25          # pusat wajah di luar 25-75% lebar
 FACECAM_ATAS_Y = 0.30          # ... dan di atas 30% atau
 FACECAM_BAWAH_Y = 0.55         # ... di bawah 55% tinggi
-POTONGAN_DASAR_MIN = 1.5       # potongan lebih pendek disatukan ke tetangganya
+# Potongan lebih pendek dari ini disatukan ke tetangganya. Dulu 1,5 detik, dan
+# itu terlalu longgar: pada wawancara Bocor Alus, tiga potongan "game" selama
+# 2-3 detik lolos dan bingkai dasarnya berganti enam kali dalam tiga puluh
+# detik. Pergantian bingkai DASAR yang lebih singkat dari empat detik tidak
+# terbaca sebagai keputusan, melainkan sebagai kedipan.
+POTONGAN_DASAR_MIN = 4.0
 
 
 def _wajah_pojok(x: float, cy: float, w: float, sw: int, sh: int) -> bool:
@@ -507,7 +560,7 @@ def _label_per_sampel(plan) -> list[str]:
     n = min((len(s) for s in plan.people_seen), default=0)
     label = []
     for i in range(n):
-        ada_wajah = ada_pojok = False
+        ada_pojok = ada_tengah = False
         for p in range(len(plan.people)):
             if not plan.people_seen[p][i]:
                 continue
@@ -515,10 +568,19 @@ def _label_per_sampel(plan) -> list[str]:
             x = plan.people[p][i]
             if kotak is None or x is None:
                 continue
-            ada_wajah = True
             if _wajah_pojok(float(x), float(kotak[0]), float(kotak[1]), sw, sh):
                 ada_pojok = True
-        label.append("game" if ada_pojok else "wajah" if ada_wajah else "gerak")
+            else:
+                ada_tengah = True
+        # "game" hanya bila wajah di pojok itu SATU-SATUNYA wajah.
+        #
+        # Sebelumnya cukup ada wajah di pojok, dan itu keliru pada percakapan:
+        # pada wawancara Bocor Alus, tamu yang duduk di tepi layar membuat 27%
+        # klip dilabeli permainan, lalu dibingkai sebagai gameplay dengan panel
+        # facecam yang tidak pernah ada. Pada gameplay sungguhan, wajah pemain
+        # memang satu-satunya wajah di layar — itulah yang membedakannya.
+        label.append("game" if ada_pojok and not ada_tengah
+                     else "wajah" if ada_pojok or ada_tengah else "gerak")
     return label
 
 
@@ -548,6 +610,37 @@ def _rapikan_potongan(runs: list[list]) -> list[list]:
     return runs
 
 
+# Sebuah percakapan tidak berubah jadi permainan selama beberapa detik lalu
+# kembali. Bila potongan "game" hanya sekelumit dari klip yang sebagian besar
+# berisi wajah, yang terjadi hampir pasti bukan permainan melainkan satu wajah
+# kecil yang kebetulan lewat di pojok layar — tamu yang duduk di tepi, atau
+# orang di latar belakang.
+GAME_PORSI_MIN = 0.25          # game harus mengisi seperempat klip untuk dipercaya
+WAJAH_PORSI_JELAS = 0.5        # ... bila wajah mengisi separuhnya
+
+
+def _buang_game_sekilas(runs: list[list], durasi: float) -> list[list]:
+    """Label "game" yang hanya sekelumit dari klip berwajah diubah jadi "wajah"."""
+    if durasi <= 0 or not runs:
+        return runs
+    porsi = {}
+    for l, a, b in runs:
+        porsi[l] = porsi.get(l, 0.0) + max(0.0, b - a)
+    game, wajah = porsi.get("game", 0.0) / durasi, porsi.get("wajah", 0.0) / durasi
+    if not game or game >= GAME_PORSI_MIN or wajah < WAJAH_PORSI_JELAS:
+        return runs
+    log.info("Potongan game hanya %.0f%% klip berwajah (%.0f%%) — dianggap wajah",
+             game * 100, wajah * 100)
+    ubah = [["wajah" if l == "game" else l, a, b] for l, a, b in runs]
+    gabung = [ubah[0]]
+    for r in ubah[1:]:
+        if r[0] == gabung[-1][0]:
+            gabung[-1][2] = r[2]
+        else:
+            gabung.append(r)
+    return gabung
+
+
 def _dasar_per_waktu(plan, src: Path, segments: list[dict], durasi: float,
                      out_w: int, out_h: int) -> Optional[list[tuple[float, float, dict]]]:
     """
@@ -571,6 +664,7 @@ def _dasar_per_waktu(plan, src: Path, segments: list[dict], durasi: float,
             runs.append([l, t, t + 1 / SAMPLE_FPS])
     runs[-1][2] = durasi
     runs = _rapikan_potongan(runs)
+    runs = _buang_game_sekilas(runs, durasi)
 
     sw, sh = plan.source_w, plan.source_h
     keluar: list[tuple[float, float, dict]] = []
@@ -997,7 +1091,7 @@ def susun_ai(src: Path, segments: list[dict], *, subtitles: list[dict],
     """
     from .media import probe
     from .momen import cari_momen, ringkas
-    from .penyedia_ai import tanya_gemini
+    from .penyedia_ai import tanya
     from .reframe import deteksi_facecam, plan_reframe
     from .render import rasio_bidang_wajah
 
@@ -1026,30 +1120,52 @@ def susun_ai(src: Path, segments: list[dict], *, subtitles: list[dict],
     momen_lokal = cari_momen(src, segments, plan=plan, words=kata)
 
     with tempfile.TemporaryDirectory(prefix="omniclip_sutradara_") as tmp:
+        tmp = Path(tmp)
         lapor("Menyiapkan klip untuk ditonton…", 0.5)
-        video = _proksi(src, segments, Path(tmp) / "proksi.mp4")
+        jalur_proksi = tmp / "proksi.mp4"
+        video = _proksi(src, segments, jalur_proksi)
         if video is None:
             raise RuntimeError("Klip tidak bisa disiapkan untuk ditonton.")
-        wajah, orang = _lembar_wajah(src, segments, plan, Path(tmp) / "wajah.jpg")
+        wajah, orang = _lembar_wajah(src, segments, plan, tmp / "wajah.jpg")
 
-    jenis_tebakan = "gameplay (ada facecam pemain)" if facecam else (
-        f"{len(orang)} orang terlihat" if orang else "tanpa wajah yang jelas")
-    teks = (
-        f"Durasi klip: {durasi:.1f} detik. Tebakan jenis: {jenis_tebakan}.\n"
-        f"Orang di lembar wajah: {', '.join(f'P{p}' for p in orang) or '(tidak ada)'}.\n\n"
-        f"=== MOMEN TERUKUR (dari suara dan gambar, waktunya tepat) ===\n{ringkas(momen_lokal)}\n\n"
-        f"=== TRANSKRIP (detik klip) ===\n{_transkrip_klip(subtitles)}\n\n"
-        "Tentukan bingkai dasar dan momen-momen yang layak diubah bingkainya."
-    )
-    bahan = [{"video": video, "fps": PROKSI_FPS}]
-    if wajah:
-        bahan.append({"gambar": wajah})
-    bahan.append({"teks": teks})
+        jenis_tebakan = "gameplay (ada facecam pemain)" if facecam else (
+            f"{len(orang)} orang terlihat" if orang else "tanpa wajah yang jelas")
+        teks = (
+            f"Durasi klip: {durasi:.1f} detik. Tebakan jenis: {jenis_tebakan}.\n"
+            f"Orang di lembar wajah: {', '.join(f'P{p}' for p in orang) or '(tidak ada)'}.\n\n"
+            f"=== MOMEN TERUKUR (dari suara dan gambar, waktunya tepat) ==="
+            f"\n{ringkas(momen_lokal)}\n\n"
+            f"=== TRANSKRIP (detik klip) ===\n{_transkrip_klip(subtitles)}\n\n"
+            "Tentukan bingkai dasar dan momen-momen yang layak diubah bingkainya."
+        )
+        bahan = [{"video": video, "fps": PROKSI_FPS}]
+        if wajah:
+            bahan.append({"gambar": wajah})
+        bahan.append({"teks": teks})
 
-    hasil, model, pakai = tanya_gemini(
-        bahan, schema=_schema(), sistem=SISTEM, api_key=api_key, models=models,
-        suhu=0.3, maks_keluaran=8192,
-        kabar=lambda p: lapor(p, 0.6), batal=batal)
+        def cadangan() -> list[dict]:
+            """
+            Bahan untuk model yang tidak bisa menonton video: gambar kunci,
+            suara klip, dan teks yang sama. Dibuat hanya bila benar-benar
+            dipakai — untuk Gemini ia tidak pernah dipanggil sama sekali.
+            """
+            gambar = _bingkai_kunci(jalur_proksi, durasi, tmp)
+            suara = _suara_klip(jalur_proksi, tmp / "suara.mp3")
+            isi: list[dict] = [{"gambar": g} for g in gambar]
+            if wajah:
+                isi.append({"gambar": wajah})
+            if suara:
+                isi.append({"suara": suara, "format": "mp3"})
+            isi.append({"teks": teks + (
+                f"\n\n(Anda menerima {len(gambar)} gambar berurutan dari klip ini, "
+                "bukan videonya. Detik klip tertulis di pojok kanan atas tiap "
+                "gambar — pakai angka itu.)" if gambar else "")})
+            return isi
+
+        hasil, model, pakai = tanya(
+            bahan, schema=_schema(), sistem=SISTEM, api_key=api_key, models=models,
+            suhu=0.3, maks_keluaran=8192, cadangan=cadangan,
+            kabar=lambda p: lapor(p, 0.6), batal=batal)
 
     lapor("Menyusun bingkai…", 0.95)
     # Facecam yang ada sepanjang klip memakai bingkai game untuk seluruhnya;
@@ -1139,15 +1255,73 @@ def susun_lokal(src: Path, segments: list[dict], *, subtitles: list[dict],
     return {"jenis": "podcast", "keys": kunci, "layers": [], "momen": momen, "catatan": catatan}
 
 
+# --- Cache hasil ---------------------------------------------------------------------
+def _kunci_cache(video_id: str, segments: list[dict], mesin: str) -> str:
+    """
+    Satu klip yang sama tidak perlu ditonton dua kali.
+
+    Yang masuk kuncinya: video, rentang detiknya, mesin yang memakainya, dan
+    kedua nomor versi. Versi ikut karena memperbaiki perintah atau cara
+    menyusun bingkai berarti mengubah hasilnya — tanpa itu, perbaikan apa pun
+    akan terus mengembalikan hasil lama sampai cachenya kedaluwarsa, yaitu
+    sebulan.
+    """
+    import hashlib
+    sidik = hashlib.sha1(
+        json.dumps([[round(float(s["start"]), 2), round(float(s["end"]), 2)]
+                    for s in segments]).encode()).hexdigest()[:12]
+    return f"sutradara:{video_id}:{sidik}:{mesin}:v{VERSI_PROMPT}.{VERSI_SUSUN}"
+
+
+# Sengaja panjang: hasil sutradara tidak basi selama klipnya tidak berubah, dan
+# kuota model jauh lebih mahal daripada satu baris di basis data.
+CACHE_HARI = 30
+
+
+# --- Menerapkan hasil ke klip tersimpan ----------------------------------------------
+def terapkan_ke_klip(video_id: str, clip_id: str, kunci: list[dict]) -> bool:
+    """
+    Menuliskan kunci bingkai ke klip di dalam analisis tersimpan.
+
+    Dipakai jalur OTOMATIS, saat tidak ada siapa pun di Studio yang bisa
+    menerapkannya. Kunci buatan pengguna tidak pernah ditimpa: bila klip itu
+    sudah punya kunci yang asalnya bukan mesin, hasil AI dilewati.
+    """
+    from ..repos import analyses as analyses_repo
+
+    cached = analyses_repo.latest_for_video(video_id)
+    if not cached:
+        return False
+    hasil = dict(cached["result"])
+    klip = list(hasil.get("clips") or [])
+    for i, c in enumerate(klip):
+        if str(c.get("clip_id")) != str(clip_id):
+            continue
+        lama = [k for k in (c.get("frame_keys") or []) if isinstance(k, dict)]
+        if any((k.get("asal") or "pengguna") not in ("otomatis", "ai") for k in lama):
+            log.info("Klip %s sudah disunting tangan — bingkai AI dilewati", clip_id)
+            return False
+        klip[i] = {**c, "frame_keys": kunci}
+        hasil["clips"] = klip
+        analyses_repo.replace_result(cached["id"], hasil)
+        return True
+    return False
+
+
 # --- Job ----------------------------------------------------------------------------
 def run_sutradara(ctx) -> dict:
     """
     Job "sutradara". payload: {video_id, segments, subtitles, aspect_ratio,
-    mesin: "ai"|"lokal", gemini_model?}. Hasil: usulan kunci bingkai — Studio
-    yang menerapkannya ke klip, supaya bisa dibatalkan seperti suntingan lain.
+    mesin: "ai"|"lokal", gemini_model?, clip_id?, terapkan?}.
+
+    Hasilnya usulan kunci bingkai. Saat diminta dari Studio, Studio yang
+    menerapkannya ke klip supaya bisa dibatalkan seperti suntingan lain; saat
+    dijadwalkan otomatis sesudah auto-klip (`terapkan`), job ini menuliskannya
+    sendiri ke analisis tersimpan karena tidak ada siapa pun yang menunggunya.
     """
     from ..config import get_api_key, get_model_override
     from ..errors import JobCancelled
+    from ..repos import cache as cache_repo
     from .paths import find_local_video
     from .peringkat_model import rantai
     from .render import PLAY_RES
@@ -1164,31 +1338,54 @@ def run_sutradara(ctx) -> dict:
         ctx.progress(min(0.97, bagian), stage="sutradara", message=pesan)
         ctx.check_cancelled()
 
+    def selesai(hasil: dict, pesan: str) -> dict:
+        if p.get("terapkan") and p.get("clip_id") and hasil.get("keys"):
+            hasil["diterapkan"] = terapkan_ke_klip(p["video_id"], p["clip_id"], hasil["keys"])
+        ctx.progress(1.0, stage="done", message=pesan)
+        return hasil
+
+    kunci_cache = _kunci_cache(p["video_id"], segments, p.get("mesin", "ai"))
+    tersimpan = cache_repo.ambil(kunci_cache, ttl=CACHE_HARI * 24 * 3600)
+    if tersimpan and tersimpan.get("keys"):
+        log.info("Sutradara: memakai hasil tersimpan untuk %s", p["video_id"])
+        return selesai(dict(tersimpan), "Bingkai diambil dari hasil sebelumnya.")
+
+    from . import openrouter
+
     api_key = get_api_key()
     catatan_gagal = None
-    if p.get("mesin", "ai") == "ai" and api_key:
+    # Kunci Gemini bukan lagi syarat: OpenRouter sendirian pun cukup untuk
+    # menonton klip, dan sesudah kuota harian Gemini habis ia satu-satunya yang
+    # tersisa.
+    if p.get("mesin", "ai") == "ai" and (api_key or openrouter.aktif()):
         try:
             hasil = susun_ai(src, segments, subtitles=subtitles, api_key=api_key,
-                             models=rantai(api_key, p.get("gemini_model") or get_model_override() or None),
+                             models=(rantai(api_key, p.get("gemini_model")
+                                            or get_model_override() or None)
+                                     if api_key else []),
                              out_w=out_w, out_h=out_h, kabar=kabar, batal=ctx.check_cancelled)
             hasil.pop("mentah", None)
             n = sum(1 for k in hasil["keys"] if k.get("alasan") and "Kembali" not in k["alasan"]) - 1
-            ctx.progress(1.0, stage="done",
-                         message=f"{max(0, n)} bidikan reaksi disusun oleh {hasil['model']}.")
-            return hasil
+            cache_repo.simpan(kunci_cache, hasil)
+            return selesai(hasil,
+                           f"{max(0, n)} bidikan reaksi disusun oleh {hasil['model']}.")
         except JobCancelled:
             raise
         except Exception as e:
             log.warning("Sutradara AI gagal, memakai mesin lokal: %s", str(e)[:300])
             sibuk = any(x in str(e) for x in ("503", "UNAVAILABLE", "timeout", "batas waktu"))
-            catatan_gagal = ("AI sedang sibuk" if sibuk else "AI gagal") + " — disusun mesin lokal."
+            habis = any(x in str(e) for x in ("429", "RESOURCE_EXHAUSTED", "limit"))
+            catatan_gagal = ("AI sedang sibuk" if sibuk else
+                             "Kuota AI habis" if habis else "AI gagal") + " — disusun mesin lokal."
     elif p.get("mesin", "ai") == "ai":
-        catatan_gagal = "Kunci Gemini belum diisi — disusun mesin lokal."
+        catatan_gagal = ("Kunci Gemini maupun OpenRouter belum diisi — "
+                         "disusun mesin lokal.")
 
     kabar("Menyusun dari bukti suara dan wajah (mesin lokal)…", 0.4)
     hasil = susun_lokal(src, segments, subtitles=subtitles, out_w=out_w, out_h=out_h)
     hasil["model"] = None
     if catatan_gagal:
         hasil["catatan"] = [catatan_gagal, *hasil.get("catatan", [])]
-    ctx.progress(1.0, stage="done", message=(catatan_gagal or "Disusun mesin lokal."))
-    return hasil
+    # Hasil mesin lokal TIDAK di-cache: ia murah dihitung ulang, dan menyimpannya
+    # berarti klip ini tidak pernah lagi ditawarkan ke AI ketika kuotanya pulih.
+    return selesai(hasil, catatan_gagal or "Disusun mesin lokal.")

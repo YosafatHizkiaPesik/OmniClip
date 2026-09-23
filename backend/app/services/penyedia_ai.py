@@ -131,3 +131,55 @@ def tanya_gemini(bahan: list[dict], *, schema, sistem: str, api_key: str,
                     continue
                 break
     raise SemuaGagal(gagal or ["tidak ada model yang bisa dicoba"])
+
+
+def tanya(bahan: list[dict], *, schema, sistem: str, api_key: str,
+          models: list[str], suhu: float = 0.3, maks_keluaran: int = 8192,
+          kabar: Optional[Callable[[str], None]] = None,
+          batal: Optional[Callable[[], None]] = None,
+          batas_detik: float = BATAS_TOTAL_DETIK,
+          cadangan: Optional[Callable[[], list[dict]]] = None) -> tuple[dict, str, dict]:
+    """
+    Gemini lebih dulu, OpenRouter bila Gemini tidak bisa. (data, model, pakai).
+
+    Urutannya bukan selera: Gemini menerima video utuh dengan suaranya dan
+    menjawab terikat skema, dan itu yang paling cocok untuk menilai kapan orang
+    tertawa. OpenRouter dipakai saat kuota harian Gemini habis — yang pada
+    pemakaian sungguhan terjadi setiap sore — atau saat kuncinya memang belum
+    diisi sama sekali.
+
+    `cadangan()` menghasilkan gambar kunci dan suara untuk model OpenRouter
+    yang tidak menerima video.
+    """
+    from . import openrouter
+
+    rincian: list[str] = []
+    if api_key and models:
+        try:
+            return tanya_gemini(bahan, schema=schema, sistem=sistem, api_key=api_key,
+                                models=models, suhu=suhu, maks_keluaran=maks_keluaran,
+                                kabar=kabar, batal=batal, batas_detik=batas_detik)
+        except SemuaGagal as e:
+            rincian = list(e.rincian)
+            log.warning("Gemini tidak menjawab, mencoba OpenRouter: %s",
+                        " | ".join(rincian)[:300])
+    else:
+        rincian.append("kunci Gemini belum diisi")
+
+    kunci_or = openrouter.kunci()
+    if not kunci_or:
+        rincian.append("kunci OpenRouter belum diisi")
+        raise SemuaGagal(rincian)
+    if batal is not None:
+        batal()
+    if kabar is not None:
+        kabar("Gemini tidak bisa dipakai — mencoba OpenRouter…")
+    try:
+        return openrouter.tanya(
+            bahan, skema=schema, sistem=sistem, api_key=kunci_or,
+            models=openrouter.rantai(openrouter.model_pilihan() or None),
+            suhu=suhu, maks_keluaran=maks_keluaran, kabar=kabar, batal=batal,
+            batas_detik=batas_detik, cadangan=cadangan)
+    except Exception as e:
+        rincian.append(str(e)[:400])
+        raise SemuaGagal(rincian) from e

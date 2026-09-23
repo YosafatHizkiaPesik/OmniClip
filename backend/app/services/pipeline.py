@@ -321,6 +321,60 @@ def _stage_progress(ctx: JobContext, stage: str, frac: float, message: str,
     ctx.progress(nilai, stage=stage, message=message, paksa=paksa)
 
 
+# Berapa klip pertama yang bingkainya disusun AI secara otomatis. Bukan semua:
+# tiap klip berarti satu panggilan model, dan kuota harian yang sama dipakai
+# untuk MEMILIH klip video berikutnya — pekerjaan yang lebih penting daripada
+# bingkai klip yang mungkin tidak jadi dirender.
+MAKS_BINGKAI_OTOMATIS = 6
+NAMA_BINGKAI_OTOMATIS = "ai.bingkai_otomatis"
+
+
+def bingkai_otomatis() -> bool:
+    """Apakah bingkai disusun AI sendiri sesudah auto-klip. Bawaannya mati."""
+    from ..repos import settings as settings_repo
+    try:
+        return (settings_repo.get(NAMA_BINGKAI_OTOMATIS) or "").strip() == "1"
+    except Exception:
+        return False
+
+
+def _jadwalkan_bingkai(video_id: str, clips: list[dict], aspect_ratio: str | None) -> int:
+    """
+    Mengantrekan sutradara bingkai untuk klip yang baru jadi.
+
+    Prioritasnya sengaja paling rendah: pemilik yang menekan "Clip" pada video
+    berikutnya harus didahulukan, karena ia sedang menunggu di depan layar
+    sementara pekerjaan ini tidak ditunggu siapa pun. Hasilnya dituliskan
+    langsung ke klipnya (`terapkan`), jadi saat Studio dibuka bingkainya sudah
+    ada — bukan menunggu tombol ditekan satu per satu.
+    """
+    if not clips or not bingkai_otomatis():
+        return 0
+    from .jobs import queue
+
+    n = 0
+    for c in clips[:MAKS_BINGKAI_OTOMATIS]:
+        segmen = [{"start": round(float(s["start"]), 3), "end": round(float(s["end"]), 3)}
+                  for s in (c.get("segments") or []) if float(s["end"]) - float(s["start"]) > 0.2]
+        if not segmen or not c.get("clip_id"):
+            continue
+        try:
+            queue.enqueue(
+                "sutradara",
+                {"video_id": video_id, "segments": segmen,
+                 "subtitles": c.get("subtitles") or [],
+                 "aspect_ratio": aspect_ratio or "9:16", "mesin": "ai",
+                 "clip_id": c["clip_id"], "terapkan": True},
+                video_id=video_id, priority=900,
+                dedupe_key=f"sutradara-oto:{video_id}:{c['clip_id']}")
+            n += 1
+        except Exception as e:      # satu klip gagal diantre bukan alasan berhenti
+            log.warning("Bingkai otomatis tidak bisa diantrekan: %s", str(e)[:200])
+    if n:
+        log.info("Bingkai AI diantrekan untuk %d klip video %s", n, video_id)
+    return n
+
+
 def run_auto_clip(ctx: JobContext) -> dict:
     """
     payload: {video_id, quality, whisper_model, max_clips, use_gemini}
@@ -813,9 +867,12 @@ def run_auto_clip(ctx: JobContext) -> dict:
                                    "quality": quality, "ulang": ulang},
                            result=payload)
 
+        n_bingkai = _jadwalkan_bingkai(video_id, clips, ctx.payload.get("aspect_ratio"))
+
         ctx.progress(1.0, stage="done", message=(
             f"{len(clips)} klip siap ditinjau"
             + (f" (dengan terjemahan)" if diterjemah else "")
+            + (f" — bingkai {n_bingkai} klip sedang disusun AI" if n_bingkai else "")
             + (f" — {gemini_gagal}, jadi dipilih mesin lokal. Coba lagi nanti."
                if gemini_gagal
                else f", dipilih {model_used}." if engine == "gemini" and model_used
