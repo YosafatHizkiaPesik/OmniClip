@@ -33,7 +33,9 @@ datas = []
 hiddenimports = []
 
 # Paket yang membawa pustaka biner atau data yang tidak terlihat sebagai impor.
-for paket in ("ctranslate2", "onnxruntime", "cv2", "av", "piper", "tokenizers"):
+for paket in ("ctranslate2", "onnxruntime", "cv2", "av", "piper", "tokenizers",
+              # Skrip JS pemecah tantangan YouTube, dimuat sebagai berkas data.
+              "yt_dlp_ejs"):
     d, b, h = collect_all(paket)
     datas += d
     binaries += b

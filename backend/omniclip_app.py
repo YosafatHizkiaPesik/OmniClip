@@ -77,6 +77,7 @@ MODUL_WAJIB = [
     ("pydantic", "validasi permintaan"),
     ("numpy", "hitungan bingkai dan audio"),
     ("yt_dlp", "pencarian dan unduhan YouTube"),
+    ("yt_dlp_ejs.yt.solver", "pemecah tantangan JavaScript YouTube"),
     ("faster_whisper", "transkripsi lokal"),
     ("ctranslate2", "mesin di balik faster-whisper"),
     ("av", "pembaca audio/video faster-whisper"),
@@ -131,6 +132,14 @@ def periksa() -> int:
     lapor("font subtitle", len(font) > 0, f"{len(font)} berkas di {FONTS_DIR}")
     yunet = MODELS_DIR / "face_detection_yunet_2023mar.onnx"
     lapor("model wajah YuNet", yunet.is_file(), str(yunet))
+    # Modulnya bisa terimpor sementara skrip JS-nya (berkas data) tertinggal;
+    # yang terjadi kemudian hanya "some formats may be missing" di mesin orang.
+    try:
+        import yt_dlp_ejs.yt.solver as _ejs
+        n = len(_ejs.core()) + len(_ejs.lib())
+        lapor("skrip yt-dlp-ejs", n > 1000, f"{n} karakter")
+    except Exception as e:
+        lapor("skrip yt-dlp-ejs", False, f"{type(e).__name__}: {e}")
 
     print("\n  ffmpeg")
     folder = use_bundled_ffmpeg()

@@ -1,5 +1,12 @@
 # Sisa Pekerjaan OmniClip
 
+> **Arsip.** Daftar yang berlaku sekarang ada di [RENCANA.md](RENCANA.md).
+>
+> Berkas ini ditulis 12 September 2026 dan terus ditambahi catatan pengerjaan
+> sampai 23 September, tapi daftar "belum selesai" di bagian atasnya tidak
+> pernah ikut dikoreksi — sebagian besar sudah dikerjakan. Disimpan karena
+> angka-angka pengukurannya masih berguna, bukan karena daftarnya masih benar.
+
 Catatan hal-hal yang **belum selesai**, ditulis 12 September 2026 setelah commit
 `b4f991f`. Tiap poin memuat apa yang sudah terukur, bukan hanya apa yang terasa —
 supaya saat dikerjakan nanti tidak perlu menebak ulang dari awal.
@@ -1365,3 +1372,268 @@ Rencana lengkap: bingkai berganti per momen — podcast: tawa → wajah yang ber
 - Studio: kedua bingkai Main game bebas seperti Susun sendiri (kotak sumber di meja bingkai, bidang di layar
   hasil). Preset/penggeser menyusun ulang dari awal. Garis putus-putus `.frame-rect-tampil` menandai bagian
   kotak yang sungguh tampil (cover), juga di Susun sendiri.
+
+## 24. Subtitle bahasa asli, tab Sutradara, dan bingkai lebar saat tak ada wajah (belum di-commit)
+
+- **Subtitle ikut bahasa video.** `CAPTION_LANGS` menaruh "id" di depan, dan YouTube MENERJEMAHKAN caption
+  otomatis ke bahasa apa pun yang diminta — video Inggris keluar dengan subtitle Indonesia hasil mesin
+  (terlapor pada "I Survived 100 Days on One Block"). `ytdlp.get_video_info` kini membawa `language`,
+  `captions.fetch_youtube_captions(asli=…)` memintanya lebih dulu, dan hasil ASR dalam bahasa yang bukan
+  bahasa video dianggap terjemahan lalu diulang. Teruji: kJu5VMN3yow → en manual 6.024 kata;
+  96GQgDkHC64 → id ASR 7.516 kata. Menerjemahkan tetap ada, lewat panel Terjemah (pilihan pengguna).
+- **Sutradara punya tabnya sendiri** (`SutradaraPanel.jsx`, tab "Sutradara"), keluar dari panel Sisipan.
+- **Tanpa wajah → bingkai lebar.** `sutradara_ai._tanpa_wajah` + aturan di `jadikan_kunci`: rentang ≥2,5 dtk
+  tanpa satu wajah pun jadi kunci `blur`, lalu kembali ke bingkai dasar. Teruji pada klip Minecraft:
+  4 bagian dilebarkan (6,9–11,4 / 17,5–20,4 / 22,4–26,9 / 29,4–36,8 dtk).
+- Sisa untuk sutradara: gaya subtitle per penutur (font, warna, letak) — belum ada sama sekali; bidikan
+  reaksi masih kurang rapi; mode otomatis setelah auto-klip; cadangan OpenRouter.
+
+## 25. Kemajuan yang terlihat untuk setiap proses (belum di-commit)
+
+- Render: `waitForJob(onProgress)`; baris catatan per klip menampilkan tahap, bilah, persen, dan sisa waktu
+  (atau lama berjalan untuk tahap tanpa angka, mis. melacak wajah). Tombol Render menyebut "2/5 · 43%".
+  Pesan server yang membawa persennya sendiri dirapikan (`bersihkanPesan`) supaya satu baris satu angka.
+  Teruji di browser: 13% → 100% dengan "sisa 2 mnt 47 dtk" menurun sampai selesai.
+- Deteksi ulang narasumber dan Tulis ulang judul kini tampil berjalan dengan kemajuannya (dulu diam sampai gagal).
+- Unggah: bilah + persen dari job. Klip jadi: tombol simpan/hapus menunjukkan sedang bekerja.
+
+## 26. Jalur audio, video yang hilang, dan transkrip berbahasa lain (belum di-commit)
+
+- **Jalur audio.** `ytdlp.jalur_audio(info)` → `audio_tracks` di /api/video-info (asli dulu). Unduhan menerima
+  `audio_lang` (auto-klip, /api/download); tanpa itu `format_sort` diawali `lang` sehingga suara ASLI yang
+  diambil. Sebelumnya bitrate menentukan: 13 jalur 129,474-129,476 kbps pada video MrBeast → bahasa acak.
+  Bila berkas di disk bertag bahasa lain (`bahasa_audio` lewat ffprobe), berkasnya disingkirkan (.lama) lalu
+  diunduh ulang; dipulihkan bila unduhan gagal. Partitur: pilihan "Unduh suara" muncul di bawah kolom tautan.
+- **Video hilang.** /api/projects menaruh `local_url` SESUDAH `**result` — sebelumnya `local_url` lama dari
+  hasil tersimpan menimpanya dan Studio memutar berkas yang tidak ada (layar hitam). Studio kini menampilkan
+  `VideoHilang` dengan tombol unduh ulang + pilihan audio + bilah kemajuan. Teruji: MrBeast pulih, 1080p, eng.
+- **Transkrip berbahasa lain.** Cari ulang tidak memakai lagi transkrip caption tersimpan yang bahasanya bukan
+  bahasa video; `transcripts.get_best` memilih yang terbaru bila peringkat sumber sama.
+- Gerbang unduhan (bagian 25) teruji ulang di dalam proses: 3 bersamaan, 2 menunggu, batal saat menunggu OK.
+- Catatan proses: pola `pgrep` "Projek Coding/.../python run.py" tidak cocok dengan perintah backend
+  ("venv/bin/python run.py") — pakai `pgrep -f "python run.py"` (tidak mengenai aplikasi desktop).
+
+## 27. Sutradara tanpa bilah kabur (belum di-commit)
+
+- Keputusan pemilik: sutradara hanya memakai `smart`, `motion`, `gaming`, `layout` (`sutradara_ai.MODE_SUTRADARA`).
+  Menu model: "lebar" diganti "ikuti_gerakan"; prompt melarang latar kabur. Bingkai dasar saat wajah jarang
+  terlihat = `motion` (dulu `blur`); wajah terlalu kecil = bingkai dasar (dulu `blur`); bagian tanpa wajah
+  ≥2,5 dtk = `motion` (jeda wajah <1,5 dtk di antaranya disatukan). "reaksi_penuh" = susunan satu bingkai
+  (dulu kotak tetap). `_tanpa_kabur` menyaring semua kunci di jalur AI dan lokal.
+- Render: kunci ber-`asal` ai/otomatis yang rencana wajah/gerakannya tak terpakai jatuh ke potong tengah,
+  bukan bilah kabur. Pilihan manual pengguna tidak berubah.
+- Teruji: Minecraft 0-40 dtk → smart/motion bergantian, nol blur; horor klip M → gaming → layout → gaming.
+
+## 28. Bingkai dasar per saat: game / wajah / gerakan (belum di-commit)
+
+- Aturan pemilik: game + wajah bersamaan → bingkai game; hanya game → ikuti gerakan; hanya wajah → ikuti wajah.
+- `sutradara_ai._label_per_sampel`: wajah "facecam" = lebar ≤14% bingkai DAN di pojok (x <25%/>75%, y <30%/>55%) —
+  angka dari rekaman MrBeast (wajah pemain 6-12,6%, x 9-20%/83-91%; wajah kamera orang x 52-55%).
+  Potongan <1,5 dtk disatukan (`_rapikan_potongan`). Tiap potongan game mencari panel facecam-nya sendiri
+  (`deteksi_facecam` pada potongan itu; cadangan `_kotak_dari_wajah`) dan membawa `layout`-nya di kunci.
+- `jadikan_kunci(dasar_waktu=…)` + `_pasang_dasar_waktu`: momen reaksi tetap di atasnya, dan sesudahnya kembali
+  ke dasar yang berlaku di detik itu. Dipakai bila tidak ada facecam sepanjang klip (jalur AI dan lokal).
+- Studio: kunci game yang membawa susunannya sendiri ditampilkan dan disunting dari kuncinya.
+- Teruji MrBeast 0-40 dtk: gerak / game (11,4-17,5) / gerak / game (20,4-22,4) / gerak / wajah (36,8); dirender
+  dan diperiksa bingkainya. Podcast Sule dan horor klip M tidak berubah.
+- Sisa: potongan game yang sangat pendek (2 dtk) memakai kotak perkiraan dari ukuran wajah — tepi panel ikut masuk.
+
+## 29. Pratinjau tidak lagi melacak ulang di tiap potongan (belum di-commit)
+
+- Penyebab: efek jejak di `Editor.jsx` bergantung pada `frameModeEfektif`/`subjekLacak`, yang berganti di setiap
+  batas potongan hasil sutradara (wajah → gerak → game). Tiap pergantian membuang jejak dan meminta ulang tanpa
+  menyimpannya; memutar ulang klip mengulang semuanya.
+- Sekarang: `cacheJejakRef` menyimpan jejak per (video, segmen, rasio, gaya gerak, subjek, tanda orang, penutur);
+  `ambilJejak` menyatukan permintaan yang sama; semua subjek yang dibutuhkan linimasa (`subjekDibutuhkan`)
+  diambil di latar sejak awal. Server sudah punya `_REFRAME_CACHE` untuk muat ulang halaman.
+- Teruji di browser (MrBeast klip A, 4 potongan wajah/gerak): dua pemutaran penuh termasuk putar ulang —
+  0 permintaan jejak baru, tanda "Melacak" 0 dtk.
+
+## 30. Bingkai bawaan dipilih dari isi klip (2026-09-21)
+
+Dulu klip dibuka dengan cara bingkai terakhir untuk videonya (biasanya ikut wajah), jadi klip game jadi close-up facecam.
+- `sutradara_ai.jenis_klip` memakai penggolong per sampel yang sama dengan sutradara (`_label_per_sampel`):
+  - game ≥70%, atau ≥30% ditambah panel facecam yang terbaca → `gaming`;
+  - tanpa wajah / wajah jarang ≥60% → `motion`;
+  - selainnya → `smart`.
+  - Klip tanpa satu wajah pun langsung `motion`: pemindai panel tertipu kartun.
+- `jenis_klip_tersimpan` menyimpan hasilnya di `search_cache` berkunci `jenis:`, yang tidak ikut dibersihkan saat startup. Endpoint `POST /api/clip-jenis`.
+- Studio: pilihan manual disimpan per klip (`cara_bingkai`) dan selalu menang. Panel Bingkai menampilkan "Membaca isi klip…", lalu alasan pilihannya, dan tombol "Kembali ke otomatis".
+- Render: klip yang belum pernah dibuka dikirim `frame_mode: "otomatis"`, lalu `run_render` menggolongkannya sendiri.
+- Hasil uji:
+  - 9 klip game (3 video horor) → game;
+  - podcast Sule → ikut wajah;
+  - kartun pemadam → gerakan.
+- Waktu deteksi pertama 20–140 dtk per klip; pembukaan ulang ±3 dtk.
+
+## 31. Verifikasi bot: runtime JS, PO Token, cookies yang kini berfungsi (2026-09-21)
+
+**Masalah:** IP ditandai YouTube; 5 dari 6 video ditolak "Sign in to confirm you're not a bot", termasuk di pemutar Firefox.
+
+**Akar masalah:** yt-dlp berjalan tanpa runtime JS ("JS runtimes: none", jalur yang ia sebut usang). Karena itu cookies pun gagal ("The page needs to be reloaded"), dan catatan lama menyimpulkan cookies "memperburuk".
+
+| Kombinasi (dari IP yang ditandai) | Hasil |
+|---|---|
+| polos | ditolak |
+| Deno | ditolak |
+| Deno + PO Token | ditolak |
+| cookies + Deno | 1080p |
+| cookies + Deno + PO Token | 2160p, unduhan penuh lewat antrean aplikasi berhasil |
+
+**Perubahan:**
+- `services/alat_yt.py` baru:
+  - mengunduh sekali Deno 2.9.7, bgutil-pot 0.8.1 (Rust), dan plugin HTTP-nya ke `STORAGE/alat/`, dengan versi dan SHA-256 dikunci;
+  - menyalakan server token hanya di 127.0.0.1;
+  - `terapkan(opts)` menambah `js_runtimes`, `remote_components={'ejs:github'}`, dan `base_url` token.
+  - Plugin dan server berlisensi GPL-3.0, jadi sengaja TIDAK dibundel.
+- `yt-dlp-ejs==0.8.0` masuk requirements dan `collect_all` di spec. `--periksa` memeriksa skrip ejs.
+- `ytdlp._ekstrak/_unduh`: berhenti pada galat bot pertama. Sebelumnya bisa sampai sekitar 17 permintaan player per percobaan.
+- Pesan galat bot kini berisi langkah nyata: tunggu, ganti jaringan, atau cookies akun cadangan.
+- `yt_klien.urutan_coba`: klien bawaan yt-dlp dulu saat cookies aktif.
+- `UNDUH_BERSAMAAN` 3 → 2.
+- `cookies.py`:
+  - video uji diganti ke jNQXAC9IVRw, karena Rick Astley tetap lolos saat IP ditandai;
+  - saran baru untuk kasus "polos 0, dengan cookies > 0".
+- Teks kartu Cookies diperbarui.
+
+**Yang perlu diingat:**
+- Aplikasi desktop terpasang (1.0.6) baru mendapat semua ini lewat rilis baru.
+- Pemasangan pertama mengunduh sekitar 90 MB dari GitHub.
+
+## 32. Bingkai: ikut wajah ke yang bicara, kepala utuh di game, render GPU (2026-09-21)
+
+**Ikut wajah:**
+- Diukur di 7 klip podcast: pada sampel ≥2 wajah dengan bukti mulut kuat, bingkai menyorot orang lain 46% waktunya.
+- Sebab: penutur yang tak terpetakan ke wajah (ohJbKVkrZ4U: 3 penutur, 1 terpetakan) jatuh ke wajah cadangan.
+- Perbaikan: `reframe._ikuti_mulut`, dengan pemungutan suara bukti mulut per jendela ±0,75 dtk, porsi ≥60%, hold 0,6 dtk, dan hanya wajah ≥4,5% lebar bingkai.
+- Hasil: 46% → 27%. Diperiksa mata di ohJbKVkrZ4U (pembicara bergestur kini disorot, sebelumnya pendengarnya).
+- Bidikan lebar berwajah kecil sengaja tidak disentuh.
+
+**Game:**
+- `render.kotak_reaksi` memuat kepala utuh dari `awan_kotak` (+35% atas, 22% bawah, 25% samping).
+- `tinggi_wajah_otomatis` memilih tinggi bidang wajah 40–50% sesuai bentuk panel (luapan ≤8%).
+- `_permainan_tanpa_wajah(wajah_saja=...)` hanya menghindari kepala bila menghindari panel menggeser >3%.
+- Cermin JS di `frames.js` (`kotakReaksi`, `permainanTanpaWajah`) terverifikasi 0 beda pada 7 klip.
+- Ruang di atas alis: dulu ~17% tinggi wajah, kini 35%.
+
+**Render:**
+- `services/enkoder.py` menguji encoder GPU (VA-API/NVENC/QSV/AMF) sekali saat startup. Render GPU yang gagal otomatis diulang dengan x264.
+- Terukur 27,9 vs 45,4 dtk untuk klip 70 dtk, SSIM 0,990.
+- ffmpeg statis Linux (johnvansickle) tanpa encoder GPU, jadi ffmpeg lain di PATH (/usr/bin) ikut dicoba.
+- Latar kabur tersembunyi di susunan game tidak berpengaruh ke kecepatan (diukur).
+
+**Temuan lingkungan:**
+- Data OmniClip ada di HDD 5400 rpm NTFS lewat FUSE: 67 MB/s, melawan SSD 523 MB/s.
+- Pembacaan pertama sumber membuat render ~2x lebih lambat (33 vs 17 dtk untuk 30 dtk).
+- Saran ke pengguna: pindahkan folder data ke SSD.
+
+**Belum:** build Linux bisa diganti ke ffmpeg dengan VA-API (BtbN) bila ukuran diterima.
+
+## 33. Pratinjau yang tidak macet, dan profil dengan akun Google sendiri (2026-09-21)
+
+**Video hitam/tidak jalan di Studio:**
+- Firefox memutar sumber 4K VP9 pada 0,44x kecepatan (5 dtk putar = 2,2 dtk maju), dan lompat 2,6 dtk. Chromium lancar, jadi gejalanya "kadang-kadang".
+- `proksi.py` v2: salinan H.264 1280 px kini membawa suara (AAC) dan faststart, dan ikut diputar Studio (`preview_url`, `pratinjau_disiapkan`).
+- Studio yang menunggu mendahulukan dan menaikkan prioritas pembuatan salinan (`_diburu`), lalu berpindah sendiri di detik yang sama.
+- `proksi` masuk MEDIA_DIRS. Salinan v1 (tanpa suara) dibuang `bersihkan_yatim`.
+- Terukur di Firefox: lompat 0,15 dtk, putar penuh kecepatan. Render tetap memakai sumber asli.
+- GPU (VA-API) justru lebih lambat untuk salinan 4K (70 vs 36 dtk per 30 dtk): hwdownload mahal.
+
+**Profil** (migrasi 4, cadangan DB: `OmniClip_Storage/omniclip.db.cadangan-sebelum-profil`):
+- Tabel `profil` (nama, warna, minat, folder_klip, unggah) dan `profil_video`. `profil_id` di search_history dan uploads. Semua data lama menjadi milik profil 1 "Utama".
+- Header `X-Omniclip-Profil` (api.js, localStorage `omniclip.profil`) → middleware → contextvar `profil.kini()`.
+- `queue.enqueue` mencatat `profil_id` di payload, dan `_run` memasang profil itu selama job berjalan.
+- Per profil:
+  - folder klip (Utama = edited_clips; lainnya `edited_clips/<nama> (<id>)`, jalur disimpan saat dibuat), media kategori `klip_<id>`;
+  - token Google `akun/<id>/google_token.json`; token lama pindah ke profil 1. OAuth `prompt=select_account consent`, dan state mengingat profil peminta;
+  - Partitur (profil_video; menghapus kartu yang dipakai profil lain hanya melepas);
+  - riwayat pencarian (`/api/riwayat-cari`), dengan chip "Terakhir dicari" di beranda;
+  - beranda dari minat (bobot 2) + 8 pencarian terakhir;
+  - jeda unggah YouTube per kanal.
+- Unggah otomatis sesudah render dijalankan server (`services/unggah.py`, `setelah_render`), sesuai setelan profil, atau pilihan YouTube/Drive di Studio untuk render itu.
+- UI: pemilih profil di kepala aplikasi, halaman /profil (buat/pakai/hapus, minat, akun Google, unggah otomatis, templat deskripsi `{judul}` `{hashtag}`).
+
+**Diuji:**
+- Profil uji: Partitur 0 vs 25, klip 0 vs 55.
+- Beranda berisi Phasmophobia dari minat/riwayat.
+- Render masuk folder profil (klip_2).
+- Unggah otomatis tanpa akun menjawab "Akun Google profil ini belum tersambung." dan render tetap sukses.
+- Profil uji sudah dihapus.
+
+**Belum diuji:** unggah sungguhan ke YouTube/Drive per akun. Mesin pengembangan ini tidak punya berkas OAuth client.
+
+## 34. Poin B dan D dari tinjauan 21 September (2026-09-22)
+
+**B4, sisa unduhan terputus:**
+- `ytdlp.bersihkan_sisa_unduhan()` dijalankan saat startup: buang .part / .part-FragN / .ytdl berumur >24 jam bila tidak ada unduhan berjalan. Terukur 6 berkas, 1 GB lega.
+- Berkas perantara `.fNNN.mp4` (video tanpa suara dari penggabungan yang gagal) tidak lagi dipakai sebagai sumber (`paths.berkas_perantara`), dan tidak didaftar di Unduhan.
+- `…IqHjpESyE_Y.f623.mp4` (17 GB) TIDAK dihapus: yt-dlp memakainya ulang bila video itu diunduh lagi. Keputusan pemilik.
+
+**B5:** kartu akun Google di Pengaturan diganti penunjuk ke halaman Profil.
+
+**D9, ikut wajah:**
+- `reframe._lengkapi_peta_dari_mulut`: penutur tanpa wajah dipetakan dari mulut dominan selama gilirannya (≥1,5 dtk bukti, ≥60%).
+- `_ikuti_mulut` tidak lagi menimpa subjek hasil peta kecuali mulut orang terpetakan diam dan orang lain ≥80%.
+- Sule klip D: 5/6 titik benar (dulu 2/6 tanpa perbaikan mulut, 4/6 dengan perbaikan pertama); render dicek mata.
+
+**D10:**
+- Potongan game pendek memakai letak panel dari seluruh klip (`panel_di`) sebelum menebak dari ukuran wajah.
+- Video tanpa wajah (`sutradara.tanpa_wajah`, porsi berwajah <0,25; kartun tanpa orang 0,18, video berorang 0,62-1,00): penutur <12% dilebur ke penutur besar terdekat. Berlaku di analisis dan deteksi ulang.
+
+**D11, sutradara:**
+- Pratinjau memakai pemutar utama yang tetap + cermin yang disiapkan lebih dulu (hanya untuk klip yang punya potongan Susun/game). Masuk ke susunan tanpa bingkai hitam (kecerahan 6,7 → 88). Klip biasa tidak terbebani (63 vs 61 bingkai terbuang per 6 dtk).
+- Susunan terbagi menyaring orang yang tidak terlihat bersamaan (<30%) atau kotaknya bertumpuk >50%; bila sisa satu → wajah tunggal.
+- Kekuatan momen = 0,5 × model + 0,5 × bukti suara lokal (0,35 tanpa bukti).
+
+**D12, subtitle:**
+- `subtitles._tanpa_tumpang`: baris berakhir saat baris berikutnya mulai (takarir rolling).
+- Subtitle kedua bisa diseret dan diubah ukurannya di pratinjau.
+- Terjemahan tanpa kunci / saat Gemini gagal → Google Terjemahan web. Gemini dibatasi 45 dtk total (dulu >2 menit mencoba 6 model).
+
+**D13:** penyaring pencarian durasi (<4 / 4-20 / >20 mnt) dan tanggal unggah lewat `sp_pencarian` (protobuf SearchParams YouTube, dicocokkan dengan nilai youtube.com). Terukur: pendek 17-233 dtk, panjang 1.203-10.117 dtk.
+
+**D14:** bahan dari berkas lain SUDAH ADA di Sisipan (video diunggah, posisi bawah/atas/tengah/sudut/penuh, waktu mulai dan potong). Catatan nomor 5 di atas usang.
+
+## 35. Impor video dari komputer, dan subtitle bahasa Jepang (2026-09-22)
+
+**Laporan:**
+- Impor anime gagal diproses, dan berkasnya muncul di halaman Unduhan.
+- Sebab gagal: id impor ("L" + 10 heks) berbentuk id YouTube, dan `run_auto_clip` selalu meminta metadata ke YouTube ("This video is unavailable"). Impor tidak pernah bisa sampai ke klip.
+
+**Perbaikan impor:**
+- Folder `impor/` sendiri (MEDIA_DIRS "impor"); impor lama dipindah saat startup (`paths.pindahkan_impor_lama`).
+- `paths.adalah_impor` (baris video berkanal "Impor lokal"); `find_local_video` mencari di unduhan lalu impor; `kategori_berkas` untuk URL pemutar.
+- Pipeline: metadata dari basis data + probe; tanpa caption YouTube, langsung ke Whisper; berkas hilang → pesan jelas.
+- Sampul kartu Partitur dari bingkai video (`/api/impor/{id}/sampul`).
+- Bilah kemajuan kirim berkas (`apiUnggah`, XHR).
+- Diuji: impor 60 dtk → 2 klip, pratinjau jalan, sampul tampil, tidak ada di Unduhan.
+
+**Subtitle Jepang/Mandarin** (Whisper memecah per huruf):
+- `services/teks.py`: `sambung` tanpa spasi di sisi CJK, `pecah`, `bobot_kata` (huruf CJK = 1/3 kata, lebar 2), `titik_patah` / `patah_teks` (libass tidak membungkus teks tanpa spasi → `\N` sendiri sesuai `box_w` dan ukuran font).
+- Dipakai di clipmodel (pembentukan baris), transcript, subtitles (`reconcile_words` kini sadar-aksara; karaoke, typewriter, baris utuh), pratinjau (`berjarak`), dan hook `_wrap`.
+- Dulu "あ ぁ 白 で あ った"; kini "さっきグゼールフィーとゾロが温", 15 huruf per baris, dua baris di kanvas, sorotan per huruf.
+
+**Risiko belum diuji:** font subtitle bawaan tidak punya huruf Jepang. Di Linux libass meminjam Noto CJK sistem; di Windows belum dicek (bisa kotak kosong). Pilihan: bundel Noto Sans JP.
+
+## 36. Subtitle asli + terjemahan otomatis, dan impor tanpa salin (2026-09-22)
+
+**Permintaan:** anime Jepang tampil dengan subtitle Jepang DAN terjemahan Indonesia/Inggris.
+
+**Terjemahan otomatis:**
+- `terjemah.kedua_untuk_klip` dijalankan di akhir auto-klip bila bahasa video ≠ tujuan.
+- Setelan `terjemah.otomatis` (bawaan "id"), diatur di kartu Pengaturan "Terjemahan otomatis".
+- Tombol "Terjemahkan semua klip" di tab Subtitle, untuk proyek lama.
+- Tata letak: terjemahan kuning 70 px di margin 560 (DI ATAS subtitle asli di 300). Bukan di bawah: anime fansub membawa subtitle tertanam di 15% bawah dan terjemahan tertimpa (terlihat di render uji).
+
+**Impor tanpa salin:**
+- Unggah lewat peramban selalu menyalin berkas (anime 248 MB tersalin dua kali).
+- "Dari komputer" kini membuka penjelajah OmniClip (`FolderPicker modeVideo`, `/settings/jelajah?video=true`), lalu `POST /api/impor/jalur`: jalur disimpan di meta video, berkas dibaca di tempatnya.
+- Pemutar untuk berkas di luar folder OmniClip: `/api/impor/{id}/berkas`. Jalur yang sama → kartu yang sama.
+- Unggah lewat peramban tetap ada untuk HP/perangkat lain.
+
+**"Macet di 2%" yang dilaporkan:**
+- Job impor pengguna menunggu jatah CPU karena uji saya berjalan bersamaan; impornya sendiri selesai (8 klip).
+- Pesan "Video sudah terunduh" diganti "Video dari komputer siap" untuk impor.
+- Salinan impor ikut terhapus bersama kartunya; salinan yatim dibersihkan saat startup (1 × 248 MB).
+
+**Catatan:** Whisper "base" banyak salah dengar pada bahasa Jepang, dan terjemahannya ikut salah. Model yang lebih besar dipilih di Pengaturan.

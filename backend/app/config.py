@@ -211,9 +211,16 @@ MEDIA_DIRS = {
     "edited_clips": CLIPS_DIR,
     "thumbnails": THUMBS_DIR,
     "title_voice": VOICE_DIR,
+    # Salinan ringan yang diputar Studio untuk sumber besar (services/proksi.py).
+    "proksi": STORAGE_DIR / "proksi",
+    # Video yang diambil dari komputer pengguna. Folder sendiri, bukan
+    # local_downloads: berkas yang tidak pernah diunduh tidak pantas muncul di
+    # halaman Unduhan (terlapor pengguna: "sangat tidak masuk akal").
+    "impor": STORAGE_DIR / "impor",
 }
+IMPOR_DIR = MEDIA_DIRS["impor"]
 
-for _d in (DOWNLOAD_DIR, CLIPS_DIR, THUMBS_DIR, LOGS_DIR, MODELS_DIR, VOICE_DIR):
+for _d in (DOWNLOAD_DIR, CLIPS_DIR, THUMBS_DIR, LOGS_DIR, MODELS_DIR, VOICE_DIR, IMPOR_DIR):
     _d.mkdir(parents=True, exist_ok=True)
 
 if BUNDLED_MODELS_DIR and BUNDLED_MODELS_DIR.is_dir():
@@ -229,18 +236,29 @@ if BUNDLED_MODELS_DIR and BUNDLED_MODELS_DIR.is_dir():
 LANE_LIMITS = {
     "net": int(os.getenv("OMNICLIP_LANE_NET", "2")),
     "cpu": int(os.getenv("OMNICLIP_LANE_CPU", "1")),
-    # Auto-klip punya jalurnya sendiri supaya beberapa video bisa MENGUNDUH
-    # bersamaan. Bagian yang berat (transkrip, analisis) tetap bergiliran
-    # dengan lane `cpu` lewat `jobs.gerbang_cpu` — lebar jalur ini hanya
-    # berarti berapa video boleh menunggu giliran dengan unduhan yang sudah
-    # berjalan, bukan berapa Whisper yang hidup bersamaan.
-    "klip": int(os.getenv("OMNICLIP_LANE_KLIP", "3")),
+    # Auto-klip punya jalurnya sendiri, dan jalur ini LEBAR. Yang membatasi
+    # mesin bukan jumlah pekerjaan yang terbuka melainkan dua sumber daya yang
+    # sudah dijaga sendiri-sendiri: `jobs.gerbang_cpu` (Whisper, pelacakan
+    # wajah, encode — satu per satu) dan `jobs.gerbang_unduh` (jalur pita).
+    #
+    # Terukur pada pemasangan sungguhan: dengan lebar 3, "Cari ulang klip"
+    # untuk video yang SUDAH terunduh dan SUDAH punya transkrip — pekerjaan
+    # beberapa detik — menunggu 6,6 menit di belakang tiga unduhan, sambil
+    # menampilkan pemutar yang tampak menggantung. Yang antre seharusnya
+    # unduhannya, bukan seluruh pekerjaannya.
+    "klip": int(os.getenv("OMNICLIP_LANE_KLIP", "8")),
     # Unggahan punya jalurnya sendiri, dan lebarnya SATU. Bukan karena memori —
     # unggahan hampir tidak memakainya — melainkan karena mengirim selusin klip
     # ke satu kanal dalam satu ledakan adalah persis pola yang membuat YouTube
     # menandai sebuah kanal. Satu per satu, berurutan, selalu.
     "upload": 1,
 }
+
+# Unduhan yang boleh berjalan bersamaan, lintas jenis pekerjaan. Dua: tiap
+# unduhan sudah memakai 8 sambungan fragmen, jadi pita 100 Mbps tetap terisi,
+# sementara permintaan serentak ke YouTube lebih sedikit. Tiga bersamaan
+# berjalan tepat sebelum IP ditandai "not a bot" (21 September 2026).
+UNDUH_BERSAMAAN = int(os.getenv("OMNICLIP_UNDUH_BERSAMAAN", "2"))
 
 # Jeda minimum antara dua unggahan YouTube yang berhasil. Nol berarti langsung
 # menyambung; bawaannya sengaja tidak nol.

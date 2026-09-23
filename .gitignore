@@ -71,3 +71,13 @@ OmniClip_Storage/proksi/
 OmniClip_Storage/suara/
 # Berkas yang diimpor ke Studio dan efek suara yang dibangkitkan.
 OmniClip_Storage/aset/
+
+# Alat pihak ketiga yang diunduh saat aplikasi berjalan (services/alat_yt.py):
+# runtime JavaScript Deno dan penyedia PO Token bgutil, ±140 MB. Keduanya
+# berlisensi sendiri dan sengaja TIDAK dibundel — diunduh dari rilis resminya
+# dengan versi dan SHA-256 yang dipatok.
+OmniClip_Storage/alat/
+# Berkas video milik pengguna yang diimpor dari komputernya.
+OmniClip_Storage/impor/
+# Cadangan basis data sebelum migrasi.
+OmniClip_Storage/*.db.cadangan*

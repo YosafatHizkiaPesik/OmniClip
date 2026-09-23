@@ -26,6 +26,7 @@ from .routers import auth as auth_router
 from .routers import clips as clips_router
 from .routers import jobs as jobs_router
 from .routers import media as media_router
+from .routers import profil as profil_router
 from .routers import projects as projects_router
 from .routers import settings as settings_router
 from .routers import update as update_router
@@ -125,12 +126,34 @@ async def lifespan(app: FastAPI):
     # menghasilkan kegagalan yang jauh lebih sulit dilacak.
     _pustaka.periksa_di_latar()
 
+    # Runtime JS dan server PO Token untuk yt-dlp — diunduh sekali, lalu
+    # dinyalakan tiap startup. Di latar: tanpanya yt-dlp tetap berjalan.
+    from .services import alat_yt
+    alat_yt.siapkan_di_latar()
+    # Encoder GPU diuji di latar, supaya render pertama tidak menunggunya.
+    from .services import enkoder
+    enkoder.siapkan_di_latar()
+    # Pecahan unduhan yang terputus, di latar (folder bisa di hardisk lambat).
+    import threading as _th
+    from .services.ytdlp import bersihkan_sisa_unduhan
+    _th.Thread(target=bersihkan_sisa_unduhan, name="sisa-unduhan", daemon=True).start()
+    # Video impor dari versi lama tinggal di local_downloads; dipindah ke
+    # folder impor supaya tidak muncul lagi di halaman Unduhan.
+    from .services.paths import pindahkan_impor_lama
+    from .services.paths import bersihkan_impor_yatim
+
+    def _impor():
+        pindahkan_impor_lama()
+        bersihkan_impor_yatim()
+    _th.Thread(target=_impor, name="impor-lama", daemon=True).start()
+
     log.info("OmniClip %s siap", __version__)
 
     try:
         yield
     finally:
         queue.stop()
+        alat_yt.hentikan()
         log.info("OmniClip backend berhenti")
 
 
@@ -159,6 +182,7 @@ app.include_router(videos_router.router)
 app.include_router(clips_router.router)
 app.include_router(media_router.router)
 app.include_router(projects_router.router)
+app.include_router(profil_router.router)
 app.include_router(uploads_router.router)
 app.include_router(update_router.router)
 
@@ -202,7 +226,16 @@ async def gerbang(request: Request, call_next):
                          "message": "Sesi berakhir. Masuk lagi dengan kata sandi."},
             )
 
-    response = await call_next(request)
+    # Profil aktif untuk permintaan ini — lihat services/profil.py. Diset di
+    # sini supaya setiap router dan setiap job yang dibuatnya membacanya dari
+    # satu tempat, tanpa parameter tambahan di puluhan fungsi.
+    from .services import profil as _profil
+    token = _profil.setel(_profil.dari_header(request.headers.get(_profil.HEADER))
+                          if path.startswith("/api/") else _profil.UTAMA)
+    try:
+        response = await call_next(request)
+    finally:
+        _profil.pulihkan(token)
     # Aplikasi ini tidak pernah pantas muncul di hasil pencarian, dan begitu ia
     # punya alamat publik, tidak diindeks adalah bagian dari tidak ditemukan.
     response.headers["X-Robots-Tag"] = "noindex, nofollow, noarchive"

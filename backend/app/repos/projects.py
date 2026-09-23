@@ -85,23 +85,29 @@ def _ringkasan_analisis(conn, video_id: str) -> Optional[dict]:
     }
 
 
-def list_projects(limit: int = 60) -> list[dict]:
+def list_projects(limit: int = 60, profil_id: Optional[int] = None) -> list[dict]:
     """
     Semua video yang pernah diminta untuk diklip, terbaru dulu.
 
     Menggabungkan yang sedang berjalan dan yang sudah selesai dalam satu daftar
     supaya halaman Studio bisa menampilkan keduanya sebagai kartu — antrean dan
     hasil di tempat yang sama.
+
+    Dengan `profil_id`, hanya video milik profil itu (tabel profil_video).
+    Analisisnya sendiri tetap dipakai bersama antar profil.
     """
     conn = get_conn()
+    saring = ("AND video_id IN (SELECT video_id FROM profil_video WHERE profil_id = ?)"
+              if profil_id is not None else "")
+    args = ((profil_id, profil_id, limit) if profil_id is not None else (limit,))
     rows = conn.execute(
-        """SELECT video_id, MAX(created_at) AS last_at FROM (
-               SELECT video_id, created_at FROM analyses WHERE video_id IS NOT NULL
+        f"""SELECT video_id, MAX(created_at) AS last_at FROM (
+               SELECT video_id, created_at FROM analyses WHERE video_id IS NOT NULL {saring}
                UNION ALL
                SELECT video_id, created_at FROM jobs
-                 WHERE type = 'auto_clip' AND video_id IS NOT NULL
+                 WHERE type = 'auto_clip' AND video_id IS NOT NULL {saring}
            ) GROUP BY video_id ORDER BY last_at DESC LIMIT ?""",
-        (limit,),
+        args,
     ).fetchall()
 
     projects = []
@@ -133,7 +139,10 @@ def list_projects(limit: int = 60) -> list[dict]:
             "video_id": vid,
             "title": (video["title"] if video else None) or result.get("title") or vid,
             "channel": video["channel"] if video else None,
-            "thumbnail": video["thumbnail_url"] if video else None,
+            # Video impor tidak punya sampul YouTube: diambil dari berkasnya.
+            "thumbnail": ((video["thumbnail_url"] if video else None)
+                          or (f"/api/impor/{vid}/sampul"
+                              if video and video["channel"] == "Impor lokal" else None)),
             "duration": (video["duration"] if video else None) or result.get("duration"),
             "status": status,
             "clip_count": len(result.get("clips") or []),

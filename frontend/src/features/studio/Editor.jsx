@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft, Menu, X, Scissors, Type, Palette, Download, Loader2, CheckCircle2,
-  AlertTriangle, Crop, Plus, Trash2, Play, Save, Tag, Undo2, Redo2, Clapperboard, RefreshCw,
+  AlertTriangle, Crop, Plus, Trash2, Play, Save, Tag, Undo2, Redo2, Clapperboard, RefreshCw, Wand2,
 } from 'lucide-react';
-import { apiGet, apiPost, downloadToDisk } from '../../lib/api';
+import { apiGet, apiPost, downloadToDisk, kategoriKlip } from '../../lib/api';
 import { loadFonts } from '../../lib/fonts';
 import { formatTime } from '../../utils/timeFormat';
 import { useClipEditor } from './useClipEditor';
@@ -14,8 +14,15 @@ import FrameStage from './FrameStage';
 import ClipTimeline from './ClipTimeline';
 import FramePanel from './FramePanel';
 import TitlePanel from './TitlePanel';
+import SutradaraPanel from './SutradaraPanel';
+import VideoHilang from './VideoHilang';
 import MediaPanel from './MediaPanel';
-import TerjemahPanel from './TerjemahPanel';
+import TerjemahPanel, { buatKedua } from './TerjemahPanel';
+
+/** Sama dengan sidikUtama di TerjemahPanel: penanda terjemahan usang. */
+function sidikUtamaKlip(lines) {
+  return (lines ?? []).map((l) => `${(+l.start).toFixed(2)}|${(+l.end).toFixed(2)}|${l.text}`).join('\n');
+}
 import CariUlangDialog from './CariUlangDialog';
 import {
   loadFraming, saveFraming, serializeLayout, clipTimeFor, sourceTimeFor,
@@ -105,8 +112,11 @@ const TABS = [
   { id: 'style', label: 'Gaya', Icon: Palette },
   { id: 'frame', label: 'Bingkai', Icon: Crop },
   { id: 'title', label: 'Judul', Icon: Tag },
-  // Berkas dari luar video sumber, plus sutradara otomatis.
+  // Berkas dari luar video sumber.
   { id: 'media', label: 'Sisipan', Icon: Clapperboard },
+  // Sutradara berdiri sendiri: ia menyusun SELURUH klip, bukan menambahkan
+  // satu benda ke dalamnya, dan akan tumbuh ke gaya subtitle juga.
+  { id: 'sutradara', label: 'Sutradara', Icon: Wand2 },
 ];
 
 /**
@@ -202,7 +212,11 @@ export default function Editor({ project, onBack }) {
   // Unggah ke Drive tepat setelah klipnya jadi. Mati secara bawaan: mengirim
   // berkas keluar dari komputer harus jadi pilihan yang diambil, bukan yang
   // kebetulan terjadi karena tombol render ditekan.
-  const [uploadAfter, setUploadAfter] = useState(false);
+  // Unggah sesudah render: {youtube, drive, privasi}. Nilai awalnya dari
+  // setelan unggah otomatis profil aktif; mengubahnya berlaku untuk render
+  // dari layar ini saja. Unggahannya diantrekan SERVER (services/unggah.py),
+  // jadi tetap jalan walau halaman ini ditutup sebelum render selesai.
+  const [unggahSetelah, setUnggahSetelah] = useState({ youtube: false, drive: false, privasi: 'private' });
   const [googleReady, setGoogleReady] = useState(null);
   const [exportLog, setExportLog] = useState([]);
   // Rencana crop untuk pratinjau — sama persis dengan yang dipakai render.
@@ -302,7 +316,10 @@ export default function Editor({ project, onBack }) {
     } else {
       // Belum ada linimasa: satu cara untuk seluruh klip. Kunci sisa dibuang
       // supaya lajurnya tidak menampilkan potongan yang tidak berarti apa-apa.
-      if (kunci.length) setFrameKeys([]);
+      // Pilihannya dicatat PADA KLIP: membukanya lagi tidak ditimpa tebakan
+      // isi klip, dan klip lain tetap memakai bingkai yang cocok untuk isinya.
+      editor.updateClip(selected.clip_id, kunci.length
+        ? { frame_keys: [], cara_bingkai: mode } : { cara_bingkai: mode });
       // Berpindah dari "Main game" ke "Susun sendiri" MEWARISI kedua bingkai
       // yang barusan dicari sistem. Tanpa ini keduanya hilang dan pengguna
       // kembali ke satu bingkai kosong — padahal justru di sinilah susunan
@@ -320,7 +337,7 @@ export default function Editor({ project, onBack }) {
       }
       setFrameMode(mode);
     }
-  }, [selected, sourceTime, setFrameKeys, frameModeEfektif, setLayout]);
+  }, [selected, sourceTime, setFrameKeys, frameModeEfektif, setLayout, editor]);
 
   /**
    * Susunan bingkai yang sedang berlaku.
@@ -436,11 +453,21 @@ export default function Editor({ project, onBack }) {
 
   // Susunan yang dipakai pratinjau: milik gaming saat modenya gaming — dengan
   // kotak wajah yang berlaku pada detik ini.
-  const susunanTampil = frameModeEfektif === 'gaming'
-    ? gamingPadaWaktu(layoutGaming, tKlip) : layoutEfektif;
+  // Kunci game dari sutradara membawa susunannya sendiri (letak facecam pada
+  // potongan itu); yang itu yang ditampilkan dan disunting.
+  const kunciGamePunyaSusunan = frameModeEfektif === 'gaming'
+    && !!kunciBingkaiAktif?.layout?.frames?.length;
+  const susunanTampil = kunciGamePunyaSusunan ? kunciBingkaiAktif.layout
+    : frameModeEfektif === 'gaming' ? gamingPadaWaktu(layoutGaming, tKlip) : layoutEfektif;
 
   /** Menulis susunan bingkai ke potongan yang berlaku, atau ke klip. */
   const setSusunanEfektif = useCallback((next) => {
+    if (kunciGamePunyaSusunan) {
+      setFrameKeys((lama) => (lama ?? []).map((k) => (
+        Math.abs((k.t ?? 0) - (kunciBingkaiAktif.t ?? 0)) < 1e-6 ? { ...k, layout: next } : k
+      )));
+      return;
+    }
     if (frameModeEfektif === 'gaming') {
       // `next` adalah susunan yang TAMPIL: kotak wajahnya milik letak yang
       // berlaku di detik ini, jadi hanya letak itu yang diubah.
@@ -469,7 +496,7 @@ export default function Editor({ project, onBack }) {
     }
     setLayout((lama) => selaraskanBentuk(lama, next, bentuk));
   }, [kunciBingkaiAktif, frameModeEfektif, setLayoutGaming, setFrameKeys, setLayout,
-      aspectRatio, tKlip]);
+      aspectRatio, tKlip, kunciGamePunyaSusunan]);
   const setPersonKeys = useCallback((next) => {
     if (!selected) return;
     const value = typeof next === 'function' ? next(selected.person_keys ?? []) : next;
@@ -533,6 +560,17 @@ export default function Editor({ project, onBack }) {
     apiGet('/uploads/google/status')
       .then((r) => { if (!cancelled) setGoogleReady(!!r.connected); })
       .catch(() => { if (!cancelled) setGoogleReady(false); });
+    apiGet('/profil')
+      .then((r) => {
+        if (cancelled) return;
+        const p = (r.profil ?? []).find((x) => x.id === r.aktif);
+        const u = p?.unggah;
+        if (u) {
+          setUnggahSetelah({ youtube: !!(u.otomatis && u.youtube), drive: !!(u.otomatis && u.drive),
+                             privasi: u.privasi || 'private' });
+        }
+      })
+      .catch(() => {});
     return () => { cancelled = true; };
   }, []);
 
@@ -566,6 +604,53 @@ export default function Editor({ project, onBack }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [videoId]);
 
+  /**
+   * Berkas yang DIPUTAR Studio: salinan ringan untuk sumber besar.
+   *
+   * Firefox memutar sumber 4K VP9 pada 0,44x kecepatan (terukur) — terlihat
+   * macet atau hitam. Selama salinannya disiapkan, sumber asli yang diputar;
+   * begitu siap, pemutar berpindah di detik yang sama tanpa menunggu F5.
+   */
+  const srcPutar = data?.preview_url || data?.local_url || null;
+  // Bidang terbanyak di potongan Susun/game klip ini: pratinjau menyiapkan
+  // pemutar sebanyak itu lebih dulu, supaya masuk ke potongannya tidak hitam.
+  const cerminSiap = useMemo(() => {
+    let n = 0;
+    for (const k of selected?.frame_keys ?? []) {
+      if (k.mode === 'layout') n = Math.max(n, k.layout?.frames?.length ?? 1);
+      if (k.mode === 'gaming') n = Math.max(n, 2);
+    }
+    if ((selected?.frame_keys ?? []).length < 2) n = 0;   // satu kunci = satu cara, tidak ada pergantian
+    return n;
+  }, [selected?.frame_keys]);
+  const posisiTukarRef = useRef(null);
+  useEffect(() => {
+    if (!videoId || !data?.pratinjau_disiapkan) return undefined;
+    let batal = false;
+    const id = setInterval(async () => {
+      try {
+        const segar = await apiGet(`/projects/${videoId}`);
+        if (batal || segar.pratinjau_disiapkan) return;
+        const v = videoRef.current;
+        posisiTukarRef.current = v ? { t: v.currentTime, main: !v.paused } : null;
+        setData((d) => ({ ...d, preview_url: segar.preview_url, pratinjau_disiapkan: false }));
+      } catch { /* dicoba lagi di putaran berikutnya */ }
+    }, 8000);
+    return () => { batal = true; clearInterval(id); };
+  }, [videoId, data?.pratinjau_disiapkan]);
+  useEffect(() => {
+    const v = videoRef.current;
+    const pos = posisiTukarRef.current;
+    if (!v || !pos) return undefined;
+    const pulihkan = () => {
+      v.currentTime = pos.t;
+      if (pos.main) v.play().catch(() => {});
+      posisiTukarRef.current = null;
+    };
+    v.addEventListener('loadedmetadata', pulihkan, { once: true });
+    return () => v.removeEventListener('loadedmetadata', pulihkan);
+  }, [srcPutar]);
+
   // Gelombang suara dihitung terpisah: pada video panjang butuh belasan detik
   // pada pemanggilan pertama, dan editor tidak perlu menunggunya untuk tampil.
   useEffect(() => {
@@ -584,6 +669,46 @@ export default function Editor({ project, onBack }) {
   const segmentKey = selected
     ? selected.segments.map((s) => `${s.start.toFixed(2)}-${s.end.toFixed(2)}`).join(',')
     : '';
+
+  /**
+   * Bingkai bawaan klip ini, dibaca dari ISINYA.
+   *
+   * Dulu setiap klip dibuka dengan cara bingkai terakhir untuk videonya —
+   * hampir selalu "ikut wajah" — sehingga klip game jadi close-up wajah di
+   * kamera pojok. Sekarang server menggolongkan klipnya: permainan + facecam
+   * → Main game; tanpa wajah → ikuti gerakan; wajah jelas → ikut wajah.
+   * Cara yang DIPILIH pengguna untuk klip ini (`cara_bingkai`) selalu menang
+   * dan ikut tersimpan bersama klipnya.
+   */
+  const [jenisKlip, setJenisKlip] = useState({});   // `${clip_id}|${segmen}` -> hasil | 'memuat'
+  const jenisRef = useRef(jenisKlip);
+  jenisRef.current = jenisKlip;
+  const selectedRef = useRef(selected);
+  selectedRef.current = selected;
+  const kunciJenis = (clip) => `${clip.clip_id}|${(clip.segments ?? [])
+    .map((s) => `${s.start.toFixed(2)}-${s.end.toFixed(2)}`).join(',')}`;
+  const jenisSekarang = selected ? jenisKlip[kunciJenis(selected)] : null;
+  useEffect(() => {
+    if (!selected?.segments?.length) return;
+    if (selected.cara_bingkai) { setFrameMode(selected.cara_bingkai); return; }
+    if (data?.downloaded === false) return;
+    const kunci = kunciJenis(selected);
+    const ada = jenisRef.current[kunci];
+    if (ada?.mode) { setFrameMode(ada.mode); return; }
+    if (ada === 'memuat') return;
+    setJenisKlip((j) => ({ ...j, [kunci]: 'memuat' }));
+    apiPost('/clip-jenis', { video_id: videoId, segments: selected.segments })
+      .then((r) => {
+        setJenisKlip((j) => ({ ...j, [kunci]: r }));
+        // Diterapkan hanya bila klip itu masih yang terbuka dan pengguna
+        // belum memilih sendiri selama menunggu.
+        const kini = selectedRef.current;
+        if (r?.mode && kini && kunciJenis(kini) === kunci && !kini.cara_bingkai) {
+          setFrameMode(r.mode);
+        }
+      })
+      .catch(() => setJenisKlip((j) => { const n = { ...j }; delete n[kunci]; return n; }));
+  }, [selected?.clip_id, segmentKey, selected?.cara_bingkai, data?.downloaded, videoId]);   // eslint-disable-line react-hooks/exhaustive-deps
   const followKey = (layout?.frames ?? []).map((f) => (f.follow ? '1' : '0')).join('');
   // Lajur Bingkai yang berisi kunci ikut-wajah atau bingkai pengikut (reaksi
   // dari sutradara) butuh jejak wajah sepanjang klip — bukan hanya saat garis
@@ -607,19 +732,72 @@ export default function Editor({ project, onBack }) {
   // datang dari kunci di lajur Bingkai — kalau tidak, potongan "Gerak" di
   // tengah klip ber-mode wajah akan dipratinjau dengan jejak wajah.
   const subjekLacak = frameModeEfektif === 'motion' ? 'gerak' : 'wajah';
-  const sceneKey = `${videoId}|${segmentKey}|${frameMode}|${subjekLacak}|${frameMotion}|${aspectRatio}|${followKey}`;
+  // Jejak yang dibutuhkan klip ini SEPANJANG linimasanya — bukan hanya potongan
+  // yang sedang diputar. Klip hasil sutradara berganti antara ikut wajah,
+  // ikuti gerakan, dan game tiap beberapa detik.
+  const subjekDibutuhkan = useMemo(() => {
+    const set = new Set();
+    if (frameMode === 'smart' || kunciButuhJejak
+        || (frameMode === 'layout' && (layout?.frames ?? []).some((f) => f.follow))) set.add('wajah');
+    if (frameMode === 'motion' || (frameKeys ?? []).some((k) => k.mode === 'motion')) set.add('gerak');
+    return [...set].sort().join(',');
+  }, [frameMode, kunciButuhJejak, layout, frameKeys]);
+  const wantsTrack = frameModeEfektif === 'smart' || frameModeEfektif === 'motion'
+    || (frameMode === 'layout' && (layout?.frames ?? []).some((f) => f.follow))
+    || kunciButuhJejak;
+  const penuturKlip = (selected?.subtitles ?? []).map((l) => l.speaker ?? '-').join('');
+  /** Kunci simpanan jejak: semua yang menentukan hasilnya, tidak lebih. */
+  const kunciJejak = (subjek) => [videoId, segmentKey, aspectRatio, frameMotion, subjek,
+    subjek === 'wajah' ? JSON.stringify(personKeys ?? []) : '', penuturKlip].join('|');
+  // Jejak yang sudah dihitung, per klip dan jenisnya.
+  //
+  // Dulu jejak dibuang dan diminta ulang setiap kali cara membingkai yang
+  // BERLAKU berganti — dan pada klip hasil sutradara itu terjadi di setiap
+  // batas potongan. Terlapor: pratinjau "memuat deteksi" terus-menerus, bahkan
+  // saat klip yang sama diputar ulang sesudah selesai ditonton.
+  const cacheJejakRef = useRef(new Map());
+  const jalanJejakRef = useRef(new Map());
+  const sceneKey = `${videoId}|${segmentKey}|${aspectRatio}`;
   const sceneKeyRef = useRef(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { setSelectedLine(null); }, [segmentKey]);
+
+  /** Mengambil satu jejak (sekali saja per kunci), mengembalikan janji hasilnya. */
+  const ambilJejak = useCallback((subjek) => {
+    const kunci = kunciJejak(subjek);
+    if (cacheJejakRef.current.has(kunci)) return Promise.resolve(cacheJejakRef.current.get(kunci));
+    if (jalanJejakRef.current.has(kunci)) return jalanJejakRef.current.get(kunci);
+    const janji = apiPost('/clip-reframe', {
+      video_id: videoId,
+      segments: selected.segments,
+      aspect_ratio: aspectRatio,
+      frame_motion: frameMotion,
+      subjek,
+      person_keys: subjek === 'wajah' ? personKeys : [],
+      // Label penutur ikut dikirim: dengan itu server bisa mencocokkan wajah
+      // dengan suara, dan crop mengikuti orang yang sedang bicara.
+      subtitles: (selected.subtitles ?? []).map((l) => ({
+        start: l.start, end: l.end, speaker: l.speaker,
+      })),
+    }).then((res) => {
+      cacheJejakRef.current.set(kunci, res);
+      // Simpanan dibatasi: tiap jejak berisi posisi per sampel untuk seluruh klip.
+      if (cacheJejakRef.current.size > 40) {
+        cacheJejakRef.current.delete(cacheJejakRef.current.keys().next().value);
+      }
+      return res;
+    }).finally(() => { jalanJejakRef.current.delete(kunci); });
+    jalanJejakRef.current.set(kunci, janji);
+    return janji;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [videoId, segmentKey, aspectRatio, frameMotion, personKeys, penuturKlip, selected]);
+
   useEffect(() => {
     let cancelled = false;
     // Jejak wajah juga dibutuhkan oleh susunan sendiri, begitu ada satu bingkai
     // yang diminta mengikuti orang. Dulu ia hanya diambil di mode ikut-wajah,
     // jadi kotak pengikut di susunan sendiri diam saja di pratinjau meski
     // hasil rendernya bergerak.
-    const wantsTrack = frameModeEfektif === 'smart' || frameModeEfektif === 'motion'
-      || (frameMode === 'layout' && (layout?.frames ?? []).some((f) => f.follow))
-      || kunciButuhJejak;
     if (!videoId || !selected || !wantsTrack || aspectRatio === '16:9') {
       setReframe(null);
       // Tanda sibuk WAJIB dimatikan di sini juga. Permintaan sebelumnya sudah
@@ -629,39 +807,33 @@ export default function Editor({ project, onBack }) {
       setReframeLoading(false);
       return undefined;
     }
-    // Rencana klip SEBELUMNYA dibuang hanya bila yang berubah adalah KLIPNYA.
-    //
-    // Kalau yang berubah cuma tanda arah bingkai, wajah-wajahnya tetap wajah
-    // yang sama — mengosongkan lajur di situ membuat linimasa bingkai lenyap
-    // tepat saat pengguna sedang menyuntingnya, dan tiap tanda terasa seperti
-    // memulai analisis baru. Tapi saat berpindah klip, menahannya berarti
-    // menampilkan orang-orang klip yang barusan ditinggalkan — dan lajur itu
-    // bisa diklik, jadi tanda bisa dipasang berdasarkan gambar yang salah.
+    // Rencana klip SEBELUMNYA dibuang hanya bila yang berubah adalah KLIPNYA —
+    // menahannya berarti menampilkan orang-orang klip yang barusan
+    // ditinggalkan, dan lajurnya bisa diklik.
     if (sceneKeyRef.current !== sceneKey) {
       sceneKeyRef.current = sceneKey;
       setReframe(null);
     }
-    setReframeLoading(true);
-    apiPost('/clip-reframe', {
-      video_id: videoId,
-      segments: selected.segments,
-      aspect_ratio: aspectRatio,
-      frame_motion: frameMotion,
-      subjek: subjekLacak,
-      person_keys: subjekLacak === 'wajah' ? personKeys : [],
-      // Label penutur ikut dikirim: dengan itu server bisa mencocokkan wajah
-      // dengan suara, dan crop mengikuti orang yang sedang bicara.
-      subtitles: (selected.subtitles ?? []).map((l) => ({
-        start: l.start, end: l.end, speaker: l.speaker,
-      })),
-    })
-      .then((res) => { if (!cancelled) setReframe(res); })
-      .catch(() => { if (!cancelled) setReframe(null); })
-      .finally(() => { if (!cancelled) setReframeLoading(false); });
+    const kunci = kunciJejak(subjekLacak);
+    if (cacheJejakRef.current.has(kunci)) {
+      setReframe(cacheJejakRef.current.get(kunci));
+      setReframeLoading(false);
+    } else {
+      setReframeLoading(true);
+      ambilJejak(subjekLacak)
+        .then((res) => { if (!cancelled) setReframe(res); })
+        .catch(() => { if (!cancelled) setReframe(null); })
+        .finally(() => { if (!cancelled) setReframeLoading(false); });
+    }
+    // Jejak lain yang akan dibutuhkan linimasa ini diambil di latar sekarang,
+    // supaya pratinjau tidak berhenti memuat saat sampai di potongannya.
+    for (const subjek of subjekDibutuhkan.split(',').filter(Boolean)) {
+      if (subjek !== subjekLacak) ambilJejak(subjek).catch(() => {});
+    }
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [videoId, segmentKey, frameMode, subjekLacak, frameModeEfektif, aspectRatio, followKey,
-      personKeys, kunciButuhJejak]);
+  }, [videoId, segmentKey, subjekLacak, wantsTrack, aspectRatio, frameMotion, followKey,
+      personKeys, penuturKlip, subjekDibutuhkan]);
 
   // Timecode dibaca dari elemen video pada ~10 Hz. `timeupdate` hanya menyala
   // sekitar 4 Hz dan angkanya terlihat tersendat; membacanya tiap frame dan
@@ -991,11 +1163,21 @@ export default function Editor({ project, onBack }) {
       const { job_id: jobId } = await apiPost('/clip-speakers', {
         video_id: videoId, speakers,
       });
-      const job = await waitForJob(jobId, { interval: 2000 });
+      setExportLog([{ name: 'Narasumber', status: 'running', progress: 0,
+                      message: 'Menunggu giliran…' }]);
+      const job = await waitForJob(jobId, {
+        interval: 2000,
+        onProgress: (j) => setExportLog([{
+          name: 'Narasumber', status: 'running', progress: j.progress ?? 0,
+          message: j.message || 'Menandai penutur…', eta: j.eta_seconds ?? null,
+        }]),
+      });
       if (job.status === 'done') {
         const fresh = await apiGet(`/projects/${videoId}`);
         setData(fresh);
         editor.load(videoId, fresh.clips || []);
+        setExportLog([{ name: 'Narasumber', status: 'done', progress: 1,
+                        message: 'Penutur ditandai ulang.' }]);
       } else {
         setExportLog([{ name: 'Narasumber', status: 'failed',
                         message: job.error || 'Deteksi ulang gagal.' }]);
@@ -1013,11 +1195,21 @@ export default function Editor({ project, onBack }) {
     setRetitling(true);
     try {
       const { job_id: jobId } = await apiPost('/clip-titles', { video_id: videoId });
-      const job = await waitForJob(jobId, { interval: 2000 });
+      setExportLog([{ name: 'Judul', status: 'running', progress: 0,
+                      message: 'Menunggu giliran…' }]);
+      const job = await waitForJob(jobId, {
+        interval: 2000,
+        onProgress: (j) => setExportLog([{
+          name: 'Judul', status: 'running', progress: j.progress ?? 0,
+          message: j.message || 'Menulis ulang judul…', eta: j.eta_seconds ?? null,
+        }]),
+      });
       if (job.status === 'done') {
         const fresh = await apiGet(`/projects/${videoId}`);
         setData(fresh);
         editor.load(videoId, fresh.clips || []);
+        setExportLog([{ name: 'Judul', status: 'done', progress: 1,
+                        message: 'Judul dan tagar diperbarui.' }]);
       } else {
         setExportLog([{ name: 'Judul', status: 'failed',
                         message: job.error || 'Gagal menulis ulang judul.' }]);
@@ -1040,7 +1232,37 @@ export default function Editor({ project, onBack }) {
   }, [editor]);
   saveRef.current = handleSaveClips;
 
-  const renderPayload = useCallback((clip) => ({
+  // Cara bingkai milik KLIP ITU: klip yang terbuka memakai yang tampil di
+  // layar; klip lain memakai pilihannya sendiri, hasil baca isinya, atau
+  // "otomatis" — server membacanya sendiri sebelum merender.
+  const modeKlip = (clip) => {
+    if (clip.clip_id === selectedRef.current?.clip_id) return frameMode;
+    return clip.cara_bingkai || jenisRef.current[kunciJenis(clip)]?.mode || 'otomatis';
+  };
+  /**
+   * Menerjemahkan SEMUA klip yang belum punya terjemahan (atau terjemahannya
+   * usang). Untuk proyek yang dianalisis sebelum terjemahan otomatis ada —
+   * satu tombol, bukan belasan klip satu per satu.
+   */
+  const terjemahSemua = useCallback(async (bahasa) => {
+    const sasaran = clips.filter((c) => (c.subtitles ?? []).length
+      && (!c.subtitle_kedua || (c.subtitle_kedua.sumber_sidik
+        && c.subtitle_kedua.sumber_sidik !== sidikUtamaKlip(c.subtitles))));
+    for (const c of sasaran) {
+      // eslint-disable-next-line no-await-in-loop
+      const r = await apiPost('/clip-terjemah', {
+        video_id: videoId, bahasa, teks: c.subtitles.map((l) => l.text || ''),
+      });
+      editor.updateClip(c.clip_id, {
+        subtitle_kedua: buatKedua(c, bahasa, r.teks, c.subtitle_kedua?.style),
+      });
+    }
+  }, [clips, videoId, editor]);
+
+  const renderPayload = useCallback((clip) => renderPayloadMode(clip, modeKlip(clip)),   // eslint-disable-line react-hooks/exhaustive-deps
+    [videoId, aspectRatio, frameMode, frameMotion, layout, cacheGaming, style, showHook,
+     unggahSetelah, googleReady]);
+  const renderPayloadMode = (clip, frameMode) => ({
     source_path: videoId,
     clip_index: clip.index,
     segments: clip.segments,
@@ -1065,7 +1287,7 @@ export default function Editor({ project, onBack }) {
     // Susunan tiap potongan ikut dikirim dalam bentuk yang sama dengan
     // `frame_layout`, supaya server tidak perlu tahu dua bentuk yang berbeda.
     frame_keys: (clip.frame_keys ?? []).map((k) => (
-      k.mode === 'layout' && k.layout
+      (k.mode === 'layout' || k.mode === 'gaming') && k.layout?.frames?.length
         ? { ...k, layout: serializeLayout(k.layout) }
         : k.mode === 'gaming' && !k.layout
             && (clip.susunan_game ?? cacheGaming[clip.clip_id])?.frames?.length
@@ -1076,7 +1298,7 @@ export default function Editor({ project, onBack }) {
     // atas semua huruf yang dicentang, dan memakai tanda klip terpilih untuk
     // semuanya akan mengarahkan bingkai empat belas klip lain ke orang yang
     // tidak pernah ditunjuk untuk mereka.
-    person_keys: frameMode === 'smart' ? (clip.person_keys ?? []) : [],
+    person_keys: ['smart', 'otomatis'].includes(frameMode) ? (clip.person_keys ?? []) : [],
     // Sisipan milik klip INI. `id` hanya pengenal di editor; server tidak perlu.
     media_layers: (clip.media_layers ?? []).map(({ id, ...l }) => l),
     // Subtitle kedua milik klip ini. `sumber_sidik` hanya penanda usang di editor.
@@ -1093,56 +1315,67 @@ export default function Editor({ project, onBack }) {
       }
       : null,
     caption_style: style,
-  }), [videoId, aspectRatio, frameMode, frameMotion, layout, cacheGaming, style, showHook]);
+    unggah: googleReady ? unggahSetelah : { youtube: false, drive: false },
+  });
+
+  // Baris render yang sedang berjalan, untuk label tombol.
+  const kerjaRender = exportLog.find((e) => e.status === 'running');
 
   const handleExportSelected = async () => {
     const targets = clips.filter((c) => checked.has(c.clip_id));
     if (!targets.length) return;
     setExporting(true);
     setExportLog([]);
-    for (const clip of targets) {
+    for (const [nomor, clip] of targets.entries()) {
       const name = `Klip #${clip.index}`;
-      setExportLog((l) => [...l, { name, status: 'running', message: 'Merender…' }]);
+      const urut = targets.length > 1 ? `${nomor + 1}/${targets.length} · ` : '';
+      setExportLog((l) => [...l, {
+        name, status: 'running', urut, progress: 0, message: 'Menunggu giliran…',
+      }]);
+      const kabar = (patch) => setExportLog((l) => l.map((e) => {
+        if (e.name !== name) return e;
+        // Kapan tahap ini dimulai: tahap tanpa angka kemajuan sendiri (melacak
+        // wajah, belasan detik) ditampilkan dengan lama berjalannya.
+        const pesanBaru = patch.message && bersihkanPesan(patch.message) !== bersihkanPesan(e.message);
+        return { ...e, ...patch, sejak: pesanBaru || !e.sejak ? Date.now() : e.sejak };
+      }));
       try {
         // eslint-disable-next-line no-await-in-loop
         const { job_id: jobId } = await apiPost('/render-clip', renderPayload(clip));
         // eslint-disable-next-line no-await-in-loop
-        const job = await waitForJob(jobId);
+        const job = await waitForJob(jobId, {
+          // Render melaporkan kemajuannya per bingkai yang di-encode; tanpa
+          // ditampilkan, satu-satunya tanda hidup adalah lingkaran berputar —
+          // dan pada klip satu menit itu berputar berpuluh detik tanpa
+          // mengatakan apa pun.
+          onProgress: (j) => kabar({
+            progress: j.progress ?? 0,
+            message: j.message || 'Merender…',
+            eta: j.eta_seconds ?? null,
+          }),
+        });
         if (job.status === 'done') {
           // eslint-disable-next-line no-await-in-loop
-          await downloadToDisk('edited_clips', job.result.clip_name);
+          await downloadToDisk(kategoriKlip(), job.result.clip_name);
           const mode = job.result.frame_mode === 'smart' ? 'ikut wajah' : job.result.frame_mode;
-          setExportLog((l) => l.map((e) => (e.name === name
-            ? { ...e, status: 'done', message: `Tersimpan · bingkai ${mode}` } : e)));
+          kabar({ status: 'done', progress: 1, eta: null,
+                  message: `Tersimpan · bingkai ${mode}` });
 
-          // Unggahan diantrekan, bukan ditunggu. Lane unggah lebarnya satu,
-          // jadi klip naik satu per satu berapa pun yang dirender sekaligus —
-          // dan render berikutnya tidak perlu menunggu jaringan.
-          if (uploadAfter) {
-            try {
-              // eslint-disable-next-line no-await-in-loop
-              await apiPost('/uploads', {
-                clip_name: job.result.clip_name,
-                target: 'drive',
-                title: (clip.title || name).trim(),
-                description: (clip.hashtags ?? []).join(' '),
-                tags: clip.hashtags ?? [],
-                privacy: 'private',
-              });
-              setExportLog((l) => l.map((e) => (e.name === name
-                ? { ...e, message: `${e.message} · antre ke Drive` } : e)));
-            } catch (err) {
-              setExportLog((l) => l.map((e) => (e.name === name
-                ? { ...e, message: `${e.message} · gagal antre unggah: ${err.message}` } : e)));
-            }
+          // Unggahan diantrekan SERVER sesudah render (services/unggah.py);
+          // di sini hanya diberitakan.
+          const antre = (job.result.unggahan ?? []).filter((u) => u.job_id)
+            .map((u) => (u.target === 'youtube' ? 'YouTube' : 'Drive'));
+          const galatUnggah = (job.result.unggahan ?? []).find((u) => u.galat);
+          if (antre.length || galatUnggah) {
+            setExportLog((l) => l.map((e) => (e.name === name
+              ? { ...e, message: `${e.message} · ${antre.length ? `antre ke ${antre.join(' & ')}` : galatUnggah.galat}` }
+              : e)));
           }
         } else {
-          setExportLog((l) => l.map((e) => (e.name === name
-            ? { ...e, status: 'failed', message: job.error || 'Gagal' } : e)));
+          kabar({ status: 'failed', eta: null, message: job.error || 'Gagal' });
         }
       } catch (err) {
-        setExportLog((l) => l.map((e) => (e.name === name
-          ? { ...e, status: 'failed', message: err.message } : e)));
+        kabar({ status: 'failed', eta: null, message: err.message });
       }
     }
     setExporting(false);
@@ -1218,12 +1451,20 @@ export default function Editor({ project, onBack }) {
             {checked.size}/{clips.length}
           </label>
           {googleReady && (
-            <label className="studio-check"
-                   title="Klip yang selesai dirender langsung diantrekan ke Google Drive">
-              <input type="checkbox" checked={uploadAfter}
-                     onChange={(e) => setUploadAfter(e.target.checked)} />
-              Drive
-            </label>
+            <>
+              <label className="studio-check"
+                     title="Klip yang selesai dirender langsung diantrekan ke kanal YouTube akun profil ini">
+                <input type="checkbox" checked={unggahSetelah.youtube}
+                       onChange={(e) => setUnggahSetelah((u) => ({ ...u, youtube: e.target.checked }))} />
+                YouTube
+              </label>
+              <label className="studio-check"
+                     title="Klip yang selesai dirender langsung diantrekan ke Google Drive akun profil ini">
+                <input type="checkbox" checked={unggahSetelah.drive}
+                       onChange={(e) => setUnggahSetelah((u) => ({ ...u, drive: e.target.checked }))} />
+                Drive
+              </label>
+            </>
           )}
           {/* Tombol simpan yang menyebut KEADAAN, bukan sekadar kejadian.
               
@@ -1277,7 +1518,11 @@ export default function Editor({ project, onBack }) {
           <button className="btn-primary" disabled={exporting || checked.size === 0}
                   onClick={handleExportSelected}>
             {exporting ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
-            Render
+            {/* Tombolnya sendiri menyebut sampai mana: saat panel catatan
+                tergulir keluar layar, tombol inilah yang tetap terlihat. */}
+            {exporting ? (kerjaRender
+              ? `${kerjaRender.urut || ''}${Math.round((kerjaRender.progress ?? 0) * 100)}%`
+              : 'Merender…') : 'Render'}
           </button>
         </div>
       </header>
@@ -1345,26 +1590,67 @@ export default function Editor({ project, onBack }) {
               <b>{data.model}</b> sebagai cadangan.
             </div>
           )}
+          {data.pratinjau_disiapkan && (
+            <div className="plate studio-note" style={{ fontSize: '.8rem', display: 'flex',
+                                                         gap: '8px', alignItems: 'center' }}>
+              <Loader2 size={14} className="animate-spin" style={{ flexShrink: 0 }} />
+              <span>
+                Video ini beresolusi besar dan bisa tersendat saat diputar di browser.
+                Salinan pratinjau yang ringan sedang disiapkan — Studio akan berpindah
+                sendiri begitu siap. Hasil render tetap memakai video asli.
+              </span>
+            </div>
+          )}
+          {data.downloaded === false && (
+            <VideoHilang videoId={videoId} onPulih={async () => {
+              const fresh = await apiGet(`/projects/${videoId}`);
+              setData(fresh);
+            }} />
+          )}
           {exportLog.length > 0 && (
             <div className="plate studio-note" style={{
               display: 'flex', flexDirection: 'column', gap: '6px',
             }}>
               {exportLog.map((e) => (
-                <div key={e.name} style={{
-                  display: 'flex', alignItems: 'center', gap: '9px', fontSize: '.8rem',
-                }}>
-                  {e.status === 'running' && <Loader2 size={13} className="animate-spin" style={{ color: 'var(--reh)' }} />}
-                  {e.status === 'done' && <CheckCircle2 size={13} style={{ color: 'var(--entry)' }} />}
-                  {e.status === 'failed' && <AlertTriangle size={13} style={{ color: 'var(--danger)' }} />}
-                  <b style={{ minWidth: '64px' }}>{e.name}</b>
-                  <span style={{ color: 'var(--ink-2)' }}>{e.message}</span>
+                <div key={e.name} style={{ fontSize: '.8rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
+                    {e.status === 'running' && <Loader2 size={13} className="animate-spin" style={{ color: 'var(--reh)' }} />}
+                    {e.status === 'done' && <CheckCircle2 size={13} style={{ color: 'var(--entry)' }} />}
+                    {e.status === 'failed' && <AlertTriangle size={13} style={{ color: 'var(--danger)' }} />}
+                    <b style={{ minWidth: '64px' }}>{e.urut}{e.name}</b>
+                    <span style={{ color: 'var(--ink-2)' }}>
+                      {e.status === 'running' ? bersihkanPesan(e.message) : e.message}
+                    </span>
+                    {e.status === 'running' && (
+                      <span style={{ marginLeft: 'auto', color: 'var(--ink-2)',
+                                     fontVariantNumeric: 'tabular-nums' }}>
+                        {Math.round((e.progress ?? 0) * 100)}%
+                        {e.eta > 1 && e.progress > 0.05
+                          ? ` · sisa ${sisaWaktu(e.eta)}`
+                          : e.sejak && Date.now() - e.sejak > 3000
+                            ? ` · berjalan ${sisaWaktu((Date.now() - e.sejak) / 1000)}` : ''}
+                      </span>
+                    )}
+                  </div>
+                  {/* Bilah kemajuan, bukan cuma lingkaran berputar: render satu
+                      klip memakan puluhan detik sampai beberapa menit, dan yang
+                      berputar tanpa angka tidak bisa dibedakan dari macet. */}
+                  {e.status === 'running' && (
+                    <div style={{ height: '5px', marginTop: '5px', borderRadius: '99px',
+                                  background: 'var(--bg-glass)', overflow: 'hidden',
+                                  border: '1px solid var(--border-color)' }}>
+                      <div style={{ width: `${Math.max(2, Math.round((e.progress ?? 0) * 100))}%`,
+                                    height: '100%', background: 'var(--reh)',
+                                    transition: 'width .5s' }} />
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
           )}
 
           <div className="stage-row">
-            <FrameStage src={data.local_url} videoRef={videoRef}
+            <FrameStage src={srcPutar} videoRef={videoRef}
                         segments={selected?.segments ?? null}
                         frameMode={frameModeEfektif} reframe={reframe} aspectRatio={aspectRatio}
                         boxRect={kunciBingkaiAktif?.rect ?? null}
@@ -1374,7 +1660,11 @@ export default function Editor({ project, onBack }) {
                         personKeys={personKeys} onLockPerson={aimPerson} />
 
             <div className="pit editor-pit">
-              <ClipPreview src={data.local_url} clip={selected} aspectRatio={aspectRatio}
+              <ClipPreview src={srcPutar} clip={selected} aspectRatio={aspectRatio}
+                           cerminSiap={cerminSiap}
+                           onKeduaStyleChange={selected?.subtitle_kedua ? (patch) => editor.updateClip(
+                             selected.clip_id, { subtitle_kedua: { ...selected.subtitle_kedua,
+                               style: { ...(selected.subtitle_kedua.style ?? {}), ...patch } } }) : null}
                            style={{ ...style, showHook }} videoRef={videoRef}
                            constrained={constrained} frameMode={frameModeEfektif}
                            boxRect={kunciBingkaiAktif?.rect ?? null}
@@ -1434,6 +1724,7 @@ export default function Editor({ project, onBack }) {
               {tab === 'subtitle' && (
                 <TerjemahPanel clip={selected} videoId={videoId}
                                styleUtama={style} onStyleUtama={setStyle}
+                               onSemua={terjemahSemua}
                                onChange={(next) => selected
                                  && editor.updateClip(selected.clip_id, { subtitle_kedua: next })} />
               )}
@@ -1472,8 +1763,18 @@ export default function Editor({ project, onBack }) {
                             frameKeys={frameKeys} onFrameKeys={setFrameKeys}
                             sorot={sisipanTerpilih} onSorot={setSisipanTerpilih} />
               )}
+              {tab === 'sutradara' && (
+                <SutradaraPanel clip={selected} videoId={videoId} aspectRatio={aspectRatio}
+                                lapisan={selected?.media_layers ?? []}
+                                onLayers={(next) => selected
+                                  && editor.updateClip(selected.clip_id, { media_layers: next })}
+                                frameKeys={frameKeys} onFrameKeys={setFrameKeys} />
+              )}
               {tab === 'frame' && (
                 <FramePanel frameMode={frameModeEfektif} onFrameModeChange={pilihCaraBingkai}
+                            jenisKlip={jenisSekarang}
+                            pilihanSendiri={!!selected?.cara_bingkai && !(selected?.frame_keys?.length >= 2)}
+                            onOtomatis={() => editor.updateClip(selected.clip_id, { cara_bingkai: null })}
                             frameMotion={frameMotion}
                             onFrameMotionChange={setFrameMotion}
                             layout={susunanTampil} onLayoutChange={setSusunanEfektif}
@@ -1650,16 +1951,34 @@ export default function Editor({ project, onBack }) {
   );
 }
 
-async function waitForJob(jobId, { interval = 1200, limit = 2400000 } = {}) {
+async function waitForJob(jobId, { interval = 1200, limit = 2400000, onProgress } = {}) {
   const started = Date.now();
   for (;;) {
     // eslint-disable-next-line no-await-in-loop
     const job = await apiGet(`/jobs/${jobId}`);
+    onProgress?.(job);
     if (['done', 'failed', 'cancelled'].includes(job.status)) return job;
     if (Date.now() - started > limit) return { status: 'failed', error: 'Waktu render habis.' };
     // eslint-disable-next-line no-await-in-loop
     await new Promise((r) => setTimeout(r, interval));
   }
+}
+
+/**
+ * Pesan tahap tanpa angka persennya sendiri. Server menulis "Merender klip…
+ * 5%" — persen tahap encode — sementara bilahnya menunjukkan persen seluruh
+ * pekerjaan (13%). Dua angka berbeda di satu baris hanya membingungkan.
+ */
+function bersihkanPesan(pesan) {
+  return String(pesan || '').replace(/\s*\d+(?:[.,]\d+)?\s*%\s*$/, '').trim();
+}
+
+/** "sisa 1 mnt 20 dtk" — perkiraan dari job, dibulatkan supaya tidak gelisah. */
+function sisaWaktu(detik) {
+  const d = Math.max(0, Math.round(detik));
+  if (d < 60) return `${d} dtk`;
+  const m = Math.floor(d / 60);
+  return m < 60 ? `${m} mnt ${d % 60} dtk` : `${Math.floor(m / 60)} jam ${m % 60} mnt`;
 }
 
 const kbd = {

@@ -13,6 +13,41 @@ from .ytdlp import YtdlpError, download_youtube_media, get_video_info
 log = logging.getLogger("omniclip.pipeline")
 
 
+def _singkirkan_audio_lain(video_id: str, audio_lang: Optional[str]):
+    """
+    Bila berkas lokal video ini memuat audio berbahasa LAIN dari yang diminta,
+    berkas itu disingkirkan (diberi akhiran .lama) supaya unduhan baru tidak
+    dilewati yt-dlp sebagai "sudah ada". Mengembalikan (lama, asli) untuk
+    dipulihkan bila unduhannya gagal, atau None.
+    """
+    from .ytdlp import audio_cocok, bahasa_audio
+    if not audio_lang:
+        return None
+    src = find_local_video(video_id)
+    if src is None or audio_cocok(bahasa_audio(src), audio_lang):
+        return None
+    lama = src.with_name(src.name + ".lama")
+    try:
+        os.replace(src, lama)
+    except OSError:
+        return None
+    log.info("Audio %s diminta; berkas lama (%s) disingkirkan", audio_lang, bahasa_audio(lama))
+    return lama, src
+
+
+def _selesaikan_singkiran(singkiran, berhasil: bool) -> None:
+    if not singkiran:
+        return
+    lama, asli = singkiran
+    try:
+        if berhasil:
+            lama.unlink(missing_ok=True)
+        elif not asli.exists():
+            os.replace(lama, asli)
+    except OSError:
+        pass
+
+
 def run_download(ctx: JobContext) -> dict:
     """
     payload: {video_id: str, resolution: str}
@@ -23,6 +58,8 @@ def run_download(ctx: JobContext) -> dict:
     video_id = ctx.payload["video_id"]
     # Sama seperti auto-clip: yang terbaik, kecuali pemintanya menyebut lain.
     resolution = ctx.payload.get("resolution") or "Terbaik"
+    # Jalur audio pilihan; kosong = suara asli video.
+    audio_lang = ctx.payload.get("audio_lang") or None
 
     ctx.progress(0.02, stage="metadata", message="Mengambil informasi video…")
     try:
@@ -42,7 +79,18 @@ def run_download(ctx: JobContext) -> dict:
                      paksa=not message.startswith("Mengunduh"))
 
     ctx.progress(0.05, stage="download", message=f"Mengunduh «{title[:48]}»…")
-    result = download_youtube_media(video_id, resolution, on_progress=on_progress)
+    singkiran = _singkirkan_audio_lain(video_id, audio_lang)
+    with ctx.giliran_unduh(lambda: ctx.progress(
+            0.05, stage="download",
+            message="Menunggu giliran mengunduh — unduhan lain sedang berjalan…",
+            paksa=True)):
+        try:
+            result = download_youtube_media(video_id, resolution, on_progress=on_progress,
+                                            audio_lang=audio_lang)
+        except BaseException:
+            _selesaikan_singkiran(singkiran, False)
+            raise
+    _selesaikan_singkiran(singkiran, bool(result.get("success")))
 
     if not result.get("success"):
         raise AppError(result.get("error", "Pengunduhan gagal."),
@@ -54,8 +102,9 @@ def run_download(ctx: JobContext) -> dict:
     actual = result.get("resolution")
     requested = result.get("requested_resolution")
     note = None
-    if actual and requested and actual != requested:
-        # Jujur: YouTube tidak selalu punya resolusi yang diminta.
+    if actual and requested and actual != requested and requested.lower() != "terbaik":
+        # Jujur: YouTube tidak selalu punya resolusi yang diminta. "Terbaik"
+        # bukan resolusi — 1080p untuknya adalah jawaban, bukan kekurangan.
         note = f"Resolusi {requested} tidak tersedia; yang diunduh {actual}."
 
     ctx.progress(1.0, stage="done", message=note or f"Selesai ({actual}).")
@@ -147,6 +196,16 @@ def run_render(ctx: JobContext) -> dict:
     total = sum(float(s["end"]) - float(s["start"]) for s in segments)
     label = "Merender klip" if len(segments) == 1 else f"Merender {len(segments)} potongan gabungan"
     frame_mode = ctx.payload.get("frame_mode") or "smart"
+    if frame_mode == "otomatis":
+        # Klip yang dirender tanpa pernah dibuka di Studio: bingkainya
+        # dipilih dari isinya, sama seperti saat klip itu dibuka.
+        from .sutradara_ai import jenis_klip_tersimpan
+        ctx.progress(0.01, stage="prepare", message="Membaca isi klip (game, wajah, atau tanpa wajah)…")
+        try:
+            frame_mode = jenis_klip_tersimpan(video_id, source, segments)["mode"]
+        except Exception as e:
+            log.warning("Jenis klip gagal dibaca, pakai ikut wajah: %s", e)
+            frame_mode = "smart"
 
     # Pelacakan wajah berjalan sebelum encode dan memakan beberapa detik. Tanpa
     # pesan sendiri, pengguna melihat bar diam di 2% tanpa tahu sebabnya.
@@ -198,8 +257,29 @@ def run_render(ctx: JobContext) -> dict:
     if not result.get("success"):
         raise RenderError(detail=str(result.get("error", ""))[:2000])
 
-    ctx.progress(1.0, stage="done", message="Klip selesai dirender.")
+    # Unggah otomatis sesuai setelan profil (atau pilihan Studio untuk render
+    # ini). Dijalankan di sini, bukan di browser: pemiliknya boleh sudah
+    # menutup halaman saat render selesai.
+    unggahan = []
+    try:
+        from .unggah import setelah_render
+        unggahan = setelah_render(
+            clip_name=result["clip_name"],
+            judul=(ctx.payload.get("title") or "").strip() or result["clip_name"].rsplit(".", 1)[0],
+            hashtag=ctx.payload.get("hashtags") or [],
+            minta=ctx.payload.get("unggah"))
+    except Exception as e:
+        log.warning("Unggah otomatis tidak bisa diantrekan: %s", e)
+        unggahan = [{"target": "-", "galat": str(e)[:200]}]
+
+    pesan = "Klip selesai dirender."
+    antre = [u["target"] for u in unggahan if u.get("job_id")]
+    if antre:
+        pesan += " Diantrekan untuk diunggah ke " + " dan ".join(
+            "YouTube" if t == "youtube" else "Google Drive" for t in antre) + "."
+    ctx.progress(1.0, stage="done", message=pesan)
     return {
+        "unggahan": unggahan,
         "video_id": video_id,
         "clip_name": result["clip_name"],
         "duration": result["duration"],
@@ -207,7 +287,7 @@ def run_render(ctx: JobContext) -> dict:
         "segments": segments,
         "frame_mode": result.get("frame_mode"),
         "face_coverage": result.get("face_coverage"),
-        "web_url": f"/api/media/edited_clips/{result['clip_name']}",
+        "web_url": f"/api/media/{result.get('kategori') or 'edited_clips'}/{result['clip_name']}",
     }
 
 
@@ -283,11 +363,26 @@ def run_auto_clip(ctx: JobContext) -> dict:
 
     # --- 1. Metadata ---------------------------------------------------------
     _stage_progress(ctx, "resolve", 0.2, "Membaca informasi video…")
-    try:
-        info = get_video_info(video_id)
-    except YtdlpError as e:
-        raise AppError(e.message, code=e.code, status=502, detail=e.original) from e
-    media_repo.upsert_video(info)
+    from .paths import adalah_impor
+    impor = adalah_impor(video_id)
+    if impor:
+        # Video dari komputer pengguna: YouTube tidak mengenalnya sama sekali.
+        # Dulu metadata tetap diminta ke YouTube — "This video is unavailable"
+        # — dan impor tidak pernah bisa sampai ke klip.
+        berkas = find_local_video(video_id)
+        if berkas is None:
+            raise AppError("Berkas video impor ini sudah tidak ada di penyimpanan. "
+                           "Ambil lagi videonya dari komputer.", code="IMPORT_MISSING", status=404)
+        baris = media_repo.get_video(video_id) or {}
+        info = {"id": video_id, "title": baris.get("title") or video_id,
+                "duration": float(probe(berkas).get("duration") or baris.get("duration") or 0),
+                "language": None, "has_captions": False}
+    else:
+        try:
+            info = get_video_info(video_id)
+        except YtdlpError as e:
+            raise AppError(e.message, code=e.code, status=502, detail=e.original) from e
+        media_repo.upsert_video(info)
     title = info.get("title") or video_id
     duration = float(info.get("duration") or 0)
     from .heuristics import auto_clip_count
@@ -295,6 +390,8 @@ def run_auto_clip(ctx: JobContext) -> dict:
     ctx.check_cancelled()
 
     # --- 2. Pastikan video ada di lokal --------------------------------------
+    audio_lang = ctx.payload.get("audio_lang") or None
+    singkiran = _singkirkan_audio_lain(video_id, audio_lang)
     source = find_local_video(video_id)
     if source is None:
         _stage_progress(ctx, "download", 0.0, f"Mengunduh «{title[:44]}»…")
@@ -304,21 +401,36 @@ def run_auto_clip(ctx: JobContext) -> dict:
             _stage_progress(ctx, "download", frac, message,
                             paksa=not message.startswith("Mengunduh"))
 
-        result = download_youtube_media(video_id, quality, on_progress=on_dl)
+        # Jalur pita dibagi beberapa unduhan saja; yang menunggu di sini tidak
+        # menahan pekerjaan lain yang tidak perlu mengunduh apa pun.
+        with ctx.giliran_unduh(lambda: _stage_progress(
+                ctx, "download", 0.0,
+                "Menunggu giliran mengunduh — unduhan lain sedang berjalan…",
+                paksa=True)):
+            try:
+                result = download_youtube_media(video_id, quality, on_progress=on_dl,
+                                                audio_lang=audio_lang)
+            except BaseException:
+                _selesaikan_singkiran(singkiran, False)
+                raise
+        _selesaikan_singkiran(singkiran, bool(result.get("success")))
         if not result.get("success"):
             raise AppError(result.get("error", "Pengunduhan gagal."),
                            code=result.get("code", "DOWNLOAD_FAILED"), status=502)
         media_repo.record_download(video_id, result)
         source = Path(result["file_path"])
     else:
-        _stage_progress(ctx, "download", 1.0, "Video sudah tersedia di penyimpanan lokal.")
+        _stage_progress(ctx, "download", 1.0,
+                        "Video dari komputer siap dibaca." if impor
+                        else "Video sudah tersedia di penyimpanan lokal.")
 
     # Unduhan berjalan bersamaan dengan video lain; mulai dari sini pekerjaan
     # berat (salinan analisis, Whisper, pelacakan wajah) bergiliran satu per
     # satu dengan render, seperti sebelumnya.
     ctx.giliran_cpu(lambda: _stage_progress(
         ctx, "download", 1.0,
-        "Video sudah terunduh — menunggu giliran analisis (video lain sedang diproses)…",
+        ("Video dari komputer siap" if impor else "Video sudah terunduh")
+        + " — menunggu giliran analisis (video lain sedang diproses)…",
         paksa=True))
 
     # Salinan analisis dimulai SEKARANG, di latar, sementara transkrip dan
@@ -356,12 +468,28 @@ def run_auto_clip(ctx: JobContext) -> dict:
         from .captions import fetch_youtube_captions
         from ..config import get_caption_langs
         tersimpan = tx_repo.get_best(video_id) if ulang else None
+        # Transkrip caption tersimpan dalam bahasa yang BUKAN bahasa video
+        # adalah sisa aturan lama yang meminta bahasa Indonesia lebih dulu —
+        # terukur pada video MrBeast: caption Indonesia tulisan manusia untuk
+        # video berbahasa Inggris. Diambil ulang, bukan dipakai lagi. Transkrip
+        # Whisper tidak disentuh: ia memang menyalin suara yang ada di berkas.
+        bahasa_video = (info.get("language") or "").split("-")[0].lower()
+        if (tersimpan and bahasa_video
+                and str(tersimpan.get("source", "")).startswith("youtube")
+                and (tersimpan.get("language") or "").split("-")[0].lower() != bahasa_video):
+            log.info("Transkrip tersimpan berbahasa %s, video berbahasa %s — diambil ulang",
+                     tersimpan.get("language"), bahasa_video)
+            tersimpan = None
         if tersimpan and tersimpan.get("words") and tersimpan.get("sentences"):
             transcript = {"words": tersimpan["words"], "source": tersimpan["source"],
                           "language": tersimpan.get("language")}
         else:
             tersimpan = None
-            transcript = fetch_youtube_captions(video_id, get_caption_langs())
+            # Bahasa video ikut dikirim: tanpa itu caption diminta dalam
+            # bahasa pilihan lebih dulu, dan YouTube menerjemahkannya sendiri.
+            # Video impor tidak punya subtitle YouTube: langsung ke Whisper.
+            transcript = None if impor else fetch_youtube_captions(
+                video_id, get_caption_langs(), asli=info.get("language"))
 
         if tersimpan:
             _stage_progress(ctx, "captions", 1.0,
@@ -471,8 +599,20 @@ def run_auto_clip(ctx: JobContext) -> dict:
                 speaker_count = dia.speaker_count
                 speaker_conf = dia.confident
                 speaker_score = dia.separation
-                if dia.speaker_count > 1:
-                    for sent, label in zip(sentences, dia.labels):
+                label_akhir = list(dia.labels)
+                if jumlah is None and dia.speaker_count > 1:
+                    # Tanpa satu wajah pun di video (gameplay tanpa facecam,
+                    # kartun), "penutur" kecil hampir pasti efek suara atau
+                    # suara tokoh game. Lihat sutradara.tanpa_wajah.
+                    from .sutradara import lebur_penutur_kecil, tanpa_wajah
+                    if tanpa_wajah(source, duration or 0):
+                        label_akhir, baru = lebur_penutur_kecil(label_akhir)
+                        if baru < speaker_count:
+                            log.info("Video tanpa wajah: %d penutur dilebur jadi %d",
+                                     speaker_count, baru)
+                            speaker_count = baru
+                if speaker_count > 1:
+                    for sent, label in zip(sentences, label_akhir):
                         a, b = sent["wi"]
                         for w in words[a:b]:
                             w["sp"] = int(max(0, label))
@@ -647,6 +787,24 @@ def run_auto_clip(ctx: JobContext) -> dict:
                 "model": lama.get("model"),
                 "clip_count": len(lama.get("clips") or []),
             }
+        # Video berbahasa asing (anime Jepang, video Inggris): subtitle aslinya
+        # tetap, dan terjemahannya dipasang sebagai subtitle kedua di bawahnya.
+        # Kegagalan menerjemahkan tidak boleh menggagalkan klipnya.
+        diterjemah = 0
+        try:
+            from .terjemah import bahasa_otomatis, kedua_untuk_klip
+            if bahasa_otomatis() and clips:
+                _stage_progress(ctx, "analyze", 0.98, "Menerjemahkan subtitle…", paksa=True)
+                from ..config import get_api_key, get_model_override
+                from .peringkat_model import rantai
+                kunci = get_api_key() or ""
+                diterjemah = kedua_untuk_klip(
+                    clips, (transcript or {}).get("language") or info.get("language"),
+                    api_key=kunci,
+                    models=rantai(kunci, get_model_override() or None) if kunci else [],
+                    konteks=title[:200])
+        except Exception as e:
+            log.warning("Terjemahan otomatis gagal: %s", str(e)[:200])
         analyses_repo.save(video_id=video_id,
                            transcript_id=stored["id"] if stored else None,
                            engine=engine, model=model_used,
@@ -657,6 +815,7 @@ def run_auto_clip(ctx: JobContext) -> dict:
 
         ctx.progress(1.0, stage="done", message=(
             f"{len(clips)} klip siap ditinjau"
+            + (f" (dengan terjemahan)" if diterjemah else "")
             + (f" — {gemini_gagal}, jadi dipilih mesin lokal. Coba lagi nanti."
                if gemini_gagal
                else f", dipilih {model_used}." if engine == "gemini" and model_used
@@ -940,14 +1099,23 @@ def run_diarize(ctx: JobContext) -> dict:
                                spans, speakers=speakers,
                                kemajuan=dengar(0.55, 0.84))
 
+    label_akhir, jumlah_akhir = list(dia.labels), dia.speaker_count
+    if speakers is None and jumlah_akhir > 1:
+        # Sama seperti analisis pertama: di video tanpa satu wajah pun,
+        # "penutur" kecil adalah efek suara atau suara tokoh game.
+        from .sutradara import lebur_penutur_kecil, tanpa_wajah
+        ctx.progress(0.84, stage="apply", message="Memeriksa apakah ada wajah di video…")
+        if tanpa_wajah(source, float(cached["result"].get("duration") or 0)):
+            label_akhir, jumlah_akhir = lebur_penutur_kecil(label_akhir)
+
     ctx.progress(0.85, stage="apply", message="Menerapkan penanda ke subtitle…")
     # Label menempel pada KATA, bukan pada baris subtitle: batas baris bisa
     # berubah setiap kali pengguna menggeser rentang klip, sedangkan katanya
     # tidak. Dari kata, warna baris dihitung ulang kapan pun dibutuhkan.
     for word in words:
         word.pop("sp", None)
-    if dia.speaker_count > 1:
-        for sentence, speaker in zip(sentences, dia.labels):
+    if jumlah_akhir > 1:
+        for sentence, speaker in zip(sentences, label_akhir):
             a, b = sentence["wi"]
             for word in words[a:b]:
                 word["sp"] = int(max(0, speaker))
@@ -958,9 +1126,9 @@ def run_diarize(ctx: JobContext) -> dict:
          "subtitles": rebuild_subtitles_for_segments(clip["segments"], words)[0]}
         for clip in (result.get("clips") or [])
     ]
-    result["speaker_count"] = dia.speaker_count
-    result["label_kalimat"] = ([int(max(0, x)) for x in dia.labels]
-                               if dia.speaker_count > 1 else [0] * len(sentences))
+    result["speaker_count"] = jumlah_akhir
+    result["label_kalimat"] = ([int(max(0, x)) for x in label_akhir]
+                               if jumlah_akhir > 1 else [0] * len(sentences))
     result["speaker_confident"] = dia.confident
     result["speaker_score"] = dia.separation
     result["speaker_requested"] = speakers
@@ -971,7 +1139,10 @@ def run_diarize(ctx: JobContext) -> dict:
         params={"rediarized": True, "speakers": speakers},
         result=result,
     )
-    pesan = f"{dia.speaker_count} narasumber ditandai."
+    pesan = f"{jumlah_akhir} narasumber ditandai."
+    if jumlah_akhir < dia.speaker_count:
+        pesan += (f" Video ini tanpa wajah: {dia.speaker_count - jumlah_akhir} suara kecil "
+                  "(efek suara, tokoh game) dilebur ke penutur utama.")
     if speakers and 1 < dia.speaker_count < speakers:
         # Jumlahnya tidak diam-diam berbeda dari yang diminta: katakan sebabnya.
         pesan = (f"Diminta {speakers} orang, tapi {speakers - dia.speaker_count} "
@@ -1010,11 +1181,13 @@ def run_upload(ctx: JobContext) -> dict:
     # Nama berkas datang dari klien, jadi ia tidak boleh dipakai menyusun path
     # begitu saja. safe_media_path menolak apa pun yang keluar dari CLIPS_DIR
     # dan melempar sendiri bila berkasnya tidak ada.
-    path = safe_media_path("edited_clips", clip_name)
+    from . import profil as _profil
+    path = safe_media_path(_profil.kategori_klip(_profil.kini()), clip_name)
     size_mb = path.stat().st_size / (1024 * 1024)
 
     if target == "youtube" and UPLOAD_GAP_SECONDS > 0:
-        elapsed = _time.time() - uploads_repo.last_finished_at("youtube")
+        from . import profil as _profil_u
+        elapsed = _time.time() - uploads_repo.last_finished_at("youtube", _profil_u.kini())
         wait = UPLOAD_GAP_SECONDS - elapsed
         while wait > 0:
             ctx.check_cancelled()

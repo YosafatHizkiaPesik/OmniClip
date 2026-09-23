@@ -268,6 +268,24 @@ class BahasaRequest(BaseModel):
     langs: List[str] = Field(default_factory=list)
 
 
+class TerjemahOtomatisRequest(BaseModel):
+    bahasa: str = Field("", max_length=12, pattern=r"^[A-Za-z-]*$")
+
+
+@router.get("/terjemah-otomatis")
+async def lihat_terjemah_otomatis():
+    """Bahasa terjemahan otomatis untuk video berbahasa asing ("" = mati)."""
+    from ..services.terjemah import bahasa_otomatis
+    return {"bahasa": bahasa_otomatis()}
+
+
+@router.post("/terjemah-otomatis")
+async def atur_terjemah_otomatis(req: TerjemahOtomatisRequest):
+    settings_repo.set_value("terjemah.otomatis", req.bahasa.strip() or "mati")
+    from ..services.terjemah import bahasa_otomatis
+    return {"bahasa": bahasa_otomatis()}
+
+
 @router.get("/languages")
 async def daftar_bahasa():
     """Bahasa pilihan yang berlaku, plus daftar yang ditawarkan antarmuka."""
@@ -644,9 +662,12 @@ def _tempat_umum() -> list[dict]:
     return keluar
 
 
+_VIDEO_JELAJAH = {".mp4", ".mkv", ".mov", ".webm", ".avi", ".m4v", ".mpg", ".mpeg", ".ts"}
+
+
 @router.get("/jelajah")
-async def jelajah(jalur: str = ""):
-    """Isi sebuah folder: hanya sub-folder, tanpa berkas."""
+async def jelajah(jalur: str = "", video: bool = False):
+    """Isi sebuah folder: sub-folder, dan berkas video bila `video` benar."""
     def baca():
         d = Path(jalur).expanduser() if jalur.strip() else Path.home()
         try:
@@ -658,6 +679,7 @@ async def jelajah(jalur: str = ""):
                            code="FOLDER_NOT_FOUND", status=404)
 
         anak = []
+        berkas = []
         try:
             for masuk in sorted(d.iterdir(), key=lambda x: x.name.lower()):
                 # Folder tersembunyi disembunyikan: ia bukan tempat menaruh
@@ -667,6 +689,9 @@ async def jelajah(jalur: str = ""):
                 try:
                     if masuk.is_dir():
                         anak.append({"nama": masuk.name, "jalur": str(masuk)})
+                    elif video and masuk.suffix.lower() in _VIDEO_JELAJAH and masuk.is_file():
+                        berkas.append({"nama": masuk.name, "jalur": str(masuk),
+                                       "mb": round(masuk.stat().st_size / 1e6)})
                 except OSError:
                     continue
         except PermissionError:
@@ -679,6 +704,7 @@ async def jelajah(jalur: str = ""):
             "induk": induk,
             "bisa_ditulis": os.access(d, os.W_OK),
             "folder": anak[:500],
+            "berkas": berkas[:500],
             "tempat_umum": _tempat_umum(),
         }
 

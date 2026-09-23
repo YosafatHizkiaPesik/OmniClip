@@ -132,6 +132,18 @@ def request_cancel(job_id: str) -> bool:
     return True
 
 
+def posisi_antre(job: dict) -> int:
+    """Berapa job lain yang akan diambil lebih dulu dari job antre ini."""
+    with tx() as conn:
+        row = conn.execute(
+            """SELECT COUNT(*) AS n FROM jobs
+               WHERE status = 'queued' AND lane = ?
+                 AND (priority < ? OR (priority = ? AND created_at < ?))""",
+            (job["lane"], job["priority"], job["priority"], job["created_at"]),
+        ).fetchone()
+    return int(row["n"] if row else 0)
+
+
 def pindah_lajur(type_: str, lane: str) -> int:
     """Job antre jenis ini yang tercatat di lajur lain dipindah ke `lane`."""
     with tx() as conn:

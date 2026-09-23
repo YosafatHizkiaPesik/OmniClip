@@ -49,8 +49,14 @@ def simpan(kunci: str, nilai: Any) -> None:
 
 
 def bersihkan(maks_umur: float = 24 * 3600) -> int:
-    """Membuang entri basi. Dipanggil saat startup, bukan tiap pencarian."""
+    """Membuang entri basi. Dipanggil saat startup, bukan tiap pencarian.
+
+    Entri `jenis:` (isi klip: game / wajah / tanpa wajah) tidak ikut dibuang:
+    isi sebuah potongan video tidak pernah basi, dan menghitungnya ulang
+    memakan puluhan detik per klip.
+    """
     cur = get_conn().execute(
-        "DELETE FROM search_cache WHERE created_at < ?", (time.time() - maks_umur,)
+        "DELETE FROM search_cache WHERE created_at < ? AND cache_key NOT LIKE 'jenis:%'",
+        (time.time() - maks_umur,),
     )
     return cur.rowcount

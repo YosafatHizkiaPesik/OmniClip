@@ -16,10 +16,11 @@ import logging
 import threading
 import time
 import traceback
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
-from ..config import JOB_PROGRESS_MIN_INTERVAL, LANE_LIMITS
+from ..config import JOB_PROGRESS_MIN_INTERVAL, LANE_LIMITS, UNDUH_BERSAMAAN
 from ..db import close_conn
 from ..errors import JobCancelled
 from ..repos import jobs as repo
@@ -32,6 +33,11 @@ log = logging.getLogger("omniclip.jobs")
 # (`JobContext.giliran_cpu`). Jadi unduhan beberapa video bisa berjalan
 # bersamaan tanpa dua model Whisper pernah hidup bersamaan.
 gerbang_cpu = threading.BoundedSemaphore(LANE_LIMITS["cpu"])
+
+# Gerbang jalur pita: berapa unduhan boleh berjalan bersamaan, lintas jenis
+# pekerjaan. Dipegang hanya selama mengunduh, lalu dilepas — pekerjaan yang
+# tidak perlu mengunduh (cari ulang klip) tidak pernah menyentuhnya.
+gerbang_unduh = threading.BoundedSemaphore(UNDUH_BERSAMAAN)
 
 
 @dataclass
@@ -92,6 +98,19 @@ class JobContext:
                 self.check_cancelled()
         self._pegang_cpu = True
 
+    @contextmanager
+    def giliran_unduh(self, kabar: Optional[Callable[[], None]] = None):
+        """Giliran mengunduh. Dilepas begitu blok `with`-nya selesai."""
+        if not gerbang_unduh.acquire(blocking=False):
+            if kabar is not None:
+                kabar()
+            while not gerbang_unduh.acquire(timeout=0.5):
+                self.check_cancelled()
+        try:
+            yield
+        finally:
+            gerbang_unduh.release()
+
     def check_cancelled(self) -> None:
         if self._cancel.is_set():
             raise JobCancelled()
@@ -106,6 +125,14 @@ class JobContext:
 
 
 JobHandler = Callable[[JobContext], dict]
+
+
+def _pesan_antre(n: Optional[int]) -> Optional[str]:
+    if n is None:
+        return None
+    if n <= 0:
+        return "Menunggu giliran — sebentar lagi mulai…"
+    return f"Menunggu giliran — {n} pekerjaan lain di depan."
 
 
 class JobQueue:
@@ -162,6 +189,11 @@ class JobQueue:
                 video_id: str | None = None, dedupe_key: str | None = None) -> tuple[str, bool]:
         if type_ not in self._handlers:
             raise ValueError(f"tidak ada handler untuk job '{type_}'")
+        # Job mencatat profil yang memintanya: ia berjalan di latar, jauh
+        # sesudah permintaannya selesai, dan tetap harus tahu folder klip dan
+        # akun Google milik siapa yang dipakainya.
+        from . import profil as _profil
+        payload = {**payload, "profil_id": payload.get("profil_id") or _profil.kini()}
         resolved_lane = lane or self._handlers[type_][1]
         job_id, created = repo.create(
             type_=type_, payload=payload, lane=resolved_lane, priority=priority,
@@ -191,14 +223,20 @@ class JobQueue:
         if job is None:
             return None
         kids = repo.children(job_id)
+        antre = repo.posisi_antre(job) if job["status"] == "queued" else None
         return {
             "job_id": job["id"],
             "type": job["type"],
             "status": job["status"],
             "progress": job["progress"],
             "stage": job["stage"],
-            "message": job["message"],
+            "message": job["message"] or _pesan_antre(antre),
             "eta_seconds": job["eta_seconds"],
+            # Berapa pekerjaan lain yang harus lewat dulu. "Menunggu giliran"
+            # tanpa angka tidak bisa dibedakan dari menggantung — terlapor
+            # pada pemasangan sungguhan, dialog Cari ulang klip yang diam
+            # enam menit tanpa satu pun keterangan.
+            "antrean": antre,
             # Kapan mulai berjalan (detik epoch) — antarmuka menghitung lama
             # berjalan dari sini, supaya menunggu yang tidak terukur pun jujur.
             "started_at": job.get("started_at"),
@@ -252,6 +290,10 @@ class JobQueue:
                          queue=self, _cancel=cancel_ev)
         self.emit(job_id)
 
+        # Job berjalan "di dalam" profil yang memintanya — folder klip dan
+        # akun Google dibaca dari sini (services/profil.py).
+        from . import profil as _profil
+        _token_profil = _profil.setel(int((job.get("payload") or {}).get("profil_id") or _profil.UTAMA))
         try:
             if lane == "cpu":
                 ctx.giliran_cpu(lambda: ctx.progress(
@@ -272,6 +314,7 @@ class JobQueue:
             message = getattr(exc, "message", None) or str(exc) or "Pekerjaan gagal."
             repo.finish(job_id, status="failed", error=message[:500], error_code=str(code)[:60])
         finally:
+            _profil.pulihkan(_token_profil)
             if ctx._pegang_cpu:
                 ctx._pegang_cpu = False
                 gerbang_cpu.release()
