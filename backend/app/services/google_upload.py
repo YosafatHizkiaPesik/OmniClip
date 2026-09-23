@@ -32,7 +32,17 @@ from ..errors import AppError
 log = logging.getLogger("omniclip.upload")
 
 CLIENT_SECRET_PATH = STORAGE_DIR / "google_client_secret.json"
-TOKEN_PATH = STORAGE_DIR / "google_token.json"
+
+
+def _token_path(pid: Optional[int] = None) -> Path:
+    """
+    Token Google milik satu profil. Setiap profil boleh menyambungkan akunnya
+    sendiri — Drive dan kanal YouTube yang berbeda (services/profil.py).
+    Rahasia klien OAuth dipakai bersama: satu project Google Cloud cukup untuk
+    banyak akun.
+    """
+    from . import profil
+    return profil.folder_akun(pid or profil.kini()) / "google_token.json"
 
 # Cakupan sekecil mungkin yang masih menyelesaikan pekerjaannya.
 #
@@ -109,8 +119,9 @@ def save_client_secret(raw: str) -> dict:
             "redirect_uri_needed": "web" in data}
 
 
-def _load_credentials():
+def _load_credentials(pid: Optional[int] = None):
     """Token tersimpan, disegarkan bila sudah kedaluwarsa."""
+    TOKEN_PATH = _token_path(pid)
     if not TOKEN_PATH.is_file():
         return None
     from google.oauth2.credentials import Credentials
@@ -124,31 +135,36 @@ def _load_credentials():
     if creds and creds.expired and creds.refresh_token:
         try:
             creds.refresh(Request())
-            _write_token(creds)
+            _write_token(creds, pid)
         except Exception as e:
             log.warning("Menyegarkan token Google gagal: %s", e)
             return None
     return creds if creds and creds.valid else None
 
 
-def _write_token(creds) -> None:
-    TOKEN_PATH.write_text(creds.to_json(), encoding="utf-8")
-    os.chmod(TOKEN_PATH, 0o600)
+def _write_token(creds, pid: Optional[int] = None) -> None:
+    tujuan = _token_path(pid)
+    # Surel akun disimpan di token yang sama; menulis ulang token yang
+    # disegarkan tidak boleh menghapusnya.
+    payload = json.loads(creds.to_json())
+    payload["_omniclip_email"] = _stored_email(pid)
+    tujuan.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    os.chmod(tujuan, 0o600)
 
 
-def _stored_email() -> str:
+def _stored_email(pid: Optional[int] = None) -> str:
     try:
-        return json.loads(TOKEN_PATH.read_text(encoding="utf-8")).get("_omniclip_email", "")
+        return json.loads(_token_path(pid).read_text(encoding="utf-8")).get("_omniclip_email", "")
     except Exception:
         return ""
 
 
-def status() -> dict:
-    creds = _load_credentials()
+def status(pid: Optional[int] = None) -> dict:
+    creds = _load_credentials(pid)
     return {
         "client_configured": client_configured(),
         "connected": creds is not None,
-        "email": _stored_email() if creds else "",
+        "email": _stored_email(pid) if creds else "",
         "redirect_uri": redirect_uri(),
         "scopes": SCOPES,
     }
@@ -167,19 +183,31 @@ def begin_authorization() -> str:
     # token. Tanpa keduanya, izin kedua dan seterusnya datang tanpa refresh
     # token dan sambungannya putus diam-diam sejam kemudian.
     url, state = flow.authorization_url(
-        access_type="offline", include_granted_scopes="true", prompt="consent")
+        # select_account: tiap profil menyambungkan akun Google-nya sendiri.
+        # Tanpa ini Google langsung memakai akun yang sedang masuk di peramban,
+        # dan profil kedua diam-diam tersambung ke akun yang sama.
+        access_type="offline", include_granted_scopes="true",
+        prompt="select_account consent")
+    from . import profil
     with _lock:
-        _pending.clear()
-        _pending[state] = flow
+        # Beberapa profil bisa sedang menyambung bersamaan (dua tab); yang
+        # lama dibuang setelah 15 menit, bukan setiap kali ada yang baru.
+        batas = time.time() - 900
+        for k in [k for k, v in _pending.items() if v[2] < batas]:
+            _pending.pop(k, None)
+        # Profil peminta diingat bersama sesinya: halaman balik dari Google
+        # tidak membawa header profil.
+        _pending[state] = (flow, profil.kini(), time.time())
     return url
 
 
 def finish_authorization(full_url: str, state: str) -> str:
     """Menukar kode izin jadi token. Mengembalikan alamat surel akunnya."""
     with _lock:
-        flow = _pending.pop(state, None)
-    if flow is None:
+        tunggu = _pending.pop(state, None)
+    if tunggu is None:
         raise _fail("Sesi izin sudah kedaluwarsa. Mulai lagi dari Pengaturan.")
+    flow, pid, _ = tunggu
 
     flow.fetch_token(authorization_response=full_url)
     creds = flow.credentials
@@ -195,13 +223,14 @@ def finish_authorization(full_url: str, state: str) -> str:
 
     payload = json.loads(creds.to_json())
     payload["_omniclip_email"] = email
-    TOKEN_PATH.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-    os.chmod(TOKEN_PATH, 0o600)
+    tujuan = _token_path(pid)
+    tujuan.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    os.chmod(tujuan, 0o600)
     return email
 
 
-def disconnect() -> None:
-    TOKEN_PATH.unlink(missing_ok=True)
+def disconnect(pid: Optional[int] = None) -> None:
+    _token_path(pid).unlink(missing_ok=True)
 
 
 def _require_credentials():

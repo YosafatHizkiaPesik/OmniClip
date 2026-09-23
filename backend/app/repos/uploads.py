@@ -7,12 +7,12 @@ from ..db import get_conn, tx
 
 
 def create(*, clip_name: str, target: str, title: str, privacy: str,
-           job_id: str) -> int:
+           job_id: str, profil_id: int = 1) -> int:
     with tx() as c:
         cur = c.execute(
             "INSERT INTO uploads(clip_name, target, status, title, privacy, "
-            "job_id, created_at) VALUES (?,?,'running',?,?,?,?)",
-            (clip_name, target, title, privacy, job_id, time.time()),
+            "job_id, created_at, profil_id) VALUES (?,?,'running',?,?,?,?,?)",
+            (clip_name, target, title, privacy, job_id, time.time(), profil_id),
         )
         return int(cur.lastrowid)
 
@@ -42,18 +42,22 @@ def fail(upload_id: int, error: str) -> None:
                   "WHERE id=?", (error[:1000], time.time(), upload_id))
 
 
-def list_recent(limit: int = 60, clip_name: Optional[str] = None) -> list[dict]:
-    sql = "SELECT * FROM uploads"
+def list_recent(limit: int = 60, clip_name: Optional[str] = None,
+                profil_id: Optional[int] = None) -> list[dict]:
+    sql = "SELECT * FROM uploads WHERE 1=1"
     args: list = []
     if clip_name:
-        sql += " WHERE clip_name = ?"
+        sql += " AND clip_name = ?"
         args.append(clip_name)
+    if profil_id is not None:
+        sql += " AND profil_id = ?"
+        args.append(profil_id)
     sql += " ORDER BY created_at DESC LIMIT ?"
     args.append(limit)
     return [dict(r) for r in get_conn().execute(sql, args)]
 
 
-def last_finished_at(target: str) -> float:
+def last_finished_at(target: str, profil_id: Optional[int] = None) -> float:
     """
     Kapan unggahan terakhir ke tujuan ini selesai.
 
@@ -61,7 +65,15 @@ def last_finished_at(target: str) -> float:
     bukan dari variabel dalam memori, supaya jedanya tetap berlaku setelah
     server dinyalakan ulang.
     """
-    row = get_conn().execute(
-        "SELECT MAX(finished_at) AS t FROM uploads "
-        "WHERE target = ? AND status = 'done'", (target,)).fetchone()
+    # Per profil: jeda itu melindungi SATU kanal dari pola unggah beruntun,
+    # dan tiap profil punya kanalnya sendiri.
+    if profil_id is None:
+        row = get_conn().execute(
+            "SELECT MAX(finished_at) AS t FROM uploads "
+            "WHERE target = ? AND status = 'done'", (target,)).fetchone()
+    else:
+        row = get_conn().execute(
+            "SELECT MAX(finished_at) AS t FROM uploads "
+            "WHERE target = ? AND status = 'done' AND profil_id = ?",
+            (target, profil_id)).fetchone()
     return float(row["t"] or 0.0)

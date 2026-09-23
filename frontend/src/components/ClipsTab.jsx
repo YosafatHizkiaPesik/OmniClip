@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
   Film, Download, Trash2, RefreshCw, Loader2, AlertTriangle, Layers, X, UploadCloud,
 } from 'lucide-react';
-import { apiGet, apiDelete, downloadToDisk, mediaUrl } from '../lib/api';
+import { apiGet, apiDelete, downloadToDisk, mediaUrl, kategoriKlip } from '../lib/api';
 import { formatTime } from '../utils/timeFormat';
 import UploadModal from './UploadModal';
 
@@ -26,7 +26,7 @@ function PlayerModal({ clip, onClose }) {
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}><X size={17} /></button>
         <video
-          src={mediaUrl('edited_clips', clip.file_name)}
+          src={mediaUrl(kategoriKlip(), clip.file_name)}
           controls autoPlay playsInline
           style={{ maxHeight: '86vh', maxWidth: '92vw', display: 'block' }}
         />
@@ -90,20 +90,40 @@ export default function ClipsTab() {
     for (const name of selected) {
       try {
         // eslint-disable-next-line no-await-in-loop
-        await downloadToDisk('edited_clips', name);
+        await downloadToDisk(kategoriKlip(), name);
       } catch { /* lanjut ke berikutnya */ }
     }
     setWorking(false);
   };
 
+  // Nama klip yang sedang dihapus atau diunduh, supaya barisnya bisa
+  // menunjukkan bahwa perintahnya SEDANG dikerjakan. Tanpa ini, menekan
+  // tombolnya tidak mengubah apa pun di layar sampai daftarnya dimuat ulang.
+  const [sibukBaris, setSibukBaris] = useState(null);
+
   const deleteClip = async (name) => {
     if (!window.confirm(`Hapus klip "${name}"?`)) return;
+    setSibukBaris({ nama: name, apa: 'hapus' });
     try {
       await apiDelete(`/clips/${encodeURIComponent(name)}`);
       setSelected((prev) => { const n = new Set(prev); n.delete(name); return n; });
       load();
     } catch (err) {
       setActionError(`Gagal menghapus "${name}": ${err.message}`);
+    } finally {
+      setSibukBaris(null);
+    }
+  };
+
+  /** Menyimpan satu klip ke komputer, dengan tanda sedang berjalan. */
+  const simpanSatu = async (name) => {
+    setSibukBaris({ nama: name, apa: 'unduh' });
+    try {
+      await downloadToDisk(kategoriKlip(), name);
+    } catch (err) {
+      setActionError(`Gagal menyimpan "${name}": ${err.message}`);
+    } finally {
+      setSibukBaris(null);
     }
   };
 
@@ -184,7 +204,7 @@ export default function ClipsTab() {
                   }}
                 >
                   <video
-                    src={mediaUrl('edited_clips', clip.file_name)}
+                    src={mediaUrl(kategoriKlip(), clip.file_name)}
                     preload="metadata" muted
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                   />
@@ -240,13 +260,19 @@ export default function ClipsTab() {
                             title="Unggah ke Drive atau YouTube">
                       <UploadCloud size={14} />
                     </button>
-                    <button onClick={() => downloadToDisk('edited_clips', clip.file_name)}
+                    <button onClick={() => simpanSatu(clip.file_name)}
+                            disabled={sibukBaris?.nama === clip.file_name}
                             aria-label="Simpan" style={iconBtn}>
-                      <Download size={14} />
+                      {sibukBaris?.nama === clip.file_name && sibukBaris.apa === 'unduh'
+                        ? <Loader2 size={14} className="animate-spin" />
+                        : <Download size={14} />}
                     </button>
                     <button onClick={() => deleteClip(clip.file_name)} aria-label="Hapus"
+                            disabled={sibukBaris?.nama === clip.file_name}
                             style={{ ...iconBtn, color: 'var(--accent-red)' }}>
-                      <Trash2 size={14} />
+                      {sibukBaris?.nama === clip.file_name && sibukBaris.apa === 'hapus'
+                        ? <Loader2 size={14} className="animate-spin" />
+                        : <Trash2 size={14} />}
                     </button>
                   </div>
                 </div>

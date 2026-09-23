@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
-  Search, Download, SlidersHorizontal, Film, Music4, Menu, X, ArrowDownToLine,
+  Search, Download, SlidersHorizontal, Film, Music4, Menu, X, ArrowDownToLine, UserRound,
 } from 'lucide-react';
 import ErrorBoundary from './components/ErrorBoundary';
+import ProfilPemilih from './components/ProfilPemilih';
 import { apiGet } from './lib/api';
 import useBuildWatch from './hooks/useBuildWatch';
 
@@ -15,6 +16,7 @@ const NAV = [
   { to: '/studio', label: 'Partitur', Icon: Music4 },
   { to: '/clips', label: 'Klip jadi', Icon: Film },
   { to: '/downloads', label: 'Unduhan', Icon: Download },
+  { to: '/profil', label: 'Profil', Icon: UserRound },
   { to: '/settings', label: 'Pengaturan', Icon: SlidersHorizontal },
 ];
 
@@ -93,6 +95,7 @@ export default function App() {
         <span className="brand-badge">Auto-clipper</span>
 
         <div className="header-meta">
+          <ProfilPemilih />
           {pembaruan && (
             <button
               onClick={() => navigate('/settings')}

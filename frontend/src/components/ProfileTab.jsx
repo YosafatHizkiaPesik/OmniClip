@@ -2,13 +2,14 @@ import React, { useState, useEffect } from 'react';
 import {
   KeyRound, Loader2, Sun, Moon, Eye, EyeOff, Info,
   CheckCircle2, AlertTriangle, Sparkles, Scissors, Mic,
-  Trash2, Languages,
+  Trash2, Languages, UploadCloud,
 } from 'lucide-react';
 import { apiDelete, apiGet, apiPost } from '../lib/api';
-import GoogleAccountCard from './GoogleAccountCard';
+import { Link } from 'react-router-dom';
 import SecurityCard from './SecurityCard';
 import StorageCard from './StorageCard';
 import CookiesCard from './CookiesCard';
+import TerjemahOtomatisCard from './TerjemahOtomatisCard';
 import UpdateCard from './UpdateCard';
 
 // Bagian pada satu lembar bergaris, bukan kartu di atas kartu. Tumpukan kartu
@@ -554,11 +555,25 @@ export default function ProfileTab() {
 
       <UpdateCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
 
+      <TerjemahOtomatisCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
+
       <StorageCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
 
       <SecurityCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
 
-      <GoogleAccountCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
+      {/* Akun Google kini milik TIAP PROFIL (Drive dan kanal YouTube sendiri),
+          jadi menyambungkannya dari sini — tanpa tahu profil mana yang aktif —
+          adalah cara tercepat mengunggah ke kanal yang salah. */}
+      <div style={card}>
+        <div style={sectionTitle}>
+          <UploadCloud size={18} style={{ color: 'var(--reh)' }} />
+          Akun Google, Drive, dan YouTube
+        </div>
+        <p style={helpText}>
+          Setiap profil menyambungkan akun Google-nya sendiri, beserta setelan unggah
+          otomatisnya. Atur di <Link to="/profil" style={{ color: 'var(--reh)', fontWeight: 700 }}>halaman Profil</Link>.
+        </p>
+      </div>
 
       {/* --- Info --- */}
       <div style={card}>

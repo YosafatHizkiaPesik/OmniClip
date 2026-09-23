@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   AlertTriangle, ChevronRight, CornerLeftUp, Folder, FolderPlus, HardDrive,
-  Home, Loader2, Monitor,
+  Home, Loader2, Monitor, Film,
 } from 'lucide-react';
 import { apiGet, apiPost } from '../lib/api';
 
@@ -23,7 +23,9 @@ const IKON = { Home, Desktop: Monitor };
  * juga bukan jawaban: ia muncul di komputer yang menjalankan backend, bukan di
  * perangkat yang sedang dipakai.
  */
-export default function FolderPicker({ judul, awal, onPilih, onTutup }) {
+// `modeVideo`: memilih SATU berkas video, bukan folder. Dipakai impor video
+// dari komputer ini — berkasnya dibaca di tempatnya, tanpa disalin.
+export default function FolderPicker({ judul, awal, onPilih, onTutup, modeVideo = false }) {
   const [isi, setIsi] = useState(null);
   const [galat, setGalat] = useState(null);
   const [sibuk, setSibuk] = useState(false);
@@ -36,7 +38,8 @@ export default function FolderPicker({ judul, awal, onPilih, onTutup }) {
     setSibuk(true);
     setGalat(null);
     try {
-      setIsi(await apiGet(`/settings/jelajah?jalur=${encodeURIComponent(jalur || '')}`));
+      setIsi(await apiGet(`/settings/jelajah?jalur=${encodeURIComponent(jalur || '')}`
+        + (modeVideo ? '&video=true' : '')));
       setTerpilih(null);
       setSedangBuat(false);
       setBuatNama('');
@@ -173,9 +176,26 @@ export default function FolderPicker({ judul, awal, onPilih, onTutup }) {
                 </button>
               );
             })}
-            {isi && !isi.folder.length && (
+            {modeVideo && isi?.berkas?.map((f) => {
+              const aktif = terpilih === f.jalur;
+              return (
+                <button key={f.jalur}
+                        onClick={() => setTerpilih(f.jalur)}
+                        onDoubleClick={() => onPilih(f.jalur)}
+                        disabled={sibuk}
+                        style={{ ...barisBtn,
+                                 background: aktif ? 'var(--hl-wash, rgba(0,0,0,0.06))' : 'transparent' }}>
+                  <Film size={15} style={{ flexShrink: 0, color: 'var(--reh, var(--accent-red))' }} />
+                  <span style={{ ...potongTeks, flex: 1, textAlign: 'left' }}>{f.nama}</span>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', flexShrink: 0 }}>
+                    {f.mb} MB
+                  </span>
+                </button>
+              );
+            })}
+            {isi && !isi.folder.length && !(modeVideo && isi.berkas?.length) && (
               <p style={{ padding: '18px 16px', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                Folder ini kosong. Ia tetap bisa dipilih.
+                {modeVideo ? 'Tidak ada video di folder ini.' : 'Folder ini kosong. Ia tetap bisa dipilih.'}
               </p>
             )}
           </div>
@@ -193,7 +213,9 @@ export default function FolderPicker({ judul, awal, onPilih, onTutup }) {
         <div style={{ borderTop: '1px solid var(--rule-2, var(--border-color))',
                       padding: '10px 14px', display: 'flex', alignItems: 'center',
                       gap: '10px', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: '0.76rem', color: 'var(--text-muted)', flexShrink: 0 }}>Folder</span>
+          <span style={{ fontSize: '0.76rem', color: 'var(--text-muted)', flexShrink: 0 }}>
+            {modeVideo ? 'Video' : 'Folder'}
+          </span>
           <code style={{ flex: '1 1 220px', minWidth: 0, fontSize: '0.75rem',
                          padding: '6px 9px', borderRadius: 'var(--radius-sm, 6px)',
                          background: 'var(--plate-3, rgba(0,0,0,0.04))',
@@ -201,7 +223,7 @@ export default function FolderPicker({ judul, awal, onPilih, onTutup }) {
                          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {tujuan || '…'}
           </code>
-          {sedangBuat ? (
+          {modeVideo ? null : sedangBuat ? (
             <form onSubmit={buat} style={{ display: 'flex', gap: '6px' }}>
               <input autoFocus value={buatNama} onChange={(e) => setBuatNama(e.target.value)}
                      placeholder="Nama folder baru" style={kolom} />
@@ -218,10 +240,18 @@ export default function FolderPicker({ judul, awal, onPilih, onTutup }) {
           <button className="btn-secondary" onClick={onTutup} style={{ fontSize: '0.8rem' }}>
             Batal
           </button>
-          <button className="btn-primary" disabled={sibuk || !isi || !isi.bisa_ditulis}
-                  onClick={() => onPilih(tujuan)} style={{ fontSize: '0.8rem' }}>
-            Pilih folder
-          </button>
+          {modeVideo ? (
+            <button className="btn-primary"
+                    disabled={sibuk || !terpilih || !(isi?.berkas ?? []).some((b) => b.jalur === terpilih)}
+                    onClick={() => onPilih(terpilih)} style={{ fontSize: '0.8rem' }}>
+              Pakai video ini
+            </button>
+          ) : (
+            <button className="btn-primary" disabled={sibuk || !isi || !isi.bisa_ditulis}
+                    onClick={() => onPilih(tujuan)} style={{ fontSize: '0.8rem' }}>
+              Pilih folder
+            </button>
+          )}
         </div>
       </div>
     </div>

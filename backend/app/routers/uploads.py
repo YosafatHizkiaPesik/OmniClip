@@ -111,42 +111,19 @@ async def start_upload(req: UploadRequest):
 
     # Memastikan klipnya ada SEBELUM barisnya dicatat, supaya riwayat tidak
     # terisi baris gagal untuk nama berkas yang salah ketik.
-    safe_media_path("edited_clips", req.clip_name)
+    from ..services import profil
+    safe_media_path(profil.kategori_klip(profil.kini()), req.clip_name)
 
-    # Baris riwayat dibuat LEBIH DULU supaya id-nya sudah ada di dalam muatan
-    # saat pekerja mengambilnya. Kalau urutannya dibalik, ada celah di mana job
-    # sudah berjalan sementara baris yang harus dituliskannya belum ada.
-    upload_id = uploads_repo.create(
-        clip_name=req.clip_name, target=req.target,
-        title=req.title, privacy=req.privacy, job_id="")
-
-    job_id, created = queue.enqueue(
-        "upload",
-        {
-            "clip_name": req.clip_name,
-            "target": req.target,
-            "title": req.title,
-            "description": req.description,
-            "tags": req.tags,
-            "privacy": req.privacy,
-            "folder_id": req.folder_id,
-            "upload_id": upload_id,
-        },
-        # Satu klip tidak boleh naik dua kali ke tujuan yang sama hanya karena
-        # tombolnya tertekan dua kali.
-        dedupe_key=f"upload:{req.target}:{req.clip_name}",
-    )
-
-    if created:
-        uploads_repo.attach_job(upload_id, job_id)
-    else:
-        # Permintaannya bergabung ke job yang sudah antre; barisnya tidak jadi
-        # dipakai dan tidak boleh tertinggal sebagai unggahan yang menggantung.
-        uploads_repo.drop(upload_id)
-
+    from ..services.unggah import antrekan
+    job_id, created = antrekan(
+        clip_name=req.clip_name, target=req.target, title=req.title,
+        description=req.description, tags=req.tags, privacy=req.privacy,
+        folder_id=req.folder_id)
     return {"job_id": job_id, "created": created}
 
 
 @router.get("")
 async def list_uploads(clip_name: Optional[str] = None, limit: int = 60):
-    return {"uploads": uploads_repo.list_recent(min(limit, 200), clip_name)}
+    from ..services import profil
+    return {"uploads": uploads_repo.list_recent(min(limit, 200), clip_name,
+                                                profil_id=profil.kini())}

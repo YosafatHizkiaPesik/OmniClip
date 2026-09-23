@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Search, Loader2, Video, RefreshCw } from 'lucide-react';
-import { apiGet } from '../lib/api';
+import { Search, Loader2, Video, RefreshCw, History, X } from 'lucide-react';
+import { apiDelete, apiGet } from '../lib/api';
 import { VideoCard } from '../components/VideoCards';
 
 // Tahun sengaja tidak dicantumkan: menempelkan "2024" ke setiap kueri menyaring
@@ -49,6 +49,10 @@ export default function Home() {
   // tiap kali dibuka tapi tidak lagi berubah di tengah gulir.
   const [nonce, setNonce] = useState(() => Math.floor(Math.random() * 1e6));
   const [sort, setSort] = useState('relevan');
+  // Penyaring milik YouTube sendiri (parameter sp), bukan saringan di sini atas
+  // data yang tidak lengkap. Kosong = semua.
+  const [durasi, setDurasi] = useState('');
+  const [tanggal, setTanggal] = useState('');
   // Tanggal unggah datang MENYUSUL, dari panggilan terpisah: hasil pencarian
   // YouTube tidak membawanya sama sekali, dan mengambilnya berarti membuka tiap
   // videonya. Kartunya tampil dulu, tanggalnya mengisi belakangan.
@@ -74,9 +78,20 @@ export default function Home() {
 
   useEffect(() => { setDraft(q); }, [q]);
 
+  // Riwayat pencarian PROFIL AKTIF — tiap profil punya minatnya sendiri, dan
+  // pencarian satu profil tidak ikut muncul di profil lain.
+  const [riwayat, setRiwayat] = useState([]);
+  useEffect(() => {
+    apiGet('/riwayat-cari').then((r) => setRiwayat(r.riwayat ?? [])).catch(() => {});
+  }, [q]);
+  const buangRiwayat = (kueri) => {
+    setRiwayat((r) => r.filter((x) => x.query !== kueri));
+    apiDelete(`/riwayat-cari?q=${encodeURIComponent(kueri)}`).catch(() => {});
+  };
+
   // Identitas daftar yang sedang ditampilkan. Kueri, urutan, atau tombol
   // Segarkan yang berubah berarti daftar yang lain sama sekali.
-  const kunci = `${q}|${sort}|${nonce}`;
+  const kunci = `${q}|${sort}|${durasi}|${tanggal}|${nonce}`;
   const kunciRef = useRef(kunci);
   if (kunciRef.current !== kunci) {
     // Disetel saat render, bukan di dalam useEffect. Lewat efek, satu putaran
@@ -103,6 +118,7 @@ export default function Home() {
     setError(null);
     const path = q
       ? `/search?q=${encodeURIComponent(q)}&limit=${batas}&sort=${sort}`
+        + (durasi ? `&durasi=${durasi}` : '') + (tanggal ? `&tanggal=${tanggal}` : '')
       : `/trending?limit=${batas}&refresh=${nonce}`;
     apiGet(path)
       .then((data) => {
@@ -238,6 +254,31 @@ export default function Home() {
         </div>
       </form>
 
+      {riwayat.length > 0 && (
+        <div style={{ display: 'flex', gap: '7px', flexWrap: 'wrap', alignItems: 'center',
+                      marginBottom: '10px' }}>
+          <span className="mark" style={{ color: 'var(--ink-3)', display: 'inline-flex', gap: '5px',
+                                          alignItems: 'center' }}>
+            <History size={13} />Terakhir dicari
+          </span>
+          {riwayat.slice(0, 8).map((r) => (
+            <span key={r.query} className={`chip${q === r.query ? ' is-on' : ''}`}
+                  style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }}>
+              <button onClick={() => setParams({ q: r.query })}
+                      style={{ background: 'none', border: 0, padding: 0, cursor: 'pointer',
+                               color: 'inherit', font: 'inherit' }}>
+                {r.query}
+              </button>
+              <button onClick={() => buangRiwayat(r.query)} aria-label={`Hapus ${r.query} dari riwayat`}
+                      style={{ background: 'none', border: 0, padding: 0, cursor: 'pointer',
+                               color: 'inherit', display: 'inline-flex', opacity: 0.6 }}>
+                <X size={12} />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
       <div style={{
         display: 'flex', gap: '8px', overflowX: 'auto',
         paddingBottom: '8px', marginBottom: '20px', scrollbarWidth: 'none',
@@ -267,6 +308,23 @@ export default function Home() {
               {label}
             </button>
           ))}
+        </div>
+      )}
+      {q && (
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center',
+                      marginTop: '-8px', marginBottom: '18px' }}>
+          <span className="mark" style={{ color: 'var(--ink-3)' }}>Durasi</span>
+          {[['', 'Semua'], ['pendek', '< 4 mnt'], ['sedang', '4–20 mnt'], ['panjang', '> 20 mnt']]
+            .map(([id, label]) => (
+              <button key={id || 'semua'} onClick={() => setDurasi(id)}
+                      className={`chip${durasi === id ? ' is-on' : ''}`}>{label}</button>
+            ))}
+          <span className="mark" style={{ color: 'var(--ink-3)', marginLeft: '8px' }}>Diunggah</span>
+          {[['', 'Kapan saja'], ['hari', 'Hari ini'], ['minggu', 'Minggu ini'], ['bulan', 'Bulan ini'], ['tahun', 'Tahun ini']]
+            .map(([id, label]) => (
+              <button key={id || 'kapan'} onClick={() => setTanggal(id)}
+                      className={`chip${tanggal === id ? ' is-on' : ''}`}>{label}</button>
+            ))}
         </div>
       )}
 

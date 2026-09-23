@@ -43,8 +43,37 @@ async function toApiError(res) {
   return new ApiError(message, { status: res.status, code });
 }
 
+// --- Profil aktif -----------------------------------------------------------
+//
+// Disimpan per peramban dan dikirim di SETIAP permintaan sebagai header, bukan
+// disetel sekali di server: dua tab (atau laptop dan HP) boleh bekerja di
+// profil yang berbeda tanpa saling menimpa. Lihat backend services/profil.py.
+const PROFIL_KEY = 'omniclip.profil';
+
+export function profilAktif() {
+  try {
+    const n = parseInt(localStorage.getItem(PROFIL_KEY) || '1', 10);
+    return Number.isFinite(n) && n > 0 ? n : 1;
+  } catch {
+    return 1;
+  }
+}
+
+/** Pindah profil: seluruh halaman dimuat ulang supaya tidak ada data profil lama yang tertinggal di layar. */
+export function pilihProfil(id) {
+  try { localStorage.setItem(PROFIL_KEY, String(id)); } catch { /* mode privat */ }
+  window.location.reload();
+}
+
+/** Kategori media folder klip profil aktif: /api/media/klip_<id>/<berkas>. */
+export function kategoriKlip() {
+  return `klip_${profilAktif()}`;
+}
+
 async function request(path, options = {}) {
   let res;
+  options = { ...options,
+              headers: { ...(options.headers || {}), 'X-Omniclip-Profil': String(profilAktif()) } };
   try {
     // credentials same-origin: cookie sesi ikut terkirim. Ini bawaan fetch
     // modern, ditulis eksplisit karena gerbang masuk bergantung padanya.
@@ -99,6 +128,46 @@ export function apiPost(path, body, { signal, raw = false } = {}) {
 export function apiPut(path, body, { signal } = {}) {
   return request(path, {
     method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body ?? {}),
+    signal,
+  });
+}
+
+/**
+ * Mengirim FormData sambil melaporkan kemajuannya (0-1).
+ *
+ * `fetch` tidak bisa memberi tahu berapa yang sudah terkirim, dan video
+ * impor berukuran ratusan megabita: tanpa angka, beberapa menit mengirim
+ * tidak bisa dibedakan dari macet.
+ */
+export function apiUnggah(path, formData, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${BASE}${path}`);
+    xhr.withCredentials = true;
+    xhr.setRequestHeader('X-Omniclip-Profil', String(profilAktif()));
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && onProgress) onProgress(e.loaded / e.total);
+    };
+    xhr.onload = () => {
+      let body = null;
+      try { body = JSON.parse(xhr.responseText); } catch { /* bukan JSON */ }
+      if (xhr.status >= 200 && xhr.status < 300) resolve(body);
+      else {
+        reject(new ApiError(body?.message ?? body?.detail
+          ?? `Pengiriman gagal (${xhr.status}).`, { status: xhr.status, code: body?.code }));
+      }
+    };
+    xhr.onerror = () => reject(new ApiError(
+      'Pengiriman terputus. Pastikan backend berjalan.', { code: 'NETWORK' }));
+    xhr.send(formData);
+  });
+}
+
+export function apiPatch(path, body, { signal } = {}) {
+  return request(path, {
+    method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body ?? {}),
     signal,

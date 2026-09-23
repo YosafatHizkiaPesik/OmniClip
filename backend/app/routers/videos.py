@@ -1,6 +1,7 @@
 """Pencarian YouTube, metadata video, dan unduhan."""
 
 import asyncio
+import json
 import logging
 import os
 import random
@@ -13,6 +14,7 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, File, Query, UploadFile
 from fastapi.responses import FileResponse
+from typing import Optional
 from pydantic import BaseModel, Field
 
 from ..config import DOWNLOAD_DIR, THUMBS_DIR
@@ -51,6 +53,8 @@ class DownloadRequest(BaseModel):
     # klip, dan jendela 9:16 yang dipotong darinya jauh lebih sempit daripada
     # bingkai penuhnya.
     resolution: str = "Terbaik"
+    # Jalur audio (sulih suara), mis. "en". Kosong = suara asli video.
+    audio_lang: Optional[str] = Field(None, max_length=16, pattern=r"^[A-Za-z0-9-]*$")
 
 
 def _lengkapi_tanggal(hasil: list[dict]) -> list[dict]:
@@ -136,11 +140,22 @@ def _lengkapi_di_latar(kunci: str, ambil: Callable[[], list], penuh: int,
 
 @router.get("/search")
 async def search(q: str = Query(..., description="Kata kunci pencarian"),
-                 limit: int = 20, sort: str = "relevan"):
+                 limit: int = 20, sort: str = "relevan",
+                 durasi: Optional[str] = None, tanggal: Optional[str] = None):
     if not q.strip():
         return []
     if sort not in SEARCH_SORTS:
         sort = "relevan"
+    from ..services.ytdlp import DURASI_KODE, TANGGAL_KODE
+    durasi = durasi if durasi in DURASI_KODE else None
+    tanggal = tanggal if tanggal in TANGGAL_KODE else None
+    if limit <= 20:
+        from ..repos import profil as profil_repo
+        from ..services import profil
+        try:
+            await asyncio.to_thread(profil_repo.catat_cari, profil.kini(), q.strip()[:200], 0)
+        except Exception:
+            pass
     # Plafon 100, bukan 50. Terukur: ytsearch50 butuh 4,2 detik dan ytsearch100
     # butuh 4,8 — ongkosnya ada pada permintaannya, bukan pada jumlah hasilnya,
     # jadi separuh daftar itu sebelumnya dibuang gratis.
@@ -154,7 +169,7 @@ async def search(q: str = Query(..., description="Kata kunci pencarian"),
     # berbeda dan lima permintaan penuh ke YouTube — 20, 40, 60, 80, 100 —
     # untuk daftar yang sebagian besar isinya sama. Ledakan itulah yang
     # memicu verifikasi bot, dan gulir tak hingga membuatnya jadi kebiasaan.
-    kunci = f"search:{sort}:{q.strip().lower()}"
+    kunci = f"search:{sort}:{durasi or '-'}:{tanggal or '-'}:{q.strip().lower()}"
     simpanan = await asyncio.to_thread(cache_repo.ambil, kunci)
     # Entri lama disimpan sebagai daftar telanjang. Bentuknya ditangani di sini
     # alih-alih mengosongkan cache saat mulai: menghapusnya berarti pencarian
@@ -172,7 +187,7 @@ async def search(q: str = Query(..., description="Kata kunci pencarian"),
     # berikutnya lalu dilayani dari cache tanpa menyentuh YouTube lagi.
     ambil = want if want <= 20 else 100
     try:
-        hasil = await asyncio.to_thread(search_youtube_videos, q, ambil, sort)
+        hasil = await asyncio.to_thread(search_youtube_videos, q, ambil, sort, durasi, tanggal)
     except YtdlpError as e:
         raise _as_app_error(e) from e
 
@@ -268,6 +283,41 @@ TRENDING_QUERIES = [
 ]
 
 
+def _kolam_beranda() -> list[str]:
+    """
+    Kueri beranda untuk profil aktif: minat yang ditulis pemiliknya, lalu
+    pencarian terbarunya. Profil yang belum punya keduanya memakai kolam umum.
+
+    Pemiliknya ingin beranda yang terbuka pertama kali sudah sesuai minat —
+    satu profil untuk horor, satu untuk podcast — bukan campuran acak yang
+    sama untuk semua orang.
+    """
+    from ..repos import profil as profil_repo
+    from ..services import profil
+    pid = profil.kini()
+    p = profil_repo.ambil(pid) or {}
+    minat = [m.strip() for m in (p.get("minat") or []) if isinstance(m, str) and m.strip()]
+    riwayat = [r["query"] for r in profil_repo.riwayat_cari(pid, 8)]
+    # Minat ditulis dua kali: ia pilihan yang disengaja, riwayat hanya jejak.
+    kolam = minat * 2 + riwayat
+    return kolam or TRENDING_QUERIES
+
+
+@router.get("/riwayat-cari")
+async def riwayat_cari():
+    from ..repos import profil as profil_repo
+    from ..services import profil
+    return {"riwayat": await asyncio.to_thread(profil_repo.riwayat_cari, profil.kini(), 12)}
+
+
+@router.delete("/riwayat-cari")
+async def hapus_riwayat_cari(q: Optional[str] = None):
+    from ..repos import profil as profil_repo
+    from ..services import profil
+    await asyncio.to_thread(profil_repo.hapus_riwayat, profil.kini(), q)
+    return {"ok": True}
+
+
 @router.get("/trending")
 async def trending(limit: int = 20, refresh: int = 0):
     """
@@ -296,9 +346,11 @@ async def trending(limit: int = 20, refresh: int = 0):
     # hanya bertambah panjang. Tombol Segarkan menaikkan nilainya — di situlah
     # tempat isi beranda memang seharusnya berganti.
     acak = random.Random(refresh)
-    query = acak.choice(TRENDING_QUERIES)
+    kolam = await asyncio.to_thread(_kolam_beranda)
+    query = acak.choice(kolam)
 
-    kunci = f"trending:{refresh}"
+    from ..services import profil
+    kunci = f"trending:{profil.kini()}:{refresh}:{query}"
     simpanan = await asyncio.to_thread(cache_repo.ambil, kunci)
     simpanan = simpanan if isinstance(simpanan, dict) else {}
     if simpanan.get("diminta", 0) >= want:
@@ -367,9 +419,9 @@ async def start_download(req: DownloadRequest):
 
     job_id, created = queue.enqueue(
         "download",
-        {"video_id": video_id, "resolution": req.resolution},
+        {"video_id": video_id, "resolution": req.resolution, "audio_lang": req.audio_lang},
         video_id=video_id,
-        dedupe_key=f"download:{video_id}:{req.resolution}",
+        dedupe_key=f"download:{video_id}:{req.resolution}:{req.audio_lang or 'asli'}",
     )
     return {"job_id": job_id, "created": created, "video_id": video_id}
 
@@ -466,6 +518,88 @@ def _id_lokal() -> str:
     return "L" + uuid.uuid4().hex[:10]
 
 
+@router.get("/impor/{video_id}/sampul")
+async def sampul_impor(video_id: str):
+    """Sampul video impor: satu bingkai dari seperempat durasinya, disimpan sekali."""
+    from ..services.paths import adalah_impor, find_local_video
+    if not adalah_impor(video_id):
+        raise NotFound("Bukan video impor.")
+    path = find_local_video(video_id)
+    if path is None:
+        raise NotFound("Berkas impor tidak ditemukan.")
+    cache = THUMBS_DIR / f"impor_{video_id}.jpg"
+    if not cache.is_file():
+        info = await asyncio.to_thread(probe, path)
+        durasi = float(info.get("duration") or 0)
+        ok = await asyncio.to_thread(poster_frame, path, cache,
+                                     at=durasi * 0.25 if durasi > 4 else 0.0)
+        if not ok:
+            raise NotFound("Sampul gagal dibuat.")
+    return FileResponse(path=cache, media_type="image/jpeg",
+                        headers={"Cache-Control": "public, max-age=86400"})
+
+
+class ImporJalurRequest(BaseModel):
+    jalur: str = Field(..., min_length=1, max_length=4096)
+
+
+@router.post("/impor/jalur", status_code=201)
+async def impor_jalur(req: ImporJalurRequest):
+    """
+    Video di komputer ini, DIBACA DI TEMPATNYA — tidak disalin.
+
+    Unggah lewat peramban selalu menyalin (peramban tidak boleh memberi tahu
+    jalur berkas), jadi anime 248 MB tersalin utuh ke penyimpanan dan impor
+    kedua menggandakannya lagi. OmniClip berjalan di komputer yang sama dengan
+    berkasnya, jadi ia cukup mengingat jalurnya. Berkas aslinya tidak pernah
+    diubah, dipindah, atau dihapus oleh OmniClip.
+    """
+    path = Path(req.jalur).expanduser()
+    try:
+        path = path.resolve()
+    except OSError:
+        pass
+    if not path.is_file():
+        raise NotFound("Berkas tidak ditemukan.")
+    if path.suffix.lower() not in _EKSTENSI_VIDEO:
+        raise AppError(f"Format {path.suffix or '(tanpa ekstensi)'} tidak didukung.",
+                       code="IMPORT_BAD_FORMAT", status=422)
+    info = await asyncio.to_thread(probe, path)
+    if not info.get("width"):
+        raise AppError("Berkas ini tidak punya gambar yang bisa dibaca.",
+                       code="IMPORT_NOT_VIDEO", status=422)
+    from ..services.paths import KANAL_IMPOR
+    # Berkas yang sama diimpor lagi: pakai id yang lama, jangan buat kartu baru.
+    from ..db import get_conn
+    for r in get_conn().execute("SELECT id, meta_json FROM videos WHERE channel = ?", (KANAL_IMPOR,)):
+        try:
+            if json.loads(r["meta_json"] or "{}").get("jalur") == str(path):
+                return {"video_id": r["id"], "title": path.stem[:60], "file_name": path.name,
+                        "duration": info.get("duration"), "sudah_ada": True}
+        except Exception:
+            continue
+    vid = _id_lokal()
+    judul = path.stem[:60] or "Video impor"
+    media_repo.upsert_video({
+        "id": vid, "title": judul, "channel": KANAL_IMPOR,
+        "duration": info.get("duration"), "thumbnail": None, "jalur": str(path),
+    })
+    return {"video_id": vid, "title": judul, "file_name": path.name,
+            "file_size": path.stat().st_size, "duration": info.get("duration"),
+            "width": info.get("width"), "height": info.get("height")}
+
+
+@router.get("/impor/{video_id}/berkas")
+async def berkas_impor(video_id: str):
+    """Memutar video impor yang ada di luar folder OmniClip (mendukung Range)."""
+    from ..services.paths import jalur_luar
+    path = jalur_luar(video_id)
+    if path is None:
+        raise NotFound("Berkas impor tidak ditemukan.")
+    import mimetypes
+    return FileResponse(path=path, media_type=mimetypes.guess_type(path.name)[0] or "video/mp4")
+
+
 @router.post("/impor/berkas", status_code=201)
 async def impor_berkas(berkas: UploadFile = File(...)):
     """
@@ -484,8 +618,12 @@ async def impor_berkas(berkas: UploadFile = File(...)):
     vid = _id_lokal()
     judul = Path(nama_asli).stem[:60] or "Video impor"
     aman = re.sub(r"[^\w.\- ]+", "_", judul).strip() or "video"
-    tujuan = DOWNLOAD_DIR / f"{aman}_{vid}{ext}"
-    DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    # Folder impor sendiri — bukan local_downloads, supaya berkas yang tidak
+    # pernah diunduh tidak muncul di halaman Unduhan.
+    from ..config import IMPOR_DIR
+    from ..services.paths import KANAL_IMPOR
+    tujuan = IMPOR_DIR / f"{aman}_{vid}{ext}"
+    IMPOR_DIR.mkdir(parents=True, exist_ok=True)
 
     ukuran = 0
     try:
@@ -511,14 +649,8 @@ async def impor_berkas(berkas: UploadFile = File(...)):
                        code="IMPORT_NOT_VIDEO", status=422)
 
     media_repo.upsert_video({
-        "id": vid, "title": judul, "channel": "Impor lokal",
+        "id": vid, "title": judul, "channel": KANAL_IMPOR,
         "duration": info.get("duration"), "thumbnail": None,
-    })
-    media_repo.record_download(vid, {
-        "file_path": str(tujuan), "width": info.get("width"), "height": info.get("height"),
-        "vcodec": info.get("vcodec"), "acodec": info.get("acodec"),
-        "file_size": ukuran, "duration": info.get("duration"),
-        "requested_resolution": "impor",
     })
     return {"video_id": vid, "title": judul, "file_name": tujuan.name,
             "file_size": ukuran, "duration": info.get("duration"),

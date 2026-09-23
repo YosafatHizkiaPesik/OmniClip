@@ -32,6 +32,9 @@ export default function UploadModal({ clip, onClose, onDone }) {
   );
 
   const [status, setStatus] = useState(null);
+  // Kemajuan job unggah (0..1) — berkas klip bisa ratusan megabita, dan
+  // lingkaran berputar tidak membedakan "sedang naik" dari "tersangkut".
+  const [kemajuan, setKemajuan] = useState(0);
   const [target, setTarget] = useState('drive');
   const [title, setTitle] = useState(defaultTitle);
   // Tagar yang sudah disetel di editor mengisi deskripsi sendiri. Mengetiknya
@@ -50,6 +53,7 @@ export default function UploadModal({ clip, onClose, onDone }) {
   const submit = async () => {
     setPhase('sending');
     setMessage('Mengantre…');
+    setKemajuan(0);
     try {
       const { job_id: jobId } = await apiPost('/uploads', {
         clip_name: clip.file_name,
@@ -65,6 +69,7 @@ export default function UploadModal({ clip, onClose, onDone }) {
         // browser dari sebuah angka adalah teater, dan pernah jadi teater di
         // aplikasi ini.
         if (job.message) setMessage(job.message);
+        if (typeof job.progress === 'number') setKemajuan(job.progress);
         if (job.status === 'done') {
           setResult(job.result);
           setPhase('done');
@@ -126,10 +131,20 @@ export default function UploadModal({ clip, onClose, onDone }) {
                     style={{ justifyContent: 'center' }}>Selesai</button>
           </div>
         ) : phase === 'sending' ? (
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'center', fontSize: '.88rem',
-                        padding: '14px 0' }}>
-            <Loader2 size={18} className="animate-spin" style={{ color: 'var(--reh)' }} />
-            {message}
+          <div style={{ padding: '14px 0' }}>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center', fontSize: '.88rem' }}>
+              <Loader2 size={18} className="animate-spin" style={{ color: 'var(--reh)' }} />
+              <span style={{ flex: 1 }}>{message}</span>
+              <span style={{ color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums' }}>
+                {Math.round(kemajuan * 100)}%
+              </span>
+            </div>
+            <div style={{ height: '6px', marginTop: '9px', borderRadius: '99px',
+                          background: 'var(--bg-glass)', overflow: 'hidden',
+                          border: '1px solid var(--border-color)' }}>
+              <div style={{ width: `${Math.max(2, Math.round(kemajuan * 100))}%`, height: '100%',
+                            background: 'var(--reh)', transition: 'width .5s' }} />
+            </div>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>

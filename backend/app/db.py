@@ -256,6 +256,37 @@ MIGRATIONS: list[str] = [
       PRIMARY KEY (sidik, bahasa)
     );
     """,
+    # --- profil: satu akun Google, satu folder klip, satu minat per profil ---
+    #
+    # Semua yang sudah ada menjadi milik profil 1 ("Utama"), jadi pembaruan
+    # ini tidak memindahkan atau menyembunyikan apa pun dari pengguna lama.
+    """
+    CREATE TABLE profil (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      nama         TEXT NOT NULL,
+      warna        TEXT NOT NULL DEFAULT '#E0473A',
+      minat_json   TEXT NOT NULL DEFAULT '[]',
+      folder_klip  TEXT NOT NULL DEFAULT '',
+      unggah_json  TEXT NOT NULL DEFAULT '{}',
+      created_at   REAL NOT NULL
+    );
+    INSERT INTO profil (id, nama, created_at) VALUES (1, 'Utama', strftime('%s', 'now'));
+    CREATE TABLE profil_video (
+      profil_id   INTEGER NOT NULL REFERENCES profil(id) ON DELETE CASCADE,
+      video_id    TEXT NOT NULL,
+      created_at  REAL NOT NULL,
+      PRIMARY KEY (profil_id, video_id)
+    );
+    INSERT OR IGNORE INTO profil_video (profil_id, video_id, created_at)
+      SELECT 1, video_id, MIN(created_at) FROM analyses
+      WHERE video_id IS NOT NULL GROUP BY video_id;
+    INSERT OR IGNORE INTO profil_video (profil_id, video_id, created_at)
+      SELECT 1, video_id, MIN(created_at) FROM jobs
+      WHERE type = 'auto_clip' AND video_id IS NOT NULL GROUP BY video_id;
+    ALTER TABLE search_history ADD COLUMN profil_id INTEGER NOT NULL DEFAULT 1;
+    CREATE INDEX idx_search_profil ON search_history(profil_id, created_at DESC);
+    ALTER TABLE uploads ADD COLUMN profil_id INTEGER NOT NULL DEFAULT 1;
+    """,
 ]
 
 
