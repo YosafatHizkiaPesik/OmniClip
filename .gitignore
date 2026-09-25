@@ -99,3 +99,10 @@ OmniClip_Storage/cadangan/
 # tidak berguna di dalam riwayat, dan ukurannya puluhan megabita.
 simplescreenrecorder-*.mkv
 *.mkv
+
+# Identitas aplikasi Google yang ditulis alur build ke dalam bundel.
+# Rahasianya memang tidak rahasia untuk aplikasi desktop (pengamannya PKCE,
+# lihat config.py), tapi ia tetap tidak punya urusan di dalam riwayat git:
+# yang ada di sana tidak bisa ditarik kembali, dan mengganti client id berarti
+# memutus sambungan semua orang yang sudah login.
+backend/app/identitas_google.py

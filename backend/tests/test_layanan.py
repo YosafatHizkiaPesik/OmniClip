@@ -361,3 +361,66 @@ class MesinPemilihKlipYangDiizinkan(unittest.TestCase):
         diizinkan = set(re.findall(r"'(\w+)'", m.group(1)))
         self.assertTrue(dipakai <= diizinkan,
                         f"pipeline memakai {dipakai - diizinkan} yang ditolak skema")
+
+
+class KemajuanSalinanPratinjau(unittest.TestCase):
+    """
+    Salinan pratinjau video dua jam memakan puluhan menit sampai berjam-jam,
+    dan sampai 25 September 2026 yang terlihat hanya lingkaran berputar tanpa
+    angka. Dilaporkan dari Windows: "sudah berapa jam masih loading, tidak bisa
+    mengedit apa pun". Yang hilang bukan kecepatannya melainkan kabarnya.
+    """
+
+    def _tulis(self, tmp, detik_selesai):
+        """Berkas `-progress` milik ffmpeg, seperti yang ia tulis sungguhan."""
+        from pathlib import Path
+        p = Path(tmp) / "proksi.tmp.kemajuan"
+        p.write_text(
+            "frame=120\nfps=30\nout_time_ms=1000000\nprogress=continue\n"
+            f"frame=999\nfps=31\nout_time_ms={int(detik_selesai * 1_000_000)}\n"
+            "progress=continue\n", encoding="utf-8")
+        return p
+
+    def test_membaca_baris_terakhir_bukan_yang_pertama(self):
+        """Berkasnya ditulis terus-menerus; yang berlaku nilai TERAKHIR."""
+        import tempfile
+        from unittest import mock
+        from app.services import proksi
+
+        with tempfile.TemporaryDirectory() as tmp:
+            prog = self._tulis(tmp, 300.0)
+            tujuan = prog.with_name("proksi.mp4")
+            with mock.patch.object(proksi, "_nama", return_value=tujuan), \
+                 mock.patch("app.services.media.probe", return_value={"duration": 600.0}):
+                self.assertAlmostEqual(proksi.kemajuan("/apa/saja.mp4"), 0.5, places=2)
+
+    def test_tanpa_berkas_kemajuan_menjawab_none(self):
+        """Belum mulai dan tidak sedang dibuat sengaja tidak dibedakan."""
+        import tempfile
+        from pathlib import Path
+        from unittest import mock
+        from app.services import proksi
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.object(proksi, "_nama",
+                                   return_value=Path(tmp) / "belum-ada.mp4"):
+                self.assertIsNone(proksi.kemajuan("/apa/saja.mp4"))
+
+    def test_tidak_pernah_melewati_satu(self):
+        import tempfile
+        from unittest import mock
+        from app.services import proksi
+
+        with tempfile.TemporaryDirectory() as tmp:
+            prog = self._tulis(tmp, 9999.0)
+            with mock.patch.object(proksi, "_nama", return_value=prog.with_name("proksi.mp4")), \
+                 mock.patch("app.services.media.probe", return_value={"duration": 600.0}):
+                self.assertEqual(proksi.kemajuan("/apa/saja.mp4"), 1.0)
+
+    def test_ffmpeg_benar_benar_diminta_menulis_kemajuan(self):
+        from pathlib import Path
+        sumber = (Path(__file__).resolve().parents[1] / "app" / "services"
+                  / "proksi.py").read_text(encoding="utf-8")
+        self.assertIn('"-progress", str(sementara.with_suffix(".kemajuan"))', sumber)
+        # Dan dibersihkan sesudahnya, kalau tidak ia tertinggal selamanya.
+        self.assertIn('sementara.with_suffix(".kemajuan").unlink(missing_ok=True)', sumber)

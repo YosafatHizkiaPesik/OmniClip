@@ -670,7 +670,14 @@ export default function Editor({ project, onBack }) {
     const id = setInterval(async () => {
       try {
         const segar = await apiGet(`/projects/${videoId}`);
-        if (batal || segar.pratinjau_disiapkan) return;
+        if (batal) return;
+        if (segar.pratinjau_disiapkan) {
+          // Persentasenya saja yang diperbarui. Tanpa ini angkanya beku di
+          // nilai pertama dan kembali terbaca seperti macet.
+          setData((d) => (d.pratinjau_kemajuan === segar.pratinjau_kemajuan
+            ? d : { ...d, pratinjau_kemajuan: segar.pratinjau_kemajuan }));
+          return;
+        }
         const v = videoRef.current;
         posisiTukarRef.current = v ? { t: v.currentTime, main: !v.paused } : null;
         setData((d) => ({ ...d, preview_url: segar.preview_url, pratinjau_disiapkan: false }));
@@ -1647,8 +1654,12 @@ export default function Editor({ project, onBack }) {
               <Loader2 size={14} className="animate-spin" style={{ flexShrink: 0 }} />
               <span>
                 Video ini beresolusi besar dan bisa tersendat saat diputar di browser.
-                Salinan pratinjau yang ringan sedang disiapkan. Studio akan berpindah
-                sendiri begitu siap. Hasil render tetap memakai video asli.
+                Salinan pratinjau yang ringan sedang disiapkan
+                {Number.isFinite(data.pratinjau_kemajuan)
+                  ? ` (${Math.round(data.pratinjau_kemajuan * 100)}%)` : ''}.
+                Studio akan berpindah sendiri begitu siap. Hasil render tetap memakai
+                video asli, jadi menunggunya tidak wajib: batas klip, subtitle, dan
+                bingkai semuanya sudah bisa disetel sekarang.
               </span>
             </div>
           )}

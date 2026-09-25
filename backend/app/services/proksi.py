@@ -28,6 +28,7 @@ import os
 import queue
 import threading
 from pathlib import Path
+from typing import Optional
 
 from ..config import STORAGE_DIR
 
@@ -137,6 +138,15 @@ def _buat(src: Path, tujuan: Path) -> None:
            "-threads", str(INTI),
            # Keyframe tiap detik: analisis selalu melompat ke tengah video.
            "-g", "30", "-keyint_min", "30",
+           # Kemajuan ditulis ke berkas, bukan dibaca dari stderr.
+           #
+           # Yang membacanya adalah permintaan HTTP di utas lain, dan berkas di
+           # cakram adalah satu-satunya cara keduanya bertemu tanpa kunci
+           # tambahan. Tanpa ini, salinan video dua jam terlihat seperti
+           # lingkaran berputar yang tidak pernah berubah selama berjam-jam,
+           # dan itulah yang dilaporkan dari Windows 25 September 2026:
+           # "sudah berapa jam masih loading, tidak bisa mengedit apa pun".
+           "-progress", str(sementara.with_suffix(".kemajuan")),
            str(sementara)]
     try:
         log.info("Membuat salinan analisis: %s", src.name)
@@ -152,6 +162,7 @@ def _buat(src: Path, tujuan: Path) -> None:
                         src.name, (hasil.stderr or "")[-300:])
     finally:
         sementara.unlink(missing_ok=True)
+        sementara.with_suffix(".kemajuan").unlink(missing_ok=True)
         tujuan.with_suffix(".kunci").unlink(missing_ok=True)
 
 
@@ -254,6 +265,41 @@ def untuk_analisis(src: Path) -> Path:
         return tujuan
     siapkan(src)
     return src
+
+
+def kemajuan(src: Path) -> Optional[float]:
+    """
+    Sejauh mana salinan pratinjau sudah dibuat, 0..1, atau None bila tidak tahu.
+
+    Dibaca dari berkas `-progress` milik ffmpeg. None berarti dua hal yang
+    sengaja tidak dibedakan: belum mulai, atau tidak sedang dibuat sama sekali.
+    Pemanggilnya hanya perlu tahu apakah ada angka yang layak ditampilkan.
+    """
+    try:
+        sementara = _nama(Path(src)).with_suffix(".tmp.kemajuan")
+    except OSError:
+        return None
+    if not sementara.is_file():
+        return None
+    try:
+        from .media import probe
+        total = float(probe(Path(src)).get("duration") or 0)
+        if total <= 0:
+            return None
+        # Berkasnya ditulis terus-menerus; yang berlaku baris `out_time_ms`
+        # TERAKHIR, jadi ekornya saja yang dibaca.
+        isi = sementara.read_text(encoding="utf-8", errors="ignore")[-2000:]
+        detik = None
+        for baris in isi.splitlines():
+            if baris.startswith("out_time_ms="):
+                nilai = baris.split("=", 1)[1].strip()
+                if nilai.isdigit():
+                    detik = int(nilai) / 1_000_000
+        if detik is None:
+            return None
+        return max(0.0, min(1.0, detik / total))
+    except Exception:                                # noqa: BLE001
+        return None
 
 
 def untuk_pratinjau(src: Path) -> Path | None:

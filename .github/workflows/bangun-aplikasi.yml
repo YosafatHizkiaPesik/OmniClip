@@ -92,6 +92,30 @@ jobs:
         working-directory: backend
         run: python ../tools/ambil_ffmpeg.py
 
+      # Identitas aplikasi Google ditulis KE DALAM bundel, bukan dibaca dari
+      # lingkungan saat dijalankan: `os.getenv` di komputer pengguna tentu
+      # kosong. Dengan ini, aplikasi yang terpasang di mana pun langsung bisa
+      # menekan "Masuk dengan Google" tanpa memasang berkas OAuth sendiri.
+      #
+      # Rahasia klien untuk aplikasi DESKTOP memang bukan rahasia: Google
+      # sendiri menyatakannya begitu, dan pengamannya PKCE (RFC 8252). Yang
+      # tetap dijaga hanya satu, ia tidak masuk riwayat git.
+      #
+      # Langkah ini tidak mewajibkan rahasianya ada. Selama belum dipasang,
+      # build tetap jalan dan hasilnya tetap terbit, hanya tanpa identitas
+      # bawaan, jadi penggunanya memasang berkas OAuth-nya sendiri seperti
+      # sebelumnya.
+      - name: Tanam identitas Google
+        if: env.GOOGLE_ID != ''
+        working-directory: backend
+        shell: bash
+        env:
+          GOOGLE_ID: ${{ secrets.OMNICLIP_GOOGLE_CLIENT_ID }}
+          GOOGLE_RAHASIA: ${{ secrets.OMNICLIP_GOOGLE_CLIENT_SECRET }}
+        run: |
+          python -c "import os, pathlib; pathlib.Path('app/identitas_google.py').write_text('\"\"\"Ditulis alur build. Jangan disunting, jangan di-commit.\"\"\"\n' + 'CLIENT_ID = %r\n' % os.environ['GOOGLE_ID'] + 'CLIENT_SECRET = %r\n' % os.environ['GOOGLE_RAHASIA'], encoding='utf-8')"
+          echo "identitas Google ditanam"
+
       - name: Bungkus
         working-directory: backend
         run: pyinstaller omniclip.spec --noconfirm --log-level WARN

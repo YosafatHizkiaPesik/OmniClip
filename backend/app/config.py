@@ -388,6 +388,22 @@ MAX_TRANSCRIPT_CHARS = int(os.getenv("OMNICLIP_MAX_TRANSCRIPT_CHARS", "350000"))
 GOOGLE_CLIENT_ID = os.getenv("OMNICLIP_GOOGLE_CLIENT_ID", "").strip()
 GOOGLE_CLIENT_SECRET = os.getenv("OMNICLIP_GOOGLE_CLIENT_SECRET", "").strip()
 
+# Variabel lingkungan saja tidak cukup untuk aplikasi yang DIBUNGKUS.
+#
+# `os.getenv` dibaca di komputer yang MENJALANKAN aplikasi, bukan di komputer
+# yang membangunnya, dan di sana variabelnya tentu kosong. Jadi alur build
+# menuliskan identitasnya ke modul kecil di bawah ini, yang ikut masuk ke dalam
+# bundel. Berkasnya tidak ada di riwayat git (lihat .gitignore) dan tidak ada
+# saat bekerja dari sumber, jadi selama seseorang membangun sendiri tanpa
+# rahasia itu, perilakunya persis seperti sebelumnya.
+if not (GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET):
+    try:
+        from .identitas_google import CLIENT_ID as _ID, CLIENT_SECRET as _RAHASIA
+        GOOGLE_CLIENT_ID = (_ID or "").strip()
+        GOOGLE_CLIENT_SECRET = (_RAHASIA or "").strip()
+    except Exception:       # noqa: BLE001 — tidak ada identitas bawaan, itu sah
+        pass
+
 
 def google_bawaan() -> Optional[dict]:
     """Berkas OAuth client bentuk dict dari identitas bawaan, atau None."""

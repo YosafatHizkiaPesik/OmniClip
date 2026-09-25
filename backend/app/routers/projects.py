@@ -39,7 +39,11 @@ def _pratinjau(local, vid: str = "") -> dict:
         salinan = None
     if salinan is not None:
         return {"preview_url": f"/api/media/proksi/{salinan.name}", "pratinjau_disiapkan": False}
-    return {"preview_url": url_sumber(vid, local), "pratinjau_disiapkan": True}
+    # Kemajuannya ikut, supaya yang menunggu tahu ia bergerak. Pada video dua
+    # jam salinan ini memakan puluhan menit sampai berjam-jam, dan lingkaran
+    # berputar tanpa angka tidak bisa dibedakan dari macet.
+    return {"preview_url": url_sumber(vid, local), "pratinjau_disiapkan": True,
+            "pratinjau_kemajuan": proksi.kemajuan(local)}
 
 
 @router.get("/projects")

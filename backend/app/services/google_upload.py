@@ -227,6 +227,52 @@ def _load_credentials(pid: Optional[int] = None, layanan: str = "youtube"):
     return creds if creds and creds.valid else None
 
 
+def _email_akun(creds) -> str:
+    """
+    Alamat surel pemilik token, dari yang paling murah ke yang paling mahal.
+
+    1. `id_token`. Google mengirimkannya bersama tokennya karena izin `openid`
+       dan `userinfo.email` ikut diminta, jadi surelnya SUDAH ada di tangan dan
+       tidak ada jaringan yang perlu disentuh sama sekali.
+    2. REST `oauth2/v3/userinfo`. Satu permintaan, tanpa dokumen discovery.
+
+    Yang dibuang: `build("oauth2", "v2", ...)`. Ia menarik dokumen discovery
+    lebih dulu, jadi satu pembacaan surel berarti DUA permintaan jaringan, dan
+    keduanya berdiri tepat di jalur yang ditunggu orang di depan layar.
+    Terlapor 25 September 2026: menambah akun berputar terus sampai halamannya
+    disegarkan, dan akunnya mendarat bernama "Akun baru" padahal seharusnya
+    memakai nama surelnya. Tokennya sendiri tersimpan benar, untuk YouTube
+    maupun Drive; yang gagal hanya pembacaan surelnya, dan gagalnya diam.
+
+    Tanda tangan id_token tidak diperiksa di sini, dan itu disengaja: ia baru
+    saja datang langsung dari Google lewat TLS pada pertukaran token ini juga,
+    bukan dari pihak ketiga. Yang diambil pun cuma namanya untuk ditampilkan.
+    """
+    dari_id = getattr(creds, "id_token", None)
+    if dari_id:
+        try:
+            import base64
+            import json as _json
+            badan = dari_id.split(".")[1]
+            badan += "=" * (-len(badan) % 4)
+            surel = _json.loads(base64.urlsafe_b64decode(badan)).get("email", "")
+            if surel:
+                return str(surel)
+        except Exception as e:                       # noqa: BLE001
+            log.info("id_token tidak terbaca, mencoba userinfo: %s", str(e)[:120])
+    try:
+        import requests
+        r = requests.get("https://www.googleapis.com/oauth2/v3/userinfo",
+                         headers={"Authorization": f"Bearer {creds.token}"},
+                         timeout=15)
+        if r.ok:
+            return str(r.json().get("email") or "")
+        log.info("userinfo menjawab %s", r.status_code)
+    except Exception as e:                           # noqa: BLE001
+        log.info("Alamat surel akun tidak terbaca: %s", str(e)[:160])
+    return ""
+
+
 def _write_token(creds, pid: Optional[int] = None, layanan: str = "youtube") -> None:
     tujuan = _token_path(pid, layanan)
     # Surel akun disimpan di token yang sama; menulis ulang token yang
@@ -360,14 +406,7 @@ def finish_authorization(full_url: str, state: str) -> tuple[str, int]:
         flow.fetch_token(authorization_response=full_url)
     creds = flow.credentials
 
-    email = ""
-    try:
-        from googleapiclient.discovery import build
-        info = build("oauth2", "v2", credentials=creds,
-                     cache_discovery=False).userinfo().get().execute()
-        email = info.get("email", "")
-    except Exception as e:
-        log.info("Alamat surel akun tidak terbaca: %s", e)
+    email = _email_akun(creds)
 
     payload = json.loads(creds.to_json())
     payload["_omniclip_email"] = email

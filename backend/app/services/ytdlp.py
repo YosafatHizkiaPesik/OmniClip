@@ -141,6 +141,18 @@ def _base_opts() -> dict:
     return opts
 
 
+def _besaran(bita: float) -> str:
+    """
+    Ukuran berkas untuk dibaca orang: MB sampai seribu, lalu GB.
+
+    "3970 MB" benar dan tetap sulit dibaca; "4,0 GB" langsung terbayang besarnya.
+    """
+    mb = (bita or 0) / 1048576
+    if mb >= 1000:
+        return f"{mb / 1024:.1f} GB".replace(".", ",")
+    return f"{mb:.0f} MB"
+
+
 def _galat_bot(e: Exception) -> bool:
     low = str(e).lower()
     return "sign in to confirm" in low or "not a bot" in low
@@ -662,12 +674,27 @@ def _make_progress_hook(on_progress):
             # panggilan pertama (0/2269), jadi itu yang dipakai.
             if frag_n:
                 frac = min(1.0, (frag_i or 0) / frag_n)
-                ukuran = f"{done / 1048576:.0f} MB · bagian {frag_i or 0}/{frag_n}"
+                # Berapa besar berkasnya SELURUHNYA, diperkirakan dari
+                # potongan yang sudah turun.
+                #
+                # Tanpa angka ini yang terbaca cuma "360 MB · bagian 33/364",
+                # dan 364 terbaca sebagai ukuran, bukan jumlah potongan.
+                # Ditanyakan pemiliknya 25 September 2026: "apakah filenya itu
+                # 364 MB, padahal video hampir 2 jam". Bukan, itu 364 potongan,
+                # dan berkasnya sekitar empat gigabita.
+                #
+                # Baru ditampilkan sesudah lima potongan: dengan satu atau dua,
+                # terkaannya meleset jauh dan angka yang meleset jauh lebih
+                # buruk daripada tidak ada angka.
+                kira = (done / frag_i * frag_n) if (frag_i or 0) >= 5 else 0
+                ukuran = (f"{_besaran(done)} dari kira-kira {_besaran(kira)}"
+                          if kira else _besaran(done))
+                ukuran += f" · potongan {frag_i or 0} dari {frag_n}"
             else:
                 total = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
                 frac = (done / total) if total else 0.0
-                ukuran = (f"{done / 1048576:.0f}/{total / 1048576:.0f} MB" if total
-                          else f"{done / 1048576:.0f} MB")
+                ukuran = (f"{_besaran(done)} dari {_besaran(total)}" if total
+                          else _besaran(done))
 
             base, span = (0.0, 0.85) if state["stream"] == 0 else (0.85, 0.15)
             overall = base + span * min(1.0, frac)
