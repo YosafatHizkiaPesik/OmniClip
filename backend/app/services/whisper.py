@@ -78,8 +78,8 @@ def model_untuk(bahasa: str, pilihan: str) -> tuple[str, str]:
     bebas = available_ram_mb()
     if bebas and bebas < MODEL_RAM_MB[NAIK_KE] + MIN_FREE_RAM_MB:
         return pilihan, (f"Bahasa ini butuh model Whisper yang lebih besar, tapi RAM "
-                         f"tersisa {bebas} MB — tetap memakai \"{pilihan}\".")
-    return NAIK_KE, (f"Bahasa \"{bahasa}\" sulit untuk model \"{pilihan}\" — "
+                         f"tersisa {bebas} MB, tetap memakai \"{pilihan}\".")
+    return NAIK_KE, (f"Bahasa \"{bahasa}\" sulit untuk model \"{pilihan}\", "
                      f"memakai \"{NAIK_KE}\" supaya salinannya benar. Lebih lama, "
                      "sekitar dua kali.")
 

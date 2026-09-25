@@ -75,7 +75,7 @@ export default function SecurityCard({ card, sectionTitle, helpText }) {
       <p style={helpText}>
         Kata sandi menjaga seluruh aplikasi: unduhan, klip, API key, dan kanal
         YouTube yang tersambung. Wajib dipasang sebelum OmniClip dibuka lewat
-        Cloudflare — tanpa itu, siapa pun yang tahu alamatnya bisa memakai
+        Cloudflare. Tanpa itu, siapa pun yang tahu alamatnya bisa memakai
         semuanya.
       </p>
 
@@ -87,13 +87,13 @@ export default function SecurityCard({ card, sectionTitle, helpText }) {
           <Cloud size={16} style={{ color: 'var(--reh)', flexShrink: 0, marginTop: '2px' }} />
           <div>
             <div style={{ fontWeight: 700, color: 'var(--text-primary)', marginBottom: '3px' }}>
-              Cloudflare Access — tim <code>{cf.team}</code>
+              Cloudflare Access, tim <code>{cf.team}</code>
             </div>
             {cf.email ? (
               <>Masuk sebagai <strong>{cf.email}</strong> lewat Google. Kata sandi di
                 bawah tidak diminta selama Anda datang dari alamat Cloudflare.</>
             ) : (
-              <>Disetel, tapi permintaan ini tidak membawa identitas Access —{' '}
+              <>Disetel, tapi permintaan ini tidak membawa identitas Access:{' '}
                 <span style={{ color: 'var(--text-muted)' }}>{cf.reason}</span>.
                 Wajar kalau Anda sedang membuka dari komputer ini langsung.</>
             )}
@@ -105,9 +105,9 @@ export default function SecurityCard({ card, sectionTitle, helpText }) {
         <div style={{ ...helpText, marginTop: '10px', display: 'flex',
                       alignItems: 'center', gap: '8px' }}>
           {has ? (
-            <><CheckCircle2 size={15} style={{ color: 'var(--entry)' }} /> Terpasang — aplikasi terkunci.</>
+            <><CheckCircle2 size={15} style={{ color: 'var(--entry)' }} /> Terpasang, aplikasi terkunci.</>
           ) : (
-            <><Info size={15} style={{ color: 'var(--text-muted)' }} /> Belum ada — mode lokal, siapa pun yang sampai ke port ini bisa masuk.</>
+            <><Info size={15} style={{ color: 'var(--text-muted)' }} /> Belum ada. Mode lokal: siapa pun yang sampai ke port ini bisa masuk.</>
           )}
           {status.mode === 'on' && (
             <span style={{ color: 'var(--text-muted)' }}>· dipaksa menyala</span>
@@ -170,7 +170,7 @@ export default function SecurityCard({ card, sectionTitle, helpText }) {
       )}
 
       <p style={{ ...helpText, marginTop: '12px' }}>
-        Mengganti kata sandi mencabut sesi di semua perangkat lain — itulah cara
+        Mengganti kata sandi mencabut sesi di semua perangkat lain. Itulah cara
         mengeluarkan HP yang hilang atau orang yang tidak lagi perlu akses.
         {cf?.configured && ' Tidak mencabut akses Cloudflare Access: itu dicabut '
           + 'dengan menghapus email dari kebijakan Access.'}

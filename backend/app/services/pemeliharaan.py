@@ -116,6 +116,12 @@ def rinci() -> dict:
                 "video_id": vid,
                 "klip": klip_per_video.get(vid, 0),
                 "dipakai": st.st_atime,
+                # Kapan berkasnya ditulis, yaitu kapan ia diunduh. Dipakai
+                # usulan pembersihan, BUKAN st_atime: memindahkan folder
+                # menyetel ulang waktu-akses semua berkas (terukur, semuanya
+                # jadi "0 hari" beberapa menit setelah dipindah), sedangkan
+                # waktu-tulisnya ikut pindah apa adanya.
+                "diunduh": st.st_mtime,
                 "dianalisis": bool(vid and analyses_repo.latest_for_video(vid)),
             })
     except OSError:
@@ -127,7 +133,43 @@ def rinci() -> dict:
     except OSError:
         sisa = 0
     return {"folder": folder, "sumber": sumber[:60], "sisa_ruang": sisa,
-            "total": sum(f["ukuran"] for f in folder)}
+            "total": sum(f["ukuran"] for f in folder),
+            "usul": _usul(sumber)}
+
+
+# Sebuah unduhan layak diusulkan dibuang bila KETIGA syarat ini terpenuhi.
+# Ketiganya ada supaya usulnya tidak pernah menyentuh pekerjaan yang belum
+# selesai: tanpa syarat "sudah ada klipnya", ia akan menawarkan membuang video
+# yang baru diunduh tadi pagi dan belum sempat diklip.
+USUL_KLIP_MIN = 1          # sudah menghasilkan klip jadi
+USUL_UMUR_HARI = 14        # sudah lama diunduh
+USUL_BESAR_MIN = 300 * 1024 * 1024   # cukup besar untuk sepadan
+
+
+def _usul(sumber: list[dict]) -> dict:
+    """
+    Video sumber yang layak dibuang, beserta alasannya.
+
+    Bukan penghapus otomatis, dan itu keputusan yang tidak berubah: mengklip
+    ulang video yang sudah dihapus berarti mengunduhnya lagi, dan mesin tidak
+    tahu mana yang masih akan dipakai pemiliknya. Yang ditambahkan di sini
+    hanya PERTANYAANNYA, supaya ruang yang bisa dikembalikan tidak perlu
+    ditemukan sendiri di antara enam puluh baris.
+    """
+    import time as _t
+
+    batas = _t.time() - USUL_UMUR_HARI * 86400
+    pilih = [s for s in sumber
+             if s["klip"] >= USUL_KLIP_MIN
+             and s["ukuran"] >= USUL_BESAR_MIN
+             and s.get("diunduh", s["dipakai"]) < batas]
+    return {
+        "berkas": [s["berkas"] for s in pilih],
+        "jumlah": len(pilih),
+        "ukuran": sum(s["ukuran"] for s in pilih),
+        "syarat": {"klip_min": USUL_KLIP_MIN, "umur_hari": USUL_UMUR_HARI,
+                   "besar_min": USUL_BESAR_MIN},
+    }
 
 
 # Folder yang isinya boleh dibuang lewat antarmuka. Yang lain sengaja tidak:

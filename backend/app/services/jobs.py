@@ -131,8 +131,8 @@ def _pesan_antre(n: Optional[int]) -> Optional[str]:
     if n is None:
         return None
     if n <= 0:
-        return "Menunggu giliran — sebentar lagi mulai…"
-    return f"Menunggu giliran — {n} pekerjaan lain di depan."
+        return "Menunggu giliran, sebentar lagi mulai…"
+    return f"Menunggu giliran, {n} pekerjaan lain di depan."
 
 
 class JobQueue:
@@ -299,7 +299,7 @@ class JobQueue:
         try:
             if lane == "cpu":
                 ctx.giliran_cpu(lambda: ctx.progress(
-                    0.0, message="Menunggu giliran — video lain sedang dianalisis…",
+                    0.0, message="Menunggu giliran, video lain sedang dianalisis…",
                     paksa=True))
             result = handler(ctx)
             if cancel_ev.is_set():

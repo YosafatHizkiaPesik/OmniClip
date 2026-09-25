@@ -109,7 +109,7 @@ MIGRATIONS: list[str] = [
       id             INTEGER PRIMARY KEY AUTOINCREMENT,
       video_id       TEXT NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
       transcript_id  INTEGER REFERENCES transcripts(id) ON DELETE SET NULL,
-      engine         TEXT NOT NULL CHECK (engine IN ('heuristic','gemini')),
+      engine         TEXT NOT NULL CHECK (engine IN ('heuristic','gemini','openrouter')),
       model          TEXT,
       params_json    TEXT,
       result_json    TEXT NOT NULL,
@@ -299,6 +299,37 @@ MIGRATIONS: list[str] = [
     ALTER TABLE jobs ADD COLUMN mulai_setelah REAL NOT NULL DEFAULT 0;
     CREATE INDEX idx_jobs_jadwal ON jobs(status, lane, mulai_setelah);
     """,
+    # 6 — OpenRouter boleh jadi mesin pemilih klip.
+    #
+    # Batasan lama hanya mengenal 'heuristic' dan 'gemini'. Ditulis sebelum
+    # OpenRouter ada, dan tidak ikut dilonggarkan ketika jalur cadangannya
+    # dibangun, jadi hasil OpenRouter yang SUDAH selesai gagal disimpan di
+    # baris terakhir pekerjaannya. Tertangkap 24 September 2026 di catatan job
+    # sungguhan: "CHECK constraint failed: engine IN ('heuristic','gemini')".
+    # Cacat paling mahal bentuknya begini, sukses yang dibuang di detik
+    # terakhir, karena yang terlihat pemiliknya cuma "auto-klip gagal".
+    #
+    # SQLite tidak bisa mengubah CHECK di tempat, jadi tabelnya dibangun ulang.
+    # Indeksnya ikut dibuat ulang karena ia hilang bersama tabel lamanya.
+    """
+    CREATE TABLE analyses_baru (
+      id             INTEGER PRIMARY KEY AUTOINCREMENT,
+      video_id       TEXT NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+      transcript_id  INTEGER REFERENCES transcripts(id) ON DELETE SET NULL,
+      engine         TEXT NOT NULL CHECK (engine IN ('heuristic','gemini','openrouter')),
+      model          TEXT,
+      params_json    TEXT,
+      result_json    TEXT NOT NULL,
+      created_at     REAL NOT NULL
+    );
+    INSERT INTO analyses_baru (id, video_id, transcript_id, engine, model,
+                               params_json, result_json, created_at)
+      SELECT id, video_id, transcript_id, engine, model,
+             params_json, result_json, created_at FROM analyses;
+    DROP TABLE analyses;
+    ALTER TABLE analyses_baru RENAME TO analyses;
+    CREATE INDEX idx_analyses_video ON analyses(video_id, created_at DESC);
+    """,
 ]
 
 
@@ -353,6 +384,17 @@ def run_migrations() -> None:
             c.execute("UPDATE schema_version SET version = ?", (version + 1,))
         print(f"[OmniClip] Migrasi database {version} -> {version + 1} diterapkan")
 
+    # Tabel pemakaian AI. Dibuat di sini, bukan saat dipakai pertama kali:
+    # pencatatnya sengaja tidak pernah melempar, jadi tabel yang hilang akan
+    # membuatnya diam-diam tidak mencatat apa pun.
+    try:
+        from .services.pemakaian_ai import bersihkan, siapkan
+        siapkan()
+        bersihkan()
+    except Exception as e:      # noqa: BLE001
+        import logging
+        logging.getLogger("omniclip.db").warning(
+            "Tabel pemakaian AI tidak bisa disiapkan: %s", str(e)[:160])
 
 def close_conn() -> None:
     conn = getattr(_local, "conn", None)

@@ -120,7 +120,7 @@ def get_transcript(
 
     if result is None and allow_whisper and audio_path:
         if on_progress:
-            on_progress(0.15, "Video tidak punya subtitle — menyalin ucapan dengan Whisper…")
+            on_progress(0.15, "Video tidak punya subtitle, menyalin ucapan dengan Whisper…")
         from .whisper import transcribe_audio  # impor lambat: model besar
 
         words, language = transcribe_audio(

@@ -251,7 +251,7 @@ def uji() -> dict:
         saran = f"Cookies tidak bisa dibaca: {galat_baca}"
     elif dengan == 0 and polos > 0:
         saran = (f"Cookies terbaca ({terbaca} butir), tapi dengan cookies ini YouTube "
-                 f"tidak memberi satu pun format video — sementara tanpa cookies ia "
+                 f"tidak memberi satu pun format video, sementara tanpa cookies ia "
                  f"memberi {polos}. Pastikan akun di browser itu masih login dan bisa "
                  "memutar video, atau matikan cookies.")
     elif dengan == 0 and polos == 0:

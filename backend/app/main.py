@@ -110,6 +110,14 @@ async def lifespan(app: FastAPI):
     # di lajur cpu itu menahan render yang tidak ada hubungannya.
     from .services.sutradara_ai import run_sutradara
     queue.register("sutradara", run_sutradara, lane="net")
+    # Memindahkan puluhan gigabita di lajur cpu: selama berkasnya berpindah,
+    # tidak ada render atau unduhan yang menulis ke folder yang sama.
+    from .services.pindah_folder import run_pindah_folder
+    queue.register("pindah_folder", run_pindah_folder, lane="cpu")
+    # Menghitung jejak wajah tiap klip sebelum ada yang membukanya. Prioritas
+    # terendah: tidak ada yang menunggunya.
+    from .services.bingkai_awal import run_bingkai_awal
+    queue.register("bingkai_awal", run_bingkai_awal, lane="cpu")
     queue.start()
 
     # Smart reframe bersifat opsional dan gagal dengan anggun, jadi ketiadaannya
@@ -304,5 +312,5 @@ else:
              "Untuk akses jarak jauh, jalankan `npm run build` lebih dulu.")
 
 if HOST not in ("127.0.0.1", "::1", "localhost"):
-    log.warning("Backend mendengar di %s — bukan hanya komputer ini. "
+    log.warning("Backend mendengar di %s, bukan hanya komputer ini. "
                 "Pastikan kata sandi sudah dipasang.", HOST)

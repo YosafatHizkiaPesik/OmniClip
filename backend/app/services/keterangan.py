@@ -51,7 +51,7 @@ PLATFORM = {
         "judul_terpisah": False,
         "unggah": "https://www.tiktok.com/tiktokstudio/upload",
         "catatan": "TikTok membatasi lima tagar. Pilih sound yang sedang naik "
-                   "di aplikasinya — itu tidak bisa dilakukan lewat unggahan web.",
+                   "di aplikasinya, itu tidak bisa dilakukan lewat unggahan web.",
     },
     "instagram": {
         "label": "Instagram Reels",
@@ -60,7 +60,7 @@ PLATFORM = {
         "judul_terpisah": False,
         "unggah": "https://www.instagram.com/",
         "catatan": "Unggah dari aplikasi HP bila ingin memakai sound, stiker, "
-                   "atau efek — semuanya tidak ada di versi web.",
+                   "atau efek, semuanya tidak ada di versi web.",
     },
     "shorts": {
         "label": "YouTube Shorts",
@@ -86,7 +86,7 @@ PLATFORM = {
 SISTEM = """Anda penulis caption untuk video pendek berbahasa Indonesia.
 
 Anda diberi ISI SEBUAH KLIP (transkrip apa adanya). Tugas Anda menulis caption
-yang membuat orang berhenti menggulir — tanpa menjanjikan apa pun yang tidak
+yang membuat orang berhenti menggulir, tanpa menjanjikan apa pun yang tidak
 ada di dalam klip itu.
 
 Tiga hal yang menentukan, berurutan:
@@ -94,7 +94,7 @@ Tiga hal yang menentukan, berurutan:
 1. HOOK (baris pertama). Paling penting. Ia harus:
    - memuat KATA YANG AKAN DIKETIK ORANG saat mencari topik ini, karena orang
      sekarang mencari di TikTok dan Instagram seperti mencari di Google;
-   - menyebutkan hal yang konkret dari klipnya — angka, nama, kejadian,
+   - menyebutkan hal yang konkret dari klipnya, angka, nama, kejadian,
      pernyataan yang mengejutkan;
    - maksimal 70 karakter, dan berdiri sendiri tanpa perlu menonton dulu.
 
@@ -105,9 +105,19 @@ Tiga hal yang menentukan, berurutan:
 3. TAGAR. Lima sampai delapan, diurutkan dari yang paling nyambung. Semuanya
    harus berasal dari ISI klip: topiknya, bidangnya, nama orang atau tempat
    yang disebut. DILARANG memakai tagar umum seperti #fyp, #viral, #foryou,
-   #trending — semuanya tidak menaikkan apa pun dan membuatnya terlihat spam.
+   #trending, semuanya tidak menaikkan apa pun dan membuatnya terlihat spam.
+
+   NAMA ORANG, KANAL, MEREK, ATAU TEMPAT hanya boleh dipakai bila namanya
+   benar-benar muncul di judul video, nama kanal, atau isi klipnya. Jangan
+   menebak siapa lagi yang mungkin terlibat, walau tebakannya masuk akal.
+   Tagar semacam itu didaftarkan juga di `tagar_nama`, dan yang tidak ada di
+   sumbernya akan dibuang.
 
 Gaya yang diminta: menarik tapi TIDAK heboh.
+  - Jangan pernah memakai tanda pisah panjang (em dash). Pakai koma, titik,
+    titik dua, atau tanda kurung. Tanda itu langka dalam tulisan orang
+    Indonesia sehari-hari, jadi kehadirannya membuat caption langsung terbaca
+    sebagai tulisan mesin.
   - Jangan menulis dengan huruf kapital semua.
   - Paling banyak satu emoji, dan hanya bila benar-benar menambah.
   - Tanpa tanda seru bertumpuk, tanpa "WAJIB NONTON", tanpa "gila banget".
@@ -130,6 +140,19 @@ def _schema() -> dict:
             # hook-nya benar-benar memuat salah satunya.
             "kata_kunci": {"type": "ARRAY", "items": {"type": "STRING"}},
             "tagar": {"type": "ARRAY", "items": {"type": "STRING"}},
+            # Tagar mana yang menyebut NAMA orang, kanal, merek, atau tempat.
+            #
+            # Modelnya yang menandai, kodenya yang memeriksa. Model tahu mana
+            # yang nama dan mana yang kata topik biasa; kode tidak, dan daftar
+            # nama tidak mungkin ditulis tangan. Sebaliknya kode bisa memeriksa
+            # apakah nama itu benar-benar ada di sumbernya, dan model tidak
+            # bisa, karena persis di situ ia mengarang.
+            #
+            # Terjadi 25 September 2026: klip dari kanal Raditya Dika diberi
+            # tagar #deddycorbuzier, lalu terbit ke kanal pemiliknya. Dokter
+            # Tirta memang sering tampil di podcast Deddy Corbuzier, jadi
+            # tebakan itu masuk akal bagi model dan tetap salah.
+            "tagar_nama": {"type": "ARRAY", "items": {"type": "STRING"}},
         },
     }
 
@@ -137,6 +160,37 @@ def _schema() -> dict:
 _UMUM = {"fyp", "fypage", "foryou", "foryoupage", "viral", "viralvideo", "trending",
          "trend", "explore", "explorepage", "reels", "reel", "shorts", "short",
          "tiktok", "instagram", "youtube", "video", "keren", "wow"}
+
+
+def _rapat(teks: str) -> str:
+    """Huruf dan angka saja, huruf kecil. Tagar tidak punya spasi; sumbernya punya."""
+    return re.sub(r"[^0-9a-z]", "", (teks or "").lower())
+
+
+def _buang_nama_karangan(tagar, nama_ditandai, sumber: str) -> tuple[list, list]:
+    """
+    Membuang tagar BERNAMA yang namanya tidak ada di sumbernya.
+
+    Mengembalikan (tagar yang lolos, yang dibuang). Yang diperiksa hanya yang
+    ditandai model sebagai nama: kata topik seperti #pasangan atau #jumpscare
+    memang jarang diucapkan di dalam klipnya sendiri, dan membuangnya akan
+    menghapus lebih dari separuh tagar yang benar. Diukur pada 96 tagar yang
+    pernah dibuat sistem ini: 54 tidak ada di teks klipnya, dan sebagian besar
+    di antaranya benar, misalnya #standupcomedy dan #jumpscare.
+
+    Yang salah bentuknya lain, dan hanya satu jenis: nama orang yang tidak ada
+    di sana. Itu yang diperiksa.
+    """
+    kena = {_rapat(n) for n in (nama_ditandai or []) if _rapat(n)}
+    rapat_sumber = _rapat(sumber)
+    lolos, dibuang = [], []
+    for t in tagar or []:
+        s = _rapat(str(t).lstrip("#"))
+        if s and s in kena and s not in rapat_sumber:
+            dibuang.append(str(t))
+            continue
+        lolos.append(t)
+    return lolos, dibuang
 
 
 def _bersih_tagar(mentah, *, maks: int, sertakan_shorts: bool = False) -> list[str]:
@@ -241,20 +295,35 @@ def _minta_ai(meta: dict, *, api_key: str, models: list) -> Optional[dict]:
               f"=== ISI KLIP ===\n{teks}\n\n"
               "Tulis hook, konteks, kata kunci pencarian, dan tagarnya."}]
     try:
-        hasil, model, _pakai = tanya(bahan, schema=_schema(), sistem=SISTEM,
-                                     api_key=api_key, models=models,
-                                     suhu=0.7, maks_keluaran=1024, batas_detik=90)
+        from .penyedia_ai import pekerjaan
+        with pekerjaan("caption"):
+            hasil, model, _pakai = tanya(bahan, schema=_schema(), sistem=SISTEM,
+                                         api_key=api_key, models=models,
+                                         suhu=0.7, maks_keluaran=1024,
+                                         batas_detik=90)
     except SemuaGagal as e:
         log.info("Caption AI tidak tersedia: %s", str(e)[:200])
         return None
     except Exception as e:                       # noqa: BLE001
         log.warning("Caption AI gagal: %s", str(e)[:200])
         return None
+    # Sumber kebenaran untuk nama: judul video, nama kanal, judul klip, dan
+    # seluruh teks klipnya. Nama yang tidak ada di salah satunya adalah tebakan.
+    sumber = " ".join([
+        str(meta.get("video_title") or ""), str(meta.get("channel") or ""),
+        str(meta.get("title") or ""), str(meta.get("hook_text") or ""), teks,
+    ])
+    tagar, dibuang = _buang_nama_karangan(
+        [str(t) for t in (hasil.get("tagar") or [])],
+        [str(n) for n in (hasil.get("tagar_nama") or [])], sumber)
+    if dibuang:
+        log.info("Tagar bernama yang tidak ada di sumbernya dibuang: %s",
+                 ", ".join(dibuang))
     return {
         "hook": _potong(hasil.get("hook") or "", 100),
         "konteks": _potong(hasil.get("konteks") or "", 200),
         "kata_kunci": [str(k) for k in (hasil.get("kata_kunci") or [])][:6],
-        "tagar": [str(t) for t in (hasil.get("tagar") or [])],
+        "tagar": tagar,
         "sumber": model,
     }
 
@@ -265,8 +334,12 @@ def _rakit(inti: dict, meta: dict, nama: str) -> dict:
     tagar = _bersih_tagar(inti.get("tagar"), maks=p["maks_tagar"],
                           sertakan_shorts=(nama == "shorts"
                                            and 0 < float(meta.get("duration") or 0) <= 180))
-    hook = inti.get("hook") or ""
-    konteks = inti.get("konteks") or ""
+    # Tanda pisah panjang dibuang di sini, bukan hanya dilarang di prompt.
+    # Larangan pada model bukan jaminan, dan satu em dash cukup membuat
+    # captionnya terbaca sebagai tulisan mesin.
+    from .teks import tanpa_pisah
+    hook = tanpa_pisah(inti.get("hook") or "")
+    konteks = tanpa_pisah(inti.get("konteks") or "")
     if konteks.strip().lower() == hook.strip().lower():
         konteks = ""
 
@@ -288,7 +361,8 @@ def _rakit(inti: dict, meta: dict, nama: str) -> dict:
     if p.get("judul_terpisah"):
         # Di YouTube, judul yang menentukan — dan judul terbaik adalah hooknya
         # sendiri, bukan nama berkasnya.
-        keluar["judul"] = _potong(hook or meta.get("title") or "", p["maks_judul"])
+        keluar["judul"] = _potong(tanpa_pisah(hook or meta.get("title") or ""),
+                                  p["maks_judul"])
     return keluar
 
 

@@ -182,7 +182,7 @@ def recover_interrupted() -> int:
     """
     with tx() as conn:
         cur = conn.execute(
-            """UPDATE jobs SET status='failed', error='Proses terhenti karena aplikasi ditutup di tengah jalan. Tekan "Lanjutkan proses" — bagian yang sudah selesai tidak diulang.',
+            """UPDATE jobs SET status='failed', error='Proses terhenti karena aplikasi ditutup di tengah jalan. Tekan "Lanjutkan proses", bagian yang sudah selesai tidak diulang.',
                                error_code='INTERRUPTED', finished_at=?
                WHERE status='running'""",
             (now(),),

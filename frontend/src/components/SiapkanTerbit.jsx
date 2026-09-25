@@ -35,7 +35,7 @@ export default function SiapkanTerbit({ clip, onClose, onSelesai }) {
     try {
       const r = await apiPost('/clip-keterangan', {
         clip_name: clip.file_name, pakai_ai: true, segarkan,
-      });
+      }, { timeout: 240000 });
       setData(r);
     } catch (e) {
       setGalat(e.message);
@@ -100,7 +100,7 @@ export default function SiapkanTerbit({ clip, onClose, onSelesai }) {
         <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: '0 0 14px',
                     lineHeight: 1.5 }}>
           Semuanya sudah siap kecuali satu langkah terakhir. Salin captionnya,
-          simpan berkasnya, lalu terbitkan dari aplikasi platformnya — di sana
+          simpan berkasnya, lalu terbitkan dari aplikasi platformnya. Di sana
           Anda masih bisa memilih sound dan efek, yang tidak bisa dilakukan
           lewat unggahan otomatis.
         </p>
@@ -132,7 +132,7 @@ export default function SiapkanTerbit({ clip, onClose, onSelesai }) {
               <>
                 <div style={{ ...label, marginBottom: '4px' }}>
                   Judul video <span style={{ fontWeight: 500, color: 'var(--text-muted)' }}>
-                    — di YouTube ini yang paling menentukan
+                    (di YouTube ini yang paling menentukan)
                   </span>
                 </div>
                 <div style={{ display: 'flex', gap: '7px', marginBottom: '12px' }}>

@@ -205,7 +205,7 @@ def _unduh(alamat: str, sha: str, tujuan: Path) -> bool:
                 cerna.update(bagian)
                 f.write(bagian)
         if cerna.hexdigest() != sha:
-            log.error("Font %s tidak cocok sidiknya — dibuang", tujuan.name)
+            log.error("Font %s tidak cocok sidiknya, dibuang", tujuan.name)
             sementara.unlink(missing_ok=True)
             return False
         sementara.replace(tujuan)

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  X, UploadCloud, Loader2, CheckCircle2, AlertTriangle, ExternalLink,
+  X, UploadCloud, Loader2, CheckCircle2, AlertTriangle, ExternalLink, Copy, Check,
 } from 'lucide-react';
 import { apiGet, apiPost } from '../lib/api';
 
@@ -45,6 +45,36 @@ export default function UploadModal({ clip, onClose, onDone }) {
     () => (meta.hashtags ?? []).join(' '));
   const [privacy, setPrivacy] = useState('private');
   const [phase, setPhase] = useState('form');   // form | sending | done | failed
+  // Judul dan deskripsi yang sudah disiapkan di sini sering dipakai DI LUAR
+  // OmniClip juga: saat unggahan otomatis ditolak, atau saat klipnya sengaja
+  // diunggah tangan lewat YouTube Studio. Mengetik ulang caption yang sudah
+  // jadi adalah pekerjaan yang sudah selesai sekali.
+  const [disalin, setDisalin] = useState(null);
+
+  const salin = async (teks, tanda) => {
+    try {
+      await navigator.clipboard.writeText(teks);
+      setDisalin(tanda);
+      setTimeout(() => setDisalin((d) => (d === tanda ? null : d)), 1800);
+    } catch {
+      setMessage('Peramban menolak menyalin. Tandai teksnya lalu salin sendiri.');
+    }
+  };
+
+  const TombolSalin = ({ teks, tanda }) => (
+    <button type="button" onClick={() => salin(teks, tanda)} disabled={!teks}
+            title="Salin ke papan klip"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: '4px',
+              background: 'none', border: 'none', padding: '0 2px', cursor: 'pointer',
+              fontSize: '0.68rem', fontWeight: 700, fontFamily: 'inherit',
+              color: disalin === tanda ? 'var(--entry)' : 'var(--accent-cyan)',
+              opacity: teks ? 1 : 0.4,
+            }}>
+      {disalin === tanda ? <Check size={12} /> : <Copy size={12} />}
+      {disalin === tanda ? 'Tersalin' : 'Salin'}
+    </button>
+  );
   const [message, setMessage] = useState('');
   const [result, setResult] = useState(null);
 
@@ -176,8 +206,11 @@ export default function UploadModal({ clip, onClose, onDone }) {
             </div>
 
             <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <span className="mark" style={{ color: 'var(--ink)' }}>
+              <span className="mark" style={{ color: 'var(--ink)', display: 'flex',
+                                              alignItems: 'center', gap: '8px' }}>
                 Judul <span style={{ color: 'var(--ink-3)' }}>({title.length}/100)</span>
+                <span style={{ flex: 1 }} />
+                <TombolSalin teks={title} tanda="judul" />
               </span>
               <input className="field" value={title} maxLength={100}
                      onChange={(e) => setTitle(e.target.value)} />
@@ -186,7 +219,12 @@ export default function UploadModal({ clip, onClose, onDone }) {
             {target !== 'drive' && (
               <>
                 <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <span className="mark" style={{ color: 'var(--ink)' }}>Deskripsi</span>
+                  <span className="mark" style={{ color: 'var(--ink)', display: 'flex',
+                                                  alignItems: 'center', gap: '8px' }}>
+                    Deskripsi
+                    <span style={{ flex: 1 }} />
+                    <TombolSalin teks={description} tanda="deskripsi" />
+                  </span>
                   <textarea className="field" rows={3} value={description}
                             onChange={(e) => setDescription(e.target.value)}
                             style={{ resize: 'vertical', fontFamily: 'inherit' }} />
@@ -207,7 +245,7 @@ export default function UploadModal({ clip, onClose, onDone }) {
                   </div>
                   <p style={{ fontSize: '.72rem', color: 'var(--ink-3)', lineHeight: 1.5, margin: '8px 0 0' }}>
                     Bawaannya privat. Video yang sudah naik bisa diubah jadi publik
-                    kapan saja dari YouTube Studio — sebaliknya tidak semudah itu.
+                    kapan saja dari YouTube Studio, sebaliknya tidak semudah itu.
                     {status?.gap_seconds > 0 && (
                       <> Sistem memberi jeda {status.gap_seconds} detik antar
                       unggahan YouTube dan mengirimkannya satu per satu.</>

@@ -17,7 +17,7 @@ const PILIHAN = [
     id: 'bersih', label: 'Seimbangkan dan bersihkan',
     nota: 'Menambah tiga hal yang ditujukan pada suara ORANG: desis dihilangkan, '
         + 'gemuruh di bawah 80 Hz dipotong, dan jarak antara bisikan dan teriakan '
-        + 'dirapatkan. Rekaman HP terdengar jauh lebih rapi — tapi musik ikut '
+        + 'dirapatkan. Rekaman HP terdengar jauh lebih rapi, tapi musik ikut '
         + 'terpengaruh, jadi jangan dipakai untuk klip musik.',
   },
 ];
@@ -37,7 +37,7 @@ export default function SuaraCard({ card, sectionTitle, helpText }) {
     setNilai(v);
     try {
       await apiPost('/settings/suara', { nilai: v });
-      setKabar('Tersimpan — berlaku untuk render berikutnya.');
+      setKabar('Tersimpan. Berlaku untuk render berikutnya.');
       setTimeout(() => setKabar(null), 2500);
     } catch (e) {
       setNilai(sebelumnya);
@@ -52,7 +52,7 @@ export default function SuaraCard({ card, sectionTitle, helpText }) {
         Perapian suara
       </div>
       <p style={helpText}>
-        Dikerjakan saat render, pada suara klipnya saja — berkas sumbernya tidak
+        Dikerjakan saat render, pada suara klipnya saja. Berkas sumbernya tidak
         disentuh.
       </p>
       <div style={{ marginTop: '10px' }}>

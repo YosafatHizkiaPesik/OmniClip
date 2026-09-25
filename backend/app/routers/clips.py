@@ -110,6 +110,18 @@ class CaptionStyleModel(BaseModel):
     speaker_colors: Optional[List[str]] = None
     # False = satu warna untuk seluruh klip, apa pun tebakan penuturnya.
     per_speaker_colors: Optional[bool] = None
+    # Jarak antar kata dalam satuan em. Batasnya sama dengan JARAK_KATA_MIN dan
+    # JARAK_KATA_MAKS di services/subtitles.py.
+    jarak_kata: Optional[float] = Field(None, ge=0.12, le=0.90)
+    # Bayangan teks. Dipakai tema "Retro" (bayangan berwarna yang digeser), dan
+    # sampai 25 September 2026 kedua bidangnya tidak ada di sini, jadi tema itu
+    # dirender tanpa bayangan sama sekali. Pratinjaunya menampilkannya.
+    shadow_px: Optional[int] = Field(None, ge=0, le=40)
+    bayang_warna: Optional[str] = None
+    # Batas pemenggalan baris. Belum ada di antarmuka, tapi diterima supaya
+    # gaya yang datang dari luar tidak kehilangan nilainya diam-diam.
+    max_words_per_line: Optional[int] = Field(None, ge=1, le=20)
+    max_chars_per_line: Optional[int] = Field(None, ge=6, le=80)
     # Subtitle kedua saja: True = warnanya mengikuti orang yang bicara, dengan
     # palet subtitle utama.
     ikut_warna_orang: Optional[bool] = None
@@ -122,7 +134,7 @@ class CaptionStyleModel(BaseModel):
     wm_y: Optional[float] = Field(None, ge=0.0, le=100.0)
     wm_outline: Optional[int] = Field(None, ge=0, le=16)
 
-    @field_validator("primary", "highlight", "wm_color", "bg_color")
+    @field_validator("primary", "highlight", "wm_color", "bg_color", "bayang_warna")
     @classmethod
     def _cek_warna(cls, v):
         return _warna(v)
@@ -194,6 +206,17 @@ class FrameKeyModel(BaseModel):
     alasan: Optional[str] = Field(None, max_length=200)
 
 
+class RectSisipanModel(BaseModel):
+    """Petak sisipan dalam persen kanvas: (x, y) pojok kiri atas, lalu ukurannya."""
+
+    x: float = Field(0.0, ge=0.0, le=100.0)
+    y: float = Field(0.0, ge=0.0, le=100.0)
+    # Minimal 2%: petak yang lebih kecil dari itu membulat jadi nol piksel pada
+    # kanvas mana pun, dan filter dengan lebar nol menggagalkan seluruh render.
+    w: float = Field(100.0, ge=2.0, le=100.0)
+    h: float = Field(100.0, ge=2.0, le=100.0)
+
+
 class MediaLayerModel(BaseModel):
     """Satu sisipan: berkas dari luar video sumber, ditempel pada waktunya."""
 
@@ -207,7 +230,25 @@ class MediaLayerModel(BaseModel):
     # Kosong = sepanjang asetnya (dipotong di akhir klip).
     dur: Optional[float] = Field(None, gt=0, le=3600)
     mulai_sumber: float = Field(0.0, ge=0)
+    # Preset lama. Tetap diterima, dan tetap dipakai oleh klip yang sudah
+    # tersimpan sebelum `rect` ada; `rect` menang bila keduanya ada.
     posisi: Literal["penuh", "atas", "bawah", "tengah", "sudut"] = "penuh"
+    # Petak bebas yang digambar pengguna di pratinjau, dalam PERSEN kanvas.
+    # Persen, bukan piksel: klip yang sama bisa dirender 9:16 dan 4:5, dan
+    # petak berpiksel akan pindah tempat di antara keduanya.
+    rect: Optional[RectSisipanModel] = None
+    # Cara isi petaknya: "penuh" memotong sisi yang kelebihan, "muat" memuat
+    # utuh dengan ruang kosong di sisanya.
+    isi: Optional[Literal["penuh", "muat"]] = None
+    # Ketembusan 0..1. Berguna untuk tanda air dan lapisan tekstur.
+    opasitas: float = Field(1.0, ge=0.0, le=1.0)
+    # Lembut masuk dan keluar, dalam detik. Berlaku untuk gambar, video, dan
+    # suara sekaligus; pada visual ia bekerja di saluran alfa, jadi yang
+    # memudar adalah sisipannya, bukan gambar di bawahnya.
+    fade_masuk: float = Field(0.0, ge=0.0, le=30.0)
+    fade_keluar: float = Field(0.0, ge=0.0, le=30.0)
+    # Berkas yang lebih pendek daripada petaknya diputar berulang.
+    ulang: bool = False
     volume: float = Field(1.0, ge=0.0, le=2.0)
     # Musik latar mengecil sendiri saat orang bicara.
     redam: bool = False
@@ -292,6 +333,11 @@ class RenderClipRequest(BaseModel):
     # Gaya perpindahan bingkai: mulus (kamera mengikuti) atau potong (diam,
     # lalu berpindah seketika).
     frame_motion: Literal["smooth", "cut"] = "smooth"
+    # Perbesaran bingkai wajah dan geseran tegaknya. 1.0 dan 0 = seperti
+    # sebelum setelan ini ada. Geser -100 menempel atas, 100 menempel bawah,
+    # dan ruang untuk menggeser baru ada begitu bingkainya diperbesar.
+    frame_zoom: float = Field(1.0, ge=1.0, le=2.0)
+    frame_geser_y: float = Field(0.0, ge=-100.0, le=100.0)
     # Susunan bingkai. Tiap bingkai punya persegi SUMBER (bagian mana dari video
     # yang diambil) dan persegi TUJUAN (di mana ia ditaruh pada kanvas hasil),
     # keduanya dalam persen. Hanya dibaca bila frame_mode == "layout".
@@ -464,7 +510,7 @@ async def cari_ulang(video_id: str, req: CariUlangRequest):
         raise AppError("Video sumber belum ada di penyimpanan. Unduh ulang dulu.",
                        code="SOURCE_NOT_DOWNLOADED", status=409)
     if not tx_repo.get_best(vid):
-        raise AppError("Video ini belum punya transkrip — jalankan klip otomatis dulu.",
+        raise AppError("Video ini belum punya transkrip, jalankan klip otomatis dulu.",
                        code="NO_TRANSCRIPT", status=409)
     if req.mesin == "gemini" and not get_api_key():
         raise AppError("Gemini butuh kunci API. Isi di Pengaturan → Model AI, "
@@ -558,6 +604,11 @@ class ReframePlanRequest(BaseModel):
     # Dikirim juga ke pratinjau, supaya jejak yang digambar di editor memakai
     # gaya perpindahan yang sama dengan yang nanti dirender.
     frame_motion: Literal["smooth", "cut"] = "smooth"
+    # Perbesaran bingkai wajah dan geseran tegaknya. 1.0 dan 0 = seperti
+    # sebelum setelan ini ada. Geser -100 menempel atas, 100 menempel bawah,
+    # dan ruang untuk menggeser baru ada begitu bingkainya diperbesar.
+    frame_zoom: float = Field(1.0, ge=1.0, le=2.0)
+    frame_geser_y: float = Field(0.0, ge=-100.0, le=100.0)
     # Yang dijejak: wajah manusia, atau pusat gerakan (kartun, hewan, gameplay).
     # Dulu pratinjau mode "Ikuti gerakan" tidak meminta apa pun ke sini — ia
     # hanya menggambar kotak diam di tengah, jadi tidak ada cara melihat apakah
@@ -566,41 +617,79 @@ class ReframePlanRequest(BaseModel):
 
 
 # Perencanaan reframe memakan beberapa detik per klip, sementara editor
-# memintanya setiap kali pengguna berpindah klip. Hasilnya disimpan sebentar
-# di memori, dikunci oleh susunan segmen yang persis.
+# memintanya setiap kali pengguna berpindah klip. Hasilnya disimpan dua kali:
+# di memori untuk perpindahan klip dalam satu sesi, dan di basis data supaya
+# menutup aplikasi tidak berarti menunggu semuanya lagi dari nol.
+#
+# Simpanan di memori saja tidak cukup, dan itu yang dilaporkan: "ada beberapa
+# yang langsung mengikuti wajah dan ada beberapa yang perlu menunggu lagi
+# padahal pemrosesan sudah selesai". Yang cepat adalah klip yang kebetulan
+# sudah pernah dibuka; sisanya dihitung ulang dari awal, dan hitungan itu
+# hilang lagi setiap kali OmniClip dijalankan ulang.
 _REFRAME_CACHE: dict[tuple, dict] = {}
 _REFRAME_CACHE_MAX = 48
 
 
-@router.post("/clip-reframe")
-async def clip_reframe(req: ReframePlanRequest):
+def _kunci_reframe(key: tuple) -> str:
+    import hashlib
+    return "bingkai:" + hashlib.sha1(repr(key).encode()).hexdigest()
+
+
+def _reframe_tersimpan(key: tuple):
+    """Rencana yang sudah pernah dihitung, dari memori lalu dari basis data."""
+    if key in _REFRAME_CACHE:
+        return _REFRAME_CACHE[key]
+    from ..repos import cache as cache_repo
+    try:
+        # Isi sebuah potongan video tidak pernah basi, jadi tidak ada TTL.
+        simpan = cache_repo.ambil(_kunci_reframe(key), ttl=float("inf"))
+    except Exception:
+        return None
+    if simpan is not None:
+        _simpan_memori(key, simpan)
+    return simpan
+
+
+def _simpan_memori(key: tuple, payload: dict) -> None:
+    if len(_REFRAME_CACHE) >= _REFRAME_CACHE_MAX:
+        _REFRAME_CACHE.pop(next(iter(_REFRAME_CACHE)), None)
+    _REFRAME_CACHE[key] = payload
+
+
+def _simpan_reframe(key: tuple, payload: dict) -> None:
+    _simpan_memori(key, payload)
+    from ..repos import cache as cache_repo
+    try:
+        cache_repo.simpan(_kunci_reframe(key), payload)
+    except Exception:           # simpanan yang gagal bukan alasan menggagalkan
+        pass
+
+
+def hitung_reframe(*, video_id: str, segments: list[dict], aspect_ratio: str = "9:16",
+                   turns: tuple = (), lock_person=None, person_keys=(),
+                   frame_motion: bool = False, subjek: str = "wajah") -> dict:
     """
     Rencana crop yang mengikuti wajah, untuk digambar di pratinjau editor.
 
     Tanpa ini pratinjau menampilkan frame 16:9 apa adanya, sehingga pengguna
     tidak punya cara melihat bagaimana hasil 9:16-nya nanti membingkai
-    pembicara — satu-satunya cara mengetahuinya adalah dengan merender.
+    pembicara: satu-satunya cara mengetahuinya adalah dengan merender.
+
+    Bentuknya sinkron karena dua pemanggil membutuhkannya. Endpoint di bawah
+    menjalankannya di utas terpisah saat editor meminta satu klip; job
+    pemanasan menjalankannya lebih awal untuk SELURUH klip sebuah video,
+    supaya membuka klip keenam tidak terasa berbeda dari membuka klip pertama.
     """
-    import asyncio
-
-    video_id = _resolve_video_id(req.video_id)
-    segments = [{"start": round(s.start, 3), "end": round(s.end, 3)}
-                for s in req.segments if s.end - s.start > 0.2]
-    if not segments:
-        raise NotFound("Rentang klip tidak valid.")
-
-    turns = [
-        (float(l["start"]), float(l["end"]), int(l["speaker"]))
-        for l in (req.subtitles or [])
-        if l.get("speaker") is not None and l.get("end") is not None
-    ]
-    key = (video_id, req.aspect_ratio,
+    turns = tuple(turns)
+    person_keys = list(person_keys)
+    key = (video_id, aspect_ratio,
            tuple((s["start"], s["end"]) for s in segments),
-           tuple(turns), req.lock_person,
-           tuple((round(k.t, 3), k.person) for k in req.person_keys),
-           req.frame_motion, req.subjek)
-    if key in _REFRAME_CACHE:
-        return _REFRAME_CACHE[key]
+           turns, lock_person,
+           tuple((round(float(k["t"]), 3), k["person"]) for k in person_keys),
+           frame_motion, subjek)
+    sudah = _reframe_tersimpan(key)
+    if sudah is not None:
+        return sudah
 
     from ..services.paths import find_local_video
     from ..services.reframe import SAMPLE_FPS, plan_reframe
@@ -613,15 +702,13 @@ async def clip_reframe(req: ReframePlanRequest):
     # jendelanya tidak diturunkan dari rasio kanvas. Tanpa itu, video yang
     # sumbernya sudah tegak dijawab "tidak tersedia" padahal bingkai sempit di
     # dalamnya masih punya ruang untuk bergeser.
-    plan = await asyncio.to_thread(plan_reframe, str(source), segments,
-                                   aspect_ratio=req.aspect_ratio, track_only=True,
-                                   speaker_turns=turns, lock_person=req.lock_person,
-                                   person_keys=[k.model_dump() for k in req.person_keys],
-                                   frame_motion=req.frame_motion,
-                                   subjek=req.subjek)
+    plan = plan_reframe(str(source), segments, aspect_ratio=aspect_ratio,
+                        track_only=True, speaker_turns=list(turns),
+                        lock_person=lock_person, person_keys=person_keys,
+                        frame_motion=frame_motion, subjek=subjek)
     if plan is None:
         payload = {"available": False,
-                   "reason": "no_motion" if req.subjek == "gerak" else "unsupported"}
+                   "reason": "no_motion" if subjek == "gerak" else "unsupported"}
     else:
         payload = {
             "available": plan.usable,
@@ -658,10 +745,31 @@ async def clip_reframe(req: ReframePlanRequest):
             "speaker_faces": {str(k): v for k, v in plan.speaker_faces.items()},
         }
 
-    if len(_REFRAME_CACHE) >= _REFRAME_CACHE_MAX:
-        _REFRAME_CACHE.clear()
-    _REFRAME_CACHE[key] = payload
+    _simpan_reframe(key, payload)
     return payload
+
+
+@router.post("/clip-reframe")
+async def clip_reframe(req: ReframePlanRequest):
+    """Rencana bingkai untuk satu klip, diminta editor saat klip dibuka."""
+    import asyncio
+
+    video_id = _resolve_video_id(req.video_id)
+    segments = [{"start": round(s.start, 3), "end": round(s.end, 3)}
+                for s in req.segments if s.end - s.start > 0.2]
+    if not segments:
+        raise NotFound("Rentang klip tidak valid.")
+    turns = [
+        (float(l["start"]), float(l["end"]), int(l["speaker"]))
+        for l in (req.subtitles or [])
+        if l.get("speaker") is not None and l.get("end") is not None
+    ]
+    return await asyncio.to_thread(
+        hitung_reframe, video_id=video_id, segments=segments,
+        aspect_ratio=req.aspect_ratio, turns=tuple(turns),
+        lock_person=req.lock_person,
+        person_keys=[k.model_dump() for k in req.person_keys],
+        frame_motion=req.frame_motion, subjek=req.subjek)
 
 
 class SutradaraRequest(BaseModel):
@@ -994,6 +1102,92 @@ class KeteranganRequest(BaseModel):
     segarkan: bool = False
 
 
+def kunci_tema(video_id: str, meta: dict) -> str:
+    """
+    Kunci simpanan untuk pilihan tema sebuah klip.
+
+    Dipakai dua pemanggil, dan harus SAMA PERSIS di keduanya: endpoint saat
+    tombolnya ditekan, dan job pemanasan yang menyiapkan jawabannya lebih awal.
+    Kunci yang berbeda sedikit saja membuat pemanasannya menghitung sesuatu yang
+    tidak pernah dibaca siapa pun.
+    """
+    import hashlib
+
+    from ..services import tema as tema_svc
+
+    baris = (meta.get("subtitles") or [])[:60]
+    sidik = hashlib.sha1(
+        (video_id + "|" + str(meta.get("title") or "") + "|"
+         + str(meta.get("jenis") or "") + "|"
+         + "|".join(f"{l.get('start')}:{(l.get('text') or '')[:40]}" for l in baris)
+         ).encode()
+    ).hexdigest()[:16]
+    return f"tema:{tema_svc.VERSI}:{sidik}"
+
+
+class GayaRequest(BaseModel):
+    """Klip yang temanya ingin dipilihkan. Isinya datang dari editor."""
+    video_id: str = Field(..., max_length=200)
+    title: str = Field("", max_length=300)
+    duration: float = Field(0.0, ge=0)
+    jenis: str = Field("", max_length=32)
+    subtitles: list[dict] = Field(default_factory=list)
+    pakai_ai: bool = True
+    segarkan: bool = False
+
+
+@router.post("/clip-gaya")
+async def clip_gaya(req: GayaRequest):
+    """
+    Tema subtitle yang cocok untuk satu klip, dipilih dari isinya.
+
+    Yang dikembalikan hanya id tema dan alasannya. Wujud tiap tema tinggal di
+    antarmuka, dan antarmuka yang menerapkannya, supaya tidak ada dua tempat
+    yang menyimpan rupa yang sama dan perlahan berbeda.
+
+    Disimpan per (klip, versi tema): menekan tombol yang sama dua kali tidak
+    memanggil model dua kali, dan kuota Gemini terbatas.
+    """
+    import asyncio
+    import hashlib
+
+    from ..config import get_api_key, get_model_override
+    from ..repos import cache as cache_repo
+    from ..services import tema as tema_svc
+    from ..services.peringkat_model import rantai
+
+    vid = _resolve_video_id(req.video_id)
+    meta = {"title": req.title, "duration": req.duration, "jenis": req.jenis,
+            "subtitles": req.subtitles}
+    kunci = kunci_tema(vid, meta)
+
+    if not req.segarkan:
+        try:
+            simpan = cache_repo.ambil(kunci, ttl=float("inf"))
+        except Exception:
+            simpan = None
+        if simpan:
+            return {**simpan, "dari_simpanan": True}
+
+    key = get_api_key() or ""
+    hasil = await asyncio.to_thread(
+        tema_svc.pilih, meta, api_key=key,
+        models=rantai(key, get_model_override() or None) if key else [],
+        pakai_ai=req.pakai_ai)
+    try:
+        cache_repo.simpan(kunci, hasil)
+    except Exception:
+        pass
+    return {**hasil, "dari_simpanan": False}
+
+
+@router.get("/tema-subtitle")
+async def daftar_tema():
+    """Daftar tema beserta untuk klip seperti apa masing-masing cocok."""
+    from ..services import tema as tema_svc
+    return {"tema": tema_svc.TEMA, "bawaan": tema_svc.BAWAAN}
+
+
 @router.post("/clip-keterangan")
 async def clip_keterangan(req: KeteranganRequest):
     """
@@ -1079,6 +1273,8 @@ async def render_clip(req: RenderClipRequest):
             "hashtags": req.hashtags,
             "frame_mode": req.frame_mode,
             "frame_motion": req.frame_motion,
+            "frame_zoom": req.frame_zoom,
+            "frame_geser_y": req.frame_geser_y,
             "lock_person": req.lock_person,
             "person_keys": [k.model_dump() for k in req.person_keys],
             "title_card": (req.title_card.model_dump() if req.title_card else None),

@@ -10,11 +10,13 @@ import SecurityCard from './SecurityCard';
 import StorageCard from './StorageCard';
 import PemeliharaanCard from './PemeliharaanCard';
 import KesehatanCard from './KesehatanCard';
+import PemakaianAiCard from './PemakaianAiCard';
 import KeluarCard from './KeluarCard';
 import SuaraCard from './SuaraCard';
 import CookiesCard from './CookiesCard';
 import TerjemahOtomatisCard from './TerjemahOtomatisCard';
 import OpenRouterCard from './OpenRouterCard';
+import WarnaPenuturCard from './WarnaPenuturCard';
 import UpdateCard from './UpdateCard';
 
 // Bagian pada satu lembar bergaris, bukan kartu di atas kartu. Tumpukan kartu
@@ -52,7 +54,11 @@ export default function ProfileTab() {
   // Model AI yang dipakai untuk memilih klip. Disimpan di browser dan dikirim
   // bersama setiap permintaan auto-clip.
   const [models, setModels] = useState(null);
-  const [modelInfo, setModelInfo] = useState({ terkuat: null, tanpaKuota: [] });
+  // Berapa model disembunyikan karena kunci ini tidak punya aksesnya.
+  const [modelTersembunyi, setModelTersembunyi] = useState(0);
+  const [modelInfo, setModelInfo] = useState({
+    terkuat: null, tanpaKuota: [], habisHarian: [], jamKePutaran: null,
+  });
   const [model, setModel] = useState(() => localStorage.getItem('omniclip_gemini_model') || '');
   const [deletingKey, setDeletingKey] = useState(false);
   // Versi datang dari backend: satu sumber, bukan angka yang ditulis ulang
@@ -135,8 +141,21 @@ export default function ProfileTab() {
       .then((res) => {
         // Hanya model yang layak memilih klip, dari yang terkuat. Agen, Gemma,
         // dan varian lite ikut terdaftar di kunci tapi tidak cocok untuk ini.
-        setModels(res.cocok?.length ? res.cocok : (res.available || []));
-        setModelInfo({ terkuat: res.terkuat || null, tanpaKuota: res.tanpa_kuota || [] });
+        // Model yang kunci ini TIDAK punya aksesnya sama sekali tidak
+        // ditampilkan. Dulu ia muncul sebagai pilihan mati bertuliskan "tidak
+        // tersedia untuk kunci ini", dan yang terbaca dari situ adalah daftar
+        // penuh pilihan yang tidak satu pun bisa dipakai. Jumlahnya tetap
+        // disebut di bawah daftar, supaya tidak ada yang hilang diam-diam.
+        const tak = new Set(res.tanpa_kuota || []);
+        const semua = res.cocok?.length ? res.cocok : (res.available || []);
+        setModels(semua.filter((m) => !tak.has(m)));
+        setModelTersembunyi((res.tanpa_kuota || []).length);
+        setModelInfo({
+          terkuat: res.terkuat || null,
+          tanpaKuota: res.tanpa_kuota || [],
+          habisHarian: res.habis_harian || [],
+          jamKePutaran: res.jam_ke_putaran ?? null,
+        });
         if (res.error) setModelsError(res.error);
       })
       .catch((err) => setModelsError(err.message));
@@ -268,7 +287,7 @@ export default function ProfileTab() {
         </div>
         <p style={helpText}>
           Berapa banyak momen yang ditawarkan dari satu video. Pada mode otomatis
-          jatahnya tumbuh mengikuti durasi — kira-kira satu klip tiap empat menit —
+          jatahnya tumbuh mengikuti durasi (kira-kira satu klip tiap empat menit)
           sehingga podcast dua jam tidak lagi diperlakukan sama dengan video
           sepuluh menit.
         </p>
@@ -423,21 +442,40 @@ export default function ProfileTab() {
                       background: 'var(--bg-glass)', color: 'var(--text-primary)',
                     }}>
               <option value="">
-                Otomatis — model terkuat yang tersedia{modelInfo.terkuat ? ` (sekarang ${modelInfo.terkuat})` : ''}
+                Otomatis{modelInfo.terkuat ? ` (mencoba ${modelInfo.terkuat} lebih dulu)` : ''}
               </option>
               {models.map((m) => (
-                <option key={m} value={m} disabled={modelInfo.tanpaKuota.includes(m)}>
-                  {m}{modelInfo.tanpaKuota.includes(m) ? ' — tidak tersedia untuk kunci ini' : ''}
+                <option key={m} value={m}>
+                  {m}{modelInfo.habisHarian.includes(m) ? ' (jatah hari ini habis)' : ''}
                 </option>
               ))}
             </select>
             <p style={{ ...helpText, marginTop: '10px' }}>
               Urut dari yang terkuat. <strong>Otomatis</strong> mencoba yang teratas
               lebih dulu, dan pindah ke berikutnya bila model itu sedang sibuk atau
-              tidak termasuk kuota kunci Anda. Model <strong>pro</strong> tidak
-              termasuk kuota gratis Gemini; ia terpakai sendiri begitu kunci Anda
-              mendapat aksesnya.
+              jatah hariannya sudah habis. Jadi model yang tertulis di atas bukan
+              selalu yang terkuat, melainkan yang akan dicoba pertama hari ini.
+              Model <strong>lite</strong> hanya dipakai paling akhir, saat semua
+              model penuh kehabisan jatah, karena jatah hariannya dihitung
+              terpisah.
             </p>
+            {modelInfo.habisHarian.length > 0 && (
+              <p style={{ ...helpText, marginTop: '8px' }}>
+                {modelInfo.habisHarian.length} model sudah memakai jatah hariannya
+                dan kembali sendiri
+                {modelInfo.jamKePutaran !== null
+                  ? ` sekitar ${modelInfo.jamKePutaran} jam lagi` : ' setelah jatahnya berputar'}
+                : {modelInfo.habisHarian.join(', ')}.
+              </p>
+            )}
+            {modelTersembunyi > 0 && (
+              <p style={{ ...helpText, marginTop: '8px' }}>
+                {modelTersembunyi} model tidak ditampilkan karena kunci ini tidak
+                punya aksesnya. Seri <strong>pro</strong> memang di luar kuota
+                gratis Gemini; ia muncul sendiri di daftar ini begitu kunci Anda
+                mendapatkannya.
+              </p>
+            )}
           </>
         )}
       </div>
@@ -459,9 +497,22 @@ export default function ProfileTab() {
         </p>
         <p style={{ ...helpText, marginTop: '8px' }}>
           Kunci disimpan di basis data komputer ini dan tetap ada setelah backend
-          dimulai ulang — jadi tidak perlu lagi menyunting <code>backend/.env</code>
+          dimulai ulang, jadi tidak perlu lagi menyunting <code>backend/.env</code>
           lewat terminal, yang memang tidak bisa dilakukan dari HP. Kunci tidak
           pernah dikirim ke mana pun selain {provider.label}.
+        </p>
+        <p style={{ ...helpText, marginTop: '8px' }}>
+          <strong style={{ color: 'var(--text-primary)' }}>Boleh lebih dari satu
+          kunci</strong>, satu per baris. OmniClip pindah sendiri ke kunci
+          berikutnya saat satu kunci kehabisan jatah atau ditolak.{' '}
+          <strong style={{ color: 'var(--text-primary)' }}>Tapi kunci keduanya
+          harus dari PROJECT Google yang berbeda</strong>: Google menghitung
+          kuota per project, bukan per kunci, jadi dua kunci dari project yang
+          sama berbagi jatah yang sama persis dan tidak menambah apa-apa. Buat
+          project baru di{' '}
+          <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer"
+             style={{ color: 'var(--reh)' }}>aistudio.google.com/apikey</a>{' '}
+          lalu ambil kuncinya dari sana.
         </p>
 
         {settings && (
@@ -469,17 +520,19 @@ export default function ProfileTab() {
             {settings.gemini_api_key_set ? (
               <>
                 <CheckCircle2 size={15} style={{ color: 'var(--entry)' }} />
-                Tersimpan (berakhiran <code>{settings.gemini_api_key_last4}</code>)
+                {(settings.gemini_api_key_count ?? 1) > 1
+                  ? `${settings.gemini_api_key_count} kunci tersimpan`
+                  : <>Tersimpan (berakhiran <code>{settings.gemini_api_key_last4}</code>)</>}
                 {settings.gemini_api_key_source === 'env' && (
                   <span style={{ color: 'var(--text-muted)' }}>
-                    — dari <code>backend/.env</code>
+                    dari <code>backend/.env</code>
                   </span>
                 )}
               </>
             ) : (
               <>
                 <Info size={15} style={{ color: 'var(--text-muted)' }} />
-                Belum dikonfigurasi — mode heuristik lokal aktif.
+                Belum dikonfigurasi. Klip dipilih mesin lokal.
               </>
             )}
           </div>
@@ -487,12 +540,18 @@ export default function ProfileTab() {
 
         <div style={{ display: 'flex', gap: '8px', marginTop: '14px' }}>
           <div style={{ position: 'relative', flex: 1 }}>
-            <input
-              type={showApiKey ? 'text' : 'password'}
+            {/* Kotak bertingkat, bukan satu baris: kolom yang tingginya satu
+                baris mengatakan "satu kunci saja" tanpa sepatah kata pun, dan
+                menempel dua kunci ke dalamnya terasa seperti melawan alat. */}
+            <textarea
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSaveApiKey()}
-              placeholder="Tempel API key di sini…"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleSaveApiKey();
+              }}
+              rows={apiKey.includes('\n') ? 3 : 1}
+              spellCheck={false}
+              placeholder="Tempel API key di sini. Punya lebih dari satu? Satu per baris."
               style={{
                 width: '100%',
                 padding: '11px 40px 11px 14px',
@@ -502,6 +561,9 @@ export default function ProfileTab() {
                 color: 'var(--text-primary)',
                 fontSize: '0.85rem',
                 fontFamily: 'inherit',
+                resize: 'vertical',
+                lineHeight: 1.5,
+                WebkitTextSecurity: showApiKey ? 'none' : 'disc',
               }}
             />
             <button
@@ -562,9 +624,13 @@ export default function ProfileTab() {
 
       <UpdateCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
 
+      <WarnaPenuturCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
+
       <TerjemahOtomatisCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
 
       <SuaraCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
+
+      <PemakaianAiCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
 
       <KesehatanCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
 
@@ -577,7 +643,7 @@ export default function ProfileTab() {
       <SecurityCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
 
       {/* Akun Google kini milik TIAP PROFIL (Drive dan kanal YouTube sendiri),
-          jadi menyambungkannya dari sini — tanpa tahu profil mana yang aktif —
+          jadi menyambungkannya dari sini, tanpa tahu profil mana yang aktif,
           adalah cara tercepat mengunggah ke kanal yang salah. */}
       <div style={card}>
         <div style={sectionTitle}>
@@ -598,7 +664,7 @@ export default function ProfileTab() {
         </div>
         <div style={{ ...helpText, display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '6px 16px', marginTop: '8px' }}>
           <span style={{ color: 'var(--text-muted)' }}>Versi</span><span>OmniClip {versiApp || '…'}</span>
-          <span style={{ color: 'var(--text-muted)' }}>Mode</span><span>Lokal — semua file dan riwayat disimpan di komputer ini</span>
+          <span style={{ color: 'var(--text-muted)' }}>Mode</span><span>Lokal, semua file dan riwayat disimpan di komputer ini</span>
           <span style={{ color: 'var(--text-muted)' }}>Penyimpanan</span><span><code>OmniClip_Storage/</code></span>
         </div>
       </div>

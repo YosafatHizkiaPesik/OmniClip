@@ -34,7 +34,17 @@ from ..config import STORAGE_DIR
 log = logging.getLogger("omniclip.proksi")
 
 PROKSI_DIR = STORAGE_DIR / "proksi"
+# Lebar salinan untuk ANALISIS. Cukup untuk menemukan wajah, dan itu satu-satunya
+# yang diminta darinya.
 LEBAR = 1280
+# Lebar salinan yang ikut DIPUTAR di Studio.
+#
+# Sumber 4K dan VP9 memang tidak bisa diputar peramban tanpa tersendat, jadi di
+# sana salinan tidak bisa dihindari. Tapi menontonnya di 1280 piksel berarti
+# yang terlihat di editor selalu lebih buruk daripada yang akan dirender, dan
+# pada sumber 4K bedanya paling terasa justru karena sumbernya paling tajam.
+# 1600 masih ringan didekode (h264, bukan VP9) dan jauh lebih dekat ke hasilnya.
+LEBAR_PUTAR = 1600
 # Di atas lebar ini, mendekode sumbernya lebih mahal daripada mendekode salinan.
 AMBANG_LEBAR = 1280
 # Inti yang boleh dipakai. Sisanya untuk apa pun yang sedang ditunggu pengguna.
@@ -51,13 +61,20 @@ _pekerja: threading.Thread | None = None
 
 # Naik setiap kali bentuk salinannya berubah. v2: ikut membawa suara, supaya
 # salinan yang sama bisa diputar di Studio (lihat `untuk_pratinjau`).
-VERSI = "v2"
+# v3: crf 26, bukan 30. v4: salinan yang ikut ditonton dibuat 1600 px.
+VERSI = "v4"
+
+
+def _lebar_untuk(src: Path) -> int:
+    """Salinan yang ikut ditonton dibuat lebih besar daripada yang hanya dibaca mesin."""
+    return LEBAR_PUTAR if butuh_salinan(src) else LEBAR
 
 
 def _nama(src: Path) -> Path:
     st = src.stat()
-    sidik = hashlib.sha1(f"{src.resolve()}|{st.st_size}|{int(st.st_mtime)}|{VERSI}"
-                         .encode()).hexdigest()[:16]
+    sidik = hashlib.sha1(
+        f"{src.resolve()}|{st.st_size}|{int(st.st_mtime)}|{VERSI}|{_lebar_untuk(src)}"
+        .encode()).hexdigest()[:16]
     return PROKSI_DIR / f"{sidik}.mp4"
 
 
@@ -105,15 +122,18 @@ def _buat(src: Path, tujuan: Path) -> None:
     sementara = tujuan.with_suffix(".tmp.mp4")
     cmd = ["ffmpeg", "-y", "-hide_banner", "-nostdin", "-loglevel", "error",
            "-threads", str(INTI), "-i", str(src),
-           "-vf", f"scale={LEBAR}:-2",
+           "-vf", f"scale={_lebar_untuk(src)}:-2",
            # Suara ikut: salinan ini juga yang diputar Studio. Firefox
            # memutar sumber 4K VP9 pada 0,44x kecepatan — terlihat macet atau
            # hitam (terukur 21 September 2026).
            "-map", "0:v:0", "-map", "0:a:0?", "-c:a", "aac", "-b:a", "128k",
            "-movflags", "+faststart",
-           # veryfast/crf 30: 9 MB per menit; deteksi wajah tidak berubah
-           # (66,7% / 66,9% / 66,0% pada crf 26/30/33).
-           "-c:v", "libx264", "-preset", "veryfast", "-crf", "30",
+           # veryfast/crf 26: deteksi wajah tidak berubah sama sekali
+           # (66,7% / 66,9% / 66,0% pada crf 26/30/33), tapi yang MENONTONNYA
+           # berubah. Pada crf 30 salinan 1280x720 keluar di 322 kbit/detik,
+           # dan wajah di Studio terlihat berbintik dan pudar dibanding
+           # sumbernya — dilaporkan sebagai "kualitas videonya jelek".
+           "-c:v", "libx264", "-preset", "veryfast", "-crf", "26",
            "-threads", str(INTI),
            # Keyframe tiap detik: analisis selalu melompat ke tengah video.
            "-g", "30", "-keyint_min", "30",
@@ -255,5 +275,35 @@ def untuk_pratinjau(src: Path) -> Path | None:
     return None
 
 
+# Sampai lebar ini, peramban memutar sumbernya sendiri tanpa tersendat.
+# Angkanya lebih besar daripada AMBANG_LEBAR dengan sengaja: dua pertanyaan
+# yang berbeda dijawab di sini.
+AMBANG_PUTAR = 1920
+# Codec yang mahal didekode peramban. Terukur 21 September 2026: Firefox
+# memutar sumber 4K VP9 pada 0,44x kecepatan, terlihat macet atau hitam.
+CODEC_BERAT = {"vp9", "av1", "av01", "hevc", "h265"}
+
+
 def butuh_salinan(src: Path) -> bool:
-    return _lebar(Path(src)) > AMBANG_LEBAR
+    """
+    Apakah PEMUTARAN di Studio butuh salinan, bukan apakah ANALISIS butuh.
+
+    Dua hal yang dulu dijawab satu angka, dan itu yang membuat kualitas
+    gambarnya turun tanpa sebab yang kelihatan: sumber 1080p h264 yang bisa
+    diputar peramban mana pun tetap diganti salinan 720p, sehingga yang
+    dilihat pemiliknya di editor selalu lebih buruk daripada yang akan
+    dirender. Analisis tetap memakai salinannya (lihat `siapkan`), karena di
+    sana yang mahal adalah mendekode, bukan menonton.
+    """
+    from .media import probe
+
+    src = Path(src)
+    try:
+        info = probe(src)
+    except Exception:
+        return _lebar(src) > AMBANG_LEBAR
+    lebar = int(info.get("width") or 0)
+    codec = str(info.get("vcodec") or "").lower()
+    if lebar > AMBANG_PUTAR:
+        return True
+    return codec in CODEC_BERAT and lebar > AMBANG_LEBAR

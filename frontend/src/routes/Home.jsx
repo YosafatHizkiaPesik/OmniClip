@@ -125,6 +125,7 @@ export default function Home() {
   // Riwayat pencarian PROFIL AKTIF — tiap profil punya minatnya sendiri, dan
   // pencarian satu profil tidak ikut muncul di profil lain.
   const [riwayat, setRiwayat] = useState([]);
+  const [cariAktif, setCariAktif] = useState(false);
   useEffect(() => {
     apiGet('/riwayat-cari').then((r) => setRiwayat(r.riwayat ?? [])).catch(() => {});
   }, [q]);
@@ -283,12 +284,19 @@ export default function Home() {
 
       <form onSubmit={submit} className="search-container">
         <div className="search-input-wrapper">
+          {/* Riwayat muncul saat kotak ini dipakai, dan menghilang sesaat
+              SESUDAH fokusnya lepas. Penundaan itu perlu: menekan sebuah kata
+              di daftar riwayat lebih dulu melepas fokus dari kotaknya, dan
+              menyembunyikan daftarnya saat itu juga membuat tekanan tersebut
+              tidak pernah sampai ke tujuannya. */}
           <input
             type="text"
             className="search-input"
             placeholder="Tempel tautan YouTube, atau ketik kata kunci"
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
+            onFocus={() => setCariAktif(true)}
+            onBlur={() => setTimeout(() => setCariAktif(false), 180)}
           />
           <button type="submit" className="btn-primary" disabled={loading}
                   style={{ minWidth: '104px' }}>
@@ -298,7 +306,11 @@ export default function Home() {
         </div>
       </form>
 
-      {riwayat.length > 0 && (
+      {/* Riwayat pencarian hanya muncul saat kotak carinya sedang dipakai.
+          Sebelumnya ia selalu berdiri di beranda, dan beranda yang isinya
+          delapan kata yang pernah diketik bukan beranda, melainkan catatan.
+          Semua kotak pencarian yang dikenal orang berperilaku begini. */}
+      {cariAktif && riwayat.length > 0 && (
         <div style={{ display: 'flex', gap: '7px', flexWrap: 'wrap', alignItems: 'center',
                       marginBottom: '10px' }}>
           <span className="mark" style={{ color: 'var(--ink-3)', display: 'inline-flex', gap: '5px',
@@ -358,7 +370,7 @@ export default function Home() {
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center',
                       marginTop: '-8px', marginBottom: '18px' }}>
           <span className="mark" style={{ color: 'var(--ink-3)' }}>Durasi</span>
-          {[['', 'Semua'], ['pendek', '< 4 mnt'], ['sedang', '4–20 mnt'], ['panjang', '> 20 mnt']]
+          {[['', 'Semua'], ['pendek', '< 4 mnt'], ['sedang', '4-20 mnt'], ['panjang', '> 20 mnt']]
             .map(([id, label]) => (
               <button key={id || 'semua'} onClick={() => setDurasi(id)}
                       className={`chip${durasi === id ? ' is-on' : ''}`}>{label}</button>
@@ -378,7 +390,7 @@ export default function Home() {
           halaman runtuh dari 2608 piksel jadi 1453, peramban memaksa posisi
           gulir turun dari 1100 ke 685, lalu data datang dan seluruh kartu
           ter-render ulang. Di layar itu terbaca persis seperti "dilempar ke
-          atas dan videonya diganti" — dan memang itu yang terjadi. */}
+          atas dan videonya diganti", dan memang itu yang terjadi. */}
       {loading && !feed.length ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
           {[...Array(12)].map((_, i) => (

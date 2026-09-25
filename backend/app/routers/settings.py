@@ -15,17 +15,18 @@ import os
 import sys
 from pathlib import Path
 
-from fastapi import APIRouter, File, Request, UploadFile
+from fastapi import APIRouter, File, Query, Request, UploadFile
 from typing import List
 
 from pydantic import BaseModel, Field
 
 from ..config import (
-    CAPTION_LANGS, GEMINI_MODELS, get_api_key, get_api_key_source,
+    CAPTION_LANGS, GEMINI_MODELS, get_api_key, get_api_key_source, get_api_keys,
     get_caption_langs, get_model_override,
 )
 from ..errors import AppError
 from ..repos import settings as settings_repo
+from ..services import subtitles
 
 def _cookies_aktif() -> bool:
     """Apakah cookies sedang dipakai. Tidak menyentuh jaringan."""
@@ -72,6 +73,9 @@ async def get_settings():
         # untuk membocorkannya. Versi lama mengembalikan 8 karakter PERTAMA.
         "gemini_api_key_set": bool(key),
         "gemini_api_key_last4": key[-4:] if len(key) >= 4 else "",
+        # Berapa kunci yang dipakai bergantian. Kuota Gemini per project, jadi
+        # angka ini menjelaskan berapa kali lipat jatah hariannya.
+        "gemini_api_key_count": len(get_api_keys()),
         # Kunci yang datang dari .env tidak bisa dihapus lewat antarmuka, dan
         # antarmuka harus mengatakannya alih-alih menyediakan tombol yang diam-
         # diam tidak berpengaruh.
@@ -80,6 +84,7 @@ async def get_settings():
         "cookies_aktif": _cookies_aktif(),
         "gemini_models": GEMINI_MODELS,
         "render_suara": (settings_repo.get("render.suara") or "seimbang"),
+        "warna_penutur": subtitles.warna_penutur_aktif(),
         **_openrouter_ringkas(),
     }
 
@@ -104,6 +109,12 @@ async def openrouter_models():
     daftar tangan akan menunjuk model yang sudah tidak ada.
     """
     from ..services import openrouter
+    # Tanpa kunci, tidak ada yang perlu dipilih. Daftarnya dulu tetap diambil
+    # dan ditampilkan, dan itu dua kesalahan sekaligus: memanggil openrouter.ai
+    # setiap kali halaman Pengaturan dibuka meski tak satu pun model bisa
+    # dipakai, dan menawarkan menu yang tidak mengubah apa pun.
+    if not openrouter.kunci():
+        return {"tersedia": [], **_openrouter_ringkas()}
     try:
         semua = await asyncio.to_thread(openrouter.daftar)
     except Exception as e:
@@ -192,6 +203,23 @@ async def set_bingkai_otomatis(req: SakelarRequest):
     return {"status": "ok", "aktif": req.aktif}
 
 
+@router.post("/warna-penutur")
+async def set_warna_penutur(req: SakelarRequest):
+    """
+    Warna subtitle berbeda per penutur, untuk seluruh aplikasi.
+
+    Mati sejak 24 September 2026 karena hasil pengukurannya, bukan karena
+    selera. Pada podcast tiga orang, penambatan wajah benar menemukan tiga
+    orang, tapi model suara yang dilatih dari bukti itu hanya benar 62% pada
+    potongan yang tidak dilatihkan, dan menambah bukti justru menurunkannya.
+    Empat dari sepuluh kalimat berwarna salah lebih mengganggu daripada satu
+    warna yang tidak pernah salah, jadi pewarnaannya menunggu sampai
+    pemisahannya bisa dipercaya.
+    """
+    subtitles.setel_warna_penutur(req.aktif)
+    return {"status": "ok", "aktif": req.aktif}
+
+
 @router.post("/openrouter-model")
 async def set_openrouter_model(req: ModelRequest):
     from ..services import openrouter
@@ -246,15 +274,23 @@ async def list_models():
     # sanggup membaca transkrip sejam lalu menjawab dalam JSON yang benar.
     # `terkuat`: yang akan dicoba pertama bila pengguna memilih "Otomatis" —
     # sudah melewati model yang kuotanya nol untuk kunci ini.
-    from ..services.peringkat_model import rantai, tanpa_kuota, urutkan
+    from ..services.peringkat_model import (detik_ke_putaran, habis_harian,
+                                             rantai, tanpa_kuota, urutkan)
     cocok = urutkan(available)
     try:
         urutan = await asyncio.to_thread(rantai, key)
     except Exception:
         urutan = cocok
+    # `habis_harian` terpisah dari `tanpa_kuota` karena artinya berbeda dan
+    # antarmuka pernah mencampurnya: "tidak tersedia untuk kunci ini" itu
+    # permanen sampai kunci mendapat akses, sedangkan "jatah hari ini habis"
+    # pulih sendiri beberapa jam lagi. Menyebut keduanya sama membuat pengguna
+    # mengira model terkuatnya hilang, padahal ia kembali nanti malam.
     return {"available": available, "configured": True, "default": GEMINI_MODELS,
             "cocok": cocok, "terkuat": (urutan or [None])[0],
-            "tanpa_kuota": [m for m in cocok if tanpa_kuota(m)]}
+            "tanpa_kuota": [m for m in cocok if tanpa_kuota(m)],
+            "habis_harian": [m for m in cocok if habis_harian(m)],
+            "jam_ke_putaran": round(detik_ke_putaran() / 3600, 1)}
 
 
 @router.post("/api-key")
@@ -264,10 +300,19 @@ async def set_api_key(req: ApiKeyRequest):
         raise AppError(f"Penyedia AI '{provider}' belum didukung.",
                        code="AI_PROVIDER_UNKNOWN", status=422)
 
-    key = req.api_key.strip()
-    if any(c.isspace() for c in key):
-        raise AppError("API key tidak boleh memuat spasi atau baris baru.",
-                       code="AI_KEY_INVALID", status=422)
+    # Boleh lebih dari satu kunci, dipisah baris baru atau koma.
+    #
+    # Kuota Gemini dihitung per PROJECT Google: lima permintaan per menit dan
+    # sejumlah permintaan per hari, masing-masing per project. Satu kunci kedua
+    # dari project kedua menggandakan jatah itu dan memberi jalan keluar saat
+    # satu project sedang tidak bisa dipakai. Menolak baris baru di sini dulu
+    # berarti satu-satunya cara memakai dua kunci adalah tidak memakainya.
+    from ..config import _pecah_kunci
+
+    daftar_kunci = _pecah_kunci(req.api_key)
+    if not daftar_kunci:
+        raise AppError("API key kosong.", code="AI_KEY_INVALID", status=422)
+    key = daftar_kunci[0]
 
     # Kuncinya DICOBA, bukan ditebak bentuknya.
     #
@@ -281,16 +326,24 @@ async def set_api_key(req: ApiKeyRequest):
     # Yang benar adalah bertanya kepada Google. Sekali panggilan daftar model
     # sudah cukup, dan bonusnya: kunci yang sah tapi kuotanya mati atau API-nya
     # belum diaktifkan ikut ketahuan di sini, bukan nanti saat analisis pertama.
-    galat = await _uji_kunci(key)
-    if galat:
-        raise AppError(galat, code="AI_KEY_INVALID", status=422)
+    # Tiap kunci diuji sendiri. Satu kunci yang salah tempel di antara tiga
+    # kunci benar harus disebut nomornya, bukan membuat semuanya ditolak tanpa
+    # petunjuk mana yang bermasalah.
+    for nomor, k in enumerate(daftar_kunci, 1):
+        galat = await _uji_kunci(k)
+        if galat:
+            awalan = f"Kunci ke-{nomor}: " if len(daftar_kunci) > 1 else ""
+            raise AppError(awalan + galat, code="AI_KEY_INVALID", status=422)
 
     settings_repo.set_value("ai.provider", provider)
-    settings_repo.set_value("ai.api_key", key)
-    log.info("API key %s dipasang (berakhiran %s).", provider, key[-4:])
-    return {"status": "ok",
-            "message": "API key diuji ke Google dan tersimpan. Tetap ada setelah "
-                       "aplikasi ditutup."}
+    settings_repo.set_value("ai.api_key", "\n".join(daftar_kunci))
+    log.info("%d API key %s dipasang (yang pertama berakhiran %s).",
+             len(daftar_kunci), provider, key[-4:])
+    return {"status": "ok", "jumlah": len(daftar_kunci),
+            "message": (f"{len(daftar_kunci)} kunci diuji ke Google dan tersimpan."
+                        if len(daftar_kunci) > 1 else
+                        "API key diuji ke Google dan tersimpan.")
+                       + " Tetap ada setelah aplikasi ditutup."}
 
 
 async def _uji_kunci(key: str) -> str | None:
@@ -479,6 +532,20 @@ async def matikan(request: Request):
     return {"status": "ok", "pesan": "OmniClip berhenti. Tab ini boleh ditutup."}
 
 
+# --- Pemakaian AI ---------------------------------------------------------------
+@router.get("/pemakaian-ai")
+async def pemakaian_ai(hari: int = Query(7, ge=1, le=30)):
+    """
+    Berapa panggilan dan token AI yang terpakai, dan sisa jatah hari ini.
+
+    Jatah gratis Gemini 20 permintaan per model per project per hari, jadi
+    "masih sisa berapa" bukan rasa ingin tahu melainkan syarat untuk bisa
+    merencanakan hari.
+    """
+    from ..services.pemakaian_ai import ringkas
+    return await asyncio.to_thread(ringkas, hari)
+
+
 # --- Kesehatan sistem -----------------------------------------------------------
 @router.get("/kesehatan")
 async def kesehatan():
@@ -653,10 +720,17 @@ def _ringkas_penyimpanan() -> dict:
             saran = str(calon)
 
     def _isi(d: Path) -> dict:
-        """Ukuran dan jumlah berkas satu folder — supaya bisa dibersihkan sadar."""
+        """
+        Ukuran dan jumlah berkas satu folder, supaya membersihkannya jadi
+        keputusan dan bukan tebakan.
+
+        Subfolder ikut dihitung: klip jadi disimpan per profil, jadi hitungan
+        yang berhenti di tingkat teratas menunjukkan nol pada folder yang
+        isinya puluhan gigabita.
+        """
         total = jumlah = 0
         try:
-            for f in d.iterdir():
+            for f in d.rglob("*"):
                 if f.is_file():
                     jumlah += 1
                     total += f.stat().st_size
@@ -700,7 +774,7 @@ async def pindah_penyimpanan(req: PenyimpananRequest):
         raise AppError("Lokasi penyimpanan sedang dipaksa lewat OMNICLIP_STORAGE.",
                        code="STORAGE_LOCKED", status=409)
     if not cfg.FROZEN:
-        raise AppError("Dijalankan dari kode sumber — penyimpanan mengikuti folder proyek.",
+        raise AppError("Dijalankan dari kode sumber, penyimpanan mengikuti folder proyek.",
                        code="STORAGE_FROM_SOURCE", status=409)
 
     tujuan = Path(req.folder.strip()).expanduser()
@@ -743,6 +817,7 @@ async def buka_penyimpanan():
 class FolderRequest(BaseModel):
     jenis: str = Field(..., description="unduhan | klip")
     folder: str = Field("", description="Kosongkan untuk kembali ke bawaan")
+    pindahkan: bool = Field(True, description="Ikut memindahkan berkas yang sudah ada")
 
 
 _JENIS = {"unduhan", "klip"}
@@ -751,16 +826,19 @@ _JENIS = {"unduhan", "klip"}
 @router.post("/penyimpanan/folder")
 async def atur_folder(req: FolderRequest):
     """
-    Menunjuk folder untuk unduhan atau klip jadi.
+    Memindahkan folder unduhan atau klip jadi ke tempat lain.
 
-    Berkas yang SUDAH ada tidak ikut pindah. Itu disengaja: memindahkan
-    puluhan gigabita di dalam sebuah permintaan HTTP berarti permintaan yang
-    menggantung bermenit-menit tanpa ada yang bisa membatalkannya, dan
-    kegagalan di tengah jalan meninggalkan berkas terbelah di dua tempat.
-    Yang lama tetap bisa dibuka dari halaman Unduhan sampai dipindahkan
-    sendiri — dan foldernya ditunjukkan di sini supaya bisa.
+    Berkas yang sudah ada IKUT pindah, sebagai pekerjaan berlatar dengan
+    persentase dan tombol batal. Versi sebelumnya hanya menulis penunjuk
+    foldernya dan meninggalkan berkasnya di tempat lama, dan dari luar itu
+    tidak bisa dibedakan dari tombol yang rusak: foldernya tetap terlihat
+    seperti semula dan tidak ada satu pun tanda bahwa sesuatu sedang terjadi.
+
+    `pindahkan=False` mempertahankan perilaku lama, untuk folder yang isinya
+    memang ingin ditinggal di tempatnya.
     """
     from .. import config as cfg
+    from ..services.jobs import queue
 
     if req.jenis not in _JENIS:
         raise AppError("Jenis folder tidak dikenal.", code="FOLDER_UNKNOWN", status=422)
@@ -768,19 +846,42 @@ async def atur_folder(req: FolderRequest):
     data = cfg._user_data_dir()
     data.mkdir(parents=True, exist_ok=True)
     penunjuk = data / f"lokasi-{req.jenis}.txt"
+    sekarang = (cfg.DOWNLOAD_DIR if req.jenis == "unduhan" else cfg.CLIPS_DIR).resolve()
 
     pilihan = req.folder.strip()
     if not pilihan:
-        penunjuk.unlink(missing_ok=True)
-        return {"status": "ok", "kembali_ke_bawaan": True, "perlu_restart": True}
+        bawaan = (cfg.STORAGE_DIR /
+                  ("local_downloads" if req.jenis == "unduhan" else "edited_clips"))
+        tujuan = bawaan.resolve()
+    else:
+        tujuan = Path(pilihan).expanduser()
+        if not cfg._bisa_ditulis(tujuan):
+            raise AppError(f"Folder {tujuan} tidak bisa ditulis.",
+                           code="FOLDER_NOT_WRITABLE", status=422)
+        tujuan = tujuan.resolve()
 
-    tujuan = Path(pilihan).expanduser()
-    if not cfg._bisa_ditulis(tujuan):
-        raise AppError(f"Folder {tujuan} tidak bisa ditulis.",
-                       code="FOLDER_NOT_WRITABLE", status=422)
-    penunjuk.write_text(str(tujuan.resolve()), encoding="utf-8")
-    log.info("Folder %s diarahkan ke %s", req.jenis, tujuan)
-    return {"status": "ok", "folder": str(tujuan.resolve()), "perlu_restart": True}
+    if tujuan == sekarang:
+        return {"status": "ok", "folder": str(tujuan), "job_id": None,
+                "perlu_restart": False, "sudah_di_sana": True}
+    if tujuan.is_relative_to(sekarang):
+        raise AppError("Folder tujuan berada di dalam folder asalnya.",
+                       code="FOLDER_NESTED", status=422)
+
+    if not req.pindahkan:
+        if pilihan:
+            penunjuk.write_text(str(tujuan), encoding="utf-8")
+        else:
+            penunjuk.unlink(missing_ok=True)
+        log.info("Folder %s diarahkan ke %s tanpa memindahkan berkas", req.jenis, tujuan)
+        return {"status": "ok", "folder": str(tujuan), "job_id": None,
+                "perlu_restart": True, "kembali_ke_bawaan": not pilihan}
+
+    job_id, _ = queue.enqueue("pindah_folder",
+                              {"jenis": req.jenis, "tujuan": str(tujuan)},
+                              lane="cpu")
+    log.info("Folder %s dipindahkan ke %s (job %s)", req.jenis, tujuan, job_id)
+    return {"status": "ok", "folder": str(tujuan), "job_id": job_id,
+            "perlu_restart": False, "kembali_ke_bawaan": not pilihan}
 
 
 @router.post("/penyimpanan/folder/buka")

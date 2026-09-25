@@ -88,10 +88,15 @@ async def buat(req: ProfilBaru):
         raise InvalidInput("Warna harus berbentuk #RRGGBB.")
     pid = await asyncio.to_thread(repo.buat, req.nama.strip(), warna=req.warna,
                                   minat=_rapikan_minat(req.minat))
-    # Folder klipnya dibuat SEKARANG dan jalurnya disimpan: mengganti nama
-    # profil nanti tidak boleh memindahkan atau memutus folder klip yang ada.
-    folder = await asyncio.to_thread(layanan.folder_klip, pid)
-    await asyncio.to_thread(repo.ubah, pid, folder_klip=str(folder))
+    # Foldernya SENGAJA belum dipatok di sini.
+    #
+    # Dulu dipatok, dengan alasan yang masuk akal waktu itu: mengganti nama
+    # profil tidak boleh memutus folder klip yang sudah ada. Tapi saat profil
+    # dibuat, akun Googlenya belum diketahui, jadi yang dipatok selalu bernama
+    # "Akun baru (6)" — dan itu nama yang menempel selamanya. Sekarang folder
+    # dipilih saat akun Googlenya tersambung, dari surelnya (lihat
+    # services/profil.folder_untuk_akun), sehingga masuk lagi dengan akun yang
+    # sama kembali ke folder yang sama.
     return await asyncio.to_thread(_lengkap, repo.ambil(pid))
 
 
@@ -105,7 +110,12 @@ async def ubah(pid: int, req: ProfilUbah):
     unggah: Optional[Dict[str, Any]] = None
     if req.unggah is not None:
         unggah = {**(lama.get("unggah") or {}), **req.unggah.model_dump(exclude_none=True)}
-    await asyncio.to_thread(repo.ubah, pid, nama=(req.nama or "").strip() or None,
+    nama_baru = (req.nama or "").strip() or None
+    # Folder klip mengikuti nama akunnya. Dikerjakan SEBELUM namanya berubah di
+    # basis data, karena nama folder lama diturunkan dari nama yang lama.
+    if nama_baru and nama_baru != lama.get("nama"):
+        await asyncio.to_thread(layanan.ikutkan_nama_folder, pid, nama_baru)
+    await asyncio.to_thread(repo.ubah, pid, nama=nama_baru,
                             warna=req.warna, minat=_rapikan_minat(req.minat), unggah=unggah)
     return await asyncio.to_thread(_lengkap, repo.ambil(pid))
 

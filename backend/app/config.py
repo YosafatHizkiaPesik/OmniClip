@@ -1,6 +1,7 @@
 """Konfigurasi terpusat: path, batas sumber daya, dan pengaturan dari .env."""
 
 import os
+from typing import Optional
 import shutil
 import sys
 from pathlib import Path
@@ -223,6 +224,61 @@ IMPOR_DIR = MEDIA_DIRS["impor"]
 for _d in (DOWNLOAD_DIR, CLIPS_DIR, THUMBS_DIR, LOGS_DIR, MODELS_DIR, VOICE_DIR, IMPOR_DIR):
     _d.mkdir(parents=True, exist_ok=True)
 
+
+# Modul yang menyalin DOWNLOAD_DIR atau CLIPS_DIR ke namanya sendiri saat
+# diimpor. Daftarnya pendek dan disengaja: `setel_folder` di bawah harus
+# memperbarui setiap salinan, kalau tidak sebagian aplikasi akan menulis ke
+# folder lama dan sebagian ke folder baru. Ada uji yang memeriksa daftar ini
+# tetap lengkap (tests/test_folder.py), supaya impor baru tidak lolos diam-diam.
+_SALINAN_FOLDER = {
+    "unduhan": [
+        ("app.routers.videos", "DOWNLOAD_DIR", None),
+        ("app.services.paths", "DOWNLOAD_DIR", None),
+        ("app.services.ytdlp", "DOWNLOAD_DIR", str),
+        ("app.services.ytdlp", "_DOWNLOAD_DIR", None),
+    ],
+    "klip": [
+        ("app.services.render", "CLIPS_DIR", None),
+        ("app.services.profil", "CLIPS_DIR", None),
+    ],
+}
+_KATEGORI_MEDIA = {"unduhan": "local_downloads", "klip": "edited_clips"}
+
+
+def setel_folder(jenis: str, tujuan: Path) -> None:
+    """
+    Mengarahkan folder unduhan atau klip ke tempat baru TANPA menjalankan ulang.
+
+    Ini pengecualian yang disengaja dari aturan di `_folder_pilihan`: folder
+    yang dibaca sekali saat startup. Pengecualiannya ada karena memindahkan
+    berkas sambil aplikasi berjalan tidak ada gunanya bila aplikasi yang sama
+    masih mencarinya di tempat lama. Berkas yang sudah pindah akan terlihat
+    hilang sampai dijalankan ulang, dan "sudah dipindahkan tapi hilang" adalah
+    bentuk kegagalan yang paling sulit dipercaya.
+
+    Hanya nama yang benar-benar disalin modul lain yang diperbarui; sisanya
+    membaca `config.X` setiap kali dan ikut sendiri.
+    """
+    import importlib
+    import sys as _sys
+
+    if jenis not in _SALINAN_FOLDER:
+        raise ValueError(f"jenis folder tidak dikenal: {jenis}")
+    tujuan = Path(tujuan).expanduser().resolve()
+    tujuan.mkdir(parents=True, exist_ok=True)
+
+    globals()["DOWNLOAD_DIR" if jenis == "unduhan" else "CLIPS_DIR"] = tujuan
+    MEDIA_DIRS[_KATEGORI_MEDIA[jenis]] = tujuan
+
+    for nama_modul, nama, ubah in _SALINAN_FOLDER[jenis]:
+        modul = _sys.modules.get(nama_modul)
+        if modul is None:
+            try:
+                modul = importlib.import_module(nama_modul)
+            except ImportError:
+                continue
+        setattr(modul, nama, ubah(tujuan) if ubah else tujuan)
+
 if BUNDLED_MODELS_DIR and BUNDLED_MODELS_DIR.is_dir():
     for _m in BUNDLED_MODELS_DIR.glob("*.onnx"):
         _target = MODELS_DIR / _m.name
@@ -314,6 +370,38 @@ GEMINI_MODELS = [
 MAX_TRANSCRIPT_CHARS = int(os.getenv("OMNICLIP_MAX_TRANSCRIPT_CHARS", "350000"))
 
 
+# --- Aplikasi Google bawaan ---------------------------------------------------
+# Identitas aplikasi Google yang IKUT di dalam OmniClip, supaya pemakainya tidak
+# perlu membuat project Google Cloud sendiri hanya untuk bisa menekan "Masuk
+# dengan Google".
+#
+# Rahasia klien ikut dibagikan, dan itu memang tidak apa-apa DI SINI: Google
+# menerbitkan jenis klien "Desktop app" justru untuk aplikasi yang dipasang di
+# komputer orang, dan menyatakan rahasianya BUKAN rahasia. Pengamannya PKCE,
+# bukan kerahasiaan (lihat RFC 8252). Untuk TikTok dan Meta aturannya berbeda
+# dan rahasianya benar-benar rahasia; itu sebabnya keduanya tidak ditempuh
+# lewat jalan ini.
+#
+# Kosong secara bawaan, dan selama kosong perilakunya persis seperti sebelum
+# ini: pemiliknya memasang berkas OAuth-nya sendiri. Diisi lewat variabel
+# lingkungan saat membangun rilis, jadi ia tidak pernah masuk riwayat git.
+GOOGLE_CLIENT_ID = os.getenv("OMNICLIP_GOOGLE_CLIENT_ID", "").strip()
+GOOGLE_CLIENT_SECRET = os.getenv("OMNICLIP_GOOGLE_CLIENT_SECRET", "").strip()
+
+
+def google_bawaan() -> Optional[dict]:
+    """Berkas OAuth client bentuk dict dari identitas bawaan, atau None."""
+    if not (GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET):
+        return None
+    return {"installed": {
+        "client_id": GOOGLE_CLIENT_ID,
+        "client_secret": GOOGLE_CLIENT_SECRET,
+        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+        "token_uri": "https://oauth2.googleapis.com/token",
+        "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+    }}
+
+
 # --- Jaringan -----------------------------------------------------------------
 # Bawaannya tetap 127.0.0.1. Membukanya adalah keputusan yang harus diketik
 # sendiri, bukan sesuatu yang terjadi karena sebuah berkas konfigurasi berubah.
@@ -342,23 +430,55 @@ FRONTEND_DIST = (BUNDLE_DIR / "frontend_dist") if FROZEN \
     else (PROJECT_DIR / "frontend" / "dist")
 
 
-def get_api_key() -> str:
-    """
-    Kunci AI yang berlaku.
+def _pecah_kunci(raw: str) -> list[str]:
+    """Beberapa kunci dalam satu kolom: dipisah baris baru, koma, atau spasi."""
+    import re as _re
+    keluar, terlihat = [], set()
+    for bagian in _re.split(r"[\s,;]+", raw or ""):
+        k = bagian.strip()
+        if k and k not in terlihat:
+            terlihat.add(k)
+            keluar.append(k)
+    return keluar
 
-    Basis data lebih dulu, `.env` sebagai cadangan. Urutannya begitu karena
-    basis data adalah satu-satunya dari keduanya yang bisa diisi dari HP —
-    dan ketika keduanya terisi, yang dimasukkan lewat antarmuka adalah yang
-    lebih baru dan lebih disengaja.
+
+def get_api_keys() -> list[str]:
     """
+    SEMUA kunci Gemini yang boleh dipakai, urut dari yang pertama dicoba.
+
+    Kuota Gemini dihitung per PROJECT Google, bukan per kunci. Itu kalimat dari
+    dokumentasi Google sendiri, dan bedanya penting: dua kunci dari project yang
+    sama berbagi jatah yang sama persis. Yang menambah jatah adalah kunci dari
+    project KEDUA, dan itu pula yang memberi jalan keluar saat satu project
+    sedang tidak bisa dipakai.
+
+    Karena itu kolom kuncinya menerima lebih dari satu, dipisah baris baru atau
+    koma. Yang di basis data lebih dulu daripada `.env`, dengan alasan yang
+    sama seperti dulu: basis data bisa diisi dari HP, dan isian lewat
+    antarmuka adalah yang lebih baru dan lebih disengaja.
+    """
+    dari_db: list[str] = []
     try:
         from .repos import settings as settings_repo
-        value = settings_repo.get("ai.api_key").strip()
-        if value:
-            return value
+        dari_db = _pecah_kunci(settings_repo.get("ai.api_key"))
     except Exception:  # basis data belum siap saat impor paling awal
         pass
-    return os.environ.get("GEMINI_API_KEY", "").strip()
+    dari_env = _pecah_kunci(os.environ.get("GEMINI_API_KEY", ""))
+    # Keduanya digabung, bukan salah satu saja: kunci di `.env` milik pemilik
+    # aplikasi dan kunci di basis data ditambahkan belakangan; membuang yang
+    # satu karena yang lain terisi berarti membuang jatah yang sudah ada.
+    keluar, terlihat = [], set()
+    for k in dari_db + dari_env:
+        if k not in terlihat:
+            terlihat.add(k)
+            keluar.append(k)
+    return keluar
+
+
+def get_api_key() -> str:
+    """Kunci pertama yang berlaku. Lihat `get_api_keys` untuk selebihnya."""
+    kunci = get_api_keys()
+    return kunci[0] if kunci else ""
 
 
 # Nama lama. Sudah bukan "env" saja, tapi dipakai di beberapa tempat.

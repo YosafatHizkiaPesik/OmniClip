@@ -77,7 +77,7 @@ def bisa_memasang() -> tuple[bool, str]:
     Diperiksa sebelum tombolnya ditampilkan, bukan setelah ditekan.
     """
     if not FROZEN:
-        return False, ("Dijalankan dari kode sumber — perbarui dengan git pull, "
+        return False, ("Dijalankan dari kode sumber, perbarui dengan git pull, "
                        "bukan lewat sini.")
     folder = folder_aplikasi()
     if folder is None:

@@ -67,7 +67,7 @@ export default function CookiesCard({ card, sectionTitle, helpText }) {
 
   const uji = async () => {
     setSibuk('uji'); setGalat(null); setHasil(null);
-    try { setHasil(await apiPost('/settings/cookies/uji', {})); }
+    try { setHasil(await apiPost('/settings/cookies/uji', {}, { timeout: 120000 })); }
     catch (err) { setGalat(err.message); } finally { setSibuk(''); }
   };
 
@@ -84,12 +84,12 @@ export default function CookiesCard({ card, sectionTitle, helpText }) {
       </div>
       <p style={helpText}>
         Biasanya tidak perlu. Nyalakan bila YouTube terus meminta &ldquo;confirm
-        you&rsquo;re not a bot&rdquo; untuk banyak video — tandanya jaringan Anda
+        you&rsquo;re not a bot&rdquo; untuk banyak video. Tandanya jaringan Anda
         sedang ditandai, dan sesi login adalah jalan keluarnya.
       </p>
 
       {/* Peringatan ini ditulis dari pengukuran, bukan dari dugaan, dan
-          sengaja berada di ATAS tombolnya — bukan di bawah sebagai catatan
+          sengaja berada di ATAS tombolnya, bukan di bawah sebagai catatan
           kaki yang dibaca setelah terlanjur dinyalakan. */}
       <div style={{
         display: 'flex', gap: '9px', alignItems: 'flex-start', margin: '10px 0',
@@ -160,7 +160,7 @@ export default function CookiesCard({ card, sectionTitle, helpText }) {
 
       {sibuk === 'uji' && (
         <p style={{ ...helpText, marginTop: '9px' }}>
-          Meminta dua kali ke YouTube — dengan dan tanpa cookies. Butuh belasan detik.
+          Meminta dua kali ke YouTube, dengan dan tanpa cookies. Butuh belasan detik.
         </p>
       )}
 
@@ -184,7 +184,7 @@ export default function CookiesCard({ card, sectionTitle, helpText }) {
             </div>
           )}
           <div style={{ marginTop: '7px', fontSize: '0.73rem', color: 'var(--text-muted)' }}>
-            Format video pada video uji — tanpa cookies: <strong>{hasil.polos}</strong>
+            Format video pada video uji. Tanpa cookies: <strong>{hasil.polos}</strong>
             {hasil.dengan !== null && <> · dengan cookies: <strong>{hasil.dengan}</strong></>}
             {hasil.terbaca > 0 && <> · {hasil.terbaca} butir cookie terbaca</>}
           </div>

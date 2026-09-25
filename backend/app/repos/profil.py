@@ -86,6 +86,25 @@ def riwayat_cari(pid: int, batas: int = 12) -> list[dict]:
            GROUP BY lower(trim(query)) ORDER BY terakhir DESC LIMIT ?""", (pid, batas))]
 
 
+def kueri_sering(pid: int, batas: int = 6, minimal: int = 2) -> list[dict]:
+    """
+    Kueri yang PALING SERING dicari, bukan yang paling baru.
+
+    Keduanya menjawab pertanyaan yang berbeda. Yang terbaru menjawab "tadi saya
+    mencari apa"; yang tersering menjawab "saya ini sebenarnya mencari apa" —
+    dan pertanyaan kedua itulah yang seharusnya mengisi beranda, supaya
+    pemiliknya tidak mengetik kata yang sama setiap hari.
+
+    `minimal` menjaga kueri yang cuma sekali diketik tidak ikut naik: sekali
+    bisa berarti salah ketik, atau rasa penasaran yang sudah selesai.
+    """
+    return [dict(r) for r in get_conn().execute(
+        """SELECT query, COUNT(*) AS kali, MAX(created_at) AS terakhir
+           FROM search_history WHERE profil_id = ?
+           GROUP BY lower(trim(query)) HAVING kali >= ?
+           ORDER BY kali DESC, terakhir DESC LIMIT ?""", (pid, minimal, batas))]
+
+
 def hapus_riwayat(pid: int, kueri: Optional[str] = None) -> None:
     with tx() as c:
         if kueri is None:

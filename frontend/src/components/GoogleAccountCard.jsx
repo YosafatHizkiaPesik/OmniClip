@@ -15,6 +15,10 @@ import { apiGet, apiPost } from '../lib/api';
  * Berkas rahasianya tidak pernah dikirim balik ke browser. Yang dijawab server
  * hanya "sudah tersambung atau belum" dan alamat surel akunnya.
  */
+// Cermin dari LAYANAN di backend/app/services/google_upload.py.
+const LAYANAN = ['youtube', 'drive'];
+const LABEL = { youtube: 'YouTube', drive: 'Drive' };
+
 export default function GoogleAccountCard({ card, sectionTitle, helpText }) {
   const [status, setStatus] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -61,13 +65,32 @@ export default function GoogleAccountCard({ card, sectionTitle, helpText }) {
     }
   };
 
-  const connect = async () => {
+  // Satu layanan per permintaan, dan itu bukan pilihan rasa: Google MENOLAK
+  // permintaan yang memuat izin YouTube dan Drive sekaligus, dengan
+  // "Error 400: invalid_request — scopes that cannot be requested together".
+  // Karena itu di sini ada dua tombol, bukan satu.
+  // Tab izin Google mengabarkan dirinya selesai lalu menutup sendiri; kartu ini
+  // menyegarkan statusnya tanpa perlu ditekan apa pun.
+  useEffect(() => {
+    const dengar = (e) => {
+      if (e.origin === window.location.origin
+          && e.data === 'omniclip:google-tersambung') {
+        setNote(null);
+        refresh();
+      }
+    };
+    window.addEventListener('message', dengar);
+    return () => window.removeEventListener('message', dengar);
+  }, [refresh]);
+
+  const connect = async (layanan) => {
     setBusy(true); setError(null); setNote(null);
     try {
-      const { authorization_url: url } = await apiPost('/uploads/google/connect', {});
+      const { authorization_url: url } = await apiPost('/uploads/google/connect',
+        { layanan });
       window.open(url, '_blank', 'noopener');
-      setNote('Halaman izin Google terbuka di tab baru. Selesaikan di sana, lalu '
-        + 'kembali ke sini — status di bawah akan ikut berubah.');
+      setNote(`Halaman izin ${LABEL[layanan]} terbuka di tab baru. Selesaikan di `
+        + 'sana, lalu kembali ke sini. Status di bawah akan ikut berubah.');
     } catch (err) {
       setError(err.message);
     } finally {
@@ -75,10 +98,10 @@ export default function GoogleAccountCard({ card, sectionTitle, helpText }) {
     }
   };
 
-  const disconnect = async () => {
+  const disconnect = async (layanan) => {
     setBusy(true); setError(null); setNote(null);
     try {
-      await apiPost('/uploads/google/disconnect', {});
+      await apiPost('/uploads/google/disconnect', { layanan });
       await refresh();
     } catch (err) {
       setError(err.message);
@@ -95,7 +118,9 @@ export default function GoogleAccountCard({ card, sectionTitle, helpText }) {
       </div>
       <p style={helpText}>
         Klip yang sudah jadi bisa dikirim langsung ke Drive atau naik sebagai
-        video di kanal Anda — satu per satu, tidak pernah berombongan.
+        video di kanal Anda, satu per satu, tidak pernah berombongan.{' '}
+        <b>Keduanya disambungkan terpisah</b>, karena Google menolak izin YouTube
+        dan Drive yang diminta bersamaan. Sambungkan yang Anda pakai saja.
       </p>
 
       {!status ? (
@@ -104,14 +129,18 @@ export default function GoogleAccountCard({ card, sectionTitle, helpText }) {
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '14px' }}>
-          <StatusLine
-            ok={status.connected}
-            okText={`Tersambung${status.email ? ` sebagai ${status.email}` : ''}.`}
-            offText="Akun ini belum masuk ke Google." />
+          {LAYANAN.map((l) => {
+            const st = status.layanan?.[l] ?? { connected: status.connected };
+            return (
+              <StatusLine key={l} ok={st.connected}
+                okText={`${LABEL[l]} tersambung${st.email ? ` sebagai ${st.email}` : ''}.`}
+                offText={`${LABEL[l]} belum tersambung.`} />
+            );
+          })}
 
           {/* Pemasangan berkas OAuth client tinggal di kartu "Tambah akun",
               tempat orang memang mencarinya. Di sini yang tersisa hanya
-              menyambungkan AKUN INI — dua tombol yang mengerjakan hal
+              menyambungkan AKUN INI, dua tombol yang mengerjakan hal
               berbeda tapi terlihat sama adalah sumber kebingungan, dan
               pemiliknya sudah bertanya "di mana saya menambahkan akun?". */}
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -119,19 +148,23 @@ export default function GoogleAccountCard({ card, sectionTitle, helpText }) {
                    onChange={pickFile} style={{ display: 'none' }} />
             {!status.client_configured && (
               <span style={helpText}>
-                Aplikasi Google belum didaftarkan — lihat kartu <b>Tambah akun</b> di atas.
+                Aplikasi Google belum didaftarkan. Lihat kartu <b>Tambah akun</b> di atas.
               </span>
             )}
-            {status.client_configured && !status.connected && (
-              <button className="btn-primary" disabled={busy} onClick={connect}>
-                <ExternalLink size={14} /> Masuk dengan Google untuk akun ini
-              </button>
-            )}
-            {status.connected && (
-              <button className="btn-secondary" disabled={busy} onClick={disconnect}>
-                <LogOut size={14} /> Putuskan sambungan
-              </button>
-            )}
+            {status.client_configured && LAYANAN.map((l) => {
+              const tersambung = status.layanan?.[l]?.connected;
+              return tersambung ? (
+                <button key={l} className="btn-secondary" disabled={busy}
+                        onClick={() => disconnect(l)}>
+                  <LogOut size={14} /> Putuskan {LABEL[l]}
+                </button>
+              ) : (
+                <button key={l} className="btn-primary" disabled={busy}
+                        onClick={() => connect(l)}>
+                  <ExternalLink size={14} /> Sambungkan {LABEL[l]}
+                </button>
+              );
+            })}
           </div>
 
           {note && (
@@ -171,7 +204,7 @@ export default function GoogleAccountCard({ card, sectionTitle, helpText }) {
               borderRadius: 'var(--r-sm)', wordBreak: 'break-all',
             }}>{status.redirect_uri}</code>
             <p style={{ marginTop: '10px', lineHeight: 1.6 }}>
-              Kuota unggah YouTube lewat API terbatas per hari dan per project —
+              Kuota unggah YouTube lewat API terbatas per hari dan per project,
               biasanya cukup untuk beberapa video sehari, bukan puluhan. Karena
               itu OmniClip mengunggah satu per satu
               {status.gap_seconds > 0 && `, dengan jeda ${status.gap_seconds} detik antar video`}.

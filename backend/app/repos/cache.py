@@ -57,10 +57,14 @@ def bersihkan(maks_umur: float = 24 * 3600) -> int:
     - `jenis:` (game / wajah / tanpa wajah), puluhan detik per klip.
     - `sutradara:` (momen dan bingkai hasil AI). Menghitungnya ulang bukan
       hanya lambat, tapi memakan kuota model yang jumlahnya terbatas per hari.
+    - `bingkai:` (jejak wajah per klip). Beberapa detik per klip pada video
+      yang isinya tidak akan pernah berubah, dan yang menunggunya adalah orang
+      yang sedang membuka editor.
     """
     cur = get_conn().execute(
         "DELETE FROM search_cache WHERE created_at < ? AND cache_key NOT LIKE 'jenis:%' "
-        "AND cache_key NOT LIKE 'sutradara:%'",
+        "AND cache_key NOT LIKE 'sutradara:%' AND cache_key NOT LIKE 'bingkai:%' "
+        "AND cache_key NOT LIKE 'tema:%'",
         (time.time() - maks_umur,),
     )
     return cur.rowcount

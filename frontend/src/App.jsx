@@ -115,8 +115,8 @@ export default function App() {
           <span>
             Mesin{' '}
             <b>
-              {engine === 'gemini' ? 'Gemini + heuristik'
-                : engine === 'lokal' ? 'heuristik lokal' : '…'}
+              {engine === 'gemini' ? 'Gemini + mesin lokal'
+                : engine === 'lokal' ? 'mesin lokal' : '…'}
             </b>
           </span>
         </div>

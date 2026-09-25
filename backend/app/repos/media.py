@@ -9,11 +9,31 @@ from ..db import get_conn, now, tx
 
 
 def rel_to_storage(path: Path | str) -> str:
-    return str(Path(path).resolve().relative_to(STORAGE_DIR.resolve()))
+    """
+    Jalan berkas seperti yang disimpan di basis data.
+
+    Relatif terhadap penyimpanan OmniClip bila memang di dalamnya, dan mutlak
+    bila di luar. Dulu ia selalu memaksa relatif, dan itu MENGGAGALKAN seluruh
+    pekerjaan begitu folder unduhan dipindahkan keluar. Terukur 24 September
+    2026: video yang sudah selesai diunduh ke /home/ynot/Videos/OmniClip
+    membuat `run_auto_clip` berhenti dengan ValueError tepat sesudah
+    unduhannya selesai, jadi yang dilihat pemiliknya adalah video yang gagal
+    diklip tanpa sebab yang bisa ditebak.
+
+    Memindahkan folder adalah fitur yang memang disediakan, jadi berkas di luar
+    penyimpanan adalah keadaan yang wajar, bukan kekeliruan yang harus ditolak.
+    """
+    penuh = Path(path).resolve()
+    try:
+        return str(penuh.relative_to(STORAGE_DIR.resolve()))
+    except ValueError:
+        return str(penuh)
 
 
 def abs_from_storage(rel_path: str) -> Path:
-    return STORAGE_DIR / rel_path
+    """Kebalikannya. Jalan mutlak dipakai apa adanya."""
+    jalan = Path(rel_path)
+    return jalan if jalan.is_absolute() else STORAGE_DIR / rel_path
 
 
 # --- videos -------------------------------------------------------------------

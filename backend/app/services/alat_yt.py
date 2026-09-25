@@ -197,7 +197,7 @@ def _mulai_server(pot: Path) -> Optional[str]:
             s.bind(("127.0.0.1", 0))
             port = s.getsockname()[1]
     url = f"http://127.0.0.1:{port}"
-    catatan = open(_folder() / "pot-server.log", "ab")   # noqa: SIM115 — hidup selama prosesnya
+    catatan = open(_folder() / "pot-server.log", "ab")   # noqa: SIM115, hidup selama prosesnya
     bendera = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
     # Hanya di 127.0.0.1: server ini tanpa autentikasi, dan bawaannya
     # mendengarkan di semua antarmuka.

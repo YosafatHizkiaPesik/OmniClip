@@ -101,7 +101,7 @@ export default function Watch() {
         kind: res.cached ? 'cached' : 'queued',
         text: res.cached
           ? 'Video ini sudah pernah diklip. Hasilnya menunggu di Clip Studio.'
-          : 'Diantrekan. Prosesnya berjalan di latar belakang — Anda bisa langsung memilih video lain.',
+          : 'Diantrekan. Prosesnya berjalan di latar belakang, Anda bisa langsung memilih video lain.',
       });
     } catch (err) {
       setNotice({ kind: 'error', text: err.message });
@@ -242,7 +242,7 @@ export default function Watch() {
                   </div>
                   <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
                     Durasinya {Math.round(pending.minutes)} menit, jadi ucapannya harus
-                    disalin dulu di komputer ini — perkiraan{' '}
+                    disalin dulu di komputer ini, perkiraan{' '}
                     <strong style={{ color: 'var(--accent-cyan)' }}>± {pending.fast} menit</strong>.
                     Prosesnya berjalan di latar belakang, jadi Anda tetap bisa menonton
                     dan mengantre video lain sementara menunggu.

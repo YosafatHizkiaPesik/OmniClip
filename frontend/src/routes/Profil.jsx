@@ -138,7 +138,7 @@ export default function Profil() {
   };
 
   const hapus = async (p) => {
-    if (!window.confirm(`Hapus akun "${p.nama}" dari OmniClip?\n\nKlip yang sudah dirender TIDAK dihapus — tetap ada di:\n${p.folder_klip}\n\nYang diputus hanya sambungannya ke OmniClip; akun Google, TikTok, dan Meta Anda sendiri tidak disentuh.`)) return;
+    if (!window.confirm(`Hapus akun "${p.nama}" dari OmniClip?\n\nKlip yang sudah dirender TIDAK dihapus, tetap ada di:\n${p.folder_klip}\n\nYang diputus hanya sambungannya ke OmniClip; akun Google, TikTok, dan Meta Anda sendiri tidak disentuh.`)) return;
     setSibuk(true);
     try {
       await apiDelete(`/profil/${p.id}`);
@@ -169,7 +169,7 @@ export default function Profil() {
           <h1 className="work-title">Akun</h1>
           <div className="sub">
             Tiap akun punya folder klip, riwayat pencarian, beranda, dan kanal
-            unggahannya sendiri — jadi satu akun bisa fokus pada satu jenis konten.
+            unggahannya sendiri, jadi satu akun bisa fokus pada satu jenis konten.
           </div>
         </div>
       </div>
@@ -210,7 +210,7 @@ export default function Profil() {
           <div style={{ marginTop: '14px', paddingTop: '12px', borderTop: '1px dashed var(--rule-2)' }}>
             {/* Menambah akun sekarang berarti MASUK, bukan mengarang nama.
                 Membuat ruang kerja tanpa akun tetap bisa, tapi ia jalan
-                sampingan — tanpa akun, klipnya tidak bisa diunggah ke mana
+                sampingan, tanpa akun, klipnya tidak bisa diunggah ke mana
                 pun, dan itu yang membuat pemiliknya bertanya "di mana saya
                 menambahkan akun?". */}
             {tanpaAkun ? (
@@ -286,7 +286,7 @@ export default function Profil() {
             <div style={card}>
               <div style={sectionTitle}><UploadCloud size={18} style={{ color: 'var(--reh)' }} />Unggah otomatis setelah render</div>
               <p style={helpText}>
-                Klip yang selesai dirender langsung diantrekan ke akun Google profil ini — tetap
+                Klip yang selesai dirender langsung diantrekan ke akun Google profil ini, tetap
                 berjalan walau halaman Studio sudah ditutup. Unggahan diberi jeda antar video
                 supaya kanal tidak terlihat seperti bot.
               </p>
@@ -322,7 +322,7 @@ export default function Profil() {
                 </select>
               </div>
               <div style={{ ...helpText, marginTop: '12px', marginBottom: '4px' }}>
-                Deskripsi video — <code>{'{judul}'}</code> dan <code>{'{hashtag}'}</code> diganti otomatis:
+                Deskripsi video. <code>{'{judul}'}</code> dan <code>{'{hashtag}'}</code> diganti otomatis:
               </div>
               <textarea value={u.deskripsi ?? ''} rows={3} maxLength={4000}
                         onChange={(e) => ubahUnggah({ deskripsi: e.target.value })}
@@ -334,7 +334,7 @@ export default function Profil() {
               <p style={{ ...helpText, marginTop: '10px' }}>
                 Catatan dari Google: selama aplikasi OAuth Anda belum lolos audit, video yang
                 diunggah lewat API selalu berstatus <b>Pribadi</b>, dan kuota harian (±6 video per
-                hari) dihitung per project Google Cloud — dibagi oleh semua profil.
+                hari) dihitung per project Google Cloud, dibagi oleh semua profil.
               </p>
             </div>
 

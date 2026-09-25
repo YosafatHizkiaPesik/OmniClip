@@ -307,7 +307,7 @@ def perbarui_semua(*, paksa: bool = False) -> list[dict]:
             h = {"paket": paket, "dipasang": False, "alasan": str(e)[:160]}
         hasil.append({k: v for k, v in h.items() if not k.startswith("_")})
         if h.get("dipasang"):
-            log.info("Pustaka %s diperbarui ke %s — berlaku setelah OmniClip "
+            log.info("Pustaka %s diperbarui ke %s, berlaku setelah OmniClip "
                      "dijalankan ulang", paket, h.get("terbaru"))
     _catat_periksa()
     return hasil
@@ -339,7 +339,7 @@ def periksa_kesehatan() -> None:
         try:
             __import__(modul)
         except Exception as e:
-            log.warning("Pustaka %s hasil pembaruan gagal diimpor (%s) — "
+            log.warning("Pustaka %s hasil pembaruan gagal diimpor (%s), "
                         "dikembalikan ke versi sebelumnya", paket, str(e)[:120])
             mundur(paket)
             # Buang jejak impor gagal supaya percobaan berikutnya bersih.

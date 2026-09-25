@@ -51,7 +51,7 @@ export default function UpdateCard({ card, sectionTitle, helpText }) {
 
       <p style={helpText}>
         OmniClip yang sudah terpasang tidak berubah sendiri saat kodenya
-        diperbaiki — versinya dibekukan saat dibangun. Di sini ia menanyakan ke
+        diperbaiki, versinya dibekukan saat dibangun. Di sini ia menanyakan ke
         GitHub apakah ada versi yang lebih baru.
       </p>
 
@@ -61,7 +61,7 @@ export default function UpdateCard({ card, sectionTitle, helpText }) {
           <>
             <ArrowDownToLine size={15} style={{ color: 'var(--reh)' }} />
             <span>
-              Versi <strong>{info.versi_terbaru}</strong> tersedia — Anda memakai{' '}
+              Versi <strong>{info.versi_terbaru}</strong> tersedia. Anda memakai{' '}
               <code>{info.versi_sekarang}</code>
               {info.ukuran ? ` · ${(info.ukuran / 1e6).toFixed(0)} MB` : ''}
             </span>
@@ -74,7 +74,7 @@ export default function UpdateCard({ card, sectionTitle, helpText }) {
         ) : (
           <>
             <Info size={15} style={{ color: 'var(--text-muted)' }} />
-            Versi terpasang <code>{info?.versi_sekarang || '—'}</code>
+            Versi terpasang <code>{info?.versi_sekarang || 'tidak diketahui'}</code>
             {info?.galat ? ` · ${info.galat}` : ''}
           </>
         )}
@@ -205,13 +205,13 @@ function PustakaOtomatis({ helpText }) {
       <strong style={{ fontSize: '0.82rem' }}>Pustaka YouTube &amp; suara</strong>
       <p style={{ ...helpText, margin: '4px 0 9px' }}>
         Diperbarui sendiri tiap dua belas jam. Inilah yang menjaga unduhan tetap
-        bekerja saat YouTube berubah — perbaikannya datang dari pustakanya, bukan
+        bekerja saat YouTube berubah. Perbaikannya datang dari pustakanya, bukan
         dari versi OmniClip.
       </p>
       <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap', fontSize: '0.78rem' }}>
         {data.paket.map((p) => (
           <span key={p.nama} style={{ color: 'var(--text-secondary)' }}>
-            {p.nama} <code>{p.versi || '—'}</code>
+            {p.nama} <code>{p.versi || 'tidak diketahui'}</code>
             {p.dari_pembaruan && (
               <em style={{ color: 'var(--text-muted)', fontStyle: 'normal' }}> (hasil pembaruan)</em>
             )}

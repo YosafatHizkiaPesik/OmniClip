@@ -110,6 +110,27 @@ class FontAksara(unittest.TestCase):
 
 
 class ModelWhisper(unittest.TestCase):
+    """
+    RAM-nya dipalsukan, dan itu bukan kemalasan.
+
+    `model_untuk` menanyakan RAM bebas mesin yang SEDANG berjalan, jadi tanpa
+    dipalsukan ujinya menjawab berbeda tergantung apa lagi yang kebetulan
+    sedang terbuka. Terukur 24 September 2026: lolos saat dijalankan sendirian,
+    gagal saat dijalankan bersama seluruh berkas uji — bukan karena ada yang
+    rusak, melainkan karena berkas uji lain sudah memuat numpy dan opencv.
+    Uji yang jawabannya bergantung pada cuaca adalah uji yang akhirnya
+    diabaikan orang.
+    """
+
+    def setUp(self):
+        from app.services import whisper
+        self.asli = whisper.available_ram_mb
+        whisper.available_ram_mb = lambda: 8000      # cukup untuk model apa pun
+
+    def tearDown(self):
+        from app.services import whisper
+        whisper.available_ram_mb = self.asli
+
     def test_bahasa_sulit_menaikkan_model_kecil(self):
         model, alasan = model_untuk("ja", "base")
         self.assertEqual(model, "small")
@@ -124,6 +145,15 @@ class ModelWhisper(unittest.TestCase):
 
     def test_kode_wilayah_diabaikan(self):
         self.assertEqual(model_untuk("zh-CN", "base")[0], "small")
+
+    def test_ram_sempit_menahan_kenaikan(self):
+        # Menaikkan model lalu mati kehabisan memori jauh lebih buruk daripada
+        # transkrip yang kurang tepat.
+        from app.services import whisper
+        whisper.available_ram_mb = lambda: 400
+        model, alasan = model_untuk("ja", "base")
+        self.assertEqual(model, "base")
+        self.assertIn("RAM", alasan)
 
     def test_daftar_aksara_sulit_memuat_yang_penting(self):
         for kode in ("ja", "ko", "zh", "ar", "th", "ru"):
@@ -145,3 +175,189 @@ class KeamananJalur(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SalinanPratinjau(unittest.TestCase):
+    """
+    Kapan Studio memutar salinan, dan kapan ia memutar sumbernya.
+
+    Dua pertanyaan berbeda yang dulu dijawab satu angka lebar, dan itu yang
+    membuat gambar di editor selalu lebih buruk daripada hasil rendernya:
+    sumber 1080p h264 yang bisa diputar peramban mana pun tetap diganti salinan
+    720p crf 26.
+    """
+
+    def jawab(self, info):
+        from app.services import proksi
+        from app.services import media
+        asli = media.probe
+        media.probe = lambda p: info
+        try:
+            return proksi.butuh_salinan(Path("/tmp/contoh.mp4"))
+        finally:
+            media.probe = asli
+
+    def test_h264_1080p_diputar_langsung(self):
+        self.assertFalse(self.jawab({"width": 1920, "height": 1080, "vcodec": "h264"}))
+
+    def test_4k_selalu_butuh_salinan(self):
+        self.assertTrue(self.jawab({"width": 3840, "height": 2160, "vcodec": "h264"}))
+
+    def test_vp9_besar_butuh_salinan(self):
+        # Terukur: Firefox memutar 4K VP9 pada 0,44x kecepatan.
+        self.assertTrue(self.jawab({"width": 1920, "height": 1080, "vcodec": "vp9"}))
+
+    def test_vp9_kecil_tidak_perlu(self):
+        self.assertFalse(self.jawab({"width": 854, "height": 480, "vcodec": "vp9"}))
+
+
+class LebarSalinan(unittest.TestCase):
+    """
+    Salinan yang ikut DITONTON dibuat lebih besar daripada yang hanya dibaca
+    mesin. Pada sumber 4K bedanya paling terasa, justru karena sumbernya paling
+    tajam, dan di sanalah salinan tidak bisa dihindari.
+    """
+
+    def lebar(self, info):
+        from app.services import media, proksi
+        asli = media.probe
+        media.probe = lambda p: info
+        try:
+            return proksi._lebar_untuk(Path("/tmp/contoh.mp4"))
+        finally:
+            media.probe = asli
+
+    def test_sumber_yang_ikut_diputar_dapat_salinan_lebih_besar(self):
+        from app.services import proksi
+        self.assertEqual(self.lebar({"width": 3840, "height": 2160, "vcodec": "h264"}),
+                         proksi.LEBAR_PUTAR)
+
+    def test_sumber_yang_hanya_dianalisis_tetap_kecil(self):
+        from app.services import proksi
+        self.assertEqual(self.lebar({"width": 1920, "height": 1080, "vcodec": "h264"}),
+                         proksi.LEBAR)
+
+    def test_salinan_tonton_lebih_besar_daripada_salinan_analisis(self):
+        from app.services import proksi
+        self.assertGreater(proksi.LEBAR_PUTAR, proksi.LEBAR)
+
+
+class IzinGoogle(unittest.TestCase):
+    """
+    Izin yang diminta OmniClip, dan yang harus didaftarkan pemiliknya di Google
+    Cloud Console. Keduanya harus sama; kalau tidak, pemiliknya mendaftarkan
+    izin yang salah dan baru tahu saat login pertama gagal.
+    """
+
+    @staticmethod
+    def dari_antarmuka() -> list[str]:
+        import re
+        akar = Path(__file__).resolve().parents[2]
+        teks = (akar / "frontend" / "src" / "components"
+                / "TambahAkun.jsx").read_text(encoding="utf-8")
+        blok = teks[teks.index("const SCOPES_TEKS = ["):]
+        return re.findall(r"'(https://[^']+)'", blok[:blok.index("]")])
+
+    def test_yang_ditampilkan_sama_dengan_yang_diminta(self):
+        from app.services.google_upload import SCOPES
+
+        https = [s for s in SCOPES if s.startswith("https://")]
+        self.assertEqual(sorted(self.dari_antarmuka()), sorted(https))
+
+    def test_openid_tidak_ikut_ditampilkan(self):
+        # Kotak "Manually add scopes" hanya menerima alamat https, dan Google
+        # memberikan openid sendiri saat userinfo.email diminta.
+        self.assertNotIn("openid", self.dari_antarmuka())
+
+    def test_izinnya_tetap_sekecil_mungkin(self):
+        from app.services.google_upload import SCOPES
+
+        # drive.file hanya berkas buatan aplikasi ini; youtube.upload tidak bisa
+        # membaca atau menghapus video yang sudah ada.
+        self.assertIn("https://www.googleapis.com/auth/drive.file", SCOPES)
+        self.assertNotIn("https://www.googleapis.com/auth/drive", SCOPES)
+        self.assertNotIn("https://www.googleapis.com/auth/youtube.force-ssl", SCOPES)
+
+
+class BerandaDariKebiasaan(unittest.TestCase):
+    """
+    Beranda yang isinya mengikuti apa yang MEMANG dicari, bukan apa yang
+    kebetulan terakhir diketik. Dilaporkan: "buat agar beranda berisi konten
+    yang sering kita cari, jadi tidak perlu mencari ulang terus."
+    """
+
+    def kolam(self, minat, sering, riwayat):
+        from app.repos import profil as repo
+        from app.routers import videos
+        from app.services import profil as ps
+
+        asli = (repo.ambil, repo.kueri_sering, repo.riwayat_cari, ps.kini)
+        repo.ambil = lambda p: {"minat": minat}
+        repo.kueri_sering = lambda p, n=6, minimal=2: [{"query": q} for q in sering]
+        repo.riwayat_cari = lambda p, n=8: [{"query": q} for q in riwayat]
+        ps.kini = lambda: 1
+        try:
+            return videos._kolam_beranda()
+        finally:
+            repo.ambil, repo.kueri_sering, repo.riwayat_cari, ps.kini = asli
+
+    def test_minat_paling_berat(self):
+        k = self.kolam(["horor"], ["podcast"], ["gaming"])
+        self.assertEqual(k.count("horor"), 3)
+        self.assertEqual(k.count("podcast"), 2)
+        self.assertEqual(k.count("gaming"), 1)
+
+    def test_yang_sering_dicari_mengalahkan_yang_terakhir(self):
+        k = self.kolam([], ["podcast bisnis"], ["sekali ketik"])
+        self.assertGreater(k.count("podcast bisnis"), k.count("sekali ketik"))
+
+    def test_tanpa_apa_pun_memakai_kolam_umum(self):
+        from app.routers import videos
+        self.assertEqual(self.kolam([], [], []), videos.TRENDING_QUERIES)
+
+    def test_kueri_sering_menolak_yang_cuma_sekali(self):
+        # Sekali bisa berarti salah ketik, atau penasaran yang sudah selesai.
+        import inspect
+        from app.repos import profil as repo
+        sumber = inspect.getsource(repo.kueri_sering)
+        self.assertIn("HAVING kali >= ?", sumber)
+        self.assertIn("ORDER BY kali DESC", sumber)
+
+
+class MesinPemilihKlipYangDiizinkan(unittest.TestCase):
+    """
+    Skema basis data harus mengenal setiap nilai `engine` yang bisa ditulis kode.
+
+    Batasan lama hanya mengenal 'heuristic' dan 'gemini'. Ia ditulis sebelum
+    OpenRouter ada dan tidak ikut dilonggarkan ketika jalur cadangannya
+    dibangun, jadi hasil OpenRouter yang SUDAH selesai gagal disimpan di baris
+    terakhir pekerjaannya. Tertangkap 24 September 2026 di catatan job
+    sungguhan: "CHECK constraint failed: engine IN ('heuristic','gemini')".
+
+    Cacat paling mahal bentuknya begini: sukses yang dibuang di detik terakhir,
+    dan yang terlihat pemiliknya cuma "auto-klip gagal".
+    """
+
+    def _skema(self) -> str:
+        from pathlib import Path
+        return (Path(__file__).resolve().parents[1] / "app" / "db.py").read_text(encoding="utf-8")
+
+    def test_skema_mengenal_ketiga_mesin(self):
+        skema = self._skema()
+        for mesin in ("heuristic", "gemini", "openrouter"):
+            self.assertIn(f"'{mesin}'", skema, f"skema tidak mengenal {mesin}")
+
+    def test_setiap_mesin_di_pipeline_ada_di_skema(self):
+        """Yang dijaga bukan daftarnya, melainkan bahwa keduanya tidak berpisah."""
+        import re
+        from pathlib import Path
+
+        pipeline = (Path(__file__).resolve().parents[1] / "app" / "services"
+                    / "pipeline.py").read_text(encoding="utf-8")
+        dipakai = set(re.findall(r'engine(?:,\s*\w+)?\s*=\s*"(\w+)"', pipeline))
+        self.assertTrue(dipakai, "tidak ada nilai engine yang terbaca dari pipeline")
+        m = re.search(r"engine\s+TEXT NOT NULL CHECK \(engine IN \(([^)]*)\)\)", self._skema())
+        self.assertIsNotNone(m, "batasan engine tidak ditemukan di skema")
+        diizinkan = set(re.findall(r"'(\w+)'", m.group(1)))
+        self.assertTrue(dipakai <= diizinkan,
+                        f"pipeline memakai {dipakai - diizinkan} yang ditolak skema")

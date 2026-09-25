@@ -47,11 +47,13 @@ export default function KesehatanCard({ card, sectionTitle, helpText }) {
         </button>
       </div>
       <p style={helpText}>
-        {data
+        {data?.galat
+          ? `${data.galat} Tekan ikon segarkan di kanan untuk memeriksa lagi.`
+          : data
           ? (buruk === 0
             ? 'Semua bagian yang diperiksa dalam keadaan baik.'
-            : `${buruk} hal belum siap. Yang belum siap tidak membuat OmniClip berhenti — `
-              + 'tiap baris menyebut apa akibatnya.')
+            : `${buruk} hal belum siap. Yang belum siap tidak membuat OmniClip berhenti, `
+              + 'dan tiap baris menyebut apa akibatnya.')
           : 'Memeriksa…'}
       </p>
 
@@ -67,7 +69,7 @@ export default function KesehatanCard({ card, sectionTitle, helpText }) {
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: '0.78rem', fontWeight: 700 }}>
                 {b.nama}
-                <span style={{ fontWeight: 500, color: 'var(--text-secondary)' }}> — {b.nilai}</span>
+                <span style={{ fontWeight: 500, color: 'var(--text-secondary)' }}> · {b.nilai}</span>
               </div>
               {!b.baik && <div style={{ ...helpText, marginTop: '2px' }}>{b.akibat}</div>}
             </div>

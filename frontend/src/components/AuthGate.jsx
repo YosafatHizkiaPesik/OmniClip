@@ -162,7 +162,7 @@ function Gate({ mode, minLength, statusError, onDone }) {
 
         {setup && (
           <p style={{ ...help, marginTop: '14px' }}>
-            Lupa kata sandi tidak bisa dipulihkan lewat email — tidak ada email di
+            Lupa kata sandi tidak bisa dipulihkan lewat email, karena tidak ada email di
             sini. Pemulihannya lewat terminal komputer ini; caranya ada di
             <code> PANDUAN-AKSES-JARAK-JAUH.md</code>.
           </p>

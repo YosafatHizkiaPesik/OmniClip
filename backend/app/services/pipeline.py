@@ -82,7 +82,7 @@ def run_download(ctx: JobContext) -> dict:
     singkiran = _singkirkan_audio_lain(video_id, audio_lang)
     with ctx.giliran_unduh(lambda: ctx.progress(
             0.05, stage="download",
-            message="Menunggu giliran mengunduh — unduhan lain sedang berjalan…",
+            message="Menunggu giliran mengunduh, unduhan lain sedang berjalan…",
             paksa=True)):
         try:
             result = download_youtube_media(video_id, resolution, on_progress=on_progress,
@@ -141,7 +141,7 @@ def run_render(ctx: JobContext) -> dict:
     """
     from .clipmodel import rebuild_subtitles_for_segments
     from .render import render_clip
-    from .subtitles import FONT_FAMILIES, CaptionStyle
+    from .subtitles import FONT_FAMILIES, CaptionStyle, warna_penutur_aktif
 
     video_id = ctx.payload["video_id"]
     source = find_local_video(video_id)
@@ -159,15 +159,28 @@ def run_render(ctx: JobContext) -> dict:
     subtitles = ctx.payload.get("subtitles") or []
 
     style_in = ctx.payload.get("caption_style") or {}
-    style = CaptionStyle(
+    # Gaya dibangun dari SELURUH bidang yang dikenal CaptionStyle, bukan dari
+    # daftar tangan.
+    #
+    # Daftar tangan sebelumnya meneruskan dua puluh bidang dan diam-diam
+    # membuang empat belas, termasuk `sorot`, `kotak_warna`, `kotak_teks`,
+    # `bg`, dan `aktif`. Akibatnya: setiap tema berkotak, berpendar, atau
+    # bergaris bawah yang dipilih di Studio DIRENDER sebagai sorotan biasa,
+    # dan pratinjau berbohong tentang hasilnya. Terlapor 25 September 2026
+    # sesudah sebuah klip terunggah: kotak kuning di belakang kata ada di
+    # pratinjau dan tidak ada di videonya.
+    #
+    # Bidang baru sekarang ikut sendiri. Yang punya syarat, batas, atau
+    # sakelar induk ditimpa di bawah, dan hanya itu yang perlu dibaca.
+    from dataclasses import fields as _bidang
+
+    dikenal = {f.name for f in _bidang(CaptionStyle)}
+    nilai = {k: v for k, v in style_in.items() if k in dikenal and v is not None}
+    nilai.update(
         # font_size lama berasal dari era SRT force_style (nilai khas 24) dan
         # terlalu kecil untuk kanvas 1080x1920. Nilai di bawah 40 diabaikan.
         size=int(style_in.get("size") or _sane_font_size(ctx.payload.get("font_size"))),
-        highlight=style_in.get("highlight", "#FFE500"),
-        primary=style_in.get("primary", "#FFFFFF"),
         position=style_in.get("position", ctx.payload.get("position", "bottom")),
-        uppercase=bool(style_in.get("uppercase", True)),
-        animation=style_in.get("animation", "karaoke_pop"),
         # Hanya font yang benar-benar ikut dibundel yang diteruskan. Nama lain
         # akan membuat libass jatuh diam-diam ke DejaVu Sans, dan hasilnya
         # terlihat seperti berkas subtitle, bukan seperti klip.
@@ -179,8 +192,17 @@ def run_render(ctx: JobContext) -> dict:
         box_w=max(20.0, min(100.0, float(style_in.get("box_w", 84.0)))),
         speaker_colors=tuple(style_in.get("speaker_colors")
                              or ("#FFFFFF", "#7CFFB2", "#FFB3C7", "#B39DFF")),
-        # Bawaannya tetap menyala, jadi gaya lama tidak berubah artinya.
-        per_speaker_colors=bool(style_in.get("per_speaker_colors", True)),
+        # Sakelar induk di Pengaturan menang atas gaya klip. Tanpa itu, gaya
+        # lama yang tersimpan di peramban (warna per penutur menyala) akan
+        # menghidupkan kembali pewarnaan yang sudah diputuskan mati, dan
+        # pengguna melihat warna yang tidak ia minta pada klip yang dirender
+        # berbulan-bulan sesudahnya.
+        per_speaker_colors=(bool(style_in.get("per_speaker_colors", False))
+                            and warna_penutur_aktif()),
+        # Tidak disetel = pakai bawaan. Dijepit ke batasnya di `jarak_kata()`,
+        # jadi angka apa pun dari klien tidak bisa memecah barisnya.
+        jarak_kata=(float(style_in["jarak_kata"])
+                    if isinstance(style_in.get("jarak_kata"), (int, float)) else None),
         # Tanda air. Font kosong berarti ikut font subtitle — itu yang
         # diharapkan saat pengguna belum menyentuh setelan ini sama sekali.
         wm_font=(style_in.get("wm_font") if style_in.get("wm_font") in FONT_FAMILIES
@@ -192,6 +214,7 @@ def run_render(ctx: JobContext) -> dict:
         wm_y=max(0.0, min(100.0, float(style_in.get("wm_y", 95.0)))),
         wm_outline=max(0, min(16, int(style_in.get("wm_outline", 2)))),
     )
+    style = CaptionStyle(**nilai)
 
     total = sum(float(s["end"]) - float(s["start"]) for s in segments)
     label = "Merender klip" if len(segments) == 1 else f"Merender {len(segments)} potongan gabungan"
@@ -241,6 +264,11 @@ def run_render(ctx: JobContext) -> dict:
         video_filter=ctx.payload.get("video_filter", "normal"),
         caption_style=style,
         frame_mode=frame_mode,
+        # Dijepit di sini juga, bukan hanya di model permintaan: muatan job
+        # bisa datang dari klip tersimpan, bukan cuma dari permintaan yang baru
+        # divalidasi.
+        frame_zoom=max(1.0, min(2.0, float(ctx.payload.get("frame_zoom") or 1.0))),
+        frame_geser_y=max(-100.0, min(100.0, float(ctx.payload.get("frame_geser_y") or 0.0))),
         frame_layout=ctx.payload.get("frame_layout"),
         frame_keys=ctx.payload.get("frame_keys"),
         media_layers=ctx.payload.get("media_layers"),
@@ -375,6 +403,109 @@ def _jadwalkan_bingkai(video_id: str, clips: list[dict], aspect_ratio: str | Non
     return n
 
 
+def _jadwalkan_jejak(video_id: str, clips: list[dict], aspect_ratio: str | None) -> None:
+    """
+    Mengantrekan perhitungan jejak wajah untuk semua klip yang baru jadi.
+
+    Berbeda dari `_jadwalkan_bingkai` di atas, ini TIDAK memakai AI dan tidak
+    bisa dimatikan lewat setelan: ia cuma memindahkan pekerjaan yang pasti
+    terjadi ke waktu yang tidak ditunggu siapa pun. Tanpa ini, klip pertama
+    terasa langsung jadi dan klip keenam membuat orang menunggu di depan
+    layar, padahal dari luar keduanya terlihat sama-sama "sudah selesai".
+    """
+    if not clips:
+        return
+    from .jobs import queue
+
+    # Subtitle dibawa LENGKAP dengan teksnya, bukan hanya waktunya: pekerjaan
+    # yang sama juga memilihkan tema, dan tema dipilih dari apa yang diucapkan.
+    ringkas = [{"segments": [{"start": s["start"], "end": s["end"]}
+                             for s in (c.get("segments") or [])],
+                "title": c.get("title") or c.get("hook_text") or "",
+                "jenis": c.get("jenis") or "",
+                "duration": sum(max(0.0, float(s["end"]) - float(s["start"]))
+                                for s in (c.get("segments") or [])),
+                "subtitles": [{"start": l.get("start"), "end": l.get("end"),
+                               "text": l.get("text"), "speaker": l.get("speaker")}
+                              for l in (c.get("subtitles") or [])][:80]}
+               for c in clips if c.get("segments")]
+    if not ringkas:
+        return
+    try:
+        queue.enqueue("bingkai_awal",
+                      {"video_id": video_id, "klip": ringkas,
+                       "aspect_ratio": aspect_ratio or "9:16"},
+                      video_id=video_id, priority=950,
+                      dedupe_key=f"bingkai-awal:{video_id}")
+    except Exception as e:      # pemanasan yang gagal diantre bukan kegagalan
+        log.warning("Bingkai awal tidak bisa diantrekan: %s", str(e)[:200])
+
+
+# Berapa kali OmniClip mencoba sendiri sesudah Gemini menjawab "sedang sibuk",
+# dan berapa lama jedanya. Dibatasi dengan sengaja: percobaan yang tidak
+# berujung akan terus menjalankan analisis di latar belakang berhari-hari tanpa
+# ada yang memintanya.
+ULANG_MAKS = 2
+ULANG_JEDA = (25 * 60, 90 * 60)
+
+
+def _jadwalkan_coba_lagi(ctx, video_id: str, galat: str) -> str:
+    """
+    Mengantrekan satu percobaan ulang untuk nanti; mengembalikan kapan, atau "".
+
+    503 dari Gemini berarti "servernya sedang penuh, coba lagi nanti", dan
+    kalimat itu adalah petunjuk yang bisa dikerjakan mesin. Sebelum ini
+    petunjuk tersebut berakhir di layar sebagai saran kepada ORANG: buka
+    editor, tekan Cari ulang, dan tebak sendiri kapan waktunya tepat.
+
+    Yang diulang hanya pemilihan klipnya. Unduhan dan transkrip sudah ada dan
+    tidak disentuh, jadi percobaan kedua jauh lebih murah daripada yang pertama.
+    """
+    sibuk = any(x in galat for x in ("503", "UNAVAILABLE", "overloaded",
+                                     "high demand", "timed out", "timeout",
+                                     "504", "DEADLINE", "batas waktu"))
+    if not sibuk:
+        return ""
+    ke = int(ctx.payload.get("ulang_otomatis") or 0) + 1
+    if ke > ULANG_MAKS:
+        return ""
+
+    import time as _t
+    from .jobs import queue
+
+    jeda = ULANG_JEDA[min(ke, len(ULANG_JEDA)) - 1]
+    payload = {**ctx.payload, "video_id": video_id, "ulang": True,
+               "use_gemini": True, "ulang_otomatis": ke}
+    payload.pop("api_key", None)
+    try:
+        queue.enqueue("auto_clip", payload, video_id=video_id, priority=800,
+                      mulai_setelah=_t.time() + jeda,
+                      dedupe_key=f"auto_clip_ulang:{video_id}:{ke}")
+    except Exception as e:
+        log.warning("Percobaan ulang tidak bisa diantrekan: %s", str(e)[:200])
+        return ""
+    log.info("Gemini sibuk; percobaan ulang %d untuk %s dijadwalkan %d menit lagi",
+             ke, video_id, jeda // 60)
+    return f"{jeda // 60} menit lagi"
+
+
+def _sudah_disunting(video_id: str) -> bool:
+    """Apakah proyek ini disentuh tangan sesudah analisis terakhirnya."""
+    try:
+        from ..db import get_conn
+        row = get_conn().execute(
+            """SELECT p.updated_at AS p_at,
+                      (SELECT MAX(created_at) FROM analyses WHERE video_id = ?) AS a_at
+                 FROM projects p WHERE p.video_id = ?""",
+            (video_id, video_id),
+        ).fetchone()
+    except Exception:
+        return False
+    if not row or row["p_at"] is None:
+        return False
+    return float(row["p_at"]) > float(row["a_at"] or 0)
+
+
 def run_auto_clip(ctx: JobContext) -> dict:
     """
     payload: {video_id, quality, whisper_model, max_clips, use_gemini}
@@ -396,6 +527,21 @@ def run_auto_clip(ctx: JobContext) -> dict:
     from .transcript import get_transcript, words_to_sentences
 
     video_id = ctx.payload["video_id"]
+
+    # Percobaan ulang otomatis MENGALAH pada pekerjaan tangan.
+    #
+    # Ia dijadwalkan sebelum orangnya membuka editor, dan berjalan dua puluh
+    # lima menit kemudian. Kalau dalam jeda itu proyeknya disunting, mengganti
+    # daftar klipnya berarti membuang pekerjaan orang tanpa diminta, demi
+    # rekomendasi yang belum tentu lebih baik. Yang dijanjikan hanya "dicoba
+    # lagi", bukan "ditimpa".
+    if ctx.payload.get("ulang_otomatis") and _sudah_disunting(video_id):
+        ctx.progress(1.0, stage="done",
+                     message="Proyek ini sudah disunting, jadi percobaan ulang "
+                             "Gemini dilewati. Tekan \"Cari ulang\" kalau "
+                             "memang ingin daftarnya diganti.")
+        return {"video_id": video_id, "dilewati": "sudah_disunting"}
+
     # Auto-clip SELALU mengambil yang terbaik kecuali diminta lain.
     #
     # Bukan pilihan gaya. Keluarannya 1080x1920, dan jendela 9:16 yang dipotong
@@ -459,7 +605,7 @@ def run_auto_clip(ctx: JobContext) -> dict:
         # menahan pekerjaan lain yang tidak perlu mengunduh apa pun.
         with ctx.giliran_unduh(lambda: _stage_progress(
                 ctx, "download", 0.0,
-                "Menunggu giliran mengunduh — unduhan lain sedang berjalan…",
+                "Menunggu giliran mengunduh, unduhan lain sedang berjalan…",
                 paksa=True)):
             try:
                 result = download_youtube_media(video_id, quality, on_progress=on_dl,
@@ -484,7 +630,7 @@ def run_auto_clip(ctx: JobContext) -> dict:
     ctx.giliran_cpu(lambda: _stage_progress(
         ctx, "download", 1.0,
         ("Video dari komputer siap" if impor else "Video sudah terunduh")
-        + " — menunggu giliran analisis (video lain sedang diproses)…",
+        + ", menunggu giliran analisis (video lain sedang diproses)…",
         paksa=True))
 
     # Salinan analisis dimulai SEKARANG, di latar, sementara transkrip dan
@@ -531,7 +677,7 @@ def run_auto_clip(ctx: JobContext) -> dict:
         if (tersimpan and bahasa_video
                 and str(tersimpan.get("source", "")).startswith("youtube")
                 and (tersimpan.get("language") or "").split("-")[0].lower() != bahasa_video):
-            log.info("Transkrip tersimpan berbahasa %s, video berbahasa %s — diambil ulang",
+            log.info("Transkrip tersimpan berbahasa %s, video berbahasa %s, diambil ulang",
                      tersimpan.get("language"), bahasa_video)
             tersimpan = None
         if tersimpan and tersimpan.get("words") and tersimpan.get("sentences"):
@@ -553,7 +699,7 @@ def run_auto_clip(ctx: JobContext) -> dict:
                             f"Transkrip ditemukan ({len(transcript['words'])} kata).")
         else:
             _stage_progress(ctx, "transcribe", 0.0,
-                            "Video tidak punya subtitle — menyalin ucapan dengan Whisper…")
+                            "Video tidak punya subtitle, menyalin ucapan dengan Whisper…")
             from .whisper import deteksi_bahasa, model_untuk, transcribe_audio
             wav = need_audio()
             # Bahasa video ikut menentukan ukuran model: aksara non-Latin
@@ -713,23 +859,50 @@ def run_auto_clip(ctx: JobContext) -> dict:
         if use_gemini and api_key and candidates:
             _stage_progress(ctx, "gemini", 0.2, "Menyusun ulang peringkat dengan Gemini…")
             try:
+                from ..config import get_api_keys
                 from .gemini import refine_candidates
                 from .peringkat_model import rantai
-                # Tanpa pilihan pengguna, yang dicoba pertama adalah model
-                # TERKUAT yang benar-benar bisa dipakai kunci ini — bukan
-                # daftar tetap yang ditulis tangan dan cepat tertinggal.
-                urutan_model = rantai(api_key, ctx.payload.get("gemini_model")
-                                      or get_model_override() or None)
-                candidates, model_used = refine_candidates(
-                    sentences=sentences, candidates=candidates, video_title=title,
-                    api_key=api_key,
-                    models=urutan_model,
-                    max_clips=max_clips,
-                    max_chars=MAX_TRANSCRIPT_CHARS,
-                    max_seconds=DURASI_MAKS,
-                    kabar=lambda pesan: _stage_progress(ctx, "gemini", 0.3, pesan),
-                    batal=ctx.check_cancelled,
-                )
+                # Kuota Gemini dihitung per PROJECT Google, bukan per orang.
+                # Kunci kedua dari project kedua punya jatah sendiri, jadi
+                # kegagalan satu kunci bukan alasan menyerah selama masih ada
+                # kunci lain — dan pada hari yang buruk itulah bedanya antara
+                # klip pilihan model dan klip pilihan mesin lokal.
+                kunci_semua = ([api_key] if api_key not in get_api_keys()
+                               else []) + get_api_keys()
+                gagal_kunci = None
+                for nomor, kunci in enumerate(kunci_semua, 1):
+                    # Tanpa pilihan pengguna, yang dicoba pertama adalah model
+                    # TERKUAT yang benar-benar bisa dipakai kunci ini, bukan
+                    # daftar tetap yang ditulis tangan dan cepat tertinggal.
+                    urutan_model = rantai(kunci, ctx.payload.get("gemini_model")
+                                          or get_model_override() or None)
+                    if len(kunci_semua) > 1:
+                        _stage_progress(ctx, "gemini", 0.25,
+                                        f"Memakai kunci Gemini ke-{nomor} "
+                                        f"dari {len(kunci_semua)}…")
+                    try:
+                        from .penyedia_ai import pekerjaan as _kerja
+                        with _kerja("pilih-klip", video_id):
+                          candidates, model_used = refine_candidates(
+                            sentences=sentences, candidates=candidates,
+                            video_title=title,
+                            api_key=kunci,
+                            models=urutan_model,
+                            max_clips=max_clips,
+                            max_chars=MAX_TRANSCRIPT_CHARS,
+                            max_seconds=DURASI_MAKS,
+                            kabar=lambda pesan: _stage_progress(ctx, "gemini", 0.3, pesan),
+                            batal=ctx.check_cancelled,
+                        )
+                        api_key = kunci
+                        break
+                    except JobCancelled:
+                        raise
+                    except Exception as e:
+                        gagal_kunci = e
+                        log.warning("Kunci Gemini ke-%d gagal: %s", nomor, str(e)[:160])
+                else:
+                    raise gagal_kunci or RuntimeError("Tidak ada kunci Gemini.")
                 # Pemeriksaan kedua, khusus batas. Gagal di sini tidak
                 # membatalkan apa pun: batas dari pemilihan tetap dipakai.
                 try:
@@ -757,12 +930,44 @@ def run_auto_clip(ctx: JobContext) -> dict:
             except Exception as e:
                 # Kegagalan Gemini TIDAK boleh menjatuhkan pipeline: hasil
                 # heuristik tetap valid dan tetap jujur.
-                log.warning("Gemini gagal, memakai hasil heuristik: %s", str(e)[:200])
+                log.warning("Gemini gagal, memakai cadangan: %s", str(e)[:200])
                 gemini_gagal = ("Gemini sedang sibuk atau tidak menjawab"
                                 if any(x in str(e) for x in ("503", "UNAVAILABLE", "timeout",
                                                              "timed out", "batas waktu"))
                                 else "Gemini gagal")
-                _stage_progress(ctx, "gemini", 1.0, f"{gemini_gagal} — memakai mesin lokal.")
+                # Sebelum menyerah ke mesin lokal: OpenRouter, bila kuncinya
+                # ada. Mesin lokal menemukan momen yang terukur keras dan
+                # berjeda tepat, tapi tidak bisa menilai apakah sebuah momen
+                # lucu atau mengejutkan, dan itu yang terasa sebagai "klipnya
+                # tidak menarik".
+                try:
+                    from .gemini import refine_openrouter
+                    _stage_progress(ctx, "gemini", 0.5,
+                                    f"{gemini_gagal}. Mencoba OpenRouter…")
+                    candidates, model_used = refine_openrouter(
+                        sentences=sentences, candidates=heuristic_pool,
+                        video_title=title, max_clips=max_clips,
+                        max_chars=MAX_TRANSCRIPT_CHARS, max_seconds=DURASI_MAKS,
+                        kabar=lambda pesan: _stage_progress(ctx, "gemini", 0.6, pesan),
+                        batal=ctx.check_cancelled)
+                    candidates = validate_and_snap(candidates, sentences, duration,
+                                                   max_duration=DURASI_MAKS)
+                    engine, gemini_gagal = "openrouter", None
+                    _stage_progress(ctx, "gemini", 1.0,
+                                    f"Dipilih OpenRouter ({model_used}).")
+                except JobCancelled:
+                    raise
+                except Exception as e2:
+                    log.info("OpenRouter tidak dipakai: %s", str(e2)[:200])
+                    nanti = _jadwalkan_coba_lagi(ctx, video_id, str(e))
+                    _stage_progress(ctx, "gemini", 1.0,
+                                    f"{gemini_gagal}, memakai mesin lokal."
+                                    + (f" Akan dicoba lagi sendiri {nanti}." if nanti else ""))
+                    # Hitungan mundurnya SENGAJA tidak ikut disimpan ke sini.
+                    # Ia dibekukan pada saat penulisan, dan kartu yang dibuka
+                    # setengah jam kemudian akan tetap berkata "25 menit lagi"
+                    # sementara jadwal sebenarnya sudah lewat. Waktunya dikirim
+                    # apa adanya sebagai `coba_lagi_pada` dan dihitung di layar.
 
         # Gemini sering mengembalikan lebih sedikit dari yang diminta — pada
         # video ini 11 dari 19. Sisa jatahnya diisi dari kandidat heuristik
@@ -819,10 +1024,29 @@ def run_auto_clip(ctx: JobContext) -> dict:
                                     video_title=title, channel=channel)
                  for i, c in enumerate(candidates, 1)]
 
+        # Tinggi sumbernya, dan peringatan bila di bawah 1080.
+        #
+        # Klip 9:16 hanya mengambil 9/16 lebar gambarnya lalu meregangkannya ke
+        # 1080x1920. Dari sumber 720p jendelanya cuma 405x720 — hampir tiga kali
+        # lipat regangan, dan tidak ada filter yang mengembalikan detail yang
+        # memang tidak pernah terekam. Terlapor: "saya heran kenapa prosesnya
+        # cepat, ternyata videonya resolusi rendah". Cepatnya memang gejala, dan
+        # satu-satunya yang kurang adalah aplikasinya tidak pernah mengatakannya.
+        tinggi_sumber = int((probe(str(source)) or {}).get("height") or 0)
+        sumber_rendah = ""
+        if 0 < tinggi_sumber < 1080:
+            sumber_rendah = (f"Video sumbernya hanya {tinggi_sumber}p, dan itu memang "
+                             f"yang tertinggi disediakan YouTube untuk video ini. "
+                             f"Klip tegaknya akan terlihat lebih lunak daripada "
+                             f"biasanya.")
+            log.info("Sumber %s hanya %dp", video_id, tinggi_sumber)
+
         payload = {
             "video_id": video_id,
             "title": title,
             "duration": duration,
+            "tinggi_sumber": tinggi_sumber,
+            "sumber_rendah": sumber_rendah,
             "has_transcript": True,
             "transcript_source": transcript["source"],
             "transcript_words": len(words),
@@ -882,12 +1106,13 @@ def run_auto_clip(ctx: JobContext) -> dict:
                            result=payload)
 
         n_bingkai = _jadwalkan_bingkai(video_id, clips, ctx.payload.get("aspect_ratio"))
+        _jadwalkan_jejak(video_id, clips, ctx.payload.get("aspect_ratio"))
 
         ctx.progress(1.0, stage="done", message=(
             f"{len(clips)} klip siap ditinjau"
             + (f" (dengan terjemahan)" if diterjemah else "")
-            + (f" — bingkai {n_bingkai} klip sedang disusun AI" if n_bingkai else "")
-            + (f" — {gemini_gagal}, jadi dipilih mesin lokal. Coba lagi nanti."
+            + (f", bingkai {n_bingkai} klip sedang disusun AI" if n_bingkai else "")
+            + (f", {gemini_gagal}, jadi dipilih mesin lokal. Coba lagi nanti."
                if gemini_gagal
                else f", dipilih {model_used}." if engine == "gemini" and model_used
                else ".")))
@@ -1052,7 +1277,7 @@ def _bukti_wajah(source, result: dict, sentences: list, ctx) -> Optional[dict]:
                     break
 
     if len(suara) < 8 or n_orang < 2:
-        log.info("Bukti wajah terlalu sedikit (%d kalimat) — penambatan dilewati",
+        log.info("Bukti wajah terlalu sedikit (%d kalimat), penambatan dilewati",
                  len(suara))
         return None
 
@@ -1063,6 +1288,97 @@ def _bukti_wajah(source, result: dict, sentences: list, ctx) -> Optional[dict]:
     log.info("Bukti wajah terkumpul untuk %d dari %d kalimat, %d orang",
              len(suara), len(sentences), n_orang)
     return {"span": span, "orang": n_orang}
+
+
+def tambatkan_ke_wajah(video_id: str, ctx) -> Optional[dict]:
+    """
+    Menambatkan suara ke wajah untuk sebuah video yang analisisnya sudah ada.
+
+    Jalur ini SUDAH ada sejak lama, tapi hanya berjalan lewat tombol "Deteksi
+    ulang" yang harus ditekan sendiri — padahal ia justru yang menghasilkan
+    warna penutur paling benar. Catatan di `diarize.label_from_evidence`
+    menjelaskan kenapa: pengelompokan suara sendirian harus menebak DUA hal
+    sekaligus (ada berapa orang, dan siapa bicara kapan), dan pada podcast
+    tebakan pertamanya rapuh. Terukur pada rekaman lima orang, kurva nilainya
+    datar dari k=2 sampai k=8 sehingga jumlah penuturnya praktis ditentukan
+    lemparan koin.
+
+    Dengan wajah, gambarnya yang menjawab lebih dulu: saat layar hanya memuat
+    satu wajah, penyuntingnya sendiri sudah mengatakan siapa yang bicara.
+
+    Dijalankan dari job pemanasan, bukan dari auto-klip, dan itu disengaja:
+    pelacakan wajahnya memang sudah dikerjakan di sana untuk keperluan bingkai,
+    jadi di sini ia praktis gratis. Menjalankannya di dalam auto-klip akan
+    menambah menit-menit pada pekerjaan yang ditunggu orang di depan layar.
+
+    Mengembalikan ringkasan bila berhasil menggantikan label lama, atau None.
+    """
+    from ..repos import analyses as analyses_repo
+    from ..repos import transcripts as tx_repo
+    from .clipmodel import rebuild_subtitles_for_segments
+    from .diarize import label_from_evidence
+    from .paths import find_local_video
+    from .transcript import words_to_sentences
+
+    cached = analyses_repo.latest_for_video(video_id)
+    stored = tx_repo.get_best(video_id)
+    source = find_local_video(video_id)
+    if not cached or not stored or source is None:
+        return None
+    hasil = cached["result"]
+    if int(hasil.get("speaker_count") or 0) < 2:
+        return None                      # satu orang tidak perlu ditambatkan
+    if hasil.get("tambat_wajah"):
+        return None                      # sudah pernah, jangan ulangi
+
+    words = list(stored["words"] or [])
+    sentences = words_to_sentences(words)
+    if not sentences:
+        return None
+
+    bukti = _bukti_wajah(source, hasil, sentences, ctx)
+    if not bukti:
+        return None
+
+    # WAV 16 kHz, bukan berkas videonya: `label_from_evidence` membaca sampel
+    # mentah lewat modul `wave`, dan mp4 yang diberikan kepadanya gagal dengan
+    # "file does not start with RIFF id" — sebuah pesan yang tidak menyebut
+    # sama sekali bahwa yang salah adalah jenis berkasnya.
+    from . import suara
+    wav = suara.siapkan(source) or ""
+    if not wav:
+        log.info("Audio %s tidak bisa disiapkan; penambatan dilewati", video_id)
+        return None
+
+    dia = label_from_evidence(wav, [(s["s"], s["e"]) for s in sentences],
+                              bukti["span"], bukti["orang"])
+    if dia is None or dia.speaker_count < 2:
+        return None
+
+    for w in words:
+        w.pop("sp", None)
+    for kalimat, orang in zip(sentences, dia.labels):
+        a, b = kalimat["wi"]
+        for w in words[a:b]:
+            w["sp"] = int(max(0, orang))
+
+    baru = dict(hasil)
+    baru["clips"] = [
+        {**klip, "subtitles": rebuild_subtitles_for_segments(klip["segments"], words)[0]}
+        for klip in (hasil.get("clips") or [])
+    ]
+    baru["speaker_count"] = dia.speaker_count
+    baru["label_kalimat"] = [int(max(0, x)) for x in dia.labels]
+    baru["speaker_confident"] = dia.confident
+    baru["speaker_score"] = dia.separation
+    # Penanda supaya pekerjaan ini tidak berjalan dua kali untuk video yang sama.
+    baru["tambat_wajah"] = True
+    analyses_repo.save(video_id=video_id, transcript_id=stored["id"],
+                       engine=hasil.get("engine", "heuristic"), model=hasil.get("model"),
+                       params={"tambat_wajah": True}, result=baru)
+    log.info("Suara ditambatkan ke wajah untuk %s: %d penutur",
+             video_id, dia.speaker_count)
+    return {"speaker_count": dia.speaker_count, "confident": dia.confident}
 
 
 def run_diarize(ctx: JobContext) -> dict:
@@ -1152,8 +1468,8 @@ def run_diarize(ctx: JobContext) -> dict:
         ctx.progress(0.15, stage="faces", message="Memeriksa apakah ini rekaman gameplay…")
         speakers = perkiraan_pemain(source, float(cached["result"].get("duration") or 0))
         if speakers:
-            label = (f"Rekaman gameplay — {speakers} orang di facecam"
-                     if speakers > 1 else "Rekaman gameplay — satu pemain")
+            label = (f"Rekaman gameplay dengan {speakers} orang di facecam"
+                     if speakers > 1 else "Rekaman gameplay dengan satu pemain")
     if speakers is None:
         ctx.progress(0.20, stage="faces",
                      message="Mencari siapa yang terlihat bicara…")
@@ -1217,7 +1533,7 @@ def run_diarize(ctx: JobContext) -> dict:
     if speakers and 1 < dia.speaker_count < speakers:
         # Jumlahnya tidak diam-diam berbeda dari yang diminta: katakan sebabnya.
         pesan = (f"Diminta {speakers} orang, tapi {speakers - dia.speaker_count} "
-                 f"kelompok ternyata suara orang yang sama — {dia.speaker_count} "
+                 f"kelompok ternyata suara orang yang sama, {dia.speaker_count} "
                  "narasumber ditandai.")
     ctx.progress(1.0, stage="done", message=pesan)
     return {"speaker_count": dia.speaker_count,

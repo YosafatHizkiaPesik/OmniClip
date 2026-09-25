@@ -86,13 +86,13 @@ export default function BilahProses({ job, ringkas = false }) {
           {antre ? 'Menunggu giliran' : `Tahap ${aktif + 1}/${TAHAP.length} · ${tahap.label}`}
         </b>
         {!antre && !menunggu && !/\d%/.test(job.message || '') && ` ${Math.round(bagian * 100)}%`}
-        {job.message ? ` — ${job.message}` : ''}
+        {job.message ? ` · ${job.message}` : ''}
       </div>
       {jalan && lama != null && (
         <div style={{ fontSize: '0.66rem', color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>
           berjalan {jam(lama)}
           {!menunggu && job.eta_seconds > 1 && ` · perkiraan sisa ${jam(job.eta_seconds)}`}
-          {menunggu && ' · menunggu jawaban Gemini (biasanya 1–3 menit; bila tidak ada jawaban, mesin lokal yang dipakai)'}
+          {menunggu && ' · menunggu jawaban Gemini (biasanya 1-3 menit; bila tidak ada jawaban, mesin lokal yang dipakai)'}
         </div>
       )}
     </div>

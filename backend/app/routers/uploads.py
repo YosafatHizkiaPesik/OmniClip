@@ -39,9 +39,17 @@ async def set_client(payload: str = Body(..., media_type="text/plain")):
     return google.save_client_secret(payload)
 
 
+class SambungRequest(BaseModel):
+    # Satu layanan per permintaan: Google menolak izin YouTube dan Drive yang
+    # diminta bersamaan (lihat SCOPES_LAYANAN di services/google_upload.py).
+    layanan: str = Field("youtube", pattern="^(youtube|drive)$")
+
+
 @router.post("/google/connect")
-async def connect():
-    return {"authorization_url": google.begin_authorization()}
+async def connect(req: SambungRequest | None = None):
+    layanan = (req.layanan if req else "youtube")
+    return {"authorization_url": google.begin_authorization(layanan),
+            "layanan": layanan}
 
 
 @router.get("/google/callback", response_class=HTMLResponse)
@@ -60,18 +68,41 @@ async def callback(request: Request, state: str = "", error: str = ""):
         nama = profil_svc.namai_dari_akun(pid, email)
         if nama:
             log.info("Akun %s dinamai dari surelnya: %s", pid, nama)
+        # Foldernya juga. Dijalankan tiap kali izin selesai, bukan hanya saat
+        # penamaan pertama: akun yang dulu terlanjur mendapat folder bernomor
+        # ikut dirapikan saat masuk lagi.
+        profil_svc.folder_untuk_akun(pid, email)
     except AppError as e:
         return _page("Gagal menyambungkan", e.message, ok=False)
-    except Exception as e:  # noqa: BLE001 — halaman ini tidak boleh 500
+    except Exception as e:  # noqa: BLE001, halaman ini tidak boleh 500
         log.exception("Callback OAuth gagal")
         return _page("Gagal menyambungkan", google.explain_error(e), ok=False)
     return _page("Akun tersambung",
-                 f"{email or 'Akun Google'} siap dipakai. Tutup tab ini dan "
-                 "kembali ke OmniClip.", ok=True)
+                 f"{email or 'Akun Google'} siap dipakai. Tab ini menutup "
+                 "sendiri sebentar lagi.", ok=True)
 
 
 def _page(title: str, body: str, *, ok: bool) -> HTMLResponse:
+    """
+    Halaman kecil yang dibaca ORANG, bukan program, plus satu pekerjaan kecil.
+
+    Saat berhasil, halaman ini memberi tahu tab OmniClip yang membukanya lalu
+    menutup dirinya sendiri. Tanpa itu pemiliknya harus kembali sendiri ke tab
+    sebelah dan menekan tombol "Saya sudah selesai" — sebuah tombol yang ada
+    semata-mata karena tab ini dulu tidak bisa bicara dengan tab yang
+    membukanya, dan pertanyaan "kenapa harus saya tekan?" tidak punya jawaban
+    yang memuaskan.
+
+    `postMessage` dipagari ke asal yang sama, dan penutupan dirinya dibiarkan
+    gagal diam-diam: peramban hanya mengizinkan sebuah tab menutup dirinya bila
+    ia memang dibuka oleh skrip, dan itu tidak selalu benar.
+    """
     colour = "#07683B" if ok else "#B3182C"
+    skrip = ("<script>try{if(window.opener&&!window.opener.closed){"
+             "window.opener.postMessage('omniclip:google-tersambung',"
+             "window.location.origin);}"
+             "setTimeout(function(){try{window.close();}catch(e){}},1200);"
+             "}catch(e){}</script>") if ok else ""
     return HTMLResponse(
         "<!doctype html><meta charset='utf-8'>"
         "<title>OmniClip</title>"
@@ -79,14 +110,15 @@ def _page(title: str, body: str, *, ok: bool) -> HTMLResponse:
         "font:16px/1.6 system-ui,sans-serif;background:#EDF1F6;color:#0E1420\">"
         f"<div style='max-width:420px;padding:28px;text-align:center'>"
         f"<h1 style='margin:0 0 8px;font-size:1.3rem;color:{colour}'>{title}</h1>"
-        f"<p style='margin:0;color:#46536A'>{body}</p></div></body>",
+        f"<p style='margin:0;color:#46536A'>{body}</p></div>{skrip}</body>",
         status_code=200 if ok else 400,
     )
 
 
 @router.post("/google/disconnect")
-async def disconnect():
-    google.disconnect()
+async def disconnect(req: SambungRequest | None = None):
+    """Memutus satu layanan; tanpa isi, memutus keduanya."""
+    google.disconnect(layanan=req.layanan if req else None)
     return {"status": "ok"}
 
 

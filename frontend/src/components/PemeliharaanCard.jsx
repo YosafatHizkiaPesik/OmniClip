@@ -27,8 +27,16 @@ export default function PemeliharaanCard({ card, sectionTitle, helpText }) {
   const [sibuk, setSibuk] = useState(null);
   const [kabar, setKabar] = useState(null);
 
+  // Kegagalannya disimpan terpisah dari `kabar`, karena kartunya harus bisa
+  // menawarkan "Hitung ulang" di tempat angkanya seharusnya berada. Sebelum
+  // ini, permintaan yang tidak pernah dijawab meninggalkan kata "Menghitung…"
+  // selamanya, tanpa galat dan tanpa jalan keluar.
+  const [gagalRuang, setGagalRuang] = useState(null);
+
   const muat = () => {
-    apiGet('/settings/ruang').then(setRuang).catch((e) => setKabar({ ok: false, teks: e.message }));
+    setGagalRuang(null);
+    apiGet('/settings/ruang').then((r) => { setRuang(r); setGagalRuang(null); })
+      .catch((e) => setGagalRuang(e.message));
     apiGet('/settings/cadangan').then((r) => setCadangan(r.cadangan || [])).catch(() => {});
   };
   useEffect(() => { muat(); }, []);
@@ -47,8 +55,9 @@ export default function PemeliharaanCard({ card, sectionTitle, helpText }) {
       + 'Untuk mengklip ulang videonya nanti, ia harus diunduh lagi.')) return;
     setSibuk('buang');
     try {
-      const r = await apiPost('/settings/ruang/buang', { folder: 'unduhan', berkas: daftar });
-      setKabar({ ok: true, teks: `${r.dibuang} berkas dihapus — ${gb(r.ukuran)} kembali.` });
+      const r = await apiPost('/settings/ruang/buang', { folder: 'unduhan', berkas: daftar },
+                              { timeout: 300000 });
+      setKabar({ ok: true, teks: `${r.dibuang} berkas dihapus. ${gb(r.ukuran)} kembali.` });
       setPilih(new Set());
       muat();
     } catch (e) {
@@ -61,7 +70,7 @@ export default function PemeliharaanCard({ card, sectionTitle, helpText }) {
   const cadangkan = async () => {
     setSibuk('cadang');
     try {
-      const r = await apiPost('/settings/cadangan', {});
+      const r = await apiPost('/settings/cadangan', {}, { timeout: 180000 });
       setKabar({ ok: true, teks: `Cadangan dibuat: ${r.berkas} (${gb(r.ukuran)}).` });
       muat();
     } catch (e) {
@@ -110,6 +119,32 @@ export default function PemeliharaanCard({ card, sectionTitle, helpText }) {
           <p style={helpText}>
             Terpakai {gb(ruang.total)}, sisa {gb(ruang.sisa_ruang)} di cakram ini.
           </p>
+
+          {/* Usulan, bukan penghapus otomatis. Mengklip ulang video yang sudah
+              dihapus berarti mengunduhnya lagi, dan mesin tidak tahu mana yang
+              masih akan dipakai. Yang ditambahkan cuma PERTANYAANNYA, supaya
+              ruang yang bisa kembali tidak perlu dicari sendiri di antara enam
+              puluh baris. */}
+          {ruang.usul?.jumlah > 0 && (
+            <div style={{
+              marginTop: '10px', padding: '10px 12px', fontSize: '0.78rem',
+              borderRadius: 'var(--radius-sm, 8px)', lineHeight: 1.5,
+              background: 'color-mix(in srgb, var(--accent-cyan) 10%, transparent)',
+              border: '1px solid color-mix(in srgb, var(--accent-cyan) 30%, transparent)',
+            }}>
+              <b>{ruang.usul.jumlah} video sumber bisa dibuang, {gb(ruang.usul.ukuran)}.</b>
+              <div style={{ ...helpText, marginTop: '4px' }}>
+                Semuanya sudah menghasilkan klip jadi, diunduh lebih dari{' '}
+                {ruang.usul.syarat.umur_hari} hari lalu, dan lebih besar dari{' '}
+                {gb(ruang.usul.syarat.besar_min)}. Klipnya tidak ikut terhapus.
+                Mengklip ulang video ini nanti berarti mengunduhnya lagi.
+              </div>
+              <button className="btn-secondary" style={{ marginTop: '8px', fontSize: '0.76rem' }}
+                      onClick={() => setPilih(new Set(ruang.usul.berkas))}>
+                Tandai semuanya
+              </button>
+            </div>
+          )}
           <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '9px' }}>
             {ruang.folder.filter((f) => f.ukuran > 0).map((f) => (
               <span key={f.nama} className="chip" style={{ fontSize: '0.68rem' }}>
@@ -120,7 +155,7 @@ export default function PemeliharaanCard({ card, sectionTitle, helpText }) {
 
           <p style={{ ...helpText, marginTop: '12px' }}>
             Video sumber terbesar. <b>Klip</b> menunjukkan berapa klip jadi yang sudah
-            dirender dari video itu — yang angkanya 0 dan sudah lama tidak dibuka
+            dirender dari video itu, yang angkanya 0 dan sudah lama tidak dibuka
             biasanya sisa percobaan.
           </p>
           <div style={{ maxHeight: '220px', overflowY: 'auto', marginTop: '8px' }}>
@@ -155,6 +190,15 @@ export default function PemeliharaanCard({ card, sectionTitle, helpText }) {
             Hapus {pilih.size || ''} berkas terpilih{terpilih ? ` (${gb(terpilih)})` : ''}
           </button>
         </>
+      ) : gagalRuang ? (
+        <div style={{ ...helpText, display: 'flex', flexWrap: 'wrap', alignItems: 'center',
+                      gap: '8px' }}>
+          <AlertTriangle size={14} style={{ color: 'var(--accent-red)', flexShrink: 0 }} />
+          <span style={{ flex: '1 1 220px', minWidth: 0 }}>{gagalRuang}</span>
+          <button className="btn-secondary" onClick={muat} style={{ fontSize: '0.76rem' }}>
+            Hitung ulang
+          </button>
+        </div>
       ) : <p style={helpText}>Menghitung…</p>}
 
       <div style={{ ...sectionTitle, marginTop: '20px' }}>
@@ -162,7 +206,7 @@ export default function PemeliharaanCard({ card, sectionTitle, helpText }) {
         Cadangan basis data
       </div>
       <p style={helpText}>
-        Seluruh pekerjaan Anda — analisis, klip, transkrip, profil, dan setelan — ada
+        Seluruh pekerjaan Anda (analisis, klip, transkrip, profil, dan setelan) ada
         di satu berkas. Cadangan dibuat dengan cara SQLite sendiri, bukan disalin
         begitu saja, supaya isinya utuh walau dibuat saat aplikasi sedang bekerja.
         Sepuluh cadangan terakhir disimpan.

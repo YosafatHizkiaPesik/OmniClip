@@ -60,7 +60,7 @@ def classify_ytdlp_error(exc: Exception) -> YtdlpError:
                      "Buka YouTube di browser yang cookies-nya dipilih, pastikan akunnya "
                      "masih login dan bisa memutar video, lalu coba lagi.")
         else:
-            pesan = ("YouTube sedang menandai jaringan internet Anda sebagai bot — "
+            pesan = ("YouTube sedang menandai jaringan internet Anda sebagai bot, "
                      "bukan hanya video ini. Pilihan: (1) tunggu beberapa jam, tanda ini "
                      "biasanya hilang sendiri; (2) ganti jaringan: nyalakan ulang modem "
                      "atau pakai VPN di tingkat sistem; (3) sambungkan cookies browser "
@@ -78,7 +78,7 @@ def classify_ytdlp_error(exc: Exception) -> YtdlpError:
         # video berlubang.
         return YtdlpError(
             "YTDLP_FRAGMENT",
-            "Sebagian video gagal terunduh meski sudah dicoba berulang kali — "
+            "Sebagian video gagal terunduh meski sudah dicoba berulang kali, "
             "biasanya koneksi sempat terputus. Coba unduh lagi: unduhan "
             "melanjutkan dari bagian terakhir, bukan mulai dari awal.",
             raw,
@@ -93,6 +93,21 @@ def classify_ytdlp_error(exc: Exception) -> YtdlpError:
         return YtdlpError(
             "YTDLP_NO_FORMAT",
             "Resolusi yang diminta tidak tersedia untuk video ini. Coba resolusi lebih rendah.",
+            raw,
+        )
+    # Internet mati atau DNS tidak menjawab. Dibedakan dari timeout biasa
+    # karena jawabannya berbeda: yang ini tidak akan membaik dengan mencoba
+    # lagi. Terukur 24 September 2026, pukul 23:06: seluruh panggilan Gemini,
+    # OpenRouter, dan YouTube gagal serentak dengan "Name or service not
+    # known", dan yang terlihat di layar hanya "Server tidak menjawab dalam 30
+    # detik" beserta saran menutup tab lain, yang tidak ada hubungannya.
+    if ("name or service not known" in low or "temporary failure in name resolution" in low
+            or "getaddrinfo" in low or "network is unreachable" in low
+            or "no address associated" in low):
+        return YtdlpError(
+            "YTDLP_OFFLINE",
+            "Tidak ada koneksi internet, atau DNS tidak menjawab. Periksa sambungan "
+            "internet dan VPN Anda, lalu coba lagi.",
             raw,
         )
     if "timed out" in low or "timeout" in low:
@@ -357,6 +372,15 @@ def search_youtube_videos(query: str, limit: int = 20, sort: str = "relevan",
         'extract_flat': 'in_playlist',
         'skip_download': True,
         'default_search': 'ytsearch',
+        # Pencarian ditunggu ORANG di depan layar, tidak seperti unduhan yang
+        # berjalan di latar. Bawaan `_base_opts` (soket 30 dtk, 3 kali ulang)
+        # berarti lebih dari sembilan puluh detik sebelum kegagalan jaringan
+        # sampai ke layar, sementara peramban sudah menyerah di detik ke-30.
+        # Yang dilihat pemiliknya lalu "server tidak menjawab", bukan sebab
+        # yang sebenarnya. Delapan detik dan satu kali ulang membuat sebabnya
+        # yang muncul, bukan tebakan.
+        'socket_timeout': 8,
+        'retries': 1,
     })
 
     results = []
@@ -657,7 +681,7 @@ def _make_progress_hook(on_progress):
             state["stream"] += 1
             state["last"] = -1.0
             on_progress(0.85 if state["stream"] == 1 else 0.98,
-                        "Aliran video selesai — mengunduh audio…" if state["stream"] == 1
+                        "Aliran video selesai, mengunduh audio…" if state["stream"] == 1
                         else "Menggabungkan video dan audio…")
 
     return hook
@@ -690,7 +714,7 @@ def _make_pp_hook(on_progress):
                 try:
                     on_progress(0.99, f"{nama}… ({lama // 60}:{lama % 60:02d})")
                 except Exception:
-                    return          # dibatalkan — yt-dlp akan berhenti sendiri
+                    return          # dibatalkan, yt-dlp akan berhenti sendiri
         finally:
             try:
                 from ..db import close_conn

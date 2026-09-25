@@ -81,20 +81,73 @@ export function kategoriKlip() {
   return `klip_${profilAktif()}`;
 }
 
+// Batas waktu bawaan satu permintaan.
+//
+// Sebelum ini tidak ada batas sama sekali, dan akibatnya bukan permintaan yang
+// lambat melainkan kartu yang menulis "Menghitung…" selamanya: tanpa jawaban,
+// tanpa galat, tanpa cara mencoba lagi. Sambungan yang macet memang terjadi,
+// dan yang membuatnya tidak bisa dipercaya adalah janji yang tidak pernah
+// selesai, bukan detik-detiknya.
+//
+// Tiga puluh detik cukup longgar untuk pemindaian folder di cakram lambat, dan
+// cukup pendek untuk masih terasa seperti jawaban. Panggilan yang memang lama
+// (menulis caption dengan AI) mengirim `timeout` sendiri.
+const BATAS_MS = 30000;
+
+/** Menggabungkan sinyal batal milik pemanggil dengan pewaktu bawaan. */
+function _dengan_batas(signal, batas) {
+  if (batas === 0) return { signal, selesai: () => {} };
+  const ac = new AbortController();
+  const jam = setTimeout(() => ac.abort(new DOMException('timeout', 'TimeoutError')), batas);
+  const teruskan = () => ac.abort(signal.reason);
+  if (signal) {
+    if (signal.aborted) teruskan();
+    else signal.addEventListener('abort', teruskan, { once: true });
+  }
+  return {
+    signal: ac.signal,
+    selesai: () => {
+      clearTimeout(jam);
+      signal?.removeEventListener('abort', teruskan);
+    },
+  };
+}
+
 async function request(path, options = {}) {
   let res;
-  options = { ...options,
-              headers: { ...(options.headers || {}), 'X-Omniclip-Profil': String(profilAktif()) } };
+  const { timeout = BATAS_MS, ...sisa } = options;
+  const batas = _dengan_batas(sisa.signal, timeout);
+  options = { ...sisa, signal: batas.signal,
+              headers: { ...(sisa.headers || {}), 'X-Omniclip-Profil': String(profilAktif()) } };
   try {
     // credentials same-origin: cookie sesi ikut terkirim. Ini bawaan fetch
     // modern, ditulis eksplisit karena gerbang masuk bergantung padanya.
     res = await fetch(`${BASE}${path}`, { credentials: 'same-origin', ...options });
   } catch (err) {
+    // Batas waktu dibedakan dari "server mati": keduanya terasa sama dari
+    // luar, tapi yang pertama biasanya hilang sendiri bila dicoba lagi.
+    if (err.name === 'TimeoutError'
+        || (err.name === 'AbortError' && sisa.signal?.aborted !== true)) {
+      // Sebabnya tidak ditebak di sini. Pesan lama menyebut "tab OmniClip
+      // lain" sebagai satu-satunya kemungkinan, dan pada 24 September 2026
+      // yang sebenarnya terjadi adalah internet putus: seluruh panggilan
+      // YouTube, Gemini, dan OpenRouter gagal serentak dengan galat DNS,
+      // sementara layar menyuruh pemiliknya menutup tab yang tidak ada.
+      throw new ApiError(
+        `Server tidak menjawab dalam ${Math.round(timeout / 1000)} detik. `
+        + 'Biasanya karena sambungan internet sedang putus, OmniClip sedang '
+        + 'sibuk memproses video, atau ada tab OmniClip lain yang memuat '
+        + 'banyak video. Periksa internet Anda lalu coba lagi.',
+        { code: 'TIMEOUT' },
+      );
+    }
     if (err.name === 'AbortError') throw err;
     throw new ApiError(
       'Tidak dapat menghubungi server. Pastikan backend berjalan di port 8000.',
       { code: 'NETWORK' },
     );
+  } finally {
+    batas.selesai();
   }
   if (res.status === 401) {
     // Sesi berakhir di tengah pemakaian — cookie kedaluwarsa, atau kata sandi
@@ -107,8 +160,8 @@ async function request(path, options = {}) {
   return res.json();
 }
 
-export function apiGet(path, { signal } = {}) {
-  return request(path, { signal });
+export function apiGet(path, { signal, timeout } = {}) {
+  return request(path, { signal, timeout });
 }
 
 /**
@@ -118,7 +171,7 @@ export function apiGet(path, { signal } = {}) {
  * dan membungkusnya lagi ke dalam JSON hanya menambah satu lapis escape yang
  * harus dibuka lagi di server.
  */
-export function apiPost(path, body, { signal, raw = false } = {}) {
+export function apiPost(path, body, { signal, raw = false, timeout } = {}) {
   // FormData dikirim apa adanya, TANPA Content-Type dari kita.
   //
   // Unggahan multipart butuh sebuah `boundary` di header, dan satu-satunya
@@ -126,13 +179,14 @@ export function apiPost(path, body, { signal, raw = false } = {}) {
   // FormData. Menuliskan Content-Type sendiri menghapus boundary itu, dan
   // server menolak seluruh unggahan dengan galat yang tidak menyebut sebabnya.
   if (typeof FormData !== 'undefined' && body instanceof FormData) {
-    return request(path, { method: 'POST', body, signal });
+    return request(path, { method: 'POST', body, signal, timeout });
   }
   return request(path, {
     method: 'POST',
     headers: { 'Content-Type': raw ? 'text/plain' : 'application/json' },
     body: raw ? String(body) : JSON.stringify(body ?? {}),
     signal,
+    timeout,
   });
 }
 
@@ -203,6 +257,27 @@ export function fileUrl(category, fileName) {
  * Mengunduh file lewat backend agar tidak kena CORS, lalu menyimpannya.
  * Rutinitas ini sebelumnya disalin-tempel di 4 komponen.
  */
+/**
+ * Apakah OmniClip sedang dibuka dari komputer yang menjalankannya sendiri.
+ *
+ * Menentukan apakah klip yang baru jadi perlu diunduh lewat peramban. Kalau
+ * server dan peramban satu komputer, berkasnya SUDAH ada di folder klip yang
+ * dipilih pengguna, dan mengunduhnya lagi hanya membuat salinan kedua di
+ * folder Unduhan peramban. Terlapor 25 September 2026: "klip yang jadi itu
+ * masuknya ke dalam folder unduhan, bukan folder yang sudah kita tetapkan".
+ *
+ * Dari HP atau komputer lain, unduhan peramban justru SATU-SATUNYA cara
+ * berkasnya sampai, jadi di sana ia tetap berjalan.
+ */
+export function dijalankanDiKomputerIni() {
+  try {
+    const h = window.location.hostname;
+    return h === '127.0.0.1' || h === 'localhost' || h === '[::1]' || h === '::1';
+  } catch {
+    return false;
+  }
+}
+
 export async function downloadToDisk(category, fileName) {
   const res = await fetch(fileUrl(category, fileName), { credentials: 'same-origin' });
   if (!res.ok) throw await toApiError(res);

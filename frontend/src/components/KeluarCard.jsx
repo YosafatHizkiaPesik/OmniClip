@@ -17,7 +17,7 @@ export default function KeluarCard({ card, sectionTitle, helpText }) {
 
   const keluar = async () => {
     if (!window.confirm(
-      'Matikan OmniClip?\n\nPekerjaan yang sedang berjalan — unduhan, render, unggahan — '
+      'Matikan OmniClip?\n\nPekerjaan yang sedang berjalan (unduhan, render, unggahan) '
       + 'akan berhenti dan dilanjutkan dari awal saat dibuka lagi.')) return;
     setSibuk(true);
     setGalat(null);
@@ -51,7 +51,7 @@ export default function KeluarCard({ card, sectionTitle, helpText }) {
         Keluar
       </div>
       <p style={helpText}>
-        OmniClip berjalan di latar belakang selama komputer menyala — itu yang
+        OmniClip berjalan di latar belakang selama komputer menyala. Itu yang
         membuat render dan unggahan tetap jalan walau tab ini ditutup. Menutup
         tab saja TIDAK mematikannya; tombol inilah yang mematikannya.
       </p>

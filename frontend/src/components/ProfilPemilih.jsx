@@ -35,7 +35,7 @@ export default function ProfilPemilih() {
   return (
     <div ref={ref} style={{ position: 'relative', marginRight: '12px' }}>
       <button onClick={() => setBuka((v) => !v)} aria-expanded={buka}
-              title={aktif.google.connected ? `Akun ${aktif.nama} · ${aktif.google.email}` : `Akun ${aktif.nama} — belum masuk Google`}
+              title={aktif.google.connected ? `Akun ${aktif.nama} · ${aktif.google.email}` : `Akun ${aktif.nama} (belum masuk Google)`}
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: '7px', cursor: 'pointer',
                 padding: '3px 9px 3px 3px', borderRadius: '999px', fontFamily: 'inherit',

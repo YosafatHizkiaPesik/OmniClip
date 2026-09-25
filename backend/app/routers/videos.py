@@ -297,9 +297,17 @@ def _kolam_beranda() -> list[str]:
     pid = profil.kini()
     p = profil_repo.ambil(pid) or {}
     minat = [m.strip() for m in (p.get("minat") or []) if isinstance(m, str) and m.strip()]
+    sering = [r["query"] for r in profil_repo.kueri_sering(pid, 6)]
     riwayat = [r["query"] for r in profil_repo.riwayat_cari(pid, 8)]
-    # Minat ditulis dua kali: ia pilihan yang disengaja, riwayat hanya jejak.
-    kolam = minat * 2 + riwayat
+    # Tiga lapis, dengan bobot yang berbeda dan alasannya masing-masing:
+    #
+    #   minat   x3  pilihan yang ditulis sendiri, dan tidak berubah tiap hari
+    #   sering  x2  kata yang berulang kali diketik; itu yang sebenarnya dicari
+    #   riwayat x1  jejak, termasuk yang cuma sekali dan mungkin salah ketik
+    #
+    # Lapis "sering" yang menjawab keluhannya: beranda yang isinya sesuai apa
+    # yang memang dicari, supaya tidak perlu mengetik kata yang sama tiap hari.
+    kolam = minat * 3 + sering * 2 + riwayat
     return kolam or TRENDING_QUERIES
 
 

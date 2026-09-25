@@ -9,6 +9,7 @@ sinkron — dan yang paling mungkin melenceng justru statusnya.
 """
 
 import json
+import time
 from typing import Optional
 
 from ..db import get_conn
@@ -33,7 +34,7 @@ def _latest_analysis(conn, video_id: str) -> Optional[dict]:
 def _latest_job(conn, video_id: str) -> Optional[dict]:
     row = conn.execute(
         """SELECT id, status, progress, stage, message, error, created_at,
-                  started_at, eta_seconds
+                  started_at, eta_seconds, mulai_setelah
            FROM jobs WHERE type = 'auto_clip' AND video_id = ?
            ORDER BY created_at DESC LIMIT 1""",
         (video_id,),
@@ -61,6 +62,8 @@ def _ringkasan_analisis(conn, video_id: str) -> Optional[dict]:
                   json_extract(result_json, '$.duration')       AS j_duration,
                   json_extract(result_json, '$.engine')         AS j_engine,
                   json_extract(result_json, '$.has_transcript') AS j_has_tx,
+                  json_extract(result_json, '$.gemini_gagal')    AS j_gagal,
+                  json_extract(result_json, '$.sumber_rendah')   AS j_rendah,
                   json_array_length(json_extract(result_json, '$.clips')) AS j_clips
              FROM analyses
             WHERE video_id = ? ORDER BY created_at DESC LIMIT 1""",
@@ -79,8 +82,15 @@ def _ringkasan_analisis(conn, video_id: str) -> Optional[dict]:
             # SQLite menyimpan boolean sebagai 0/1; kartunya mengharapkan bool.
             "has_transcript": (None if row["j_has_tx"] is None
                                else bool(row["j_has_tx"])),
-            # Bukan daftar klipnya, hanya panjangnya — itu saja yang dipakai.
+            # Bukan daftar klipnya, hanya panjangnya: itu saja yang dipakai.
             "clips": [None] * (row["j_clips"] or 0),
+            # Kenapa mesinnya lokal. Ikut di sini, bukan hanya di analisis
+            # lengkap, karena justru di kartu proyek label "mesin lokal"
+            # muncul tanpa sebab yang bisa ditebak siapa pun.
+            "gemini_gagal": row["j_gagal"],
+            # Sumber di bawah 1080p. Kartu proyek menyebutkannya, supaya klip
+            # yang lunak punya sebab yang terbaca, bukan cuma terasa.
+            "sumber_rendah": row["j_rendah"],
         },
     }
 
@@ -119,12 +129,25 @@ def list_projects(limit: int = 60, profil_id: Optional[int] = None) -> list[dict
         result = (analysis or {}).get("result") or {}
 
 
+        # Percobaan ulang yang DIJADWALKAN NANTI bukan pekerjaan yang sedang
+        # berjalan, dan tidak boleh menutupi hasil yang sudah ada.
+        #
+        # Terukur 24 September 2026: sebuah video dengan 11 klip siap tinjau
+        # berubah menjadi kartu "Menunggu antrean · Menunggu giliran" dengan
+        # tahap "Unduh" menyala, hanya karena sistem menjadwalkan pencarian
+        # ulang dengan Gemini dua puluh lima menit lagi. Yang melihatnya wajar
+        # menyimpulkan videonya harus diunduh dari nol dan klipnya hilang.
+        tunda = float(job["mulai_setelah"] or 0) if job else 0.0
+        nanti = bool(job and job["status"] == "queued" and tunda > time.time())
+
         # Urutannya penting. Job yang sedang berjalan menang atas hasil lama:
         # video yang sedang dianalisis ulang harus terlihat sedang berjalan,
         # bukan "siap ditinjau" karena kebetulan punya hasil dari kemarin.
-        # Sebaliknya, job yang GAGAL kalah dari hasil tersimpan — analisis lama
+        # Sebaliknya, job yang GAGAL kalah dari hasil tersimpan: analisis lama
         # yang klipnya masih ada tetap bisa dibuka.
-        if job and job["status"] in ("queued", "running"):
+        if nanti and result.get("clips"):
+            status = "done"
+        elif job and job["status"] in ("queued", "running"):
             status = job["status"]
         elif result.get("clips"):
             status = "done"
@@ -147,8 +170,18 @@ def list_projects(limit: int = 60, profil_id: Optional[int] = None) -> list[dict
             "status": status,
             "clip_count": len(result.get("clips") or []),
             "engine": result.get("engine") or (analysis or {}).get("engine"),
+            # Kenapa mesinnya lokal. Tanpa ini label "heuristik" terlihat
+            # seperti pilihan, padahal sering ia akibat Gemini yang sedang
+            # sibuk, dan yang melihatnya tidak punya cara menduga bahwa
+            # "Cari ulang" beberapa menit lagi akan berhasil.
+            "mesin_gagal": result.get("gemini_gagal"),
+            "sumber_rendah": result.get("sumber_rendah"),
             "has_transcript": result.get("has_transcript"),
             "updated_at": row["last_at"],
+            # Kapan pencarian ulang otomatis akan dimulai, bila ada. Kartunya
+            # menyebut ini sebagai keterangan kecil, bukan sebagai keadaan
+            # video: klipnya sudah ada dan tetap bisa dibuka sekarang.
+            "coba_lagi_pada": tunda if nanti else None,
             "job": {
                 "id": job["id"], "status": job["status"],
                 "progress": job["progress"], "stage": job["stage"],
