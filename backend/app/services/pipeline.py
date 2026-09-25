@@ -403,18 +403,64 @@ def _jadwalkan_bingkai(video_id: str, clips: list[dict], aspect_ratio: str | Non
     return n
 
 
+NAMA_PEMANASAN_BINGKAI = "bingkai.pemanasan"
+
+
+def pemanasan_bingkai() -> bool:
+    """
+    Apakah bingkai semua klip dihitung lebih dulu sesudah auto-klip.
+
+    Bawaannya MENYALA, karena itulah perilaku yang sudah ada dan yang diminta
+    pemiliknya sejak awal: "karena malas menunggu untuk tiap klip, saya ingin
+    tiap klip yang sudah direkomendasikan sudah tersusun bingkainya".
+    """
+    from ..repos import settings as settings_repo
+    try:
+        nilai = (settings_repo.get(NAMA_PEMANASAN_BINGKAI) or "").strip()
+        return nilai != "0"
+    except Exception:                               # noqa: BLE001
+        return True
+
+
+def setel_pemanasan_bingkai(aktif: bool) -> None:
+    from ..repos import settings as settings_repo
+    settings_repo.set_value(NAMA_PEMANASAN_BINGKAI, "1" if aktif else "0")
+
+
 def _jadwalkan_jejak(video_id: str, clips: list[dict], aspect_ratio: str | None) -> None:
     """
     Mengantrekan perhitungan jejak wajah untuk semua klip yang baru jadi.
 
-    Berbeda dari `_jadwalkan_bingkai` di atas, ini TIDAK memakai AI dan tidak
-    bisa dimatikan lewat setelan: ia cuma memindahkan pekerjaan yang pasti
-    terjadi ke waktu yang tidak ditunggu siapa pun. Tanpa ini, klip pertama
-    terasa langsung jadi dan klip keenam membuat orang menunggu di depan
-    layar, padahal dari luar keduanya terlihat sama-sama "sudah selesai".
+    Berbeda dari `_jadwalkan_bingkai` di atas, ini TIDAK memakai AI: ia cuma
+    memindahkan pekerjaan yang pasti terjadi ke waktu yang tidak ditunggu siapa
+    pun. Tanpa ini, klip pertama terasa langsung jadi dan klip keenam membuat
+    orang menunggu di depan layar, padahal dari luar keduanya terlihat
+    sama-sama "sudah selesai".
+
+    Bisa dimatikan sejak 25 September 2026, lewat sakelar di panel Bingkai.
+    Alasannya sah: pemanasan ini memakai CPU di latar, dan pada mesin yang
+    pas-pasan itu terasa saat pemiliknya sedang mengerjakan hal lain. Yang
+    mematikannya membayar dengan menunggu beberapa detik tiap kali membuka
+    klip baru, dan itu pertukaran yang boleh ia ambil sendiri.
+    """
+    if not clips or not pemanasan_bingkai():
+        return
+    _jadwalkan_jejak_sekarang(video_id, clips, aspect_ratio)
+
+
+def _jadwalkan_jejak_sekarang(video_id: str, clips: list[dict],
+                              aspect_ratio: str | None) -> str:
+    """
+    Isi `_jadwalkan_jejak`, tanpa memeriksa sakelarnya.
+
+    Dipisah supaya tombol "Siapkan bingkai sekarang" bisa memakainya: yang
+    menekan tombol sudah menyatakan maunya, dan sakelar yang mematikan
+    pemanasan otomatis tidak boleh ikut mematikan permintaan langsung.
+
+    Mengembalikan id pekerjaannya, atau teks kosong bila tidak jadi diantrekan.
     """
     if not clips:
-        return
+        return ""
     from .jobs import queue
 
     # Subtitle dibawa LENGKAP dengan teksnya, bukan hanya waktunya: pekerjaan
@@ -430,15 +476,21 @@ def _jadwalkan_jejak(video_id: str, clips: list[dict], aspect_ratio: str | None)
                               for l in (c.get("subtitles") or [])][:80]}
                for c in clips if c.get("segments")]
     if not ringkas:
-        return
+        return ""
     try:
-        queue.enqueue("bingkai_awal",
-                      {"video_id": video_id, "klip": ringkas,
-                       "aspect_ratio": aspect_ratio or "9:16"},
-                      video_id=video_id, priority=950,
-                      dedupe_key=f"bingkai-awal:{video_id}")
+        # `enqueue` mengembalikan (id, baru). `baru` False berarti sudah ada
+        # pekerjaan yang sama sedang antre atau berjalan, dan id yang diberikan
+        # adalah miliknya; pemanggil tetap dapat sesuatu untuk dipantau.
+        job_id, _baru = queue.enqueue(
+            "bingkai_awal",
+            {"video_id": video_id, "klip": ringkas,
+             "aspect_ratio": aspect_ratio or "9:16"},
+            video_id=video_id, priority=950,
+            dedupe_key=f"bingkai-awal:{video_id}")
+        return job_id
     except Exception as e:      # pemanasan yang gagal diantre bukan kegagalan
         log.warning("Bingkai awal tidak bisa diantrekan: %s", str(e)[:200])
+        return ""
 
 
 # Berapa kali OmniClip mencoba sendiri sesudah Gemini menjawab "sedang sibuk",

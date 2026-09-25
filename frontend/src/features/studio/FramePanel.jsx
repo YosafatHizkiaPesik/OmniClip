@@ -1,9 +1,88 @@
-import React from 'react';
-import { Plus, Trash2, ArrowUp, ArrowDown, ScanFace, Loader2 } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Plus, Trash2, ArrowUp, ArrowDown, ScanFace, Loader2, Zap } from 'lucide-react';
+import { apiGet, apiPost } from '../../lib/api';
 import FrameKeysPanel from './FrameKeysPanel';
 import {
   LAYOUT_PRESETS, addedFrame, clampRect, frameInk, presetLayout,
 } from './frames';
+
+/**
+ * Sakelar pemanasan bingkai, plus tombol untuk video yang sudah terlanjur.
+ *
+ * Diminta 25 September 2026. Bingkai tiap klip dulu baru dihitung saat klipnya
+ * dibuka, jadi menelusuri dua puluh klip berarti menunggu dua puluh kali.
+ * Pemanasan otomatis sesudah auto-klip menghapus penungguan itu, tapi ia
+ * memakai CPU di latar, dan pada mesin yang pas-pasan itu terasa. Jadi
+ * sakelarnya ada di sini, di tempat orang memikirkan bingkai, bukan terkubur
+ * di Pengaturan.
+ */
+function PemanasanBingkai({ videoId }) {
+  const [aktif, setAktif] = useState(null);
+  const [sibuk, setSibuk] = useState(false);
+  const [kabar, setKabar] = useState(null);
+
+  useEffect(() => {
+    apiGet('/settings')
+      .then((r) => setAktif(r?.pemanasan_bingkai !== false))
+      .catch(() => setAktif(true));
+  }, []);
+
+  const ubah = async (nilai) => {
+    const sebelum = aktif;
+    setAktif(nilai);
+    try {
+      await apiPost('/settings/pemanasan-bingkai', { aktif: nilai });
+    } catch (e) {
+      setAktif(sebelum);
+      setKabar(e.message);
+    }
+  };
+
+  const siapkanSekarang = async () => {
+    setSibuk(true);
+    setKabar(null);
+    try {
+      const r = await apiPost(`/projects/${videoId}/siapkan-bingkai`, {});
+      setKabar(`Bingkai ${r.klip} klip sedang disiapkan. Kemajuannya di halaman Partitur.`);
+    } catch (e) {
+      setKabar(e.message);
+    } finally {
+      setSibuk(false);
+    }
+  };
+
+  return (
+    <>
+      <div style={{ height: '1px', background: 'var(--rule-2)', margin: '4px 0' }} />
+      <label style={{ display: 'flex', alignItems: 'flex-start', gap: '9px',
+                      cursor: aktif === null ? 'default' : 'pointer' }}>
+        <input type="checkbox" checked={aktif === true} disabled={aktif === null}
+               onChange={(e) => ubah(e.target.checked)}
+               style={{ marginTop: '3px', width: '15px', height: '15px',
+                        accentColor: 'var(--accent-cyan)', flex: 'none' }} />
+        <span style={{ fontSize: '0.75rem', lineHeight: 1.5 }}>
+          <b>Siapkan bingkai semua klip di awal.</b>{' '}
+          <span style={{ color: 'var(--text-muted)' }}>
+            Sesudah mengklip, bingkai dua puluh klip pertama dihitung lebih dulu di
+            latar, jadi tiap klip yang dibuka langsung terbingkai. Dimatikan berarti
+            bingkainya dihitung saat klipnya dibuka, beberapa detik tiap kali, dan
+            CPU-nya bebas untuk hal lain.
+          </span>
+        </span>
+      </label>
+      <button className="btn-secondary" onClick={siapkanSekarang} disabled={sibuk}
+              style={{ fontSize: '0.72rem', padding: '5px 9px', alignSelf: 'flex-start',
+                       display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+        {sibuk ? <Loader2 size={12} className="animate-spin" /> : <Zap size={12} />}
+        Siapkan bingkai video ini sekarang
+      </button>
+      {kabar && (
+        <p style={{ fontSize: '0.68rem', color: 'var(--text-muted)', margin: 0,
+                    lineHeight: 1.5 }}>{kabar}</p>
+      )}
+    </>
+  );
+}
 
 export const FRAME_MODES = [
   { id: 'smart', label: 'Ikuti wajah', hint: 'Kamera mengikuti pembicara. Layar penuh, tanpa bilah kabur.' },
@@ -28,6 +107,7 @@ export default function FramePanel({
   // Gaya perpindahan: kamera mengikuti dengan mulus, atau diam lalu memotong.
   frameMotion = 'smooth', onFrameMotionChange = null,
   frameZoom = 1, frameGeserY = 0, onFrameZoom = null, onFrameGeserY = null,
+  videoId = null,
   layout, onLayoutChange,
   // Main game: setelan susunan dua bidangnya.
   gamingSibuk = false, onGaming = null, onGamingUlang = null,
@@ -163,6 +243,8 @@ export default function FramePanel({
           </div>
         </>
       )}
+
+      {videoId && <PemanasanBingkai videoId={videoId} />}
 
       {frameMode === 'smart' && peopleCount > 1 && onAimPerson && (
         <>

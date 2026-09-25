@@ -749,6 +749,32 @@ def hitung_reframe(*, video_id: str, segments: list[dict], aspect_ratio: str = "
     return payload
 
 
+@router.post("/projects/{video_id}/siapkan-bingkai", status_code=202)
+async def siapkan_bingkai(video_id: str):
+    """
+    Menghitung bingkai semua klip video ini SEKARANG, tanpa mengulang auto-klip.
+
+    Pemanasan biasanya berjalan sendiri sesudah auto-klip. Video yang sudah
+    terlanjur diklip sebelum sakelarnya dinyalakan, atau yang pemanasannya
+    gagal, tidak punya jalan lain selain "Cari ulang" yang memakan jatah AI dan
+    mengganti seluruh daftar klipnya. Tombol ini yang menutup celah itu.
+    """
+    vid = _resolve_video_id(video_id)
+    cached = analyses_repo.latest_for_video(vid)
+    if not cached:
+        raise NotFound("Belum ada analisis untuk video ini.")
+    klip = (cached["result"] or {}).get("clips") or []
+    if not klip:
+        raise InvalidInput("Video ini belum punya klip yang bisa disiapkan.")
+
+    from ..services.pipeline import _jadwalkan_jejak_sekarang
+    job_id = _jadwalkan_jejak_sekarang(vid, klip,
+                                       (cached["result"] or {}).get("aspect_ratio"))
+    if not job_id:
+        raise InvalidInput("Pemanasan bingkai sedang berjalan untuk video ini.")
+    return {"job_id": job_id, "klip": len(klip)}
+
+
 @router.post("/clip-reframe")
 async def clip_reframe(req: ReframePlanRequest):
     """Rencana bingkai untuk satu klip, diminta editor saat klip dibuka."""

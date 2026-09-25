@@ -112,3 +112,49 @@ class KunciSimpanan(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SakelarPemanasanBingkai(unittest.TestCase):
+    """
+    Pemanasan bingkai bisa dimatikan sejak 25 September 2026, dari panel Bingkai.
+
+    Diminta pemiliknya, dan alasannya sah dua arah: menyala berarti tidak perlu
+    menunggu tiap kali membuka klip, mati berarti CPU di latar bebas. Yang
+    menentukan pertukarannya pemiliknya, bukan kode.
+    """
+
+    def setUp(self):
+        from app.repos import settings as repo
+        self.repo, self.nilai = repo, {}
+        self.asli = (repo.get, repo.set_value)
+        repo.get = lambda n, b=None: self.nilai.get(n, b)
+        repo.set_value = lambda n, v: self.nilai.__setitem__(n, v)
+
+    def tearDown(self):
+        self.repo.get, self.repo.set_value = self.asli
+
+    def test_bawaannya_menyala(self):
+        """Perilaku yang sudah ada tidak boleh berubah sendiri saat sakelar ada."""
+        from app.services.pipeline import pemanasan_bingkai
+        self.assertTrue(pemanasan_bingkai())
+
+    def test_bisa_dimatikan_dan_dinyalakan_lagi(self):
+        from app.services.pipeline import pemanasan_bingkai, setel_pemanasan_bingkai
+        setel_pemanasan_bingkai(False)
+        self.assertFalse(pemanasan_bingkai())
+        setel_pemanasan_bingkai(True)
+        self.assertTrue(pemanasan_bingkai())
+
+    def test_sakelar_mati_tidak_ikut_mematikan_permintaan_langsung(self):
+        """
+        Tombol "Siapkan bingkai video ini sekarang" memakai jalur yang sama,
+        TANPA memeriksa sakelarnya: yang menekan tombol sudah menyatakan maunya.
+        """
+        from pathlib import Path
+        sumber = (Path(__file__).resolve().parents[1] / "app" / "services"
+                  / "pipeline.py").read_text(encoding="utf-8")
+        badan = sumber.split("def _jadwalkan_jejak_sekarang")[1][:600]
+        self.assertNotIn("pemanasan_bingkai()", badan)
+        # Dan yang memeriksa sakelarnya adalah pembungkus otomatisnya.
+        otomatis = sumber.split("def _jadwalkan_jejak(")[1][:1400]
+        self.assertIn("not pemanasan_bingkai()", otomatis)

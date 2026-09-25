@@ -1878,6 +1878,7 @@ export default function Editor({ project, onBack }) {
               )}
               {tab === 'frame' && (
                 <FramePanel frameMode={frameModeEfektif} onFrameModeChange={pilihCaraBingkai}
+                            videoId={videoId}
                             jenisKlip={jenisSekarang}
                             pilihanSendiri={!!selected?.cara_bingkai && !(selected?.frame_keys?.length >= 2)}
                             onOtomatis={() => editor.updateClip(selected.clip_id, { cara_bingkai: null })}

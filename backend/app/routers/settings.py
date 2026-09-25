@@ -85,6 +85,7 @@ async def get_settings():
         "gemini_models": GEMINI_MODELS,
         "render_suara": (settings_repo.get("render.suara") or "seimbang"),
         "warna_penutur": subtitles.warna_penutur_aktif(),
+        "pemanasan_bingkai": _pemanasan_bingkai(),
         **_openrouter_ringkas(),
     }
 
@@ -200,6 +201,28 @@ async def set_bingkai_otomatis(req: SakelarRequest):
     """
     from ..services.pipeline import NAMA_BINGKAI_OTOMATIS
     settings_repo.set_value(NAMA_BINGKAI_OTOMATIS, "1" if req.aktif else "0")
+    return {"status": "ok", "aktif": req.aktif}
+
+
+def _pemanasan_bingkai() -> bool:
+    try:
+        from ..services.pipeline import pemanasan_bingkai
+        return pemanasan_bingkai()
+    except Exception:                                # noqa: BLE001
+        return True
+
+
+@router.post("/pemanasan-bingkai")
+async def set_pemanasan_bingkai(req: SakelarRequest):
+    """
+    Bingkai semua klip dihitung lebih dulu sesudah auto-klip, atau tidak.
+
+    Menyala secara bawaan. Yang mematikannya membayar dengan menunggu beberapa
+    detik tiap kali membuka klip baru, dan mendapat CPU yang tidak dipakai di
+    latar sebagai gantinya. Pertukaran itu milik pemiliknya, bukan milik kode.
+    """
+    from ..services.pipeline import setel_pemanasan_bingkai
+    setel_pemanasan_bingkai(req.aktif)
     return {"status": "ok", "aktif": req.aktif}
 
 
