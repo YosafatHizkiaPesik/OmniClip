@@ -53,9 +53,11 @@ export default function SutradaraPanel({
     setMerapat(true);
     setGalat(null);
     try {
+      // Menghitung jejak energi seluruh klip dari berkas sumbernya; pada
+      // podcast satu jam di cakram lambat ini bukan hitungan detik.
       const r = await apiPost('/clip-rapatkan', {
         video_id: videoId, segments: clip.segments,
-      });
+      }, { timeout: 180000 });
       setRapat(r);
       if (r.potongan) onSegments(r.segments);
     } catch (e) {
@@ -139,7 +141,7 @@ export default function SutradaraPanel({
         <p style={{ ...kecil, margin: '0 0 9px' }}>
           Membuang diam di antara kalimat dan gumaman "eee". Dalam video sejam
           jeda satu detik terasa wajar; dalam klip enam puluh detik ia terasa
-          seperti video yang macet. Yang dibuang hanya yang benar-benar sunyi —
+          seperti video yang macet. Yang dibuang hanya yang benar-benar sunyi,
           tawa, musik, dan suara permainan ditahan walau tidak ada yang bicara.
         </p>
         <button className="btn-secondary" onClick={rapatkan}
@@ -167,9 +169,9 @@ export default function SutradaraPanel({
         <p style={{ ...kecil, margin: '0 0 9px' }}>
           AI menonton klip ini dan mengganti bingkai di momen reaksi: saat semua
           tertawa, wajah yang tertawa dipotong bergantian atau ditumpuk; saat
-          pemain game kaget, wajahnya dibuat penuh — lalu kembali normal. Bagian
+          pemain game kaget, wajahnya dibuat penuh, lalu kembali normal. Bagian
           tanpa wajah mengikuti gerakan. Sutradara hanya memakai empat cara:
-          <b> ikuti wajah, ikuti gerakan, game, dan susunan</b> — tidak pernah
+          <b> ikuti wajah, ikuti gerakan, game, dan susunan</b>, tidak pernah
           bilah kabur, jadi gambar selalu memenuhi layar. Semua usulan muncul di
           lajur Bingkai bertanda ✦ dengan alasannya, dan bisa dihapus satu per satu.
         </p>
@@ -207,7 +209,7 @@ export default function SutradaraPanel({
               <li>{hasil.pemakaian.masuk.toLocaleString('id-ID')} token dipakai.</li>
             )}
             {(hasil.kejutan ?? []).map((k) => (
-              <li key={k.t}>Reaksi kaget di {formatTime(k.t)} — {k.di_atas_db} dB di atas kebiasaannya</li>
+              <li key={k.t}>Reaksi kaget di {formatTime(k.t)}, {k.di_atas_db} dB di atas kebiasaannya</li>
             ))}
           </ul>
         )}

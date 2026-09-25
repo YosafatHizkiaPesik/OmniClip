@@ -7,7 +7,7 @@ import {
 
 export const FRAME_MODES = [
   { id: 'smart', label: 'Ikuti wajah', hint: 'Kamera mengikuti pembicara. Layar penuh, tanpa bilah kabur.' },
-  { id: 'motion', label: 'Ikuti gerakan', hint: 'Untuk tokoh yang BUKAN manusia — kartun, maskot, hewan. Kamera mengikuti bagian yang paling banyak bergerak, tanpa perlu mengenali wajah.' },
+  { id: 'motion', label: 'Ikuti gerakan', hint: 'Untuk tokoh yang BUKAN manusia, kartun, maskot, hewan. Kamera mengikuti bagian yang paling banyak bergerak, tanpa perlu mengenali wajah.' },
   { id: 'gaming', label: 'Main game', hint: 'Wajah pemain di atas, permainan di bawah. Letak facecam dicari sendiri, lalu ukuran dan posisinya bisa Anda atur.' },
   { id: 'layout', label: 'Susun sendiri', hint: 'Satu bingkai atau lebih, masing-masing bisa diatur letak dan ukurannya.' },
   { id: 'blur', label: 'Bilah kabur', hint: 'Video utuh di tengah, sisi atas-bawah diisi versi kabur.' },
@@ -27,6 +27,7 @@ export default function FramePanel({
   frameMode, onFrameModeChange,
   // Gaya perpindahan: kamera mengikuti dengan mulus, atau diam lalu memotong.
   frameMotion = 'smooth', onFrameMotionChange = null,
+  frameZoom = 1, frameGeserY = 0, onFrameZoom = null, onFrameGeserY = null,
   layout, onLayoutChange,
   // Main game: setelan susunan dua bidangnya.
   gamingSibuk = false, onGaming = null, onGamingUlang = null,
@@ -81,7 +82,7 @@ export default function FramePanel({
       {jenisKlip === 'memuat' && !pilihanSendiri && (
         <div className="choice-h" style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
           <Loader2 size={12} className="animate-spin" />
-          Membaca isi klip — game, wajah, atau tanpa wajah…
+          Membaca isi klip: game, wajah, atau tanpa wajah…
         </div>
       )}
       {jenisKlip?.mode && !pilihanSendiri && (
@@ -102,6 +103,46 @@ export default function FramePanel({
           <div className="choice-h">{m.hint}</div>
         </button>
       ))}
+
+      {/* Perbesaran dan geseran tegak.
+          Bingkai wajah memakai SELURUH tinggi sumber, jadi secara tegak tidak
+          ada yang bisa digeser: potongannya sudah setinggi gambarnya.
+          Memperbesar memotong lebih sedikit dari tingginya, dan barulah ada
+          sisa untuk memilih bagian mana yang dipakai. Diminta 25 September
+          2026: sisipan ditaruh di atas menutupi wajah, dan wajahnya tidak bisa
+          dipindahkan ke bawah. */}
+      {(frameMode === 'smart' || frameMode === 'motion') && onFrameZoom && (
+        <>
+          <div style={{ height: '1px', background: 'var(--rule-2)', margin: '4px 0' }} />
+          <div className="mark" style={{ color: 'var(--ink)' }}>
+            Perbesar wajah, {Number(frameZoom).toFixed(2)}x
+          </div>
+          <input type="range" min="1" max="2" step="0.02" value={frameZoom}
+                 onChange={(e) => onFrameZoom(Number(e.target.value))}
+                 style={{ width: '100%', accentColor: 'var(--accent-cyan)' }} />
+          <div className="mark" style={{ color: frameZoom > 1 ? 'var(--ink)' : 'var(--ink-3)' }}>
+            Turunkan wajah, {frameGeserY > 0 ? `${Math.round(frameGeserY)} ke bawah`
+              : frameGeserY < 0 ? `${Math.round(-frameGeserY)} ke atas` : 'tengah'}
+          </div>
+          <input type="range" min="-100" max="100" step="5" value={frameGeserY}
+                 disabled={frameZoom <= 1}
+                 onChange={(e) => onFrameGeserY(Number(e.target.value))}
+                 style={{ width: '100%', accentColor: 'var(--accent-cyan)',
+                          opacity: frameZoom <= 1 ? 0.4 : 1 }} />
+          <p style={{ fontSize: '0.67rem', color: 'var(--text-muted)', margin: '2px 0 0',
+                      lineHeight: 1.5 }}>
+            {frameZoom <= 1
+              ? 'Perbesar dulu sebelum bisa digeser: tanpa perbesaran, bingkainya sudah setinggi gambar aslinya, jadi tidak ada ruang tersisa.'
+              : 'Berguna saat sisipan menutupi wajahnya. Perbesaran memakan ketajaman, jadi ambil secukupnya saja.'}
+          </p>
+          {frameZoom > 1 && (
+            <button className="btn-secondary" style={{ fontSize: '0.7rem', padding: '4px 9px' }}
+                    onClick={() => { onFrameZoom(1); onFrameGeserY(0); }}>
+              Kembalikan
+            </button>
+          )}
+        </>
+      )}
 
       {(frameMode === 'smart' || frameMode === 'layout') && onFrameMotionChange && (
         <>
@@ -144,20 +185,20 @@ export default function FramePanel({
             bingkai menoleh ke orang yang dipilih, sampai tanda berikutnya. Jadi
             satu bagian yang meleset bisa dibetulkan tanpa mengambil alih seluruh
             klip. Tandanya terlihat dan bisa dihapus di lajur <b>Wajah</b> pada
-            linimasa klip. Nomornya diurut dari kiri ke kanan layar — bukan
+            linimasa klip. Nomornya diurut dari kiri ke kanan layar, bukan
             nomor <b>Orang</b> di partitur, yang itu hasil memisahkan suara.
           </p>
           {keyCount > 0 && (
             <button className="btn-secondary" style={{ fontSize: '.75rem', alignSelf: 'start' }}
                     onClick={() => onClearKeys?.()}>
-              Lepas {keyCount} tanda — kembali otomatis penuh
+              Lepas {keyCount} tanda, kembali otomatis penuh
             </button>
           )}
           <p style={{ fontSize: '.72rem', color: 'var(--ink-3)', lineHeight: 1.55, margin: '2px 0 0' }}>
             <b>Otomatis</b> mencocokkan wajah dengan suara: sistem sudah tahu
             kapan tiap orang bicara, lalu mencari mulut siapa yang ikut bergerak
-            saat itu. Ia bisa keliru — mulut yang tertutup mikrofon hampir tidak
-            bergerak di gambar — dan kalau begitu, tunjuk saja orangnya.
+            saat itu. Ia bisa keliru: mulut yang tertutup mikrofon hampir tidak
+            bergerak di gambar. Kalau begitu, tunjuk saja orangnya.
           </p>
         </>
       )}
@@ -170,7 +211,7 @@ export default function FramePanel({
       {frameMode !== 'layout' && frameMode !== 'gaming' && (
         <p style={{ fontSize: '.72rem', color: 'var(--ink-3)', lineHeight: 1.5, margin: '4px 0 0' }}>
           Mode ikut-wajah menganalisis klip sebelum render. Bila wajah jarang
-          terlihat — misalnya rekaman layar — sistem otomatis memakai bilah kabur.
+          terlihat, misalnya rekaman layar, sistem otomatis memakai bilah kabur.
           Untuk klip main game atau reaksi streamer, pakai <b>Susun sendiri</b>.
         </p>
       )}
@@ -257,7 +298,7 @@ export default function FramePanel({
 
           {/* Ikuti orang. Ditaruh di sini, bukan sebagai mode tersendiri:
               "ikuti wajah" dan "susun sendiri" bukan dua pilihan yang saling
-              meniadakan — bingkai reaksi yang mengikuti gamer di atas gameplay
+              meniadakan, bingkai reaksi yang mengikuti gamer di atas gameplay
               yang diam adalah satu susunan, bukan dua. */}
           <div style={{
             display: 'flex', gap: '9px', alignItems: 'flex-start',
@@ -269,7 +310,7 @@ export default function FramePanel({
               <b style={{ color: 'var(--ink)' }}>Ikuti orang:</b> taruh kotaknya
               di atas orang yang Anda mau, lalu tekan ikon wajah pada baris
               bingkai itu. Bingkainya akan membuntuti <i>orang itu</i> sepanjang
-              klip — bukan siapa pun yang wajahnya kebetulan paling besar.
+              klip, bukan siapa pun yang wajahnya kebetulan paling besar.
               Lebar, tinggi, dan posisi tegaknya tetap milik Anda.
               {!faceTrackAvailable && (
                 <> Untuk klip ini wajah belum terlacak, jadi bingkai pengikut
@@ -421,7 +462,7 @@ function GamingSetelan({ layout, sibuk, onGaming, onUlang }) {
           </p>
           {pindah > 0 && (
             <p style={{ fontSize: '.72rem', color: 'var(--ink-2)', lineHeight: 1.55, margin: 0 }}>
-              Kamera wajah berpindah tempat {pindah}× di klip ini — kotak Reaksi
+              Kamera wajah berpindah tempat {pindah}× di klip ini. Kotak Reaksi
               ikut pindah pada detiknya. Menyeret kotak Reaksi mengubah letak
               yang berlaku di posisi garis main saja.
             </p>

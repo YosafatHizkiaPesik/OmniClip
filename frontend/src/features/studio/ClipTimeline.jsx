@@ -533,7 +533,7 @@ export default function ClipTimeline({
 
   /* ── Lajur bingkai ─────────────────────────────────────────────────────
      Bukan sekadar deretan tanda: rentang di mana tiap orang benar-benar ada
-     di kamera digambar lebih dulu. Tanpa itu, menaruh tanda berarti menebak —
+     di kamera digambar lebih dulu. Tanpa itu, menaruh tanda berarti menebak,
      tidak ada cara mengetahui bahwa orang yang ditunjuk sedang tidak terlihat
      pada detik itu, yang persis kesalahan yang sedang dibetulkan. */
   const people = reframe?.people ?? [];
@@ -585,13 +585,13 @@ export default function ClipTimeline({
   /* ── Subtitle duduk di baris ORANGNYA ──────────────────────────────────
      Selama subtitle punya lajurnya sendiri dan wajah punya lajurnya sendiri,
      tidak ada tempat di layar yang menjawab "orang ini bicara apa, dan
-     bingkainya sedang menoleh ke siapa saat itu" — padahal itu satu-satunya
+     bingkainya sedang menoleh ke siapa saat itu", padahal itu satu-satunya
      pertanyaan yang membuat kedua lajur itu perlu dilihat bersama.
 
      Jembatannya `speaker_faces`: penomoran subtitle datang dari SUARA
      (diarisasi), penomoran wajah dari GAMBAR, dan keduanya tidak pernah
      otomatis sama. Tanpa peta itu, menaruh baris subtitle di baris seorang
-     wajah hanya akan berbohong dengan rapi — jadi kalau petanya tidak ada,
+     wajah hanya akan berbohong dengan rapi, jadi kalau petanya tidak ada,
      subtitle tetap memakai lajurnya sendiri seperti sebelumnya. */
   const speakerFaces = reframe?.speaker_faces ?? null;
   const byPerson = useMemo(() => {
@@ -723,7 +723,7 @@ export default function ClipTimeline({
       </div>
 
       {/* Nama lajur hidup di kolom sendiri, bukan mengambang di atas isinya.
-          Di dalam lajur, namanya menutupi rentang yang justru harus dibaca —
+          Di dalam lajur, namanya menutupi rentang yang justru harus dibaca,
           dan ikut hanyut saat linimasanya digulir. */}
       <div className="clip-tl-body">
         <div className="clip-tl-names">
@@ -902,7 +902,7 @@ export default function ClipTimeline({
                           ))}
                           {cut.keyIndex >= 0 && (
                             <button type="button" className="tl-aim-btn tl-aim-btn--x"
-                                    title="Hapus batas ini — sambung dengan potongan sebelumnya"
+                                    title="Hapus batas ini dan sambung dengan potongan sebelumnya"
                                     onPointerDown={(e) => e.stopPropagation()}
                                     onClick={() => gabungBingkai(cut)}>×</button>
                           )}
@@ -1031,7 +1031,7 @@ export default function ClipTimeline({
                       )}
                       {muat && (
                       <span className="tl-aim-pick">
-                        {/* Nomornya diklik langsung: itu gerakan yang diminta —
+                        {/* Nomornya diklik langsung: itu gerakan yang diminta,
                             di detik ini ambil wajah ini, di detik berikutnya
                             ambil sebelahnya. */}
                         <button type="button"
@@ -1051,7 +1051,7 @@ export default function ClipTimeline({
                         ))}
                         {cut.keyIndex >= 0 && (
                           <button type="button" className="tl-aim-btn tl-aim-btn--x"
-                                  title="Hapus batas ini — sambung dengan potongan sebelumnya"
+                                  title="Hapus batas ini dan sambung dengan potongan sebelumnya"
                                   onPointerDown={(e) => e.stopPropagation()}
                                   onClick={() => mergeCut(cut)}>×</button>
                         )}
@@ -1071,8 +1071,8 @@ export default function ClipTimeline({
 
             {/* Satu baris per ORANG: kehadirannya di kamera dan ucapannya,
                 pada sumbu waktu yang sama.
-                Dulu keduanya lajur terpisah — subtitle di satu tempat, wajah di
-                tempat lain — dan tidak ada satu titik pun di layar yang bisa
+                Dulu keduanya lajur terpisah, subtitle di satu tempat, wajah di
+                tempat lain, dan tidak ada satu titik pun di layar yang bisa
                 menjawab "saat dia mengatakan ini, bingkainya sedang melihat
                 siapa". Itulah satu-satunya alasan kedua lajur itu dilihat. */}
             {hadir.length > 1 && (
@@ -1129,7 +1129,7 @@ export default function ClipTimeline({
           <Crosshair size={12} style={{ color: 'var(--ink-3)' }} />
           <span>
             {reframeLoading
-              ? 'Menyiapkan lajur bingkai — sistem sedang mencari wajah di klip ini…'
+              ? 'Menyiapkan lajur bingkai, sistem sedang mencari wajah di klip ini…'
               : 'Klip ini hanya punya satu wajah di kamera, jadi tidak ada yang perlu ditunjuk.'}
           </span>
         </div>
@@ -1143,7 +1143,7 @@ export default function ClipTimeline({
           </button>
           <span>
             Menekan nama cara di dalam sebuah potongan akan <b>memotong di
-            posisi garis main</b> dan memakai cara itu mulai dari situ — jadi
+            posisi garis main</b> dan memakai cara itu mulai dari situ, jadi
             geser garis mainnya dulu ke detik yang dimaksud, lalu tekan.
             Menekannya saat garis main di luar potongan itu mengubah potongan
             itu seluruhnya.

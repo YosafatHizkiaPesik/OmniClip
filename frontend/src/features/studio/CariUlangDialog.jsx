@@ -30,7 +30,7 @@ export default function CariUlangDialog({ videoId, data, dirty, onSimpanDulu, on
     try { return localStorage.getItem('omniclip_gemini_model') || ''; } catch { return ''; }
   });
   const [daftarModel, setDaftarModel] = useState([]);
-  const [infoModel, setInfoModel] = useState({ terkuat: null, tanpaKuota: [] });
+  const [infoModel, setInfoModel] = useState({ terkuat: null, habisHarian: [] });
   const [adaKunci, setAdaKunci] = useState(null);
   const [jumlah, setJumlah] = useState(0);
   const [sibuk, setSibuk] = useState(false);
@@ -41,12 +41,16 @@ export default function CariUlangDialog({ videoId, data, dirty, onSimpanDulu, on
   useEffect(() => {
     apiGet('/settings/models').then((r) => {
       setAdaKunci(r.configured !== false);
-      const daftar = r.cocok?.length ? r.cocok : (r.available || []);
+      // Model yang kunci ini tidak punya aksesnya dibuang dari daftar, bukan
+      // ditampilkan sebagai pilihan yang mati.
+      const tak = new Set(r.tanpa_kuota || []);
+      const daftar = (r.cocok?.length ? r.cocok : (r.available || []))
+        .filter((m) => !tak.has(m));
       setDaftarModel(daftar);
       // Pilihan lama yang tidak cocok lagi (atau sudah tidak ada) kembali ke
       // Otomatis, bukan diam-diam dikirim ke server.
       setModel((m) => (m && !daftar.includes(m) ? '' : m));
-      setInfoModel({ terkuat: r.terkuat || null, tanpaKuota: r.tanpa_kuota || [] });
+      setInfoModel({ terkuat: r.terkuat || null, habisHarian: r.habis_harian || [] });
       if (r.configured === false) setMesin('heuristik');
     }).catch(() => setAdaKunci(null));
   }, []);
@@ -166,7 +170,7 @@ export default function CariUlangDialog({ videoId, data, dirty, onSimpanDulu, on
         <div style={{ display: 'grid', gap: '7px' }}>
           {pilihan('gemini', <Sparkles size={16} style={{ color: 'var(--accent-cyan)', marginTop: 2 }} />,
                    'Gemini', adaKunci === false
-                     ? 'Butuh kunci API — isi di Pengaturan → Model AI.'
+                     ? 'Butuh kunci API, isi di Pengaturan → Model AI.'
                      : 'Membaca seluruh transkrip dan menilai momen seperti penyunting.',
                    adaKunci === false)}
           {pilihan('heuristik', <Cpu size={16} style={{ color: 'var(--text-secondary)', marginTop: 2 }} />,
@@ -178,11 +182,11 @@ export default function CariUlangDialog({ videoId, data, dirty, onSimpanDulu, on
             <select value={model} onChange={(e) => setModel(e.target.value)} disabled={sibuk}
                     style={{ ...kontrol, width: '100%', marginTop: '5px' }}>
               <option value="">
-                Otomatis — terkuat yang tersedia{infoModel.terkuat ? ` (${infoModel.terkuat})` : ''}
+                Otomatis{infoModel.terkuat ? ` (mencoba ${infoModel.terkuat} lebih dulu)` : ''}
               </option>
               {daftarModel.map((m) => (
-                <option key={m} value={m} disabled={infoModel.tanpaKuota.includes(m)}>
-                  {m}{infoModel.tanpaKuota.includes(m) ? ' — tidak tersedia untuk kunci ini' : ''}
+                <option key={m} value={m}>
+                  {m}{infoModel.habisHarian.includes(m) ? ' (jatah hari ini habis)' : ''}
                 </option>
               ))}
             </select>

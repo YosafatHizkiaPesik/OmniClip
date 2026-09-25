@@ -6,10 +6,10 @@ Dua sumber:
   - BERKAS PENGGUNA, diimpor lewat Studio — cuplikan pertandingan untuk
     podcast bola, musik latar, logo. Disalin ke `aset/` supaya klip tidak rusak
     saat berkas aslinya dipindahkan.
-  - EFEK BAWAAN, disintesis oleh ffmpeg saat pertama dibutuhkan. Tidak ada satu
-    pun berkas suara yang diunduh atau dibundel: semuanya dibangkitkan dari
-    rumus, jadi tidak ada lisensi yang perlu diperiksa dan tidak ada yang bisa
-    hilang dari server orang lain. Sutradara otomatis memilih dari daftar ini.
+  - EFEK BAWAAN, disintesis oleh ffmpeg saat pertama dibutuhkan. Daftarnya
+    KOSONG sekarang (lihat `EFEK`), jadi pustaka hanya berisi berkas pengguna.
+    Mesinnya sengaja ditinggal utuh: satu rumus yang ditambahkan ke `EFEK`
+    cukup untuk menghidupkannya lagi.
 
 Klien TIDAK PERNAH menyebut jalur berkas. Ia menyebut `id`, dan jalurnya dicari
 di sini — sama dengan aturan untuk video sumber.
@@ -42,41 +42,15 @@ EKSTENSI = {
 # Masing-masing didengar dan disetel satu per satu, bukan asal sinus. Yang
 # penting untuk klip vertikal adalah transien yang jelas — efek yang lembek
 # tenggelam di bawah suara orang dan tidak terdengar sama sekali di speaker HP.
-EFEK: dict[str, tuple[str, str, str, float]] = {
-    "dentum": (
-        "Dentum", "Hantaman berat — jumpscare, punchline",
-        "aevalsrc='0.9*sin(2*PI*t*(48+90*exp(-9*t)))*exp(-3.2*t)"
-        "+0.35*(random(0)*2-1)*exp(-40*t)':s=48000:d=1.6",
-        1.6),
-    "whoosh": (
-        "Whoosh", "Desir perpindahan adegan",
-        "anoisesrc=c=pink:r=48000:a=0.8:d=0.8,"
-        "highpass=f=350,lowpass=f=5200,"
-        "afade=t=in:st=0:d=0.45:curve=exp,afade=t=out:st=0.45:d=0.35,"
-        # Derau merah muda yang disaring kehilangan sebagian besar energinya:
-        # tanpa penguat ini puncaknya -14 dB, 10 dB di bawah efek lain, dan
-        # tenggelam di bawah suara orang.
-        "volume=11dB",
-        0.8),
-    "ding": (
-        "Ding", "Denting — poin penting, fakta",
-        "aevalsrc='0.55*sin(2*PI*1318*t)*exp(-3.5*t)"
-        "+0.25*sin(2*PI*2637*t)*exp(-5*t)+0.12*sin(2*PI*3951*t)*exp(-7*t)':s=48000:d=1.3",
-        1.3),
-    "pop": (
-        "Pop", "Letupan kecil — teks muncul, reaksi lucu",
-        "aevalsrc='0.9*sin(2*PI*t*(1100-5200*t))*exp(-38*t)':s=48000:d=0.18",
-        0.18),
-    "naik": (
-        "Naik", "Tegangan menanjak — menjelang momen besar",
-        "aevalsrc='(0.35*sin(2*PI*(180*t+220*t*t))+0.25*(random(0)*2-1))*pow(t/2.2,2)':s=48000:d=2.2,"
-        "lowpass=f=6000",
-        2.2),
-    "gedebuk": (
-        "Gedebuk", "Pukulan rendah pendek — jatuh, gagal",
-        "aevalsrc='0.9*sin(2*PI*t*(90+140*exp(-25*t)))*exp(-11*t)':s=48000:d=0.5",
-        0.5),
-}
+# Kosong sejak 25 September 2026, atas keputusan pemiliknya sesudah
+# mendengarkan keenamnya: "efek suara bawaan, hilangkan, jelek-jelek".
+#
+# Yang ditinggalkan hanya isinya, bukan mesinnya. `siapkan_efek` di bawah masih
+# bekerja, jadi menambahkan kembali satu rumus di sini cukup untuk
+# menghidupkannya lagi, tanpa berkas yang perlu diunduh atau dilisensikan.
+# Efek suara yang bagus dibuat dengan telinga, bukan dengan rumus lavfi, dan
+# yang dipasang di sini tidak lolos telinga siapa pun.
+EFEK: dict[str, tuple[str, str, str, float]] = {}
 
 
 def _probe(path: Path) -> dict:

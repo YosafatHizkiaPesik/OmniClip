@@ -7,6 +7,22 @@ Diukur 21 September 2026 pada i5-8250U + Intel UHD 620, klip 70 detik
     x264 veryfast crf 20        45,4 dtk   32 MB
     h264_vaapi qp 22            27,9 dtk   40 MB   SSIM 0,990 terhadap x264
 
+Diukur ULANG 24 September 2026, potongan 9:16 enam detik dari sumber 1080p,
+dibandingkan terhadap patokan x264 crf 12:
+
+    h264_vaapi qp 22   2,3 MB   0,87 dtk   SSIM 0,99328
+    h264_vaapi qp 21   2,7 MB   0,87 dtk   SSIM 0,99384
+    h264_vaapi qp 20   3,3 MB   0,85 dtk   SSIM 0,99402
+    h264_vaapi qp 19   4,0 MB   0,96 dtk   SSIM 0,99441
+    x264 veryfast crf 20  1,9 MB  2,10 dtk  SSIM 0,99425
+
+Pengukuran itu mengubah satu keputusan: pada qp 22 encoder GPU menghasilkan
+gambar yang LEBIH BURUK daripada x264 sambil memakai berkas yang LEBIH BESAR.
+Cepatnya nyata, mutunya tidak. Karena itu angkanya diturunkan ke 19, tempat GPU
+akhirnya sedikit melewati x264 dan masih dua kali lebih cepat. Harganya berkas
+sekitar 1,7 kali lebih besar, dan itu harga yang pantas: yang dikeluhkan
+pemiliknya kualitas gambarnya, bukan ruang cakramnya.
+
 Encoder perangkat keras ada di hampir semua laptop — Intel Quick Sync sejak
 2011, NVENC di NVIDIA, AMF di AMD — tapi "ada di daftar ffmpeg" tidak sama
 dengan "bekerja di mesin ini": driver bisa tidak terpasang, GPU-nya bisa
@@ -78,23 +94,23 @@ def _calon_encoder() -> list[dict]:
                 "global": ["-vaapi_device", _VAAPI_DEV],
                 "saring": "format=nv12,hwupload",
                 "video": ["-c:v", "h264_vaapi", "-low_power", lp, "-rc_mode", "CQP",
-                          "-qp", "22", "-profile:v", "high"],
+                          "-qp", "19", "-profile:v", "high"],
             })
     c.append({
         "nama": "h264_nvenc", "global": [], "saring": "",
-        "video": ["-c:v", "h264_nvenc", "-preset", "p4", "-rc", "vbr", "-cq", "22",
+        "video": ["-c:v", "h264_nvenc", "-preset", "p4", "-rc", "vbr", "-cq", "19",
                   "-b:v", "0", "-pix_fmt", "yuv420p", "-profile:v", "high"],
     })
     c.append({
         "nama": "h264_qsv", "global": [], "saring": "format=nv12",
-        "video": ["-c:v", "h264_qsv", "-preset", "veryfast", "-global_quality", "22",
+        "video": ["-c:v", "h264_qsv", "-preset", "veryfast", "-global_quality", "19",
                   "-profile:v", "high"],
     })
     if sys.platform == "win32":
         c.append({
             "nama": "h264_amf", "global": [], "saring": "",
             "video": ["-c:v", "h264_amf", "-quality", "speed", "-rc", "cqp",
-                      "-qp_i", "22", "-qp_p", "22", "-pix_fmt", "yuv420p"],
+                      "-qp_i", "19", "-qp_p", "19", "-pix_fmt", "yuv420p"],
         })
     return c
 
@@ -148,7 +164,7 @@ def tandai_gagal(enc: dict) -> None:
         if enc["nama"] != "x264":
             _gagal.add((enc["ffmpeg"], enc["nama"]))
             _terpilih = None
-            log.warning("Encoder %s gagal saat render — kembali ke x264", enc["nama"])
+            log.warning("Encoder %s gagal saat render, kembali ke x264", enc["nama"])
 
 
 def siapkan_di_latar() -> None:

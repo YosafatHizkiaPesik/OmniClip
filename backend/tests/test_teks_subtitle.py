@@ -14,6 +14,7 @@ Dijalankan tanpa memasang apa pun:
 
 import unittest
 
+from app.services import teks
 from app.services.subtitles import _tanpa_tumpang, ke_srt
 from app.services.teks import (bobot_kata, cjk, lebar_teks, patah_teks, pecah,
                                sambung, titik_patah)
@@ -113,3 +114,38 @@ class Srt(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TanpaPisah(unittest.TestCase):
+    """
+    Em dash di caption. Papan ketik biasa tidak punya tombolnya, jadi
+    kehadirannya membuat tulisan langsung terbaca sebagai hasil mesin. Prompt
+    sudah melarangnya; ini jaring yang menangkap sisanya.
+    """
+
+    def test_di_tengah_kalimat_jadi_koma(self):
+        self.assertEqual(teks.tanpa_pisah("Beli rumah umur 23 — dari jualan desain"),
+                         "Beli rumah umur 23, dari jualan desain")
+
+    def test_sepasang_jadi_sepasang_koma(self):
+        self.assertEqual(
+            teks.tanpa_pisah("Dia bilang — dan ini penting — semuanya gratis."),
+            "Dia bilang, dan ini penting, semuanya gratis.")
+
+    def test_antara_angka_jadi_tanda_hubung(self):
+        self.assertEqual(teks.tanpa_pisah("Butuh 2—8 minggu."), "Butuh 2-8 minggu.")
+        self.assertEqual(teks.tanpa_pisah("Butuh 2 – 8 minggu."), "Butuh 2-8 minggu.")
+
+    def test_di_ujung_dibuang(self):
+        self.assertEqual(teks.tanpa_pisah("— Awalnya begitu"), "Awalnya begitu")
+        self.assertEqual(teks.tanpa_pisah("Sudah selesai —"), "Sudah selesai")
+
+    def test_tidak_membuat_koma_ganda(self):
+        self.assertEqual(teks.tanpa_pisah("Ia berhenti, — lalu pergi."),
+                         "Ia berhenti, lalu pergi.")
+        self.assertEqual(teks.tanpa_pisah("Ia berhenti —, lalu pergi."),
+                         "Ia berhenti, lalu pergi.")
+
+    def test_teks_bersih_tidak_berubah(self):
+        for t in ("Judul biasa saja", "Kata-kata berhubung tetap utuh", ""):
+            self.assertEqual(teks.tanpa_pisah(t), t)

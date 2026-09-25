@@ -1,12 +1,59 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Plus, Trash2, Loader2, Star, ChevronRight, Users, Palette } from 'lucide-react';
+import { Plus, Trash2, Loader2, Star, ChevronRight, Users, Palette, Sparkles, AlertTriangle } from 'lucide-react';
+import { apiGet, apiPost } from '../../lib/api';
 import { formatTime, parseTimeString } from '../../utils/timeFormat';
 import { inkSafe } from '../../lib/contrast';
 import { cachedFonts, fontStack, loadFonts } from '../../lib/fonts';
-import { gayaKata, hexAlpha } from './ClipPreview';
+import { JARAK_KATA, JARAK_KATA_MAKS, JARAK_KATA_MIN, gayaKata, hexAlpha, jarakKata } from './ClipPreview';
 import {
   COLOR_GROUPS, COLOR_PAIRS, normalizeHex, useFavoriteColors, useRecentColors,
 } from '../../lib/colors';
+
+/**
+ * Sakelar induk warna per penutur, dibaca sekali per sesi.
+ *
+ * Dibaca di sini dan bukan dititipkan lewat prop karena dua panel yang jauh
+ * terpisah membutuhkannya, dan keduanya hanya MEMBACA: yang mengubahnya adalah
+ * Pengaturan. Satu panggilan yang dibagi lebih jujur daripada satu prop yang
+ * harus dilewatkan melalui empat komponen yang tidak peduli.
+ */
+let warnaPenuturJanji = null;
+const pendengarWarnaPenutur = new Set();
+
+export function muatWarnaPenutur() {
+  if (!warnaPenuturJanji) {
+    warnaPenuturJanji = apiGet('/settings')
+      .then((r) => r?.warna_penutur === true)
+      .catch(() => false);
+  }
+  return warnaPenuturJanji;
+}
+
+/**
+ * Menyalakan atau mematikan sakelar induk dari mana saja di Studio.
+ *
+ * Nilainya disiarkan ke semua yang sedang menampilkannya, bukan menunggu
+ * halaman dimuat ulang: sakelar di tab Subtitle dan kotak centang di tab Gaya
+ * menjelaskan hal yang sama, dan dua tempat yang tidak sepakat lebih
+ * membingungkan daripada satu tempat yang sulit dicari.
+ */
+export async function setelWarnaPenutur(aktif) {
+  await apiPost('/settings/warna-penutur', { aktif });
+  warnaPenuturJanji = Promise.resolve(aktif);
+  for (const beri of pendengarWarnaPenutur) beri(aktif);
+}
+
+function useWarnaPenutur() {
+  const [boleh, setBoleh] = useState(false);
+  useEffect(() => {
+    let hidup = true;
+    const beri = (v) => { if (hidup) setBoleh(v); };
+    muatWarnaPenutur().then(beri);
+    pendengarWarnaPenutur.add(beri);
+    return () => { hidup = false; pendengarWarnaPenutur.delete(beri); };
+  }, []);
+  return boleh;
+}
 
 const label = {
   fontSize: '0.72rem',
@@ -144,7 +191,7 @@ export function TrimPanel({ clip, videoDuration, busy, onNudge, onSetBounds, onA
         Gabungkan potongan lain
       </button>
       <p style={{ fontSize: '0.74rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
-        Potongan baru bisa diambil dari bagian mana pun di video — misalnya menit 10
+        Potongan baru bisa diambil dari bagian mana pun di video, misalnya menit 10
         digabung dengan menit 50. Atur waktunya di kotak yang muncul.
       </p>
     </div>
@@ -165,7 +212,16 @@ export function SubtitlePanel({ clip, onUpdate, onRemove, style, onStyle = null,
   // jalan keluar lebih awal, dan kait di bawahnya akan berubah-ubah jumlahnya
   // antar render.
   const listRef = useRef(null);
-  const rowRef = useRef(null);
+  // Peta indeks -> elemen baris, BUKAN satu ref bersyarat.
+  //
+  // Versi sebelumnya memakai `ref={terpilih ? rowRef : null}`, dan ref bersyarat
+  // seperti itu menunjuk baris yang salah pada saat yang salah: saat pilihannya
+  // berpindah, React melepas ref dari baris lama dan memasangnya ke baris baru
+  // dalam commit yang sama, dan di antara keduanya `rowRef.current` bisa masih
+  // memegang baris LAMA. Efek penggulir lalu menggulir ke sana. Terekam
+  // sungguhan: mengklik baris pertama, lalu daftarnya melompat ke baris detik
+  // ke-18 setengah detik kemudian.
+  const rowsRef = useRef(new Map());
 
   /**
    * Menggulir baris terpilih ke dalam pandangan — di dalam DAFTARNYA saja.
@@ -180,17 +236,28 @@ export function SubtitlePanel({ clip, onUpdate, onRemove, style, onStyle = null,
    *
    * Sekarang yang digulir hanya kotak daftarnya, lewat scrollTop, dan hanya
    * ketika baris terpilih benar-benar berganti.
+   *
+   * DAN hanya bila tidak ada yang sedang menyunting. Tanpa syarat terakhir itu,
+   * membetulkan satu kata di baris pertama praktis tidak mungkin: garis mainnya
+   * terus berjalan, baris terpilih ikut pindah ke bawah, dan daftarnya menyeret
+   * baris yang sedang diketik keluar dari layar. Dilaporkan persis begitu:
+   * "saat saya mengklik subtitle, tampilan langsung lompat ke subtitle
+   * bawahnya, jadi saya harus menggulir lagi ke atas".
    */
   useEffect(() => {
     const kotak = listRef.current;
-    const baris = rowRef.current;
+    const baris = selectedLine == null ? null : rowsRef.current.get(selectedLine);
     if (!kotak || !baris) return;
+    // Ada yang sedang diketik di dalam daftar ini: jangan disentuh.
+    if (kotak.contains(document.activeElement)
+        && document.activeElement !== document.body) return;
     const atas = baris.offsetTop;
     const bawah = atas + baris.offsetHeight;
+    // Yang sudah terlihat seluruhnya dibiarkan: menggulir ke tempat yang sama
+    // tidak menambah apa pun, dan tiap gulir adalah kesempatan untuk salah.
+    if (atas >= kotak.scrollTop && bawah <= kotak.scrollTop + kotak.clientHeight) return;
     if (atas < kotak.scrollTop) kotak.scrollTop = atas - 6;
-    else if (bawah > kotak.scrollTop + kotak.clientHeight) {
-      kotak.scrollTop = bawah - kotak.clientHeight + 6;
-    }
+    else kotak.scrollTop = bawah - kotak.clientHeight + 6;
   }, [selectedLine]);
 
   if (!clip) return null;
@@ -200,7 +267,7 @@ export function SubtitlePanel({ clip, onUpdate, onRemove, style, onStyle = null,
     return (
       <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
         Klip ini tidak punya subtitle. Kalau video sumbernya tidak memiliki transkrip,
-        sistem tidak membuat teks apa pun — subtitle karangan justru berbahaya karena
+        sistem tidak membuat teks apa pun, subtitle karangan justru berbahaya karena
         akan ikut terbakar ke video.
       </p>
     );
@@ -241,7 +308,7 @@ export function SubtitlePanel({ clip, onUpdate, onRemove, style, onStyle = null,
       <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
         {lines.length} baris. Perbaiki kata yang salah dengar langsung di sini, dan
         tekan lingkaran warna untuk menandai siapa yang bicara. Nomor <b>Orang</b>
-        di sini datang dari memisahkan SUARA — satu orang tetap dihitung meski
+        di sini datang dari memisahkan SUARA, satu orang tetap dihitung meski
         kameranya sedang tidak menyorotnya. Nomor <b>Wajah</b> pada bingkai lain
         soal: itu wajah yang terlihat di layar, diurut dari kiri ke kanan.
       </p>
@@ -259,7 +326,7 @@ export function SubtitlePanel({ clip, onUpdate, onRemove, style, onStyle = null,
         <p style={{ fontSize: '0.68rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.55 }}>
           {speakerConfident === false
             ? 'Sistem harus menebak dua hal sekaligus: berapa orangnya, dan '
-              + 'siapa bicara kapan. Yang pertama paling sering meleset — kalau '
+              + 'siapa bicara kapan. Yang pertama paling sering meleset, kalau '
               + 'Anda sudah tahu jumlahnya, isikan di bawah dan sisanya biasanya ikut membaik.'
             : 'Ditebak dari warna suara. Kalau jumlahnya keliru, setel sendiri '
               + 'di bawah lalu deteksi ulang.'}
@@ -281,7 +348,7 @@ export function SubtitlePanel({ clip, onUpdate, onRemove, style, onStyle = null,
 
       {/* Warna tiap orang, di tempat orangnya ditandai.
           Dulu satu-satunya tempat mengaturnya adalah tab Gaya → Warna, bagian
-          yang tertutup dan jauh dari baris-baris yang ditandai — pengguna yang
+          yang tertutup dan jauh dari baris-baris yang ditandai, pengguna yang
           mencari "warna untuk orang ini" mencarinya di sini, di sebelah
           penandanya. Keduanya menulis ke palet yang sama. */}
       <WarnaTiapOrang
@@ -296,7 +363,10 @@ export function SubtitlePanel({ clip, onUpdate, onRemove, style, onStyle = null,
           const on = selectedLine === i;
           return (
             <div key={i}
-                 ref={on ? rowRef : null}
+                 ref={(el) => {
+                   if (el) rowsRef.current.set(i, el);
+                   else rowsRef.current.delete(i);
+                 }}
                  onPointerDown={() => onSelectLine?.(i)}
                  style={{
                    display: 'grid', gridTemplateColumns: '52px 22px 1fr 26px', gap: '7px',
@@ -325,7 +395,7 @@ export function SubtitlePanel({ clip, onUpdate, onRemove, style, onStyle = null,
               </button>
               <button
                 onClick={() => onUpdate(clip.clip_id, i, { speaker: (speaker + 1) % total })}
-                title={`Orang ${speaker + 1} — klik untuk ganti (sampai ${total})`}
+                title={`Orang ${speaker + 1}, klik untuk ganti (sampai ${total})`}
                 aria-label="Ganti penanda pembicara"
                 style={{
                   width: '20px', height: '20px', borderRadius: '50%', cursor: 'pointer',
@@ -335,7 +405,7 @@ export function SubtitlePanel({ clip, onUpdate, onRemove, style, onStyle = null,
               >{speaker + 1}</button>
               {/* Textarea, bukan input satu baris.
                   Kalimat subtitle rutin melewati enam puluh karakter,
-                  sedangkan kolomnya selebar sisa kisi — jadi dengan <input>
+                  sedangkan kolomnya selebar sisa kisi, jadi dengan <input>
                   sebagian besar kalimat tidak pernah terlihat utuh, dan
                   menyunting kata di tengah berarti menggeser isi kotak dulu
                   untuk mencari tempatnya. Tingginya menyesuaikan isi, jadi
@@ -387,9 +457,37 @@ const WARNA_ORANG = ['#FFFFFF', '#FFE500', '#7CFFB2', '#5BC8FF', '#FFB3C7',
  * orang yang sengaja memberi Orang 2 warna hijau jelas ingin melihatnya hijau,
  * dan diam-diam tidak terjadi apa-apa adalah jawaban terburuk.
  */
-function WarnaTiapOrang({ jumlah, tally, palette, style, onStyle }) {
+function WarnaTiapOrang({ jumlah, tally, palette, style, onStyle: onStyleProp }) {
   const [buka, setBuka] = useState(null);
+  const [sibuk, setSibuk] = useState(false);
+  const boleh = useWarnaPenutur();
+  // Sakelar induk mati berarti panel ini hanya menghitung baris. Tombol yang
+  // menyalakan sesuatu yang tetap tidak akan dirender lebih buruk daripada
+  // tidak ada tombol sama sekali.
+  const onStyle = boleh ? onStyleProp : null;
   const seragam = style?.per_speaker_colors === false;
+
+  /**
+   * Sakelarnya ada DI SINI, bukan hanya di Pengaturan.
+   *
+   * Warna per penutur adalah keputusan per video, bukan setelan yang dipasang
+   * sekali seumur hidup: podcast dua orang bersuara jelas berbeda pantas
+   * diwarnai, podcast tiga orang yang suaranya mirip tidak. Menyuruh orang
+   * meninggalkan Studio, membuka Pengaturan, lalu kembali, untuk keputusan
+   * yang hanya bisa dinilai sambil melihat klipnya, adalah jalan memutar yang
+   * tidak ada gunanya. Sakelar di Pengaturan tetap ada beserta angka ujinya.
+   */
+  const ubahSakelar = async (nilai) => {
+    setSibuk(true);
+    try {
+      await setelWarnaPenutur(nilai);
+      if (onStyleProp) onStyleProp({ ...style, per_speaker_colors: nilai });
+    } catch {
+      /* gagal menyimpan: sakelar kembali sendiri karena nilainya dari server */
+    } finally {
+      setSibuk(false);
+    }
+  };
   const warnaDari = (i) => palette[i] ?? DEFAULT_SPEAKER_COLORS[i] ?? '#FFFFFF';
 
   const setel = (i, c) => {
@@ -404,6 +502,23 @@ function WarnaTiapOrang({ jumlah, tally, palette, style, onStyle }) {
       <div style={{ ...label, fontSize: '0.7rem', marginBottom: '6px' }}>
         Warna subtitle tiap orang
       </div>
+      {onStyleProp && (
+        <label style={{
+          display: 'flex', alignItems: 'center', gap: '9px', cursor: sibuk ? 'default' : 'pointer',
+          padding: '7px 9px', marginBottom: '8px', borderRadius: 'var(--radius-sm)',
+          background: boleh ? 'var(--hl-wash)' : 'transparent',
+          border: `1px solid ${boleh ? 'var(--hl)' : 'var(--border-color)'}`,
+          opacity: sibuk ? 0.6 : 1,
+        }}>
+          <input type="checkbox" checked={boleh} disabled={sibuk}
+                 onChange={(e) => ubahSakelar(e.target.checked)}
+                 style={{ width: '15px', height: '15px', accentColor: 'var(--accent-cyan)',
+                          flex: 'none' }} />
+          <span style={{ fontSize: '0.73rem', fontWeight: 700, color: 'var(--ink)' }}>
+            Warna subtitle mengikuti penutur
+          </span>
+        </label>
+      )}
       <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
         {jumlah.map((i) => (
           <div key={i}>
@@ -429,7 +544,7 @@ function WarnaTiapOrang({ jumlah, tally, palette, style, onStyle }) {
           </div>
         ))}
       </div>
-      {/* Terbuka di bawah deretan keping, selebar panel — bukan melayang di
+      {/* Terbuka di bawah deretan keping, selebar panel, bukan melayang di
           bawah kepingnya. Keping orang kedua ke kanan berada di tepi panel
           yang sempit, dan kotak melayang di sana terpotong separuh. */}
       {buka !== null && (
@@ -466,9 +581,19 @@ function WarnaTiapOrang({ jumlah, tally, palette, style, onStyle }) {
           </div>
         </div>
       )}
+      {!boleh && onStyleProp && (
+        <p style={{ fontSize: '0.66rem', color: 'var(--text-muted)', margin: '6px 0 0', lineHeight: 1.5 }}>
+          Semua baris memakai satu warna. Nyalakan sakelar di atas untuk mencobanya
+          pada video ini. Perlu diketahui sebelum menyalakannya: pemisahan penutur
+          baru benar sekitar enam dari sepuluh kalimat pada podcast tiga orang yang
+          suaranya mirip, dan lebih baik pada dua orang yang suaranya jelas berbeda.
+          Hitungan baris di atas tetap dipakai untuk mengikuti wajah yang bicara,
+          menyala atau tidak.
+        </p>
+      )}
       {seragam && onStyle && (
         <p style={{ fontSize: '0.66rem', color: 'var(--text-muted)', margin: '6px 0 0', lineHeight: 1.5 }}>
-          Warna per orang sedang dimatikan — semua baris memakai satu warna.{' '}
+          Warna per orang sedang dimatikan. Semua baris memakai satu warna.{' '}
           <button onClick={() => onStyle({ ...style, per_speaker_colors: true })}
                   style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer',
                            color: 'var(--accent-cyan)', fontWeight: 700, fontSize: 'inherit',
@@ -523,7 +648,7 @@ function SpeakerCountPicker({ current, busy, onRedetect }) {
       </div>
       <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)', margin: '6px 0 0', lineHeight: 1.5 }}>
         Menandai ulang seluruh klip dari suaranya. Butuh sekitar dua menit untuk
-        video satu jam — transkripnya tidak diulang.
+        video satu jam, transkripnya tidak diulang.
       </p>
     </div>
   );
@@ -608,7 +733,7 @@ const STYLE_PRESETS = [
              sorot: 'warna', highlight_words: true, bg: false },
   },
   {
-    id: 'getar', label: 'Getar', hint: 'Hentakan kecil — untuk klip game dan reaksi',
+    id: 'getar', label: 'Getar', hint: 'Hentakan kecil, untuk klip game dan reaksi',
     patch: { size: 84, primary: '#FFFFFF', highlight: '#FF4D5E', font: 'Bungee',
              uppercase: true, animation: 'getar', position: 'bottom', outline_px: 8,
              sorot: 'pop', highlight_words: true, bg: false },
@@ -1007,10 +1132,84 @@ function Section({ id, title, note, openId, setOpenId, children }) {
 }
 
 /** Panel gaya teks — semua nilai di sini benar-benar sampai ke ffmpeg. */
+/**
+ * Meminta AI memilih tema untuk klip ini, lalu menerapkannya.
+ *
+ * Dua puluh enam tema membuat memilih jadi pekerjaan tersendiri, dan pada video
+ * yang menghasilkan lima belas klip itu lima belas tebakan. Yang menentukan tema
+ * mana yang cocok adalah isi klipnya, dan isi klipnya sudah diketahui sistem.
+ *
+ * Alasannya ikut ditampilkan, bukan hanya hasilnya: pilihan yang tidak bisa
+ * dibantah adalah pilihan yang tidak bisa diperbaiki.
+ */
+function PilihTemaAI({ klip, presets, set }) {
+  const [sibuk, setSibuk] = useState(false);
+  const [hasil, setHasil] = useState(null);
+  const [galat, setGalat] = useState(null);
+
+  const minta = async (segarkan) => {
+    setSibuk(true);
+    setGalat(null);
+    try {
+      const r = await apiPost('/clip-gaya', { ...klip, segarkan }, { timeout: 120000 });
+      const preset = presets.find((p) => p.id === r.tema);
+      if (!preset) throw new Error(`Tema "${r.tema}" tidak dikenal di sini.`);
+      // Usul model soal warna per penutur hanya berlaku bila sakelar induknya
+      // menyala. Model menilai transkrip, bukan ketepatan pemisahan suaranya,
+      // jadi ia tidak berhak menyalakan sesuatu yang sedang dimatikan.
+      const bolehWarna = await muatWarnaPenutur();
+      set({ ...preset.patch,
+            per_speaker_colors: bolehWarna && !!r.warna_per_penutur });
+      setHasil({ ...r, label: preset.label,
+                 warna_per_penutur: bolehWarna && !!r.warna_per_penutur });
+    } catch (e) {
+      setGalat(e.message);
+    } finally {
+      setSibuk(false);
+    }
+  };
+
+  return (
+    <div style={{ marginBottom: '10px' }}>
+      <button className="btn-secondary" disabled={sibuk} onClick={() => minta(false)}
+              style={{ width: '100%', fontSize: '0.78rem', display: 'inline-flex',
+                       alignItems: 'center', justifyContent: 'center', gap: '7px',
+                       color: 'var(--accent-cyan)' }}>
+        {sibuk ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+        {sibuk ? 'Membaca isi klipnya…' : 'Pilihkan tema untuk klip ini'}
+      </button>
+      {hasil && (
+        <p style={{ fontSize: '0.69rem', color: 'var(--text-muted)', lineHeight: 1.5,
+                    margin: '7px 0 0' }}>
+          <b style={{ color: 'var(--text-secondary)' }}>{hasil.label}</b>
+          {hasil.alasan ? ` - ${hasil.alasan}` : ''}
+          {hasil.warna_per_penutur ? '. Warna dibedakan per orang.' : ''}
+          {hasil.sumber === 'lokal' ? ' (dipilih mesin lokal)' : ''}{' '}
+          <button onClick={() => minta(true)} disabled={sibuk}
+                  style={{ background: 'none', border: 0, padding: 0, cursor: 'pointer',
+                           color: 'var(--accent-cyan)', font: 'inherit' }}>
+            Pilih ulang
+          </button>
+        </p>
+      )}
+      {galat && (
+        <p style={{ fontSize: '0.69rem', color: 'var(--accent-red)', margin: '7px 0 0',
+                    display: 'flex', gap: '6px', alignItems: 'center' }}>
+          <AlertTriangle size={13} /> {galat}
+        </p>
+      )}
+    </div>
+  );
+}
+
+
 export function StylePanel({
   style, onChange, aspectRatio, onAspectChange,
   showHook, onShowHookChange, hookText, onHookTextChange,
   speakerCount = 2,
+  // Bahan untuk "Pilihkan AI": isi klip yang sedang dibuka. Tanpa ini tombolnya
+  // disembunyikan, bukan ditampilkan lalu gagal saat ditekan.
+  klipUntukTema = null,
   // Bagian yang terbuka saat panel dibuka. Bisa disetel dari luar supaya uji
   // asap bisa merender isi tiap bagian — isi bagian yang tertutup tidak pernah
   // dijalankan, jadi kesalahan di dalamnya tidak akan tertangkap.
@@ -1027,9 +1226,11 @@ export function StylePanel({
   );
   const speakers = Math.max(1, Math.min(8, speakerCount || 1));
   const palette = style.speaker_colors ?? DEFAULT_SPEAKER_COLORS;
-  // Tak disetel = menyala, supaya gaya yang sudah tersimpan tidak
-  // berubah artinya begitu bendera ini ada.
-  const seragam = style.per_speaker_colors === false;
+  const bolehWarnaPenutur = useWarnaPenutur();
+  // Sakelar induk menang. Gaya lama yang tersimpan di peramban masih menyimpan
+  // `true`, dan tanpa baris ini kotak centangnya akan terlihat mati sementara
+  // yang dirender tetap satu warna.
+  const seragam = !bolehWarnaPenutur || style.per_speaker_colors === false;
   const fontLabel = fonts.find((f) => f.family === style.font)?.label ?? style.font;
 
   // Tak disetel = menyala, supaya klip lama tidak mendadak kehilangan teksnya.
@@ -1078,6 +1279,9 @@ export function StylePanel({
 
       <Section id="preset" title="Gaya siap pakai" note={activePreset?.label ?? 'ubahan sendiri'}
                openId={openId} setOpenId={setOpenId}>
+        {klipUntukTema && (
+          <PilihTemaAI klip={klipUntukTema} presets={STYLE_PRESETS} set={set} />
+        )}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '7px' }}>
           {STYLE_PRESETS.map((p) => (
             <PresetTile key={p.id} preset={p} active={activePreset?.id === p.id}
@@ -1086,7 +1290,7 @@ export function StylePanel({
         </div>
         <p style={{ fontSize: '0.67rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
           Tiap contoh digambar dengan font, warna, dan huruf besar-kecil yang
-          sebenarnya akan dipakai — jadi yang terlihat di sini itulah yang
+          sebenarnya akan dipakai, jadi yang terlihat di sini itulah yang
           dibakar ke video.
         </p>
       </Section>
@@ -1146,7 +1350,7 @@ export function StylePanel({
           {/* Sakelar keluar.
               Menebak siapa bicara kapan adalah bagian paling rapuh dari alur
               ini, dan saat ia meleset warnanya berganti di tengah kalimat
-              orang yang sama — lebih mengganggu daripada satu warna untuk
+              orang yang sama, lebih mengganggu daripada satu warna untuk
               semuanya. Paletnya tidak dihapus saat dimatikan, hanya tidak
               dipakai, jadi menyalakannya kembali mengembalikan setelan lama. */}
           <label style={{
@@ -1158,6 +1362,7 @@ export function StylePanel({
             <input
               type="checkbox"
               checked={seragam}
+              disabled={!bolehWarnaPenutur}
               onChange={(e) => set({ per_speaker_colors: !e.target.checked })}
               style={{ width: '15px', height: '15px', accentColor: 'var(--accent-cyan)', flex: 'none' }}
             />
@@ -1166,12 +1371,17 @@ export function StylePanel({
             </span>
           </label>
           <p style={{ fontSize: '0.68rem', color: 'var(--text-muted)', margin: '0 0 9px', lineHeight: 1.5 }}>
-            {seragam
+            {!bolehWarnaPenutur
+              ? <>Warna per penutur sedang dimatikan, karena pemisahan penuturnya
+                  baru benar sekitar enam dari sepuluh kalimat pada podcast tiga
+                  orang. Sakelarnya ada di tab <strong>Subtitle</strong>, di atas
+                  daftar orangnya, dan juga di Pengaturan.</>
+              : seragam
               ? <>Semua baris memakai <strong>Warna teks</strong> di atas, apa pun
                   tebakan penuturnya. Palet di bawah tersimpan dan tidak dipakai.</>
               : <>Berlaku untuk baris yang ditandai di tab <strong>Subtitle</strong>.
                   Deteksi otomatis mengisinya lebih dulu; kalau meleset, setel jumlah
-                  orangnya di tab Subtitle lalu betulkan barisnya di sana — atau
+                  orangnya di tab Subtitle lalu betulkan barisnya di sana, atau
                   centang kotak di atas supaya warnanya seragam.</>}
           </p>
           <div style={{ opacity: seragam ? 0.4 : 1, pointerEvents: seragam ? 'none' : 'auto' }}>
@@ -1208,7 +1418,7 @@ export function StylePanel({
       <Section id="font" title="Font & ukuran" note={fontLabel}
                openId={openId} setOpenId={setOpenId}>
         <div>
-          <div style={{ ...label, marginBottom: '7px' }}>Font — {fonts.length} pilihan</div>
+          <div style={{ ...label, marginBottom: '7px' }}>Font, {fonts.length} pilihan</div>
           <div style={{
             display: 'flex', flexDirection: 'column', gap: '5px',
             maxHeight: '250px', overflowY: 'auto', paddingRight: '3px',
@@ -1238,7 +1448,7 @@ export function StylePanel({
         </div>
 
         <div>
-          <div style={{ ...label, marginBottom: '8px' }}>Ukuran teks — {style.size}</div>
+          <div style={{ ...label, marginBottom: '8px' }}>Ukuran teks, {style.size}</div>
           <input type="range" min="44" max="190" step="2" value={style.size}
                  onChange={(e) => set({ size: Number(e.target.value) })}
                  style={{ width: '100%', accentColor: 'var(--accent-cyan)' }} />
@@ -1248,15 +1458,45 @@ export function StylePanel({
         </div>
 
         <div>
+          {/* Jarak antar kata.
+              Angkanya pernah dipatok mati, dan patokan itu selalu salah untuk
+              sebagian orang: font yang lebih lebar butuh jarak lebih rapat,
+              dan seleranya sendiri berbeda beda. Yang dijaga tetap sama, yaitu
+              HASILNYA: pratinjau dan render memakai angka yang sama walau
+              lebar spasi bawaan tiap font berbeda dua kali lipat. */}
           <div style={{ ...label, marginBottom: '8px' }}>
-            Tebal garis luar — {style.outline_px ?? 7}
+            Jarak antar kata, {jarakKata(style).toFixed(2)}
+          </div>
+          <input type="range" min={JARAK_KATA_MIN} max={JARAK_KATA_MAKS} step="0.02"
+                 value={jarakKata(style)}
+                 onChange={(e) => set({ jarak_kata: Number(e.target.value) })}
+                 style={{ width: '100%', accentColor: 'var(--accent-cyan)' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '5px' }}>
+            <p style={{ fontSize: '0.67rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.5, flex: 1 }}>
+              Rapat di kiri, renggang di kanan. Pratinjau di sebelah berubah
+              seketika, dan hasil rendernya sama persis.
+            </p>
+            {jarakKata(style) !== JARAK_KATA && (
+              <button onClick={() => set({ jarak_kata: JARAK_KATA })}
+                      style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+                               color: 'var(--accent-cyan)', fontWeight: 700,
+                               fontSize: '0.67rem', fontFamily: 'inherit', flex: 'none' }}>
+                Kembali ke {JARAK_KATA}
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div>
+          <div style={{ ...label, marginBottom: '8px' }}>
+            Tebal garis luar, {style.outline_px ?? 7}
           </div>
           <input type="range" min="0" max="14" step="1" value={style.outline_px ?? 7}
                  onChange={(e) => set({ outline_px: Number(e.target.value) })}
                  style={{ width: '100%', accentColor: 'var(--accent-cyan)' }} />
           <p style={{ fontSize: '0.67rem', color: 'var(--text-muted)', margin: '5px 0 0', lineHeight: 1.5 }}>
             Garis hitam inilah yang menjaga teks tetap terbaca di atas latar terang.
-            Nol berarti teks polos — bagus di atas gambar gelap, hilang di atas langit.
+            Nol berarti teks polos: bagus di atas gambar gelap, hilang di atas langit.
           </p>
         </div>
 
@@ -1279,7 +1519,7 @@ export function StylePanel({
         {style.position !== 'middle' && (
           <div>
             <div style={{ ...label, marginBottom: '8px' }}>
-              Jarak dari tepi {style.position === 'top' ? 'atas' : 'bawah'} — {style.margin_v ?? 300}
+              Jarak dari tepi {style.position === 'top' ? 'atas' : 'bawah'}, {style.margin_v ?? 300}
             </div>
             <input type="range" min="60" max="1200" step="10" value={style.margin_v ?? 300}
                    onChange={(e) => set({ margin_v: Number(e.target.value) })}
@@ -1292,14 +1532,14 @@ export function StylePanel({
 
         <div>
           <div style={{ ...label, marginBottom: '8px' }}>
-            Lebar kotak teks — {Math.round(style.box_w ?? 84)}%
+            Lebar kotak teks, {Math.round(style.box_w ?? 84)}%
           </div>
           <input type="range" min="20" max="100" step="1" value={style.box_w ?? 84}
                  onChange={(e) => set({ box_w: Number(e.target.value) })}
                  style={{ width: '100%', accentColor: 'var(--accent-cyan)' }} />
           <p style={{ fontSize: '0.67rem', color: 'var(--text-muted)', margin: '5px 0 0', lineHeight: 1.5 }}>
             Menentukan di lebar berapa baris subtitle mulai dibungkus. Kotak
-            sempit memberi baris pendek yang menumpuk — gaya yang biasa dipakai
+            sempit memberi baris pendek yang menumpuk, gaya yang biasa dipakai
             klip vertikal. Bisa juga ditarik langsung lewat batang di kiri/kanan
             subtitle pada pratinjau.
           </p>
@@ -1307,7 +1547,7 @@ export function StylePanel({
 
         <div>
           <div style={{ ...label, marginBottom: '8px' }}>
-            Posisi mendatar — {Math.round(style.pos_x ?? 50)}%
+            Posisi mendatar, {Math.round(style.pos_x ?? 50)}%
           </div>
           <input type="range" min="0" max="100" step="1" value={style.pos_x ?? 50}
                  onChange={(e) => set({ pos_x: Number(e.target.value) })}
@@ -1369,7 +1609,7 @@ export function StylePanel({
           </div>
         ) : (
           <p style={{ fontSize: '0.68rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
-            Mati secara bawaan — hasilnya lebih bersih. Nyalakan bila klipnya
+            Mati secara bawaan, karena hasilnya lebih bersih. Nyalakan bila klipnya
             butuh konteks pembuka.
           </p>
         )}
@@ -1411,7 +1651,7 @@ export function StylePanel({
             </div>
 
             <div style={{ ...label, marginBottom: '4px' }}>
-              Ukuran — {style?.wm_size ?? 34}
+              Ukuran, {style?.wm_size ?? 34}
             </div>
             <input type="range" min="12" max="160" step="2"
                    value={style?.wm_size ?? 34}
@@ -1419,7 +1659,7 @@ export function StylePanel({
                    style={{ width: '100%', marginBottom: '10px' }} />
 
             <div style={{ ...label, marginBottom: '4px' }}>
-              Tembus pandang — {Math.round((style?.wm_opacity ?? 0.62) * 100)}%
+              Tembus pandang, {Math.round((style?.wm_opacity ?? 0.62) * 100)}%
             </div>
             <input type="range" min="5" max="100" step="5"
                    value={Math.round((style?.wm_opacity ?? 0.62) * 100)}
@@ -1427,7 +1667,7 @@ export function StylePanel({
                    style={{ width: '100%', marginBottom: '10px' }} />
 
             <div style={{ ...label, marginBottom: '4px' }}>
-              Garis luar — {style?.wm_outline ?? 2}
+              Garis luar, {style?.wm_outline ?? 2}
             </div>
             <input type="range" min="0" max="10" step="1"
                    value={style?.wm_outline ?? 2}
@@ -1436,7 +1676,7 @@ export function StylePanel({
 
             {/* Sembilan sudut sebagai jalan pintas. Menyeret di pratinjau tetap
                 yang paling cepat, tapi sudut yang persis sulit dikenai dengan
-                tangan — dan pojok adalah tempat tanda air paling sering ditaruh. */}
+                tangan, dan pojok adalah tempat tanda air paling sering ditaruh. */}
             <div style={{ ...label, marginBottom: '6px' }}>Tempat cepat</div>
             <div style={{
               display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '4px',

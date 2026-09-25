@@ -282,9 +282,92 @@ DEADZONE_RATIO = 0.025
 DEADZONE_EXIT_RATIO = 0.35
 EMA_ALPHA = 0.28           # per sampel pada 8 Hz; dijalankan dua arah, dua kali
 EMA_PASSES = 2             # dua lintasan = filter orde-4, riak sisa jauh lebih kecil
-MAX_SPEED_RATIO = 0.10     # plafon kecepatan pan, lebar-per-detik
+# Plafon kecepatan pan, lebar-per-detik.
+#
+# Naik dari 0,10 ke 0,16 pada 25 September 2026, karena 0,10 terukur MENAHAN
+# kamera di belakang wajahnya. Terlapor sebagai "ada 1 detik bingkai tidak
+# mengikuti wajah", dan angkanya persis itu: pada podcast Dokter Tirta, tujuh
+# sampel berturut-turut (0,88 detik) meleset lebih dari 8% lebar layar, dan
+# pada ketujuhnya kamera berjalan tepat di plafonnya. Perpindahan yang diminta
+# 15,9% lebar; pada 0,10 itu butuh 1,6 detik.
+#
+# Diukur pada empat podcast, 30 detik tiap klip:
+#
+#   plafon   lepas >8%   galat rata2   p90     kekasaran
+#   0,10        2,9%        1,72%      3,63%     0,4124
+#   0,16        2,5%        1,59%      3,44%     0,4187
+#   0,22        2,5%        1,59%      3,44%     0,4200
+#
+# Di atas 0,16 tidak ada yang berubah lagi: plafonnya berhenti mengikat. Tiga
+# klip lain tidak terpengaruh sama sekali, karena di sana ia memang tidak
+# pernah mengikat. Ongkosnya 1,5% kekasaran, dan yang dibeli adalah hampir
+# satu detik bingkai yang tidak lagi tertinggal.
+MAX_SPEED_RATIO = 0.16
 SCENE_CUT_DISTANCE = 0.5   # jarak Bhattacharyya histogram HSV
 MEDIAN_WINDOW = 7          # buang deteksi meleset sesaat sebelum difilter
+# Jarak minimum antar BATAS bidikan, dalam detik.
+#
+# Tiap batas (potongan adegan atau pergantian penutur) memulai rentang filter
+# yang baru, dan rentang baru berarti kamera berpindah seketika. Itu memang
+# yang diinginkan sekali-sekali. Yang tidak diinginkan: batas yang datang
+# beruntun.
+#
+# Terukur 25 September 2026 pada tiga podcast, 30 detik tiap klip, dengan
+# kekasaran = rata-rata |percepatan| bingkai sebagai persen lebar sumber:
+#
+#   podcast Tirta, 12 batas dalam 30 dtk, sela terpendek 0,38 dtk
+#     tanpa jarak minimum   galat 1,59%  p90 3,56%  kekasaran 0,5722
+#     jarak minimum 2 dtk   galat 1,72%  p90 3,63%  kekasaran 0,4124
+#     jarak minimum 3 dtk   galat 2,18%  p90 5,30%  kekasaran 0,1998
+#
+# Dua detik menurunkan getaran 28% dengan ongkos ketepatan 0,13 poin persen.
+# Tiga detik menurunkannya 65%, tapi ongkosnya naik jadi 0,59 poin dan p90
+# melewati 5% — itu kembali ke keluhan lama, "bingkainya tidak pas di muka
+# orangnya". Jadi dua.
+#
+# Yang menentukan getaran BUKAN filternya. Diukur tahap demi tahap pada klip
+# yang sama: satu rentang utuh yang difilter penuh berkekasaran 0,0416,
+# sedangkan hasil `_smooth` yang memecahnya per bidikan berkekasaran 0,5722.
+# Empat belas kali lipat, dan seluruhnya datang dari batas rentangnya.
+JEDA_BATAS_MIN = 2.0
+# Perpindahan target yang terlalu jauh untuk di-PAN, sebagai pecahan lebar
+# sumber. Di atas ini bingkainya berpindah seketika, bukan meluncur.
+#
+# Inilah "ada 1 detik bingkai tidak mengikuti wajah" yang dilaporkan 25
+# September 2026. Ditelusuri sampel demi sampel pada podcast Dokter Tirta:
+#
+#   detik   wajah   kotak   galat
+#   22,50     474     496    1,2%
+#   23,50     488     588    5,2%
+#   24,00     470     717   12,8%
+#   24,12    1013     755   13,4%   <- penutur berganti, 543 px, 28% lebar
+#   24,62     967     888    4,1%
+#
+# Dua hal sekaligus. Penuturnya berganti DI DALAM satu bidikan, tanpa potongan
+# adegan, jadi tidak ada yang menandainya sebagai perpindahan. Dan penghalus
+# dua arah bersifat non-kausal: ia mulai bergerak 1,6 detik SEBELUM
+# perpindahannya, jadi kotaknya sudah meninggalkan orang pertama sebelum orang
+# kedua mulai bicara. Sepanjang itu bingkainya tidak memuat siapa pun.
+#
+# Modul ini sudah memegang aturannya untuk pergantian penutur yang diketahui:
+# orang tidak mem-pan kepalanya dari satu lawan bicara ke lawan bicara lain, ia
+# menoleh. Yang kurang hanya cara mengenalinya tanpa label penutur, dan jejak
+# wajahnya sendiri sudah cukup: 28% lebar dalam satu sampel bukan gerakan
+# kepala, itu orang lain.
+#
+# Diukur pada empat podcast, 30 detik tiap klip. Ambang 5%, 8%, dan 12%
+# memberi hasil yang sama persis, karena yang dipisahkan memang berjarak jauh:
+#
+#            lepas >8%   galat rata2   p90
+#   tanpa       2,5%        1,59%     3,44%
+#   dengan      0,0%        1,18%     2,28%
+#
+# Tiga klip lain tidak berubah sama sekali: di sana memang tidak ada
+# perpindahan sebesar itu. Angka "kekasaran" naik dari 0,42 ke 0,62, dan itu
+# BUKAN kemunduran: ukuran itu menghitung percepatan, dan sebuah potongan yang
+# disengaja memang percepatan tak hingga. Yang dibeli dengan itu adalah nol
+# detik bingkai yang tidak memuat siapa pun.
+LOMPAT_POTONG = 0.10
 # Sebuah bidikan harus muncul di sekian bagian sampel sebelum jumlah wajahnya
 # dianggap menentukan berapa orang yang ada.
 ROSTER_MIN_SHARE = 0.05
@@ -1430,7 +1513,7 @@ def _identities_from_faces(raw: list, embeds: dict, max_people: int,
 
     if selisih < IDENTITY_TRUST_MARGIN and batas_terlihat < max_people:
         if len(bobot) > batas_terlihat:
-            log.info("Sidik wajah lemah (selisih %.3f) — jumlah orang dibatasi ke %d, "
+            log.info("Sidik wajah lemah (selisih %.3f), jumlah orang dibatasi ke %d, "
                      "sebanyak wajah yang pernah terlihat bersamaan (dari %d kelompok)",
                      selisih, batas_terlihat, len(bobot))
         max_people = max(1, batas_terlihat)
@@ -1874,12 +1957,30 @@ def _smooth(centers: list[Optional[float]], cuts: list[bool], *,
 
     # Pecah menjadi rentang antar potongan adegan DAN pergantian subjek.
     breaks = {i for i, is_cut in enumerate(cuts) if is_cut and i > 0}
+    # Perpindahan target yang terlalu jauh untuk di-pan diperlakukan sama
+    # dengan potongan adegan. Dibaca dari jejak yang SUDAH dimedian, supaya
+    # satu deteksi nyasar tidak memotong bingkai tanpa alasan.
+    lompat_min = LOMPAT_POTONG * source_w
+    dimedian = _median([min(max(v, lo), hi) for v in filled], MEDIAN_WINDOW)
+    for i in range(1, len(dimedian)):
+        if abs(dimedian[i] - dimedian[i - 1]) > lompat_min:
+            breaks.add(i)
     if subject is not None:
         settled = _settle_subject(list(subject) + [None] * (len(filled) - len(subject)))
         for i in range(1, min(len(settled), len(filled))):
             if settled[i] != settled[i - 1]:
                 breaks.add(i)
-    bounds = sorted(breaks)
+    # Batas yang datang beruntun disaring: yang pertama menang, yang menyusul
+    # dalam JEDA_BATAS_MIN detik dibuang. Kamera yang berpindah dua kali dalam
+    # satu detik tidak pernah disengaja siapa pun, dan itulah yang terbaca
+    # sebagai goyang.
+    jeda_min = max(1, int(round(JEDA_BATAS_MIN * SAMPLE_FPS)))
+    bounds: list[int] = []
+    terakhir = -(10 ** 9)
+    for b in sorted(breaks):
+        if b - terakhir >= jeda_min:
+            bounds.append(b)
+            terakhir = b
     runs: list[tuple[int, int]] = []
     prev = 0
     for b in bounds:
@@ -2213,7 +2314,7 @@ def assign_faces_to_speakers(people, motion, speaker_turns, n_samples, seen=None
                  sp, i + 1, banyak / SAMPLE_FPS)
 
     if not dipakai:
-        log.info("Tidak ada penutur yang terpetakan ke wajah — bingkai "
+        log.info("Tidak ada penutur yang terpetakan ke wajah, bingkai "
                  "mengikuti bidikan aslinya")
     return dipakai
 
@@ -2732,14 +2833,14 @@ def plan_reframe(source_video_path: str, segments: list[dict], *,
     if target is None:
         target = 9 / 16
     if subjek != "gerak" and not MODEL_PATH.is_file():
-        log.info("Model YuNet tidak ada di %s — reframe dilewati", MODEL_PATH)
+        log.info("Model YuNet tidak ada di %s, reframe dilewati", MODEL_PATH)
         return None
 
     try:
         import cv2  # noqa: F401
         import numpy  # noqa: F401
     except ImportError:
-        log.info("opencv/numpy tidak terpasang — reframe dilewati")
+        log.info("opencv/numpy tidak terpasang, reframe dilewati")
         return None
 
     src = Path(source_video_path)
@@ -2832,7 +2933,7 @@ def plan_reframe(source_video_path: str, segments: list[dict], *,
     plan = ReframePlan(crop_w=crop_w, crop_h=crop_h, source_w=source_w,
                        source_h=source_h, face_coverage=round(coverage, 3))
     if coverage < MIN_FACE_COVERAGE:
-        log.info("Wajah hanya terlihat di %.0f%% frame — memakai blur-pad", coverage * 100)
+        log.info("Wajah hanya terlihat di %.0f%% frame, memakai blur-pad", coverage * 100)
         return plan  # usable == False; pemanggil membaca face_coverage untuk log
 
     # Naikkan dari laju sampling ke laju perintah memakai spline Catmull-Rom.
@@ -2894,6 +2995,45 @@ def plan_reframe(source_video_path: str, segments: list[dict], *,
     log.info("Reframe siap: crop %dx%d, wajah terlihat %.0f%%, %d titik perintah",
              crop_w, crop_h, coverage * 100, len(keyframes))
     return plan
+
+
+# Batas perbesaran bingkai wajah. Di atas 2x, sumber 1080p tinggal 540 piksel
+# tinggi sebelum diskalakan ke 1920, dan yang terlihat bubur.
+ZOOM_MAKS = 2.0
+
+
+def petak_zoom(plan: ReframePlan, zoom: float = 1.0, geser_y: float = 0.0,
+               ) -> tuple[int, int, int]:
+    """
+    (lebar, tinggi, y) potongan bingkai wajah sesudah diperbesar dan digeser.
+
+    Bingkai wajah memakai SELURUH tinggi sumber, jadi secara tegak tidak ada
+    yang bisa digeser: potongannya sudah setinggi gambarnya. Satu-satunya cara
+    memberi ruang tegak adalah memperbesar, yaitu memotong lebih sedikit dari
+    tingginya, dan barulah ada sisa untuk memilih bagian mana yang dipakai.
+
+    Diminta 25 September 2026: sisipan ditaruh di atas dan menutupi wajahnya,
+    dan wajahnya tidak bisa dipindahkan ke bawah.
+
+    `geser_y` menyatakan ke mana GAMBARNYA pindah, bukan ke mana jendelanya
+    pindah, dan itu perbedaan yang menentukan. Keduanya berlawanan: menurunkan
+    jendela berarti mengambil bagian bawah sumber, dan wajah yang tadinya di
+    tengah lalu naik ke atas layar. Yang diminta pemiliknya adalah "wajahnya
+    pindah ke bawah supaya sisipan di atas tidak menutupinya", jadi itu yang
+    dijadikan arti angkanya: 100 menurunkan wajah, -100 menaikkannya, 0 di
+    tengah persis seperti sebelum setelan ini ada.
+
+    zoom = 1 mengembalikan ukuran yang sama persis dengan sebelumnya, jadi klip
+    yang tidak menyentuh setelan ini tidak berubah sedikit pun.
+    """
+    zoom = max(1.0, min(ZOOM_MAKS, float(zoom or 1.0)))
+    target = plan.crop_w / plan.crop_h if plan.crop_h else 9 / 16
+    h = _even(max(16, min(plan.source_h, plan.source_h / zoom)))
+    w = _even(max(16, min(h * target, plan.source_w)))
+    sisa = max(0, plan.source_h - h)
+    bagian = max(0.0, min(1.0, 0.5 - max(-100.0, min(100.0, float(geser_y or 0.0))) / 200.0))
+    y = int(round(sisa * bagian))
+    return w, h, max(0, min(y, sisa))
 
 
 def build_reframe_filter(plan: ReframePlan, cmd_path: Path,
@@ -2967,6 +3107,30 @@ FACECAM_KELONGGARAN = 1.85
 # Mendatar dilonggarkan lebih banyak: wajah jauh lebih sempit daripada bahu,
 # dan panel facecam hampir selalu memuat keduanya.
 FACECAM_KELONGGARAN_X = 2.2
+
+# Luas petak hasilnya, sebagai pecahan bingkai. Syarat TERAKHIR, dan yang
+# paling menentukan.
+#
+# Syarat awan wajah di atas memeriksa sebaran wajahnya, bukan besar petak yang
+# akhirnya dipotong. Podcast dua orang dengan bidikan lebar lolos dari situ:
+# wajahnya memang berdekatan, tapi petak hasilnya memakan separuh layar, dan
+# separuh layar bukan panel di sudut.
+#
+# Akibatnya bukan sekadar potongan yang meleset. `sutradara.susun` memakai
+# "ada facecam" sebagai SATU-SATUNYA bukti bahwa klip ini rekaman permainan,
+# lalu menyusunnya sebagai wajah di atas dan permainan di bawah. Terlapor 24
+# September 2026 pada podcast Kajian Kitab Rongawi: petak 59%x55%, disusun
+# sebagai gameplay, dan separuh bawah kanvasnya berisi dinding ruangan yang
+# diberi label "Main game".
+#
+# Diukur pada sebelas video di penyimpanan, luas petak sebagai pecahan bingkai:
+#
+#   gameplay berfacecam   yqtdCouprBc 6,3%   MYXRsvydCb4 6,4%   jBQT3uYP2C4 11,9%
+#   podcast / bicara      OcpInDT2jKc 23,7%  Q0vs4W03yBI 38,6%  rBg0ZcwjVKQ 32,5%
+#
+# Jurangnya lebar, 11,9% lawan 23,7%, jadi 16% memberi margin ke dua arah dan
+# tidak menyentuh satu pun facecam sungguhan.
+FACECAM_LUAS_MAKS = 0.16
 
 
 def _persentil(nilai: list[float], q: float) -> float:
@@ -3195,7 +3359,13 @@ def deteksi_facecam(src, start: float, duration: float,
             x0, y0, xe, ye = tepi
             w_pot, h_pot = xe - x0, ye - y0
 
-    log.info("Facecam terdeteksi: %.0f%%x%.0f%% di (%.0f%%, %.0f%%) — "
+    if w_pot * h_pot > FACECAM_LUAS_MAKS:
+        log.info("Petak wajah %.0f%%x%.0f%% memakan %.0f%% bingkai, terlalu besar "
+                 "untuk panel facecam: ini bidikan kamera biasa, bukan gameplay",
+                 w_pot * 100, h_pot * 100, w_pot * h_pot * 100)
+        return None
+
+    log.info("Facecam terdeteksi: %.0f%%x%.0f%% di (%.0f%%, %.0f%%), "
              "awan wajah %.2fx%.2f, %d deteksi dari %d sampel",
              w_pot * 100, h_pot * 100, x0 * 100, y0 * 100,
              lebar_awan, tinggi_awan, len(kiri), total)
@@ -3505,7 +3675,7 @@ def _scan_gerak(src: Path, segments: list[dict], source_w: int, source_h: int,
     if terlihat < GERAK_CAKUPAN_MIN:
         # Hampir tidak ada gerakan sama sekali: bidikan diam, papan tulis,
         # layar menu. Mengikuti apa pun di situ hanya akan menggoyang gambar.
-        log.info("Gerakan hanya terdeteksi di %.0f%% sampel — bingkai gerak dilewati",
+        log.info("Gerakan hanya terdeteksi di %.0f%% sampel, bingkai gerak dilewati",
                  terlihat * 100)
         return None
     return centers, cuts, terlihat

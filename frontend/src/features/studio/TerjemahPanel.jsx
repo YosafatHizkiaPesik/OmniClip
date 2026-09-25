@@ -109,7 +109,7 @@ export default function TerjemahPanel({ clip, videoId, styleUtama, onStyleUtama,
       </div>
       <p style={{ ...kecil, margin: '0 0 9px' }}>
         Baris subtitle diterjemahkan satu per satu dan muncul bersamaan dengan
-        aslinya — misalnya Indonesia di atas, Jepang di bawahnya. Video berbahasa
+        aslinya, misalnya Indonesia di atas, Jepang di bawahnya. Video berbahasa
         asing diterjemahkan otomatis saat dianalisis (atur di Pengaturan). Untuk
         terjemahan saja, matikan subtitle asli.
       </p>

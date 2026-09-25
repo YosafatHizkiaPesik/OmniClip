@@ -62,7 +62,7 @@ export default function FrameKeysPanel({ keys, onKeys, waktuSekarang = 0, durasi
         <p style={{ fontSize: '0.74rem', color: 'var(--text-secondary)',
                     lineHeight: 1.55, margin: '8px 0 0' }}>
           Kosong berarti seluruh klip memakai satu mode di atas. Tambahkan dua kunci
-          atau lebih untuk berganti cara membingkai di tengah klip — misalnya mengikuti
+          atau lebih untuk berganti cara membingkai di tengah klip, misalnya mengikuti
           wajah saat narasumber bicara, lalu kotak tetap yang memuat semua orang saat
           reaksinya yang penting.
         </p>
@@ -79,7 +79,7 @@ export default function FrameKeysPanel({ keys, onKeys, waktuSekarang = 0, durasi
             <div style={{ display: 'flex', alignItems: 'center', gap: '7px', flexWrap: 'wrap' }}>
               <span style={{ fontSize: '0.73rem', color: 'var(--text-muted)',
                              fontVariantNumeric: 'tabular-nums' }}>
-                {jam(k.t ?? 0)} – {jam(sampai)}
+                {jam(k.t ?? 0)}-{jam(sampai)}
               </span>
               <select value={k.mode || 'smart'}
                       onChange={(e) => ubah(i, { mode: e.target.value })}

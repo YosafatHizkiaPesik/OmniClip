@@ -19,7 +19,7 @@ const MODES = [
   { id: 'freeze', label: 'Foto diam',
     hint: 'Satu bingkai klip dibekukan jadi latar, judul di atasnya, baru klipnya mulai. Klipnya utuh, hanya jadi lebih panjang.' },
   { id: 'zoom', label: 'Foto merayap membesar',
-    hint: 'Sama seperti foto diam, tapi gambarnya membesar pelan selama judul dibaca — supaya tidak terlihat macet.' },
+    hint: 'Sama seperti foto diam, tapi gambarnya membesar pelan selama judul dibaca, supaya tidak terlihat macet.' },
   { id: 'overlay', label: 'Klip langsung jalan',
     hint: 'Judul menutupi sebagian klip yang sudah berjalan lalu hilang. Tidak ada waktu yang terbuang.' },
 ];
@@ -108,7 +108,7 @@ export default function TitlePanel({ clip, onChange, onRetitle = null, retitling
         try {
           await el.play();
         } catch {
-          setVoiceError('Peramban menahan pemutaran otomatis — tekan tombol putar di bawah.');
+          setVoiceError('Peramban menahan pemutaran otomatis, tekan tombol putar di bawah.');
         }
       }
     } catch (e) {
@@ -173,7 +173,7 @@ export default function TitlePanel({ clip, onChange, onRetitle = null, retitling
       <p style={{ fontSize: '.72rem', color: 'var(--ink-3)', lineHeight: 1.55, margin: 0 }}>
         {(clip.title_source === 'gemini' || clip.source === 'gemini')
           ? 'Ditulis oleh Gemini dari isi klip ini.'
-          : 'Diambil dari kalimat pembuka klip ini sendiri — kutipan nyata, '
+          : 'Diambil dari kalimat pembuka klip ini sendiri, kutipan nyata, '
             + 'bukan judul karangan. Akurat, tapi jarang memancing.'}
         {' '}Judul ini jadi nama berkas hasil render, dan mengisi sendiri
         formulir saat klipnya diunggah.
@@ -192,7 +192,7 @@ export default function TitlePanel({ clip, onChange, onRetitle = null, retitling
 
       {/* ── Kartu judul di awal klip ──────────────────────────────────────
           Judul yang hanya tertulis kehilangan separuh gunanya di feed yang
-          diputar sambil lalu. Kartu di awal — judul besar, dibacakan — memberi
+          diputar sambil lalu. Kartu di awal, judul besar, dibacakan, memberi
           penonton alasan untuk berhenti sebelum sempat menggulir pergi. */}
       <div style={{ borderTop: '1px solid var(--rule-2)', paddingTop: '12px' }}>
         <label style={{
@@ -207,7 +207,7 @@ export default function TitlePanel({ clip, onChange, onRetitle = null, retitling
         </label>
         <p style={{ fontSize: '.72rem', color: 'var(--ink-3)', lineHeight: 1.55, margin: '6px 0 0' }}>
           Judulnya disiapkan di sini dan baru digabungkan dengan klipnya saat
-          dirender — jadi mematikan pilihan ini mengembalikan klipnya seperti
+          dirender, jadi mematikan pilihan ini mengembalikan klipnya seperti
           semula, tanpa perlu mengubah apa pun yang lain.
         </p>
 
@@ -222,7 +222,7 @@ export default function TitlePanel({ clip, onChange, onRetitle = null, retitling
             </label>
             <p style={{ fontSize: '.72rem', color: 'var(--ink-3)', margin: 0 }}>
               Dikosongkan berarti memakai judul klip di atas. Diisi berarti kartunya
-              boleh berbeda dari judul unggahan — yang sering perlu, karena judul
+              boleh berbeda dari judul unggahan, yang sering perlu, karena judul
               yang dibaca di layar dan judul yang dicari orang bukan hal yang sama.
             </p>
 
@@ -283,7 +283,7 @@ export default function TitlePanel({ clip, onChange, onRetitle = null, retitling
                       <AlertTriangle size={14} style={{ flex: 'none', marginTop: '2px', color: 'var(--warn)' }} />
                       <span style={{ fontSize: '.75rem', color: 'var(--ink-2)', lineHeight: 1.55 }}>
                         Suara pembaca belum ada di mesin ini. Berkasnya 63 MB, diunduh
-                        sekali lalu bekerja tanpa internet — judulnya tidak pernah
+                        sekali lalu bekerja tanpa internet, judulnya tidak pernah
                         dikirim ke layanan mana pun.
                       </span>
                     </div>
@@ -316,7 +316,7 @@ export default function TitlePanel({ clip, onChange, onRetitle = null, retitling
                           berarti judul klip dikirim keluar dari mesin ini. */}
                       <p style={{ fontSize: '.72rem', color: 'var(--ink-3)', lineHeight: 1.55, margin: '6px 0 0' }}>
                         {voices.find((v) => v.id === card.voice_id)?.online
-                          ? 'Dibuat di server Microsoft — judul klip dikirim ke sana untuk dibacakan, dan butuh internet. Ini suara yang dipakai kebanyakan alat pembuat klip.'
+                          ? 'Dibuat di server Microsoft, judul klip dikirim ke sana untuk dibacakan, dan butuh internet. Ini suara yang dipakai kebanyakan alat pembuat klip.'
                           : 'Dibuat di komputer ini. Judul tidak dikirim ke mana pun dan tetap bekerja tanpa internet.'}
                       </p>
                     </div>
@@ -339,7 +339,7 @@ export default function TitlePanel({ clip, onChange, onRetitle = null, retitling
                       <p style={{ fontSize: '.74rem', color: 'var(--ink-2)', margin: 0 }}>
                         Bacaannya {heard.seconds.toFixed(1)} detik, jadi kartunya
                         menahan layar <b>{heard.card_seconds.toFixed(1)} detik</b>.
-                        {' '}Panjang kartu memang mengikuti bacaan — kartu yang
+                        {' '}Panjang kartu memang mengikuti bacaan, kartu yang
                         berganti sebelum kalimatnya selesai terdengar seperti kesalahan.
                       </p>
                     )}
@@ -398,7 +398,7 @@ export default function TitlePanel({ clip, onChange, onRetitle = null, retitling
         <p style={{ fontSize: '.72rem', color: 'var(--ink-3)', lineHeight: 1.55, margin: '8px 0 0' }}>
           Tagar di atas diambil dari kata yang benar-benar diucapkan di klip ini
           dan dari judul video sumbernya. Tagar yang tidak nyambung dengan isinya
-          tidak membuat video naik — justru sebaliknya.
+          tidak membuat video naik, justru sebaliknya.
         </p>
       </div>
 

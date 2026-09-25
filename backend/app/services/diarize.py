@@ -670,7 +670,7 @@ def label_from_evidence(wav_path: str, spans: list[tuple[float, float]],
     model = {orang: pos for orang, pos in jangkar.items() if len(pos) >= MIN_ANCHORS}
     if len(model) < 2:
         log.info("Hanya %d dari %d orang punya cukup jangkar suara "
-                 "(%s dari %d jendela) — penambatan dilewati",
+                 "(%s dari %d jendela), penambatan dilewati",
                  len(model), n_people,
                  {o: len(v) for o, v in sorted(jangkar.items())}, len(covers))
         return None
@@ -707,17 +707,17 @@ def label_from_evidence(wav_path: str, spans: list[tuple[float, float]],
         # tanda bahwa modelnya memang belum layak dipercaya.
         if jumlah < MIN_HOLDOUT_SAMPLES:
             log.info("Jangkar terlalu sedikit untuk diuji silang (%d potongan) "
-                     "— penambatan dilewati", jumlah)
+                     "penambatan dilewati", jumlah)
             return None
         if akurasi < MIN_HOLDOUT_ACCURACY:
             log.info("Model suara gagal menebak potongan yang tak dilatihkan "
-                     "(%d/%d = %.0f%%) — penambatan dilewati, kembali ke "
+                     "(%d/%d = %.0f%%), penambatan dilewati, kembali ke "
                      "pengelompokan suara", benar, jumlah, 100 * akurasi)
             return None
         log.info("Model suara lulus uji silang: %d/%d = %.0f%%",
                  benar, jumlah, 100 * akurasi)
     else:
-        log.info("Kurang dari dua orang punya jangkar terpisah — penambatan dilewati")
+        log.info("Kurang dari dua orang punya jangkar terpisah, penambatan dilewati")
         return None
 
     pusat = {}
@@ -734,7 +734,7 @@ def label_from_evidence(wav_path: str, spans: list[tuple[float, float]],
     iu = np.triu_indices(len(M), 1)
     jauh = float((1.0 - (M @ M.T)[iu]).min()) if len(M) > 1 else 0.0
     if jauh < 0.10:
-        log.info("Model suara antar orang terlalu mirip (jarak %.3f) — "
+        log.info("Model suara antar orang terlalu mirip (jarak %.3f), "
                  "penambatan dilewati", jauh)
         return None
 
@@ -801,7 +801,7 @@ def analyze_speakers(wav_path: str, spans: list[tuple[float, float]], *,
     if speakers == 1:
         return Diarization(labels=[0] * len(spans), speaker_count=1, separation=1.0)
     if _get_session() is None:
-        log.info("Model penutur tidak tersedia — pemisahan dilewati")
+        log.info("Model penutur tidak tersedia, pemisahan dilewati")
         return Diarization(labels=[0] * len(spans), speaker_count=0, separation=0.0)
 
     sidik = _embeddings(wav_path, spans, kemajuan)
@@ -810,7 +810,7 @@ def analyze_speakers(wav_path: str, spans: list[tuple[float, float]], *,
     vectors, covers = sidik
 
     if len(vectors) < 12:
-        log.info("Hanya %d jendela layak — pemisahan penutur dilewati", len(vectors))
+        log.info("Hanya %d jendela layak, pemisahan penutur dilewati", len(vectors))
         return Diarization(labels=[0] * len(spans), speaker_count=1, separation=0.0)
 
     x = np.vstack(vectors)
@@ -865,7 +865,7 @@ def analyze_speakers(wav_path: str, spans: list[tuple[float, float]], *,
         score, sep, coh = _quality(x, labels, chosen_k)
         if chosen_k != auto_k:
             log.info("Diminta %d penutur (nilai %.3f); tebakan otomatis %d "
-                     "(nilai %.3f) — yang diminta yang dipakai",
+                     "(nilai %.3f), yang diminta yang dipakai",
                      chosen_k, score, auto_k, auto_score)
     else:
         chosen_k, labels = auto_k, auto_labels
@@ -875,7 +875,7 @@ def analyze_speakers(wav_path: str, spans: list[tuple[float, float]], *,
     # pengguna TIDAK menyebut jumlah dan tebakan otomatisnya sendiri lemah.
     if chosen_k < 2 or (not speakers and (score < MIN_QUALITY
                                           or coh < MIN_COHERENCE)):
-        log.info("Pemisahan suara lemah (pisah %.3f, runtut %.2fx) — "
+        log.info("Pemisahan suara lemah (pisah %.3f, runtut %.2fx), "
                  "dianggap satu penutur", sep, coh)
         return Diarization(labels=[0] * len(spans), speaker_count=1,
                            separation=sep, coherence=coh, quality=score,
@@ -895,7 +895,7 @@ def analyze_speakers(wav_path: str, spans: list[tuple[float, float]], *,
     # warna yang benar, bukan tepat sekian kelompok.
     labels, digabung = _gabung_kembar(x, np.asarray(labels), chosen_k)
     if digabung:
-        log.info("%d kelompok ternyata suara yang sama — %d penutur menjadi %d",
+        log.info("%d kelompok ternyata suara yang sama, %d penutur menjadi %d",
                  digabung, chosen_k, chosen_k - digabung)
         chosen_k -= digabung
         if chosen_k < 2:

@@ -246,9 +246,9 @@ def plan_card(spec: TitleCardSpec, workdir: Path, out_w: int, out_h: int) -> Opt
                 log.warning("Pembacaan judul gagal, kartu dibuat tanpa suara: %s", e)
                 wav_path = None
                 voice_seconds = 0.0
-                notes.append("Suara pembaca gagal dibuat — kartu dibuat tanpa suara.")
+                notes.append("Suara pembaca gagal dibuat, kartu dibuat tanpa suara.")
         else:
-            notes.append("Suara pembaca belum terpasang — kartu dibuat tanpa suara.")
+            notes.append("Suara pembaca belum terpasang, kartu dibuat tanpa suara.")
 
     ass_path = workdir / "titlecard.ass"
     ass_path.write_text(card_ass(spec, seconds, out_w, out_h), encoding="utf-8")

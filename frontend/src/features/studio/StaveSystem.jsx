@@ -482,7 +482,7 @@ export default function StaveSystem({
                   tidak menjawab satu pun pertanyaan yang sebenarnya diajukan di
                   layar ini: ia memakai penomoran SUARA sementara lajur bingkai
                   memakai penomoran WAJAH, jadi "Orang 3" di sini dan "Wajah 3"
-                  di bawah bisa dua orang berbeda — dan tidak ada cara
+                  di bawah bisa dua orang berbeda, dan tidak ada cara
                   mengetahuinya dari layar. Penuturnya tetap terbaca dari warna
                   frasanya; yang hilang cuma empat baris kosong.
                   Siapa-berbicara-kapan sekarang tinggal di linimasa klip,
@@ -509,7 +509,7 @@ export default function StaveSystem({
                                   Sebelumnya ia selalu melompat ke awal klip,
                                   dan karena frasanya menutupi seluruh rentang
                                   klip, tidak ada satu titik pun di dalam klip
-                                  yang bisa dituju dengan mengklik — termasuk
+                                  yang bisa dituju dengan mengklik, termasuk
                                   ujungnya, tempat orang memeriksa apakah
                                   kalimat terakhirnya terpotong. */
                                onClick={(ev) => {
@@ -525,7 +525,7 @@ export default function StaveSystem({
                                }}
                                /* Klik kanan menghapus klipnya.
                                   Sebelum ini tidak ada satu pun jalan untuk
-                                  membuang klip yang sudah dibuat — `removeClip`
+                                  membuang klip yang sudah dibuat: `removeClip`
                                   ada di dalam editor tapi tidak pernah
                                   tersambung ke apa pun di layar. Klip buatan
                                   tangan yang salah tempat karenanya menumpuk
@@ -536,7 +536,7 @@ export default function StaveSystem({
                                  onRemoveClip?.(clip.clip_id, letter);
                                }}
                                title={`${letter} · ${formatTime(start)} · ${Math.round(end - start)} dtk`
-                                 + (onRemoveClip ? ' — klik kanan untuk menghapus' : '')}
+                                 + (onRemoveClip ? ', klik kanan untuk menghapus' : '')}
                                style={{
                                  left: `${left}%`, width: `${w}%`,
                                  background: `color-mix(in srgb, ${pencil(voice)} 24%, transparent)`,
@@ -552,7 +552,7 @@ export default function StaveSystem({
                                   }}>{letter}</span>
                             {/* Pembacaan waktu selama diseret. Ada sepanjang
                                 waktu tapi tak terlihat, supaya seretan tidak
-                                perlu menyisipkan elemen baru ke DOM — dan
+                                perlu menyisipkan elemen baru ke DOM, dan
                                 isinya ditulis lewat ref, bukan state. */}
                             <span className="phrase-clock tc" />
                             {/* Pegangan di kedua ujung frasa. Hanya digambar

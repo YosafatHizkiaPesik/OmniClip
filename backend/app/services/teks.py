@@ -142,3 +142,39 @@ _TOKEN = re.compile(
 def pecah(teks: str) -> list[str]:
     """Kebalikan `sambung`: huruf CJK satu per token, sisanya per spasi."""
     return _TOKEN.findall(teks or "")
+
+
+# --- Tanda pisah panjang --------------------------------------------------------
+# Em dash dan en dash hampir tidak pernah diketik orang Indonesia: papan ketik
+# biasa tidak punya tombolnya. Karena itu kehadirannya di sebuah caption membuat
+# tulisannya langsung terbaca sebagai hasil mesin, dan itulah keluhan yang
+# memunculkan fungsi ini. Prompt sudah melarangnya, tapi larangan pada model
+# bukan jaminan; ini jaringnya.
+_PISAH = "—–‒―"
+
+
+def tanpa_pisah(teks: str) -> str:
+    """
+    Mengganti tanda pisah panjang dengan tanda baca yang biasa diketik orang.
+
+    Aturannya mengikuti maksud tandanya, bukan bentuknya:
+
+    - di antara dua angka ia rentang, jadi jadi tanda hubung ("2-8 menit");
+    - di antara dua kalimat ia jeda, jadi jadi koma;
+    - di awal atau akhir potongan ia hiasan, jadi dibuang.
+    """
+    import re as _re
+
+    if not teks:
+        return teks
+    kelas = f"[{_PISAH}]"
+    t = _re.sub(rf"(?<=\d)\s*{kelas}\s*(?=\d)", "-", teks)
+    # Koma ganda tidak pernah benar: bila sebelahnya sudah ada tanda baca,
+    # tandanya cukup dibuang.
+    t = _re.sub(rf"\s*{kelas}\s*(?=[,.;:!?])", "", t)
+    t = _re.sub(rf"(?<=[,;:])\s*{kelas}\s*", " ", t)
+    t = _re.sub(rf"\s+{kelas}\s+", ", ", t)
+    t = _re.sub(rf"^\s*{kelas}\s*", "", t, flags=_re.M)
+    t = _re.sub(rf"\s*{kelas}\s*$", "", t, flags=_re.M)
+    t = _re.sub(kelas, "-", t)
+    return _re.sub(r" {2,}", " ", t).strip()

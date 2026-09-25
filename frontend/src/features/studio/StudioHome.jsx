@@ -27,6 +27,19 @@ const STATUS_META = {
   unknown: { label: 'Belum diproses', color: 'var(--text-muted)', Icon: Clock },
 };
 
+/**
+ * "sekitar 10 menit lagi" dari sebuah waktu epoch.
+ *
+ * Kasar dengan sengaja: yang dibutuhkan pembacanya bukan detiknya, melainkan
+ * apakah ini soal menit atau soal jam.
+ */
+function sebentarLagi(waktu) {
+  const menit = Math.max(0, Math.round((waktu * 1000 - Date.now()) / 60000));
+  if (menit <= 1) return 'sebentar lagi';
+  if (menit < 60) return `sekitar ${menit} menit lagi`;
+  return `sekitar ${Math.round(menit / 60)} jam lagi`;
+}
+
 export default function StudioHome({ onOpen, onFindVideos }) {
   const [projects, setProjects] = useState(null);
   const [error, setError] = useState(null);
@@ -219,10 +232,43 @@ export default function StudioHome({ onOpen, onFindVideos }) {
                   <span style={{ fontWeight: 700 }}>{meta.label}</span>
                   {p.engine && p.status === 'done' && (
                     <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>
-                      · {p.engine === 'gemini' ? 'Gemini' : 'heuristik'}
+                      · {p.engine === 'gemini' ? 'Gemini'
+                        : p.engine === 'openrouter' ? 'OpenRouter' : 'mesin lokal'}
                     </span>
                   )}
                 </div>
+
+                {/* Kenapa mesinnya lokal. "heuristik" saja terbaca seperti
+                    pilihan yang disengaja, padahal biasanya ia akibat Gemini
+                    yang sedang penuh, dan mencoba lagi nanti sering berhasil. */}
+                {p.sumber_rendah && p.status === 'done' && (
+                  <div style={{ fontSize: '0.71rem', color: 'var(--text-muted)',
+                                lineHeight: 1.45 }}>
+                    {p.sumber_rendah}
+                  </div>
+                )}
+
+                {p.mesin_gagal && p.status === 'done' && (
+                  <div style={{ fontSize: '0.71rem', color: 'var(--text-muted)',
+                                lineHeight: 1.45 }}>
+                    {p.mesin_gagal}, jadi klipnya dipilih mesin lokal.
+                    {/* Saran "cari ulang sendiri" hanya berguna bila memang
+                        tidak ada yang akan mencarikannya. */}
+                    {!p.coba_lagi_pada && ' Buka editor lalu "Cari ulang klip" bila ingin dicoba lagi.'}
+                  </div>
+                )}
+
+                {/* Pencarian ulang yang dijadwalkan nanti. Disebut sebagai
+                    keterangan, bukan sebagai keadaan video: klipnya sudah ada,
+                    kartunya tetap bisa dibuka, dan yang akan terjadi nanti
+                    hanya mengganti daftar klipnya dengan yang lebih baik. */}
+                {p.coba_lagi_pada && p.status === 'done' && (
+                  <div style={{ fontSize: '0.71rem', color: 'var(--text-muted)',
+                                lineHeight: 1.45 }}>
+                    Klipnya akan dicari ulang dengan Gemini {sebentarLagi(p.coba_lagi_pada)}.
+                    Sampai saat itu klip yang ada sekarang tetap bisa dibuka dan disunting.
+                  </div>
+                )}
 
                 {busy && <BilahProses job={{ ...p.job, status: p.status }} />}
 
@@ -233,7 +279,7 @@ export default function StudioHome({ onOpen, onFindVideos }) {
                 )}
                 {busy && catatanLanjut[p.video_id]?.length > 0 && (
                   <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', lineHeight: 1.45 }}>
-                    Dilanjutkan — dilewati: {catatanLanjut[p.video_id].join(', ')}.
+                    Dilanjutkan, dilewati: {catatanLanjut[p.video_id].join(', ')}.
                   </div>
                 )}
 

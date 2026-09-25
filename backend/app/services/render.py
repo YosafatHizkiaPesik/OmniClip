@@ -696,7 +696,8 @@ def _urut_kunci(keys: list, durasi: float) -> list[dict]:
 def _cabang_kunci(k: dict, i: int, masuk: str, keluar: str, *,
                   src_w: int, src_h: int, out_w: int, out_h: int,
                   aspect_ratio: str, plan, workdir, layout_gaming,
-                  plan_gerak=None) -> str:
+                  plan_gerak=None, frame_zoom: float = 1.0,
+                  frame_geser_y: float = 0.0) -> str:
     """Satu kunci -> potongan graf yang menghasilkan kanvas penuh."""
     mode = (k.get("mode") or "smart").lower()
 
@@ -718,17 +719,21 @@ def _cabang_kunci(k: dict, i: int, masuk: str, keluar: str, *,
         mode = "smart"
 
     if mode == "motion" and plan_gerak is not None and plan_gerak.usable:
-        from .reframe import build_reframe_filter
+        from .reframe import build_reframe_filter, petak_zoom
+        zw, zh, zy = petak_zoom(plan_gerak, frame_zoom, frame_geser_y)
         rantai = build_reframe_filter(
-            plan_gerak, workdir / f"gerak_kunci{i}.cmd", out_w, out_h, name=f"fg{i}")
+            plan_gerak, workdir / f"gerak_kunci{i}.cmd", out_w, out_h, name=f"fg{i}",
+            crop_w=zw, crop_h=zh, crop_y=zy)
         return f"{masuk}{rantai},setsar=1{keluar}"
 
     if mode == "smart" and plan is not None and plan.usable:
-        from .reframe import build_reframe_filter
+        from .reframe import build_reframe_filter, petak_zoom
         orang = k.get("person")
+        zw, zh, zy = petak_zoom(plan, frame_zoom, frame_geser_y)
         rantai = build_reframe_filter(
             plan, workdir / f"reframe_kunci{i}.cmd", out_w, out_h,
-            name=f"fk{i}", person=int(orang) if orang is not None else None)
+            name=f"fk{i}", person=int(orang) if orang is not None else None,
+            crop_w=zw, crop_h=zh, crop_y=zy)
         return f"{masuk}{rantai},setsar=1{keluar}"
 
     # Usulan sutradara tidak pernah jatuh ke bilah kabur — pemiliknya
@@ -750,7 +755,8 @@ def build_frame_keys_graph(keys: list, in_label: str, out_label: str, *,
                            durasi: float, aspect_ratio: str = "9:16",
                            plan=None, workdir=None,
                            layout_gaming: Optional[dict] = None,
-                           plan_gerak=None) -> tuple[str, list]:
+                           plan_gerak=None, frame_zoom: float = 1.0,
+                           frame_geser_y: float = 0.0) -> tuple[str, list]:
     """
     Graf untuk daftar kunci pembingkaian. Mengembalikan (graf, kunci_terpakai).
 
@@ -795,7 +801,8 @@ def build_frame_keys_graph(keys: list, in_label: str, out_label: str, *,
             k, i, f"[fwin{i}]", f"[fk{i}]", src_w=src_w, src_h=src_h,
             out_w=out_w, out_h=out_h, aspect_ratio=aspect_ratio,
             plan=plan, workdir=workdir, layout_gaming=layout_gaming,
-            plan_gerak=plan_gerak))
+            plan_gerak=plan_gerak, frame_zoom=frame_zoom,
+            frame_geser_y=frame_geser_y))
         # Semua potongan wajib seragam — ukuran, laju, format piksel — atau
         # `concat` menolaknya.
         bagian.append(f"[fk{i}]scale={out_w}:{out_h},setsar=1,format=yuv420p,"
@@ -836,6 +843,46 @@ def _petak_sisipan(posisi: str, out_w: int, out_h: int) -> tuple[int, int, int, 
     return int(round(out_w * x)), int(round(out_h * y)), pw, ph
 
 
+def _petak_dari_rect(rect: dict, out_w: int, out_h: int) -> tuple[int, int, int, int]:
+    """
+    Petak bebas yang digambar pengguna, dalam PERSEN kanvas.
+
+    Persen, bukan piksel: klip yang sama dirender 1080x1920 dan 1080x1350, dan
+    petak berpiksel akan pindah tempat di antara keduanya. Persen berarti angka
+    yang sama berarti hal yang sama di setiap rasio, sama seperti `pos_x` dan
+    `box_w` pada subtitle.
+
+    Dijepit ke dalam kanvas, lalu dibulatkan genap: h264 menolak lebar atau
+    tinggi ganjil, dan yang gagal bukan filternya melainkan seluruh rendernya.
+    """
+    x = max(0.0, min(100.0, float(rect.get("x", 0.0))))
+    y = max(0.0, min(100.0, float(rect.get("y", 0.0))))
+    w = max(2.0, min(100.0 - x, float(rect.get("w", 100.0))))
+    h = max(2.0, min(100.0 - y, float(rect.get("h", 100.0))))
+    pw = max(2, _even(out_w * w / 100.0))
+    ph = max(2, _even(out_h * h / 100.0))
+    px = int(round(out_w * x / 100.0))
+    py = int(round(out_h * y / 100.0))
+    # Digeser masuk bila pembulatan genap membuatnya melewati tepi kanvas.
+    px = max(0, min(px, out_w - pw))
+    py = max(0, min(py, out_h - ph))
+    return px, py, pw, ph
+
+
+def petak_sisipan(l: dict, out_w: int, out_h: int) -> tuple[int, int, int, int]:
+    """
+    Petak sebuah sisipan: rect bebas kalau ada, kalau tidak preset lamanya.
+
+    Preset tidak dibuang saat rect ditambahkan, dan itu disengaja: klip yang
+    sudah tersimpan sejak sebelum hari ini memakainya, dan klip yang sudah jadi
+    tidak boleh berubah tampilannya sendiri hanya karena aplikasinya diperbarui.
+    """
+    rect = l.get("rect")
+    if isinstance(rect, dict):
+        return _petak_dari_rect(rect, out_w, out_h)
+    return _petak_sisipan(str(l.get("posisi") or "penuh"), out_w, out_h)
+
+
 def siapkan_sisipan(lapisan: Optional[list], durasi: float) -> list[dict]:
     """Membersihkan daftar sisipan dan mencari berkasnya. Yang tak dikenal dibuang."""
     from . import aset as aset_svc
@@ -861,15 +908,44 @@ def siapkan_sisipan(lapisan: Optional[list], durasi: float) -> list[dict]:
         dur = l.get("dur")
         dur = float(dur) if dur not in (None, "") else (
             panjang_aset - mulai if panjang_aset > 0 else 4.0)
-        if info["jenis"] != "gambar" and panjang_aset > 0:
+        ulang = bool(l.get("ulang", False))
+        # Panjangnya dibatasi isi berkasnya, KECUALI kalau diulang: musik satu
+        # menit yang dipasang untuk klip dua menit memang dimaksudkan berputar
+        # dua kali, bukan dipotong jadi satu menit.
+        if info["jenis"] != "gambar" and panjang_aset > 0 and not ulang:
             dur = min(dur, max(0.05, panjang_aset - mulai))
         dur = min(dur, durasi - t)
         if dur <= 0.05:
             continue
+        # Rect bebas: dipakai bila ada, kalau tidak preset lamanya (`posisi`).
+        rect = l.get("rect")
+        rect = rect if isinstance(rect, dict) else None
+        # Isi petak: "penuh" memotong sisi yang kelebihan, "muat" memuat utuh
+        # dengan ruang kosong di sisanya. Bawaannya mengikuti kebiasaan lama,
+        # yaitu video memenuhi petaknya dan gambar dimuat utuh, supaya klip
+        # yang sudah tersimpan tidak berubah tampilannya sendiri.
+        isi = str(l.get("isi") or ("muat" if info["jenis"] == "gambar" else "penuh"))
+        if isi not in ("penuh", "muat"):
+            isi = "penuh"
+        try:
+            opasitas = max(0.0, min(1.0, float(l.get("opasitas", 1.0))))
+            masuk = max(0.0, min(dur / 2, float(l.get("fade_masuk") or 0.0)))
+            keluar_f = max(0.0, min(dur / 2, float(l.get("fade_keluar") or 0.0)))
+        except (TypeError, ValueError):
+            opasitas, masuk, keluar_f = 1.0, 0.0, 0.0
         keluar.append({
             "path": path, "jenis": info["jenis"], "punya_suara": info.get("punya_suara"),
             "t": t, "dur": dur, "mulai": mulai, "volume": vol,
             "posisi": str(l.get("posisi") or "penuh"),
+            "rect": rect,
+            "isi": isi,
+            "opasitas": opasitas,
+            "fade_masuk": masuk,
+            "fade_keluar": keluar_f,
+            # Berkas yang lebih pendek daripada petaknya diulang sampai penuh.
+            # Berguna untuk musik latar dan cuplikan pendek yang dijadikan
+            # gelang; tanpa ini sisanya senyap atau membeku.
+            "ulang": ulang,
             "redam": bool(l.get("redam", False)),
         })
     return keluar
@@ -895,28 +971,47 @@ def build_sisipan_graph(lapisan: list[dict], vin: str, ain: str, *,
         if l["jenis"] == "gambar":
             inputs += ["-loop", "1", "-t", f"{dur:.3f}", "-i", str(l["path"])]
         else:
+            # `-stream_loop -1` memutar berkasnya berulang, dan `-t` di
+            # bawahnya yang menghentikannya. Urutannya penting: keduanya opsi
+            # MASUKAN, jadi keduanya harus berdiri sebelum `-i`.
+            if l.get("ulang"):
+                inputs += ["-stream_loop", "-1"]
             inputs += ["-ss", f"{l['mulai']:.3f}", "-t", f"{dur:.3f}", "-i", str(l["path"])]
 
         if l["jenis"] in ("video", "gambar"):
-            x, y, w, h = _petak_sisipan(l["posisi"], out_w, out_h)
+            x, y, w, h = petak_sisipan(l, out_w, out_h)
             # `setpts ... +t0/TB` menggeser cuplikannya ke waktunya di klip;
             # tanpa itu overlay menempelkannya di detik nol, lalu `enable`
             # menyembunyikannya — cuplikan yang "tidak muncul" padahal ada.
             geser = f"setpts=PTS-STARTPTS+{t0:.3f}/TB"
-            if l["jenis"] == "gambar":
-                # Gambar DIMUAT utuh, bukan dipotong memenuhi petaknya: logo
-                # persegi di petak 16:9 kehilangan atas-bawahnya kalau dipotong.
-                # Transparansi PNG ikut dibawa (yuva420p), dan gambarnya
-                # ditaruh di tengah petak.
+            # Lembut masuk dan keluar, plus ketembusan. Ketiganya bekerja pada
+            # SALURAN ALFA, bukan dengan menggelapkan gambarnya: sisipan yang
+            # memudar harus memperlihatkan video di bawahnya, bukan berubah
+            # jadi persegi hitam. Waktunya relatif terhadap awal sisipan
+            # sendiri, jadi ditulis sebelum `setpts` menggesernya.
+            efek = []
+            if l.get("fade_masuk", 0) > 0:
+                efek.append(f"fade=t=in:st=0:d={l['fade_masuk']:.3f}:alpha=1")
+            if l.get("fade_keluar", 0) > 0:
+                efek.append(f"fade=t=out:st={max(0.0, dur - l['fade_keluar']):.3f}:"
+                            f"d={l['fade_keluar']:.3f}:alpha=1")
+            if l.get("opasitas", 1.0) < 1.0:
+                efek.append(f"colorchannelmixer=aa={l['opasitas']:.3f}")
+            rantai = ("," + ",".join(efek)) if efek else ""
+
+            if l.get("isi") == "muat":
+                # DIMUAT utuh, bukan dipotong memenuhi petaknya: logo persegi di
+                # petak 16:9 kehilangan atas-bawahnya kalau dipotong. Gambarnya
+                # ditaruh di tengah petak, dan transparansi PNG ikut terbawa.
                 bagian.append(
                     f"[{idx}:v]scale={w}:{h}:force_original_aspect_ratio=decrease,"
-                    f"setsar=1,format=yuva420p,{geser}[sv{i}]")
+                    f"setsar=1,format=yuva420p{rantai},{geser}[sv{i}]")
                 px = f"{x}+({w}-overlay_w)/2"
                 py = f"{y}+({h}-overlay_h)/2"
             else:
                 bagian.append(
                     f"[{idx}:v]scale={w}:{h}:force_original_aspect_ratio=increase,"
-                    f"crop={w}:{h},setsar=1,format=yuv420p,{geser}[sv{i}]")
+                    f"crop={w}:{h},setsar=1,format=yuva420p{rantai},{geser}[sv{i}]")
                 px, py = str(x), str(y)
             keluar = f"[svo{i}]"
             bagian.append(
@@ -926,9 +1021,15 @@ def build_sisipan_graph(lapisan: list[dict], vin: str, ain: str, *,
 
         if l["volume"] > 0 and (l["jenis"] == "audio" or l.get("punya_suara")):
             ms = int(round(t0 * 1000))
+            afade = ""
+            if l.get("fade_masuk", 0) > 0:
+                afade += f",afade=t=in:st=0:d={l['fade_masuk']:.3f}"
+            if l.get("fade_keluar", 0) > 0:
+                afade += (f",afade=t=out:st={max(0.0, dur - l['fade_keluar']):.3f}"
+                          f":d={l['fade_keluar']:.3f}")
             bagian.append(
                 f"[{idx}:a]aresample=48000,aformat=channel_layouts=stereo,"
-                f"asetpts=PTS-STARTPTS,volume={l['volume']:.3f},"
+                f"asetpts=PTS-STARTPTS,volume={l['volume']:.3f}{afade},"
                 f"adelay={ms}|{ms}[sa{i}]")
             suara.append((f"[sa{i}]", l["redam"]))
         idx += 1
@@ -1041,6 +1142,10 @@ def render_clip(
     # bidikan lalu berpindah seketika. Keduanya sah — yang mulus terasa
     # sinematik, yang memotong terasa seperti hasil editor.
     frame_motion: str = "smooth",
+    # Perbesaran dan geseran tegak bingkai wajah. zoom 1.0 dan geser 0 berarti
+    # persis seperti sebelum setelan ini ada. Lihat `reframe.petak_zoom`.
+    frame_zoom: float = 1.0,
+    frame_geser_y: float = 0.0,
     frame_layout: Optional[dict] = None,
     # Linimasa pembingkaian: [{t, mode, rect?, person?, layout?}] dalam waktu
     # KLIP. Bila berisi dua kunci atau lebih, ia menang atas `frame_mode`.
@@ -1203,7 +1308,8 @@ def render_clip(
                 src_w=skunci_w, src_h=skunci_h, out_w=out_w, out_h=out_h,
                 durasi=durasi_klip, aspect_ratio=aspect_ratio,
                 plan=kunci_plan, workdir=workdir, layout_gaming=tata_gaming,
-                plan_gerak=kunci_plan_gerak)
+                plan_gerak=kunci_plan_gerak,
+                frame_zoom=frame_zoom, frame_geser_y=frame_geser_y)
             if kunci_graf:
                 frame_used = "keys"
                 log.info("Linimasa bingkai: %s",
@@ -1238,7 +1344,7 @@ def render_clip(
                 # Tidak ada facecam yang diam di satu tempat: ini bukan rekaman
                 # gameplay dengan kamera pemain. Jatuh ke pelacakan wajah biasa,
                 # yang punya jalur mundurnya sendiri ke bilah kabur.
-                log.info("Facecam tidak ditemukan — mode gaming jatuh ke smart")
+                log.info("Facecam tidak ditemukan, mode gaming jatuh ke smart")
                 frame_mode = "smart"
 
         if not kunci_graf and frame_mode == "layout" and frame_layout and frame_layout.get("frames"):
@@ -1261,7 +1367,7 @@ def render_clip(
                 if layout_plan is not None and not layout_plan.centers:
                     layout_plan = None
                 if layout_plan is None:
-                    log.info("Wajah tidak terlacak — bingkai pengikut memakai "
+                    log.info("Wajah tidak terlacak, bingkai pengikut memakai "
                              "posisi tetap dari kotaknya")
 
             layout_graph = build_layout_graph(
@@ -1288,8 +1394,11 @@ def render_clip(
             if plan is not None:
                 face_coverage = plan.face_coverage
             if plan is not None and plan.usable:
+                from .reframe import petak_zoom
+                zw, zh, zy = petak_zoom(plan, frame_zoom, frame_geser_y)
                 chain.append(build_reframe_filter(
-                    plan, workdir / "reframe.cmd", out_w, out_h))
+                    plan, workdir / "reframe.cmd", out_w, out_h,
+                    crop_w=zw, crop_h=zh, crop_y=zy))
                 frame_used = frame_mode
 
         if frame_used not in ("smart", "motion", "original", "layout", "gaming", "keys"):
@@ -1312,6 +1421,30 @@ def render_clip(
         # subtitle ke tengah layar dan membuat hurufnya raksasa — jadi keduanya
         # diskalakan mengikuti tinggi kanvas sebenarnya.
         style_for_render = caption_style or CaptionStyle()
+
+        # Subtitle yang SUDAH terbakar di gambar sumber, mis. anime fansub.
+        #
+        # Kalau ada, subtitle OmniClip dinaikkan sampai di atasnya. Dulu
+        # keduanya bertumpuk dan dua-duanya tidak terbaca, dan satu-satunya
+        # jalan keluar adalah pemiliknya menyadarinya sendiri lalu menaikkan
+        # subtitle dengan tangan, satu klip demi satu klip.
+        try:
+            from .teks_tertanam import batas_atas
+            awal = float((segments or [{}])[0].get("start") or 0.0)
+            atas = batas_atas(source_video_path, awal, min(45.0, total_duration or 30.0))
+        except Exception as e:                # deteksi bukan alasan render gagal
+            log.warning("Teks tertanam dilewati: %s", str(e)[:160])
+            atas = None
+        if atas is not None and style_for_render.position != "top":
+            # `margin_v` dihitung dari BAWAH kanvas, dan potongan 9:16 dari
+            # sumber 16:9 mempertahankan tingginya, jadi persennya berpindah
+            # apa adanya. Ditambah sedikit jarak supaya keduanya tidak bersisian.
+            perlu = int(round((100.0 - atas) / 100.0 * 1920)) + 40
+            if perlu > style_for_render.margin_v:
+                log.info("Subtitle dinaikkan ke %d (ada teks tertanam mulai %.0f%%)",
+                         perlu, atas)
+                style_for_render = replace(style_for_render, margin_v=perlu)
+
         if out_h and out_h != 1920:
             factor = out_h / 1920.0
             style_for_render = replace(

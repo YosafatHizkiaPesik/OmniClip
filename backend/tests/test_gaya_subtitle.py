@@ -124,6 +124,19 @@ class JarakKata(unittest.TestCase):
             total = lebar_spasi(font) + tambahan(font) / 100.0
             self.assertAlmostEqual(total, JARAK_KATA, delta=0.01, msg=font)
 
+    def test_jarak_lebih_lebar_daripada_pelat_sorotan(self):
+        """
+        Kotak sorotan melebar ke kanan-kiri kata yang disorot. Bila jaraknya
+        tidak melebihi pelebaran itu, kotaknya menempel pada kata berikutnya
+        dan dua kata terbaca sebagai satu. Ini yang dilaporkan dua kali.
+        """
+        from app.services.subtitles import JARAK_KATA
+        EMPUK = 0.16                      # lihat `gaya_kotak` di build_ass
+        # Batasnya diukur, bukan ditebak. Pada bingkai sungguhan, sisa 0,24 em
+        # membuat kotak menempel pada kata berikutnya; sisa 0,30 em tidak.
+        # Angka di bawah duduk di antara keduanya.
+        self.assertGreater(JARAK_KATA - EMPUK, 0.28)
+
     def test_spasi_dilebarkan_hanya_di_antara_kata(self):
         ass = build_ass(lines=baris("satu dua"), clip_duration=1.5,
                         style=CaptionStyle(font="Bebas Neue", sorot="warna"))
@@ -190,3 +203,223 @@ class AnimasiMasuk(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class KapitalPerAksara(unittest.TestCase):
+    """
+    HURUF KAPITAL tidak berlaku untuk aksara Jepang, Korea, Mandarin, dan Arab:
+    tidak ada satu pun huruf yang berubah. Membiarkannya menyala bukan sekadar
+    tidak berguna, ia membuat pratinjau berbohong tentang lebar barisnya, dan
+    lebar baris itulah yang dipakai memilih ukuran huruf.
+    """
+
+    def gaya(self, teks, **kv):
+        from app.services.subtitles import CaptionStyle, _font_aksara
+        return _font_aksara(CaptionStyle(uppercase=True, **kv),
+                            [{"text": teks}])
+
+    def test_jepang_kapital_dimatikan(self):
+        self.assertFalse(self.gaya("天井にいたらどのくらい").uppercase)
+
+    def test_korea_arab_mandarin_juga(self):
+        for t in ("안녕하세요 반갑습니다", "مرحبا بالعالم", "你好世界啊"):
+            self.assertFalse(self.gaya(t).uppercase, t)
+
+    def test_latin_tidak_disentuh(self):
+        self.assertTrue(self.gaya("Halo dunia, apa kabar").uppercase)
+
+    def test_pilihan_mati_tetap_mati(self):
+        from app.services.subtitles import CaptionStyle, _font_aksara
+        st = _font_aksara(CaptionStyle(uppercase=False), [{"text": "Halo dunia"}])
+        self.assertFalse(st.uppercase)
+
+    def test_font_tetap_diganti_bersamaan(self):
+        # Dua hal sekaligus, dan yang satu tidak boleh membatalkan yang lain.
+        st = self.gaya("天井にいたらどのくらい")
+        self.assertNotEqual(st.font, "Montserrat")
+
+
+class WarnaPenuturBawaanMati(unittest.TestCase):
+    """
+    Warna berbeda per penutur mati secara bawaan, dan itu keputusan yang diukur.
+
+    Pada podcast tiga orang, penambatan wajah benar menemukan tiga orang, tapi
+    model suara yang dilatih dari bukti itu hanya benar 62% pada potongan yang
+    tidak dilatihkan (37 dari 60), dan menambah bukti dari 8 ke 15 klip
+    menurunkannya ke 60%. Empat dari sepuluh kalimat berwarna salah, dengan
+    warna yang berganti di tengah kalimat orang yang sama, lebih mengganggu
+    daripada satu warna yang tidak pernah salah.
+
+    Yang dijaga di sini: gaya yang tidak menyebut apa-apa memberi SATU warna.
+    """
+
+    def _baris_dua_orang(self):
+        a = baris("halo dunia ini", 0.0, 1.5)[0]
+        b = baris("balasan dari lawan", 1.6, 3.0)[0]
+        a["speaker"], b["speaker"] = 0, 1
+        return [a, b]
+
+    def test_bawaannya_mati(self):
+        self.assertFalse(CaptionStyle().per_speaker_colors)
+
+    def test_kedua_penutur_memakai_warna_yang_sama(self):
+        ass = build_ass(lines=self._baris_dua_orang(),
+                        style=CaptionStyle(primary="#FFFFFF"), clip_duration=3.0)
+        # #7CFFB2, warna orang kedua dari palet bawaan, dalam urutan byte ASS.
+        self.assertNotIn("B2FF7C", ass)
+
+    def test_masih_bisa_dinyalakan_dengan_sengaja(self):
+        ass = build_ass(lines=self._baris_dua_orang(),
+                        style=CaptionStyle(per_speaker_colors=True),
+                        clip_duration=3.0)
+        self.assertIn("B2FF7C", ass)
+
+
+class SakelarIndukWarnaPenutur(unittest.TestCase):
+    """
+    Satu kebenaran untuk seluruh aplikasi, bukan satu kotak centang per klip.
+
+    Gaya yang sudah tersimpan di peramban masih menyimpan `per_speaker_colors:
+    true` dari sebelum keputusan ini. Tanpa sakelar induk yang menang, gaya lama
+    itu akan menghidupkan kembali pewarnaan yang sudah diputuskan mati, pada
+    klip yang dirender berbulan-bulan sesudahnya.
+    """
+
+    def setUp(self):
+        from app.repos import settings as repo
+        self.repo = repo
+        self.nilai = {}
+        self.asli_get = repo.get
+        self.asli_set = repo.set_value
+        repo.get = lambda nama, bawaan=None: self.nilai.get(nama, bawaan)
+        repo.set_value = lambda nama, nilai: self.nilai.__setitem__(nama, nilai)
+
+    def tearDown(self):
+        self.repo.get = self.asli_get
+        self.repo.set_value = self.asli_set
+
+    def test_bawaannya_mati(self):
+        from app.services.subtitles import warna_penutur_aktif
+        self.assertFalse(warna_penutur_aktif())
+
+    def test_bisa_dinyalakan_dan_dimatikan_lagi(self):
+        from app.services.subtitles import setel_warna_penutur, warna_penutur_aktif
+        setel_warna_penutur(True)
+        self.assertTrue(warna_penutur_aktif())
+        setel_warna_penutur(False)
+        self.assertFalse(warna_penutur_aktif())
+
+    def test_perender_benar_benar_menanyakan_sakelarnya(self):
+        """
+        Dibaca dari sumbernya, karena `run_render` tidak bisa dijalankan tanpa
+        video sungguhan. Yang dijaga hanya satu: gaya dari klien tidak boleh
+        lagi sampai ke CaptionStyle tanpa melewati sakelar induk.
+        """
+        from pathlib import Path
+        sumber = (Path(__file__).resolve().parents[1]
+                  / "app" / "services" / "pipeline.py").read_text(encoding="utf-8")
+        potong = sumber.split("per_speaker_colors=")[1][:200]
+        self.assertIn("warna_penutur_aktif()", potong)
+        self.assertNotIn('"per_speaker_colors", True', sumber)
+
+
+class JarakKataBisaDisetel(unittest.TestCase):
+    """
+    Jarak antar kata pernah dipatok mati di 0,46.
+
+    Patokan itu selalu salah untuk sebagian orang: font yang lebih lebar butuh
+    jarak lebih rapat, dan seleranya sendiri berbeda beda. Yang tetap dijaga
+    adalah HASILNYA, yaitu jarak akhir yang sama untuk semua font, bukan
+    tambahan yang sama.
+    """
+
+    def test_tanpa_disetel_memakai_bawaan(self):
+        from app.services.subtitles import JARAK_KATA, jarak_kata
+        self.assertEqual(jarak_kata(CaptionStyle()), JARAK_KATA)
+
+    def test_nilai_pengguna_dipakai(self):
+        from app.services.subtitles import jarak_kata
+        self.assertAlmostEqual(jarak_kata(CaptionStyle(jarak_kata=0.30)), 0.30)
+
+    def test_nilai_liar_dijepit(self):
+        from app.services.subtitles import (JARAK_KATA_MAKS, JARAK_KATA_MIN,
+                                            jarak_kata)
+        self.assertEqual(jarak_kata(CaptionStyle(jarak_kata=-5)), JARAK_KATA_MIN)
+        self.assertEqual(jarak_kata(CaptionStyle(jarak_kata=99)), JARAK_KATA_MAKS)
+
+    def test_lebih_rapat_menghasilkan_fsp_lebih_kecil(self):
+        """Yang diperiksa bukan angkanya, melainkan arahnya: rapat = fsp kecil."""
+        import re
+
+        from app.services.subtitles import _sela
+
+        def fsp(nilai):
+            m = re.search(r"\\fsp(\d+)", _sela(CaptionStyle(jarak_kata=nilai,
+                                                           font="Montserrat", size=96)))
+            return int(m.group(1)) if m else 0
+
+        self.assertLess(fsp(0.34), fsp(0.46))
+        self.assertLess(fsp(0.46), fsp(0.62))
+
+    def test_font_lebar_diberi_tambahan_lebih_kecil(self):
+        """Jarak akhir yang sama, walau spasi bawaan tiap font berbeda."""
+        import re
+
+        from app.services.fonts import lebar_spasi
+        from app.services.subtitles import _sela
+
+        def fsp(font):
+            m = re.search(r"\\fsp(\d+)", _sela(CaptionStyle(jarak_kata=0.60,
+                                                           font=font, size=96)))
+            return int(m.group(1)) if m else 0
+
+        sempit, lebar = "Bebas Neue", "Archivo Black"
+        if lebar_spasi(sempit) >= lebar_spasi(lebar):
+            sempit, lebar = lebar, sempit
+        self.assertGreater(fsp(sempit), fsp(lebar))
+
+
+class GayaSampaiKeRenderUtuh(unittest.TestCase):
+    """
+    Setiap bidang gaya yang dikenal harus benar-benar sampai ke perender.
+
+    `run_render` dulu menyusun CaptionStyle dari daftar tangan berisi dua puluh
+    bidang, dan diam-diam membuang empat belas sisanya: `sorot`, `kotak_warna`,
+    `kotak_teks`, `bg`, `aktif`, dan seterusnya. Akibatnya setiap tema
+    berkotak, berpendar, atau bergaris bawah dirender sebagai sorotan biasa.
+
+    Terlapor 25 September 2026 sesudah sebuah klip terunggah ke YouTube: kotak
+    kuning di belakang kata ada di pratinjau, tidak ada di videonya. Cacat
+    seperti ini tidak pernah membuat render GAGAL, jadi ia hanya bisa terlihat
+    dengan menonton hasilnya, berminggu-minggu sesudah temanya dipilih.
+    """
+
+    def _bidang(self):
+        from dataclasses import fields
+        return {f.name for f in fields(CaptionStyle)}
+
+    def test_perender_tidak_memakai_daftar_tangan(self):
+        from pathlib import Path
+        sumber = (Path(__file__).resolve().parents[1] / "app" / "services"
+                  / "pipeline.py").read_text(encoding="utf-8")
+        self.assertIn("dikenal = {f.name for f in _bidang(CaptionStyle)}", sumber)
+        self.assertIn("style = CaptionStyle(**nilai)", sumber)
+
+    def test_model_permintaan_menerima_semua_bidang_gaya(self):
+        """Penyaring kedua ada di router; dua daftar yang berpisah sama saja."""
+        from app.routers.clips import CaptionStyleModel
+        hilang = self._bidang() - set(CaptionStyleModel.model_fields)
+        self.assertEqual(hilang, set(), f"router membuang {hilang}")
+
+    def test_mode_kotak_menghasilkan_lapis_pelat(self):
+        """Yang membedakan mode kotak: ada lapis pelat di bawah teksnya."""
+        def n_dialog(sorot):
+            baris = [{"start": 0.0, "end": 1.5, "text": "satu dua",
+                      "words": [{"w": "satu", "s": 0.0, "e": 0.7},
+                                {"w": "dua", "s": 0.7, "e": 1.5}]}]
+            ass = build_ass(lines=baris, style=CaptionStyle(sorot=sorot),
+                            clip_duration=1.5)
+            return sum(1 for l in ass.splitlines() if l.startswith("Dialogue"))
+
+        self.assertGreater(n_dialog("kotak"), n_dialog("warna"))
+        self.assertGreater(n_dialog("kotak_pop"), n_dialog("pop"))

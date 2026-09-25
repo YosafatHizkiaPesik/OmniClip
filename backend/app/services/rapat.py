@@ -134,6 +134,58 @@ def _ambang(jejak: Optional[list[float]], asal: float, kata: list[dict]) -> floa
     return tengah - ENERGI_SELISIH
 
 
+def _ambang_tanpa_kata(jejak: list[float]) -> float:
+    """
+    Batas 'sunyi' untuk klip yang tidak punya transkrip.
+
+    Tanpa kata, tidak ada yang bisa dipakai menjawab "sekeras apa saat ada
+    isinya". Yang tersedia cuma sebaran kekerasannya sendiri, jadi patokannya
+    diambil dari sana: persentil 70 sebagai wakil "sedang ada isinya", lalu
+    turun sejauh yang sama dengan jalur bertranskrip. Diambil 70, bukan tengah,
+    karena pada klip musik atau gameplay bagian yang berisi justru lebih banyak
+    daripada bagian sunyinya, dan nilai tengah akan ikut terseret naik.
+    """
+    urut = sorted(jejak)
+    if not urut:
+        return 0.0
+    return urut[int(len(urut) * 0.7)] - ENERGI_SELISIH
+
+
+def _potongan_dari_energi(jejak: list[float], asal: float, a: float, b: float,
+                          ambang: float, *, jeda_min: float) -> list[tuple]:
+    """
+    Bagian sunyi yang layak dipotong, dibaca dari SUARA saja.
+
+    Ada karena klip tanpa transkrip dulu tidak bisa dirapatkan sama sekali:
+    musik, gameplay tanpa bicara, dan video berbahasa asing yang subtitle-nya
+    gagal diambil. Padahal jeda di sana justru sering paling panjang.
+
+    Bentuknya sama dengan jalur bertranskrip supaya sisa pipeline tidak perlu
+    tahu bedanya: daftar (mulai, selesai, jenis).
+    """
+    keluar: list[tuple] = []
+    i0 = max(0, int((a - asal) / ENERGI_LANGKAH))
+    i1 = min(len(jejak), int((b - asal) / ENERGI_LANGKAH) + 1)
+    mulai = None
+    for i in range(i0, i1):
+        sunyi = jejak[i] <= ambang
+        if sunyi and mulai is None:
+            mulai = i
+        elif not sunyi and mulai is not None:
+            keluar.append((mulai, i))
+            mulai = None
+    if mulai is not None:
+        keluar.append((mulai, i1))
+
+    potong = []
+    for i, j in keluar:
+        x = asal + i * ENERGI_LANGKAH + BANTALAN
+        y = asal + j * ENERGI_LANGKAH - BANTALAN
+        if y - x >= max(jeda_min, POTONG_MIN):
+            potong.append((x, y, "sunyi"))
+    return potong
+
+
 def _kata_dalam(words: list[dict], a: float, b: float) -> list[dict]:
     keluar = []
     for w in words or []:
@@ -203,13 +255,25 @@ def rapatkan(segments: list[dict], words: list[dict], *,
     """
     asal = [{"start": float(s["start"]), "end": float(s["end"])} for s in segments or []
             if float(s["end"]) - float(s["start"]) > 0.2]
-    if not asal or not words:
+    if not asal:
+        return {"segments": asal, "dibuang": 0.0, "potongan": 0, "rincian": {}}
+    # Tanpa transkrip DAN tanpa berkas sumber, tidak ada satu pun bahan untuk
+    # menilai di mana jedanya. Dengan salah satunya, masih bisa.
+    if not words and sumber is None:
         return {"segments": asal, "dibuang": 0.0, "potongan": 0, "rincian": {}}
 
     calon: list[tuple] = []
     ditahan = 0
     for s in asal:
         kata = _kata_dalam(words, s["start"], s["end"])
+        if not kata:
+            # Klip tanpa transkrip: jedanya dibaca dari suaranya sendiri.
+            jejak = jejak_energi(sumber, s["start"], s["end"])
+            if jejak:
+                calon += _potongan_dari_energi(
+                    jejak, s["start"], s["start"], s["end"],
+                    _ambang_tanpa_kata(jejak), jeda_min=jeda_min)
+            continue
         milik = _potongan_segmen(s["start"], s["end"], kata,
                                  jeda_min=jeda_min, gumaman=gumaman)
         if milik and sumber is not None:
@@ -276,5 +340,5 @@ def ringkas(hasil: dict, durasi_lama: float) -> str:
                         ("awal", "diam di awal"), ("akhir", "diam di akhir")):
         if hasil["rincian"].get(nama):
             bagian.append(f"{hasil['rincian'][nama]} {label}")
-    return (f"{', '.join(bagian)} dibuang — {hasil['dibuang']:.1f} detik. "
+    return (f"{', '.join(bagian)} dibuang, {hasil['dibuang']:.1f} detik. "
             f"Klip jadi {baru:.0f} detik dari {durasi_lama:.0f}.")

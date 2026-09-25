@@ -56,7 +56,7 @@ export default function VideoHilang({ videoId, onPulih }) {
         <AlertTriangle size={15} style={{ color: 'var(--warn)', flexShrink: 0, marginTop: '2px' }} />
         <div style={{ flex: 1, lineHeight: 1.55 }}>
           <b>Berkas video sumber tidak ada di penyimpanan komputer ini.</b>{' '}
-          Klip, subtitle, dan suntingan Anda aman — yang hilang hanya videonya,
+          Klip, subtitle, dan suntingan Anda aman, yang hilang hanya videonya,
           dan itu bisa diunduh lagi dari YouTube.
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap',
                         marginTop: '8px' }}>

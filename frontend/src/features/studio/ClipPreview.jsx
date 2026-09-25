@@ -88,6 +88,17 @@ export default function ClipPreview({
   onSelectFrame = null,
   onStyleChange = null,    // menggeser/mengubah ukuran subtitle di atas gambar
   onCardChange = null,     // menggeser/mengubah ukuran JUDUL kartu di atas gambar
+  // Sisipan: yang sedang dipilih, cara menyimpan petak barunya, dan cara
+  // memilihnya dengan mengklik di atas gambar. Ketiganya kosong di luar tab
+  // Sisipan, dan di sana pratinjau tidak menggambar pegangan apa pun.
+  sisipanTerpilih = null,
+  onSisipanRect = null,
+  onPilihSisipan = null,
+  // Perbesaran bingkai wajah dan geseran tegaknya. 1 dan 0 = seperti sebelum
+  // setelan ini ada. Ruang untuk menggeser tegak baru ada begitu bingkainya
+  // diperbesar: tanpa perbesaran, potongannya sudah setinggi gambarnya.
+  frameZoom = 1,
+  frameGeserY = 0,
 }) {
   const innerRef = useRef(null);
   const videoRef = externalRef ?? innerRef;
@@ -340,7 +351,26 @@ export default function ClipPreview({
    * lalu duduk mulai dari tengah kotak, dan separuh kiri kanvas tergambar
    * hitam. Ini kambuhan dari bug bilah-kabur yang dulu, dengan arah terbalik.
    */
-  const baseTransform = useReframe ? 'translateX(0)'
+  // Perbesaran dijepit sama dengan `ZOOM_MAKS` di reframe.py.
+  const zPerbesar = Math.max(1, Math.min(2, Number(frameZoom) || 1));
+  const zoom = reframe?.source_w && reframe?.crop_w
+    ? (reframe.source_w / reframe.crop_w) * 100 * zPerbesar : 100 * zPerbesar;
+  // Tinggi potongan sesudah diperbesar, dan berapa persen tinggi ELEMEN yang
+  // harus digeser supaya bagian yang dipilih yang terlihat. Rumusnya cermin
+  // dari `petak_zoom` di reframe.py; kalau yang satu berubah, yang lain ikut.
+  const zTinggiPct = 100 * zPerbesar;
+  const zGeserPct = (() => {
+    if (zPerbesar <= 1 || !reframe?.source_h) return 0;
+    const h = reframe.source_h / zPerbesar;
+    const sisa = Math.max(0, reframe.source_h - h);
+    const bagian = Math.max(0, Math.min(1,
+      // Tandanya MINUS: angkanya menyatakan ke mana gambarnya pindah, bukan
+      // ke mana jendelanya pindah. Keduanya berlawanan.
+      0.5 - Math.max(-100, Math.min(100, Number(frameGeserY) || 0)) / 200));
+    return -((sisa * bagian) / reframe.source_h) * 100;
+  })();
+
+  const baseTransform = useReframe ? 'translateX(0) translateY(0)'
     : useCenter ? 'translateX(-50%)' : 'none';
 
   useEffect(() => {
@@ -368,7 +398,12 @@ export default function ClipPreview({
 
         if (useReframe && cropXAt) {
           const x = cropXAt(Math.max(0, t));
-          v.style.transform = `translateX(${(-x / reframe.source_w) * 100}%)`;
+          // Persen di `translate` dihitung terhadap ukuran ELEMEN, dan
+          // elemen sudah ikut membesar bersama perbesarannya. Jadi pecahan
+          // "x terhadap lebar sumber" tetap benar apa pun perbesarannya, dan
+          // tidak ada faktor zoom yang perlu ditulis di sini.
+          v.style.transform = `translateX(${(-x / reframe.source_w) * 100}%) `
+            + `translateY(${zGeserPct}%)`;
         }
         // Bingkai pengikut: geser videonya mengikuti jejak wajah. Rumusnya
         // sama dengan yang dipakai render, dari jejak yang sama, jadi yang
@@ -407,8 +442,12 @@ export default function ClipPreview({
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
+    // `zGeserPct` WAJIB ada di daftar ini. Loop rAF menuliskan geseran tegak
+    // dari nilai yang tertangkap saat efeknya dibuat; tanpa ia di sini,
+    // penggeser di panel Bingkai mengubah angkanya sementara gambar di
+    // pratinjau tetap diam pada nilai lama.
   }, [videoRef, segments, segIndex, offsets, constrained, useReframe, cropXAt,
-      reframe, secondaries, cerminTersembunyi, useLayout, frames]);
+      reframe, secondaries, cerminTersembunyi, useLayout, frames, zGeserPct]);
 
   const handleTimeUpdate = () => {
     const v = videoRef.current;
@@ -901,8 +940,6 @@ export default function ClipPreview({
 
   // Geometri crop. Lebar video dilebihkan sebesar rasio sumber terhadap crop,
   // lalu digeser; hasilnya jendela crop persis mengisi kotak pratinjau.
-  const zoom = reframe?.source_w && reframe?.crop_w
-    ? (reframe.source_w / reframe.crop_w) * 100 : 100;
 
   // `transform` HARUS muncul di setiap cabang, termasuk yang tidak memakainya.
   //
@@ -915,7 +952,7 @@ export default function ClipPreview({
   // `transform` sehingga memaksa React menuliskannya ulang.
   const videoStyle = useReframe
     ? {
-      position: 'absolute', top: 0, left: 0, height: '100%', width: `${zoom}%`,
+      position: 'absolute', top: 0, left: 0, height: `${zTinggiPct}%`, width: `${zoom}%`,
       objectFit: 'cover', willChange: 'transform', background: '#000',
       transform: baseTransform,         // ditimpa tiap frame oleh loop rAF
     }
@@ -987,7 +1024,7 @@ export default function ClipPreview({
       }}>
         {src ? (
           <>
-            {/* Latar kabur — mencerminkan bilah kabur pada hasil render, dan
+            {/* Latar kabur, mencerminkan bilah kabur pada hasil render, dan
                 mengisi celah di antara bingkai pada susunan sendiri. */}
             {showBlurBg && (
               <video
@@ -1005,7 +1042,7 @@ export default function ClipPreview({
 
             {/* Pemutar utama: SATU elemen yang tidak pernah diganti. Di mode
                 susunan ia tetap memutar (suara dan jam klip) tapi tidak
-                terlihat — gambarnya datang dari cermin di bawah. */}
+                terlihat, gambarnya datang dari cermin di bawah. */}
             <video
               ref={pasangUtama}
               src={src}
@@ -1057,7 +1094,7 @@ export default function ClipPreview({
               );
             })}
 
-            {/* Kotak tujuan yang bisa dipegang. Hanya hidup di tab Bingkai —
+            {/* Kotak tujuan yang bisa dipegang. Hanya hidup di tab Bingkai,
                 di tab lain ia akan berebut jari dengan kotak subtitle yang
                 menempati kanvas yang sama. */}
             {useLayout && frameEditing && onLayoutChange && !fullscreen
@@ -1116,7 +1153,7 @@ export default function ClipPreview({
             {reframeLoading ? (frameMode === 'motion' ? 'Melacak gerakan…' : 'Melacak wajah…')
               : useLayout ? `${frames.length} bingkai`
                 : useReframe ? `${frameMode === 'motion' ? 'Ikut gerakan' : 'Ikut wajah'} ${Math.round((reframe.face_coverage ?? 0) * 100)}%`
-                  : frameMode === 'motion' && reframe && !reframe.available ? 'Gerakan terlalu sedikit — bilah kabur'
+                  : frameMode === 'motion' && reframe && !reframe.available ? 'Gerakan terlalu sedikit, bilah kabur'
                   : useOriginal ? 'Bingkai orisinal'
                     : useBox ? 'Kotak tetap'
                       : frameMode === 'gaming' ? 'Main game'
@@ -1193,7 +1230,7 @@ export default function ClipPreview({
 
         {/* Pembacaan judul. Elemen tersembunyi, bukan `new Audio()`: dengan
             elemen di pohon DOM, React membereskannya sendiri saat pratinjau
-            dilepas — dan suara judul tidak bisa tertinggal berbunyi setelah
+            dilepas, dan suara judul tidak bisa tertinggal berbunyi setelah
             penggunanya berpindah klip. */}
         <audio ref={cardAudioRef} preload="auto" style={{ display: 'none' }} />
 
@@ -1273,16 +1310,18 @@ export default function ClipPreview({
           </button>
         )}
 
-        {/* Sisipan: di atas bingkai, di bawah subtitle — urutan yang sama
+        {/* Sisipan: di atas bingkai, di bawah subtitle, urutan yang sama
             dengan render. */}
         {constrained && (
           <MediaOverlay layers={clip?.media_layers} clipTime={clipTime}
-                        playing={playing} boxW={boxW} boxH={boxH} />
+                        playing={playing} boxW={boxW} boxH={boxH}
+                        terpilih={sisipanTerpilih} onRect={onSisipanRect}
+                        onPilih={onPilihSisipan} />
         )}
 
         {/* Saklar subtitle dihormati di pratinjau juga. Pratinjau yang masih
             menampilkan teks setelah subtitle dimatikan adalah pratinjau yang
-            berbohong tentang hasilnya — cacat yang lebih buruk daripada
+            berbohong tentang hasilnya, cacat yang lebih buruk daripada
             saklarnya tidak ada. */}
         {barisKedua && boxH > 0 && (
           <CaptionOverlay line={{ ...barisKedua, words: [] }} activeWordIndex={-1}
@@ -1314,7 +1353,7 @@ export default function ClipPreview({
       <div className="preview-controls">
         {/* Ikon saja, tanpa kata.
             Barisnya duduk di bawah kanvas selebar 160 piksel; dengan kata
-            "Putar" saja ia sudah 208 piksel — lebih lebar daripada gambarnya,
+            "Putar" saja ia sudah 208 piksel, lebih lebar daripada gambarnya,
             sehingga pelatnya terpaksa melebar dan kembali terlihat sebagai
             kotak yang tidak terisi. Putar dan ulang termasuk segelintir ikon
             yang benar-benar universal. */}
@@ -1344,7 +1383,7 @@ export default function ClipPreview({
       </div>
 
       {/* Petunjuk seret, sebagai SATU BARIS.
-          Sebelumnya tiga baris penuh di bawah kanvas — 95 piksel terukur, yang
+          Sebelumnya tiga baris penuh di bawah kanvas, 95 piksel terukur, yang
           di ruang berlabuh diambil langsung dari tinggi kanvasnya sendiri.
           Kanvas 9:16 adalah bagian tersempit di layar lanskap; membayar
           seperempat tingginya untuk kalimat yang sudah dibaca sekali dan tidak
@@ -1354,7 +1393,7 @@ export default function ClipPreview({
           Dulu di sini ada ikon panah-empat-arah 11 piksel dengan `cursor:
           help`, yang tooltipnya menerangkan subtitle bisa diseret di atas
           gambar. Pemilik aplikasinya sendiri tidak bisa menebak itu apa dan
-          mengira ia tombol yang rusak — sebuah petunjuk yang harus ditebak
+          mengira ia tombol yang rusak, sebuah petunjuk yang harus ditebak
           lebih dulu bukan petunjuk, ia bagian dari teka-tekinya. Yang
           diterangkannya juga terungkap sendiri: subtitle di pratinjau memang
           langsung bisa ditarik, dan orang menemukannya dengan menariknya. */}
@@ -1377,10 +1416,25 @@ export default function ClipPreview({
  */
 // Aksara Jepang/Mandarin: kata-katanya tidak dipisah spasi.
 // Jarak antar kata sebagai pecahan ukuran huruf. Cermin dari `JARAK_KATA` di
-// backend/app/services/subtitles.py — kalau yang satu berubah, yang lain ikut.
-export const JARAK_KATA = 0.40;
+// backend/app/services/subtitles.py: kalau yang satu berubah, yang lain ikut.
+// Ini nilai BAWAAN; gaya boleh menimpanya lewat `jarak_kata`.
+export const JARAK_KATA = 0.46;
+export const JARAK_KATA_MIN = 0.12;
+export const JARAK_KATA_MAKS = 0.90;
+
+/** Jarak antar kata yang berlaku untuk sebuah gaya, sudah dijepit ke batasnya. */
+export function jarakKata(style) {
+  const n = Number(style?.jarak_kata);
+  if (!Number.isFinite(n)) return JARAK_KATA;
+  return Math.max(JARAK_KATA_MIN, Math.min(JARAK_KATA_MAKS, n));
+}
 
 const CJK = /[\u3000-\u303f\u3040-\u30ff\u31f0-\u31ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff00-\uffef]/;
+// Aksara yang tidak punya huruf besar-kecil: Jepang, Korea, Mandarin, Arab.
+// Cermin dari `TANPA_KAPITAL` di backend/app/services/subtitles.py. Menyalakan
+// HURUF KAPITAL di sana tidak mengubah satu pun huruf, jadi pratinjau yang
+// tetap menampilkannya berbohong tentang lebar barisnya.
+const TANPA_KAPITAL = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af\u0600-\u06ff]/;
 function berjarak(kiri, kanan) {
   const a = (kiri || '').trim();
   const b = (kanan || '').trim();
@@ -1406,7 +1460,8 @@ export function CaptionOverlay({
       : String(line.text ?? '').split(/\s+/).filter(Boolean).map((w) => ({ w }))
   ), [line.words, line.text]);
   const anim = style?.animation ?? 'karaoke_pop';
-  const uppercase = style?.uppercase !== false;
+  const uppercase = style?.uppercase !== false
+    && !TANPA_KAPITAL.test(words.map((w) => w.w).join(''));
   const scale = boxH / CANVAS_H;
 
   // Warna per penutur. Penutur pertama memakai warna teks utama, sehingga video
@@ -1568,7 +1623,7 @@ export function CaptionOverlay({
               // Tanpa jarak sama sekali antarhuruf Jepang/Mandarin, sama
               // seperti render (backend services/teks.py).
               marginRight: i === tampil.length - 1 || !berjarak(w.w, tampil[i + 1]?.w)
-                ? 0 : `${JARAK_KATA}em`,
+                ? 0 : `${jarakKata(style)}em`,
               display: 'inline-block',
               transition: 'transform 90ms ease, color 60ms linear',
             }}>{w.w}</span>
@@ -1702,9 +1757,16 @@ export function gayaKata(aktif, mode, warna) {
       color: warna.kotakTeks,
       background: warna.kotak,
       // Kotak sedikit lebih lebar daripada hurufnya, sama seperti empuk pelat
-      // di ASS. Margin negatif menjaga jarak antar kata tetap sama.
+      // di ASS.
+      //
+      // TANPA `margin` di sini, dan itu bukan kelalaian. Pemanggil memasang
+      // `marginRight` untuk jarak antar kata, dan React menerapkan gaya sebaris
+      // properti demi properti: begitu objek yang sama memuat `margin` (ringkas)
+      // DAN `marginRight` (tunggal), urutan penerapannya berubah saat gaya
+      // diperbarui, dan yang ringkas menghapus jarak yang baru saja dipasang.
+      // Akibatnya cuma terlihat pada mode kotak, dan cuma saat sorotan
+      // berpindah: kata-katanya menempel jadi satu. Dilaporkan dua kali.
       padding: '0.02em 0.12em',
-      margin: '0 -0.02em',
       WebkitTextStroke: '0',
       ...(mode === 'kotak_pop' ? pop : {}),
     };

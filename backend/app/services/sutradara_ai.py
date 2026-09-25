@@ -53,7 +53,7 @@ WAJAH_MIN_PX = 44
 SISTEM = """Anda sutradara penyunting video pendek vertikal (TikTok/Reels/Shorts).
 
 Anda menonton satu klip. Angka di pojok kanan atas setiap bingkai adalah DETIK
-klip — pakai angka itu untuk semua waktu. Gambar kedua (bila ada) berisi wajah
+klip, pakai angka itu untuk semua waktu. Gambar kedua (bila ada) berisi wajah
 orang-orang di klip, berlabel P0, P1, dst.
 
 Tugas Anda: menentukan KAPAN bingkai perlu berubah untuk menonjolkan reaksi,
@@ -67,7 +67,7 @@ Yang ingin ditonjolkan adalah WAJAH yang bereaksi. Pakai "wajah" atau
 "reaksi_terbagi" untuk orang-orang yang bereaksi. Bila wajah mereka tidak bisa
 dibingkai sendiri-sendiri (terlalu kecil atau tertutup), lewati momen itu. Bila
 bidikan kamera saat itu sudah close-up satu orang yang bereaksi, momen itu
-tidak perlu diubah sama sekali. JANGAN PERNAH memakai latar kabur — gambar
+tidak perlu diubah sama sekali. JANGAN PERNAH memakai latar kabur, gambar
 selalu memenuhi layar.
 
 kekuatan (0-1): 0,9 tawa pecah/kaget besar; 0,7 tawa lepas yang jelas; 0,5
@@ -79,13 +79,13 @@ Pilihan bingkai (hanya ini):
 - "reaksi_penuh": (gameplay) wajah pemain dari facecam memenuhi layar.
 - "gameplay": (gameplay) permainan + facecam seperti biasa.
 - "ikuti_penutur": bingkai dasar podcast, mengikuti yang sedang bicara.
-- "ikuti_gerakan": kamera mengikuti bagian yang paling banyak bergerak — untuk
+- "ikuti_gerakan": kamera mengikuti bagian yang paling banyak bergerak, untuk
   bidikan tanpa wajah (pemandangan, permainan tanpa facecam, kartun, hewan).
 
 Satu momen boleh berisi beberapa bidikan berurutan ("gaya"):
 - "potong_bergantian": wajah orang yang bereaksi satu per satu, masing-masing
-  0,7-1,5 detik — cocok bila reaksinya bergiliran atau orangnya duduk berjauhan.
-- "terbagi": semua yang bereaksi sekaligus dalam "reaksi_terbagi" — cocok bila
+  0,7-1,5 detik, cocok bila reaksinya bergiliran atau orangnya duduk berjauhan.
+- "terbagi": semua yang bereaksi sekaligus dalam "reaksi_terbagi", cocok bila
   mereka bereaksi bersamaan.
 - "tunggal": satu bidikan saja (misalnya "reaksi_penuh" saat jumpscare).
 
@@ -629,7 +629,7 @@ def _buang_game_sekilas(runs: list[list], durasi: float) -> list[list]:
     game, wajah = porsi.get("game", 0.0) / durasi, porsi.get("wajah", 0.0) / durasi
     if not game or game >= GAME_PORSI_MIN or wajah < WAJAH_PORSI_JELAS:
         return runs
-    log.info("Potongan game hanya %.0f%% klip berwajah (%.0f%%) — dianggap wajah",
+    log.info("Potongan game hanya %.0f%% klip berwajah (%.0f%%), dianggap wajah",
              game * 100, wajah * 100)
     ubah = [["wajah" if l == "game" else l, a, b] for l, a, b in runs]
     gabung = [ubah[0]]
@@ -706,16 +706,16 @@ def _dasar_per_waktu(plan, src: Path, segments: list[dict], durasi: float,
             if fc is None:
                 fc = _kotak_dari_wajah(plan, a, b)
             if fc is None:
-                keluar.append((a, b, {"mode": "motion", "alasan": "Permainan — kamera mengikuti gerakan"}))
+                keluar.append((a, b, {"mode": "motion", "alasan": "Permainan, kamera mengikuti gerakan"}))
                 continue
             tata = susun_layout_gaming(fc, src_w=sw, src_h=sh, out_w=out_w, out_h=out_h)
             keluar.append((a, b, {"mode": "gaming", "layout": tata,
-                                  "alasan": "Permainan dan wajah pemain — bingkai game"}))
+                                  "alasan": "Permainan dan wajah pemain, bingkai game"}))
         elif l == "wajah":
-            keluar.append((a, b, {"mode": "smart", "alasan": "Hanya wajah — mengikuti wajah"}))
+            keluar.append((a, b, {"mode": "smart", "alasan": "Hanya wajah, mengikuti wajah"}))
         else:
             keluar.append((a, b, {"mode": "motion",
-                                  "alasan": "Tanpa wajah — kamera mengikuti gerakan"}))
+                                  "alasan": "Tanpa wajah, kamera mengikuti gerakan"}))
     return keluar
 
 
@@ -761,7 +761,7 @@ def jenis_klip(src: Path, segments: list[dict]) -> dict:
         # Tanpa satu wajah pun, facecam juga tidak ada. Pemindai panel tidak
         # ditanya di sini: pada kartun ia menemukan "panel" di mana-mana.
         return {"mode": "motion", "porsi": {"gerak": 1.0},
-                "alasan": "Tidak ada wajah — kamera mengikuti gerakan"}
+                "alasan": "Tidak ada wajah, kamera mengikuti gerakan"}
 
     n = len(label)
     porsi = {k: round(label.count(k) / n, 2) for k in ("game", "wajah", "gerak")}
@@ -769,13 +769,13 @@ def jenis_klip(src: Path, segments: list[dict]) -> dict:
     # panelnya baru diperiksa bila buktinya setengah-setengah.
     if porsi["game"] >= JENIS_GAME_YAKIN or (porsi["game"] >= JENIS_GAME_MIN and facecam()):
         return {"mode": "gaming", "porsi": porsi,
-                "alasan": "Klip game — permainan dan kamera wajah pemain"}
+                "alasan": "Klip game, permainan dan kamera wajah pemain"}
     if porsi["gerak"] + porsi["game"] >= JENIS_GERAK_MIN:
         # Wajah di pojok tanpa panel facecam yang terbaca dihitung sebagai
         # "tanpa wajah jelas": mengikuti wajah sekecil itu memotong gambarnya.
         return {"mode": "motion", "porsi": porsi,
-                "alasan": "Wajah jarang terlihat — kamera mengikuti gerakan"}
-    return {"mode": "smart", "porsi": porsi, "alasan": "Wajah terlihat jelas — mengikuti wajah"}
+                "alasan": "Wajah jarang terlihat, kamera mengikuti gerakan"}
+    return {"mode": "smart", "porsi": porsi, "alasan": "Wajah terlihat jelas, mengikuti wajah"}
 
 
 def jenis_klip_tersimpan(video_id: str, src: Path, segments: list[dict]) -> dict:
@@ -981,7 +981,7 @@ def jadikan_kunci(hasil: dict, *, plan, facecam: Optional[dict], momen_lokal: li
     terpilih.sort(key=lambda u: u["mulai"])
 
     alasan_dasar = {"smart": "Mengikuti yang sedang bicara", "gaming": "Permainan + facecam",
-                    "motion": "Wajah jarang terlihat — mengikuti gerakan"}.get(
+                    "motion": "Wajah jarang terlihat, mengikuti gerakan"}.get(
                         dasar["mode"], "Bingkai dasar")
     kunci: list[dict] = [{"t": 0.0, **dasar, "asal": "ai", "alasan": alasan_dasar,
                           "_dasar": True}]
@@ -1044,7 +1044,7 @@ def jadikan_kunci(hasil: dict, *, plan, facecam: Optional[dict], momen_lokal: li
     elif dasar["mode"] == "smart":
         n_gerak = 0
         for a, b in _tanpa_wajah(plan, durasi):
-            alasan = f"Tidak ada wajah di layar ({b - a:.0f} dtk) — kamera mengikuti gerakan"
+            alasan = f"Tidak ada wajah di layar ({b - a:.0f} dtk), kamera mengikuti gerakan"
             bentrok = [k for k in kunci if abs(k["t"] - a) < 0.4]
             if bentrok:
                 # Klip yang DIBUKA tanpa wajah: kunci dasar di detik 0 yang
@@ -1083,6 +1083,7 @@ def jadikan_kunci(hasil: dict, *, plan, facecam: Optional[dict], momen_lokal: li
 # --- Titik masuk ------------------------------------------------------------------
 def susun_ai(src: Path, segments: list[dict], *, subtitles: list[dict],
              api_key: str, models: list[str], out_w: int = 1080, out_h: int = 1920,
+             video_id: Optional[str] = None,
              kabar: Optional[Callable[[str, float], None]] = None,
              batal: Optional[Callable[[], None]] = None) -> dict:
     """
@@ -1091,7 +1092,7 @@ def susun_ai(src: Path, segments: list[dict], *, subtitles: list[dict],
     """
     from .media import probe
     from .momen import cari_momen, ringkas
-    from .penyedia_ai import tanya
+    from .penyedia_ai import pekerjaan, tanya
     from .reframe import deteksi_facecam, plan_reframe
     from .render import rasio_bidang_wajah
 
@@ -1159,13 +1160,18 @@ def susun_ai(src: Path, segments: list[dict], *, subtitles: list[dict],
             isi.append({"teks": teks + (
                 f"\n\n(Anda menerima {len(gambar)} gambar berurutan dari klip ini, "
                 "bukan videonya. Detik klip tertulis di pojok kanan atas tiap "
-                "gambar — pakai angka itu.)" if gambar else "")})
+                "gambar, pakai angka itu.)" if gambar else "")})
             return isi
 
-        hasil, model, pakai = tanya(
-            bahan, schema=_schema(), sistem=SISTEM, api_key=api_key, models=models,
-            suhu=0.3, maks_keluaran=8192, cadangan=cadangan,
-            kabar=lambda p: lapor(p, 0.6), batal=batal)
+        # Ditandai supaya kartu Pemakaian AI menyebut pekerjaannya dengan
+        # benar. Tanpa penanda, belasan panggilan per video tercatat sebagai
+        # "ai" begitu saja, dan yang menghabiskan jatah harian jadi tidak
+        # terlihat oleh siapa pun.
+        with pekerjaan("bingkai", video_id):
+            hasil, model, pakai = tanya(
+                bahan, schema=_schema(), sistem=SISTEM, api_key=api_key, models=models,
+                suhu=0.3, maks_keluaran=8192, cadangan=cadangan,
+                kabar=lambda p: lapor(p, 0.6), batal=batal)
 
     lapor("Menyusun bingkai…", 0.95)
     # Facecam yang ada sepanjang klip memakai bingkai game untuk seluruhnya;
@@ -1215,8 +1221,8 @@ def susun_lokal(src: Path, segments: list[dict], *, subtitles: list[dict],
         # seluruh klip mengikuti gerakan — bukan gambar utuh berlatar kabur.
         return {**hasil, "jenis": "lainnya", "layers": [],
                 "keys": [{"t": 0.0, "mode": "motion", "asal": "otomatis",
-                          "alasan": "Tidak ada wajah — kamera mengikuti gerakan"}],
-                "catatan": ["Tidak ada wajah di klip ini — kamera mengikuti gerakan."]}
+                          "alasan": "Tidak ada wajah, kamera mengikuti gerakan"}],
+                "catatan": ["Tidak ada wajah di klip ini, kamera mengikuti gerakan."]}
     kata = [{"s": float(l["start"]), "e": float(l["end"])} for l in subtitles or []
             if l.get("start") is not None and l.get("end") is not None]
     momen = cari_momen(src, segments, plan=plan, words=kata)
@@ -1233,7 +1239,7 @@ def susun_lokal(src: Path, segments: list[dict], *, subtitles: list[dict],
         tiruan["momen"].append({
             "mulai": t0, "selesai": t1, "kekuatan": m["kuat"], "momen_id": m["id"],
             "alasan": "Terdengar " + ", ".join(j for j in m["jenis"] if j in ("tawa", "sorak", "teriak"))
-                      + " — wajah yang terlihat ditumpuk",
+                      + ", wajah yang terlihat ditumpuk",
             "bidikan": [{"bingkai": "reaksi_terbagi", "orang": [f"P{p}" for p in terlihat[:3]],
                          "durasi": t1 - t0}]})
     kunci, catatan = jadikan_kunci(tiruan, plan=plan, facecam=None, momen_lokal=momen,
@@ -1299,7 +1305,7 @@ def terapkan_ke_klip(video_id: str, clip_id: str, kunci: list[dict]) -> bool:
             continue
         lama = [k for k in (c.get("frame_keys") or []) if isinstance(k, dict)]
         if any((k.get("asal") or "pengguna") not in ("otomatis", "ai") for k in lama):
-            log.info("Klip %s sudah disunting tangan — bingkai AI dilewati", clip_id)
+            log.info("Klip %s sudah disunting tangan, bingkai AI dilewati", clip_id)
             return False
         klip[i] = {**c, "frame_keys": kunci}
         hasil["clips"] = klip
@@ -1323,7 +1329,7 @@ def run_sutradara(ctx) -> dict:
     from ..errors import JobCancelled
     from ..repos import cache as cache_repo
     from .paths import find_local_video
-    from .peringkat_model import rantai
+    from .peringkat_model import CADANGAN_KLIP, rantai
     from .render import PLAY_RES
 
     p = ctx.payload
@@ -1360,8 +1366,14 @@ def run_sutradara(ctx) -> dict:
     if p.get("mesin", "ai") == "ai" and (api_key or openrouter.aktif()):
         try:
             hasil = susun_ai(src, segments, subtitles=subtitles, api_key=api_key,
+                             video_id=p.get("video_id"),
+                             # `sisakan`: sutradara bingkai mengalah pada
+                             # pemilihan klip. Ia punya mesin lokal yang
+                             # hasilnya masih masuk akal; pemilihan klip tidak
+                             # punya penggantinya. Lihat CADANGAN_KLIP.
                              models=(rantai(api_key, p.get("gemini_model")
-                                            or get_model_override() or None)
+                                            or get_model_override() or None,
+                                            sisakan=CADANGAN_KLIP)
                                      if api_key else []),
                              out_w=out_w, out_h=out_h, kabar=kabar, batal=ctx.check_cancelled)
             hasil.pop("mentah", None)
@@ -1376,9 +1388,9 @@ def run_sutradara(ctx) -> dict:
             sibuk = any(x in str(e) for x in ("503", "UNAVAILABLE", "timeout", "batas waktu"))
             habis = any(x in str(e) for x in ("429", "RESOURCE_EXHAUSTED", "limit"))
             catatan_gagal = ("AI sedang sibuk" if sibuk else
-                             "Kuota AI habis" if habis else "AI gagal") + " — disusun mesin lokal."
+                             "Kuota AI habis" if habis else "AI gagal") + ", disusun mesin lokal."
     elif p.get("mesin", "ai") == "ai":
-        catatan_gagal = ("Kunci Gemini maupun OpenRouter belum diisi — "
+        catatan_gagal = ("Kunci Gemini maupun OpenRouter belum diisi, "
                          "disusun mesin lokal.")
 
     kabar("Menyusun dari bukti suara dan wajah (mesin lokal)…", 0.4)

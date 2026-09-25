@@ -2,8 +2,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft, Menu, X, Scissors, Type, Palette, Download, Loader2, CheckCircle2,
   AlertTriangle, Crop, Plus, Trash2, Play, Save, Tag, Undo2, Redo2, Clapperboard, RefreshCw, Wand2,
+  FolderOpen,
 } from 'lucide-react';
-import { apiGet, apiPost, downloadToDisk, kategoriKlip } from '../../lib/api';
+import { apiGet, apiPost, dijalankanDiKomputerIni, downloadToDisk, kategoriKlip } from '../../lib/api';
 import { loadFonts } from '../../lib/fonts';
 import { formatTime } from '../../utils/timeFormat';
 import { useClipEditor } from './useClipEditor';
@@ -31,6 +32,7 @@ import {
   GAMING_WAJAH_BAWAAN, gamingPadaWaktu, newFrameId, reaksiAktif, selaraskanBentuk, rasioKeluaran,
   susunanDariServer,
   susunGaming,
+  CANVAS_ASPECT, layoutDariCrop, pusatWajahPada,
 } from './frames';
 
 const DEFAULT_STYLE = {
@@ -39,9 +41,14 @@ const DEFAULT_STYLE = {
   // narasumber tampil persis seperti sebelum warna per orang ada.
   speaker_colors: ['#FFFFFF', '#7CFFB2', '#FFB3C7', '#B39DFF',
                    '#FFD166', '#5BC8FF', '#FF9F1C', '#B8FF3A'],
-  // false = satu warna sepanjang klip, untuk video yang tebakan penuturnya
-  // meleset. Palet di atas tetap tersimpan saat dimatikan.
-  per_speaker_colors: true,
+  // false = satu warna sepanjang klip. Bawaannya mati sejak 24 September 2026:
+  // pemisahan penutur baru benar 62% pada uji terakhir, dan empat dari sepuluh
+  // kalimat berwarna salah lebih mengganggu daripada satu warna yang tidak
+  // pernah salah. Palet di atas tetap tersimpan, menunggu sakelar di
+  // Pengaturan dinyalakan lagi.
+  per_speaker_colors: false,
+  // Jarak antar kata dalam satuan em. Cermin dari JARAK_KATA di backend.
+  jarak_kata: 0.46,
   position: 'bottom', margin_v: 300, outline_px: 7,
   // Penempatan mendatar dalam persen lebar kanvas: titik tengah kotak teks dan
   // lebarnya. Keduanya diubah dengan menyeret subtitle di pratinjau.
@@ -192,6 +199,21 @@ export default function Editor({ project, onBack }) {
   }, [dockH]);
   const [style, setStyle] = useState(loadStoredStyle);
   const patchStyle = useCallback((patch) => setStyle((prev) => ({ ...prev, ...patch })), []);
+  // Sakelar induk warna per penutur. Dibaca di sini, bukan di panel gayanya,
+  // karena pratinjau dan muatan render membaca `style` yang sama: kalau hanya
+  // panelnya yang tahu, pratinjau akan menampilkan warna yang tidak ikut
+  // dirender. Gaya lama di peramban masih menyimpan `true`, jadi nilainya
+  // diturunkan sekali di sini supaya keduanya sepakat.
+  const [warnaPenutur, setWarnaPenutur] = useState(false);
+  useEffect(() => {
+    apiGet('/settings')
+      .then((r) => {
+        const boleh = r?.warna_penutur === true;
+        setWarnaPenutur(boleh);
+        if (!boleh) patchStyle({ per_speaker_colors: false });
+      })
+      .catch(() => {});
+  }, [patchStyle]);
   const [aspectRatio, setAspectRatio] = useState('9:16');
   // Cara membingkai dan susunannya dipulihkan bersama-sama untuk video ini.
   // Susunan hidup di sini, bukan di dalam pratinjau, karena tiga tempat
@@ -199,6 +221,10 @@ export default function Editor({ project, onBack }) {
   const [framing] = useState(() => loadFraming(videoId));
   const [frameMode, setFrameMode] = useState(framing.mode);
   const [frameMotion, setFrameMotion] = useState('smooth');
+  // Perbesaran bingkai wajah dan geseran tegaknya, per klip. Disimpan di
+  // klipnya sendiri, bukan di sini: dua klip dari video yang sama boleh
+  // membutuhkan bingkai yang berbeda, dan setelan yang ikut berpindah klip
+  // adalah setelan yang salah di klip berikutnya.
   const [layout, setLayout] = useState(framing.layout);
   const [selectedFrameId, setSelectedFrameId] = useState(null);
   const [selectedLine, setSelectedLine] = useState(null);
@@ -334,10 +360,24 @@ export default function Editor({ project, onBack }) {
           layoutGamingRef.current, clipTimeFor(selected.segments, sourceTime));
         setLayout({ ...asal,
                     frames: asal.frames.map((f) => ({ ...f, id: newFrameId() })) });
+      } else if (mode === 'layout'
+                 && (frameModeEfektif === 'smart' || frameModeEfektif === 'motion')) {
+        // Berpindah dari bingkai yang mengikuti wajah: kotak pertamanya
+        // diletakkan PERSIS di tempat kotak itu berdiri sekarang. Tanpa ini
+        // susunannya mulai dari kotak bawaan yang tidak ada hubungannya dengan
+        // apa yang barusan di layar, dan yang terlihat adalah gambar melompat
+        // lalu berkedip hitam sesaat.
+        const t = clipTimeFor(selected.segments, sourceTime);
+        setLayout(layoutDariCrop(
+          (reframe?.source_w && reframe?.source_h)
+            ? reframe.source_w / reframe.source_h : 16 / 9,
+          CANVAS_ASPECT[aspectRatio] ?? 9 / 16,
+          pusatWajahPada(reframe, t)));
       }
       setFrameMode(mode);
     }
-  }, [selected, sourceTime, setFrameKeys, frameModeEfektif, setLayout, editor]);
+  }, [selected, sourceTime, setFrameKeys, frameModeEfektif, setLayout, editor,
+      reframe, aspectRatio, layout]);
 
   /**
    * Susunan bingkai yang sedang berlaku.
@@ -546,7 +586,7 @@ export default function Editor({ project, onBack }) {
     const nama = (klip.title || klip.hook_text || '').trim().slice(0, 48);
     // eslint-disable-next-line no-alert
     if (!window.confirm(
-      `Hapus klip ${huruf}${nama ? ` — "${nama}"` : ''}?\n\n`
+      `Hapus klip ${huruf}${nama ? ` "${nama}"` : ''}?\n\n`
       + `${formatTime(klip.segments[0].start)} · ${Math.round(klip.duration || 0)} detik`)) {
       return;
     }
@@ -1277,6 +1317,11 @@ export default function Editor({ project, onBack }) {
     aspect_ratio: aspectRatio,
     frame_mode: frameMode,
     frame_motion: frameMotion,
+    // Dari KLIP yang sedang dirender, bukan dari klip yang kebetulan terbuka:
+    // "Render semua" mengirim lima belas klip lewat fungsi ini, dan setelan
+    // klip yang terbuka tidak berlaku untuk empat belas sisanya.
+    frame_zoom: clip.frame_zoom ?? 1,
+    frame_geser_y: clip.frame_geser_y ?? 0,
     frame_layout: frameMode === 'layout' ? serializeLayout(layout)
       // Main game yang sudah disetel dikirim sebagai susunan jadi; tanpanya
       // server mencari facecam sendiri seperti dulu.
@@ -1355,11 +1400,17 @@ export default function Editor({ project, onBack }) {
           }),
         });
         if (job.status === 'done') {
-          // eslint-disable-next-line no-await-in-loop
-          await downloadToDisk(kategoriKlip(), job.result.clip_name);
+          // Diunduh lewat peramban HANYA kalau OmniClip dibuka dari komputer
+          // lain. Di komputer yang menjalankannya sendiri, berkasnya sudah ada
+          // di folder klip yang dipilih pengguna, dan mengunduhnya lagi cuma
+          // menaruh salinan kedua di folder Unduhan peramban.
+          if (!dijalankanDiKomputerIni()) {
+            // eslint-disable-next-line no-await-in-loop
+            await downloadToDisk(kategoriKlip(), job.result.clip_name);
+          }
           const mode = job.result.frame_mode === 'smart' ? 'ikut wajah' : job.result.frame_mode;
           kabar({ status: 'done', progress: 1, eta: null,
-                  message: `Tersimpan · bingkai ${mode}` });
+                  message: `Tersimpan di folder klip · bingkai ${mode}` });
 
           // Unggahan diantrekan SERVER sesudah render (services/unggah.py);
           // di sini hanya diberitakan.
@@ -1406,20 +1457,20 @@ export default function Editor({ project, onBack }) {
     );
   }
 
-  const letter = selected ? rehearsalLetter(clips.indexOf(selected)) : '—';
+  const letter = selected ? rehearsalLetter(clips.indexOf(selected)) : '·';
 
   return (
     /* ── Studio sebagai RUANG, bukan halaman ────────────────────────────────
        Sebelumnya seluruh studio adalah satu halaman yang digulir: panggung di
        atas, linimasa di tengah, panel di bawah. Akibatnya pekerjaan yang paling
-       sering dilakukan — melihat gambarnya lalu menggeser sesuatu di linimasa —
+       sering dilakukan, melihat gambarnya lalu menggeser sesuatu di linimasa,
        menuntut menggulir bolak-balik, dan keduanya tidak pernah terlihat
        bersamaan.
 
        Sekarang tingginya dikunci ke tinggi layar dan dibagi tiga: bilah di
        atas, panggung di tengah, linimasa berlabuh di bawah. Tidak ada yang
        menggulir kecuali isi kotaknya sendiri. Panel alat tidak lagi berdiri
-       permanen memakan tempat — ia muncul dari rel ikon di kanan hanya ketika
+       permanen memakan tempat, ia muncul dari rel ikon di kanan hanya ketika
        dipanggil, dan menutup lagi dengan menekan ikon yang sama. */
     <div className="studio" style={{ '--dock-h': `${dockH}px` }}>
       <header className="studio-bar">
@@ -1469,7 +1520,7 @@ export default function Editor({ project, onBack }) {
           {/* Tombol simpan yang menyebut KEADAAN, bukan sekadar kejadian.
               
               Sebelumnya ia berkata "Tersimpan" selama 2,5 detik lalu kembali
-              jadi "Simpan" dengan sendirinya — dan dibaca begitu, ia terlihat
+              jadi "Simpan" dengan sendirinya, dan dibaca begitu, ia terlihat
               seperti sakelar yang membatalkan simpanannya sendiri. Padahal
               editor sudah tahu jawabannya sepanjang waktu lewat `dirty`; yang
               kurang cuma menampilkannya. Sekarang: ada yang belum tersimpan ->
@@ -1481,7 +1532,7 @@ export default function Editor({ project, onBack }) {
               tombolnya di sini untuk yang tidak. Judulnya menyebutkan
               pintasannya, jadi keduanya saling mengajarkan. */}
           <button className="btn-secondary" onClick={() => setCariUlang(true)}
-                  title="Cari ulang rekomendasi klip, hook, dan judul — dengan Gemini atau mesin lokal, tanpa mengunduh ulang">
+                  title="Cari ulang rekomendasi klip, hook, dan judul dengan Gemini atau mesin lokal, tanpa mengunduh ulang">
             <RefreshCw size={14} />
             Cari ulang
           </button>
@@ -1507,7 +1558,7 @@ export default function Editor({ project, onBack }) {
           <button className="btn-secondary" onClick={handleSaveClips}
                   disabled={saving === 'running' || (!editor.dirty && saving !== 'failed')}
                   title={editor.dirty
-                    ? 'Menyimpan susunan klip — batas, subtitle, judul, dan tanda bingkai — ke penyimpanan lokal'
+                    ? 'Menyimpan susunan klip, batas, subtitle, judul, dan tanda bingkai ke penyimpanan lokal'
                     : 'Semua perubahan sudah tersimpan'}>
             {saving === 'running' ? <Loader2 size={14} className="animate-spin" />
               : saving === 'failed' ? <AlertTriangle size={14} style={{ color: 'var(--danger)' }} />
@@ -1569,7 +1620,7 @@ export default function Editor({ project, onBack }) {
             </div>
             {/* Mesin pemilih pasti melewatkan momen: ia menilai dari pola bicara
                 dan kosakata, bukan dari apa yang lucu. Pintu untuk menambah
-                sendiri harus ada DI SINI — di daftar klip — karena di sinilah
+                sendiri harus ada DI SINI, di daftar klip, karena di sinilah
                 orang melihat bahwa yang dicarinya tidak ada. */}
             <button className="btn-secondary studio-rail-add" onClick={createFromMarks}
                     disabled={editor.busy}>
@@ -1586,7 +1637,7 @@ export default function Editor({ project, onBack }) {
           {data.model_requested && data.model && data.model_requested !== data.model && (
             <div className="plate studio-note" style={{ borderLeftColor: 'var(--warn)' }}>
               Model <b>{data.model_requested}</b> tidak bisa dipakai saat analisis ini
-              berjalan — biasanya karena kuota hariannya habis. Sistem memakai{' '}
+              berjalan, biasanya karena kuota hariannya habis. Sistem memakai{' '}
               <b>{data.model}</b> sebagai cadangan.
             </div>
           )}
@@ -1596,7 +1647,7 @@ export default function Editor({ project, onBack }) {
               <Loader2 size={14} className="animate-spin" style={{ flexShrink: 0 }} />
               <span>
                 Video ini beresolusi besar dan bisa tersendat saat diputar di browser.
-                Salinan pratinjau yang ringan sedang disiapkan — Studio akan berpindah
+                Salinan pratinjau yang ringan sedang disiapkan. Studio akan berpindah
                 sendiri begitu siap. Hasil render tetap memakai video asli.
               </span>
             </div>
@@ -1611,6 +1662,19 @@ export default function Editor({ project, onBack }) {
             <div className="plate studio-note" style={{
               display: 'flex', flexDirection: 'column', gap: '6px',
             }}>
+              {/* Jalan ke berkasnya. Sejak klip tidak lagi diunduh ulang lewat
+                  peramban, satu-satunya tempatnya adalah folder klip, dan
+                  tombol ini yang membukanya. */}
+              {exportLog.some((e) => e.status === 'done') && dijalankanDiKomputerIni() && (
+                <button className="btn-secondary"
+                        style={{ alignSelf: 'flex-start', fontSize: '0.74rem',
+                                 padding: '4px 9px', display: 'inline-flex',
+                                 alignItems: 'center', gap: '6px' }}
+                        onClick={() => apiPost('/settings/penyimpanan/folder/buka',
+                                               { jenis: 'klip' }).catch(() => {})}>
+                  <FolderOpen size={13} /> Buka folder klip
+                </button>
+              )}
               {exportLog.map((e) => (
                 <div key={e.name} style={{ fontSize: '.8rem' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
@@ -1673,7 +1737,26 @@ export default function Editor({ project, onBack }) {
                            layout={susunanTampil} onLayoutChange={setSusunanEfektif}
                            frameEditing={tab === 'frame'}
                            selectedFrameId={selectedFrameId}
-                           onSelectFrame={setSelectedFrameId} />
+                           onSelectFrame={setSelectedFrameId}
+                           /* Pegangan sisipan hanya di tab Sisipan. Kotak
+                              putus-putus di atas gambar akan mengganggu saat
+                              orang sedang menyetel subtitle atau bingkai. */
+                           frameZoom={selected?.frame_zoom ?? 1}
+                           frameGeserY={selected?.frame_geser_y ?? 0}
+                           sisipanTerpilih={tab === 'media' ? sisipanTerpilih : null}
+                           onPilihSisipan={tab === 'media' ? setSisipanTerpilih : null}
+                           onSisipanRect={tab === 'media' && selected ? (id, rect) => {
+                             const kini = selected.media_layers ?? [];
+                             editor.updateClip(selected.clip_id, {
+                               media_layers: kini.map((l) => (l.id === id ? {
+                                 ...l,
+                                 rect: {
+                                   x: Number(rect.x.toFixed(2)), y: Number(rect.y.toFixed(2)),
+                                   w: Number(rect.w.toFixed(2)), h: Number(rect.h.toFixed(2)),
+                                 },
+                               } : l)),
+                             });
+                           } : null} />
             </div>
           </div>
         </main>
@@ -1712,7 +1795,7 @@ export default function Editor({ project, onBack }) {
                           padding: '3px 8px', background: 'var(--plate-2)',
                           border: '1px solid var(--rule-2)', borderRadius: 'var(--r-sm)',
                         }}>
-                          {formatTime(s.start)}–{formatTime(s.end)}
+                          {formatTime(s.start)}-{formatTime(s.end)}
                           <Trash2 size={11} style={{ cursor: 'pointer', color: 'var(--danger)' }}
                                   onClick={() => editor.removeSegment(selected.clip_id, i)} />
                         </span>
@@ -1745,7 +1828,17 @@ export default function Editor({ project, onBack }) {
                             showHook={showHook} onShowHookChange={setShowHook}
                             hookText={selected?.hook_text ?? ''}
                             onHookTextChange={(t) => selected
-                              && editor.updateClip(selected.clip_id, { hook_text: t })} />
+                              && editor.updateClip(selected.clip_id, { hook_text: t })}
+                            klipUntukTema={selected ? {
+                              video_id: videoId,
+                              title: selected.title || selected.hook_text || '',
+                              duration: (selected.segments || []).reduce(
+                                (n, sg) => n + Math.max(0, sg.end - sg.start), 0),
+                              jenis: selected.jenis || '',
+                              subtitles: (selected.subtitles || []).slice(0, 80).map((l) => ({
+                                start: l.start, end: l.end, text: l.text, speaker: l.speaker,
+                              })),
+                            } : null} />
               )}
               {tab === 'title' && (
                 <TitlePanel clip={selected}
@@ -1779,6 +1872,12 @@ export default function Editor({ project, onBack }) {
                             onOtomatis={() => editor.updateClip(selected.clip_id, { cara_bingkai: null })}
                             frameMotion={frameMotion}
                             onFrameMotionChange={setFrameMotion}
+                            frameZoom={selected?.frame_zoom ?? 1}
+                            frameGeserY={selected?.frame_geser_y ?? 0}
+                            onFrameZoom={(v) => selected
+                              && editor.updateClip(selected.clip_id, { frame_zoom: v })}
+                            onFrameGeserY={(v) => selected
+                              && editor.updateClip(selected.clip_id, { frame_geser_y: v })}
                             layout={susunanTampil} onLayoutChange={setSusunanEfektif}
                             gamingSibuk={gamingSibuk}
                             onGaming={setelGaming} onGamingUlang={ulangiGaming}
@@ -1799,7 +1898,7 @@ export default function Editor({ project, onBack }) {
         )}
 
         {/* Rel alat: ikon saja, selalu di tempat yang sama.
-            Menekan ikon yang sedang menyala menutup panelnya — jadi panggung
+            Menekan ikon yang sedang menyala menutup panelnya, jadi panggung
             bisa dikembalikan ke lebar penuh tanpa mencari tombol lain. */}
         <nav className="studio-tools">
           {TABS.map(({ id, label, Icon }) => (
@@ -1845,12 +1944,12 @@ export default function Editor({ project, onBack }) {
           </div>
 
           {/* SATU tombol untuk memotong, bukan dua.
-              Mulanya dua tombol bernama "Tandai I" dan "Tandai O" — nama yang
+              Mulanya dua tombol bernama "Tandai I" dan "Tandai O", nama yang
               hanya masuk akal bagi yang sudah tahu istilah in-point dan
               out-point. Diberi nama yang jelas, keduanya jadi panjang dan
               memakan separuh bilah untuk pekerjaan yang urutannya sudah pasti:
               awal selalu didahulukan, akhir selalu menyusul. Sesuatu yang
-              urutannya pasti tidak butuh dua tombol — ia butuh satu tombol yang
+              urutannya pasti tidak butuh dua tombol, ia butuh satu tombol yang
               tahu sedang di langkah mana. */}
           <div className="cutter">
             <button className="btn-secondary cutter-btn" onClick={tandaiPotong}
@@ -1867,7 +1966,7 @@ export default function Editor({ project, onBack }) {
             <span className="tc cutter-range">
               {mark.in === null && mark.out === null
                 ? 'tandai awal & akhirnya'
-                : `${mark.in === null ? '…' : formatTime(mark.in)} – ${mark.out === null ? '…' : formatTime(mark.out)}`
+                : `${mark.in === null ? '…' : formatTime(mark.in)}-${mark.out === null ? '…' : formatTime(mark.out)}`
                   + (mark.in !== null && mark.out !== null
                     ? ` · ${Math.max(0, mark.out - mark.in).toFixed(1)} dtk` : '')}
             </span>

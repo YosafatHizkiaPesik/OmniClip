@@ -52,7 +52,7 @@ export default function ImportBar({ onDone }) {
       gemini_model: localStorage.getItem('omniclip_gemini_model') || null,
     });
     setKabar(res.cached
-      ? `«${judul}» sudah pernah diklip — hasilnya ada di daftar bawah.`
+      ? `«${judul}» sudah pernah diklip. Hasilnya ada di daftar bawah.`
       : `«${judul}» masuk antrean. Kartunya muncul di bawah.`);
     onDone?.();
   };
@@ -106,7 +106,7 @@ export default function ImportBar({ onDone }) {
       const hasil = await apiUnggah('/impor/berkas', data, (frac) => {
         setKabar(frac < 1
           ? `Mengirim ${f.name} (${mb} MB)… ${Math.round(frac * 100)}%`
-          : 'Terkirim — memeriksa videonya…');
+          : 'Terkirim. Memeriksa videonya…');
       });
       setKabar(null);
       await mulaiKlip(hasil.video_id, hasil.title);
@@ -153,7 +153,7 @@ export default function ImportBar({ onDone }) {
         </button>
         <button type="button" className="btn-secondary" disabled={!!sibuk}
                 onClick={() => setJelajah(true)}
-                title="Video di komputer ini dibaca langsung dari tempatnya — tidak disalin"
+                title="Video di komputer ini dibaca langsung dari tempatnya, tidak disalin"
                 style={{ fontSize: '0.82rem', whiteSpace: 'nowrap' }}>
           {sibuk === 'berkas' ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
           Dari komputer
@@ -189,7 +189,7 @@ export default function ImportBar({ onDone }) {
                                border: '1px solid var(--border-color)' }}>
                 {jalur.map((j) => (
                   <option key={j.lang} value={j.asli ? '' : j.lang}>
-                    {j.nama}{j.asli ? ' — suara asli' : ''}
+                    {j.nama}{j.asli ? ' (suara asli)' : ''}
                   </option>
                 ))}
               </select>

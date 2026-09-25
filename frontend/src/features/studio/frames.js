@@ -117,7 +117,7 @@ export const LAYOUT_PRESETS = [
   {
     id: 'reaction-2',
     label: 'Reaksi 2 orang',
-    hint: 'Dua wajah bertumpuk, atas dan bawah — untuk tawa atau kaget bersama.',
+    hint: 'Dua wajah bertumpuk, atas dan bawah, untuk tawa atau kaget bersama.',
     build: () => [
       makeFrame('Orang 1', { x: 10, y: 10, w: 36, h: 64 }, { x: 0, y: 0, w: 100, h: 50 }),
       makeFrame('Orang 2', { x: 54, y: 10, w: 36, h: 64 }, { x: 0, y: 50, w: 100, h: 50 }),
@@ -162,6 +162,54 @@ export function presetLayout(id) {
 
 export function defaultLayout() {
   return presetLayout('single');
+}
+
+/**
+ * Titik tengah wajah pada detik `t`, dalam persen lebar sumber.
+ *
+ * Rata-rata orang yang BENAR-BENAR terlihat saat itu, bukan orang pertama:
+ * pada bidikan dua orang, memakai orang pertama saja akan menaruh kotaknya di
+ * pinggir dan memenggal yang lain.
+ */
+export function pusatWajahPada(reframe, t) {
+  const people = reframe?.people;
+  const seen = reframe?.people_seen;
+  const fps = reframe?.people_fps || 8;
+  if (!people?.length) return 50;
+  const i = Math.max(0, Math.round(t * fps));
+  const x = [];
+  people.forEach((track, p) => {
+    const terlihat = seen?.[p]?.[Math.min(i, (seen[p]?.length ?? 1) - 1)];
+    const v = track[Math.min(i, track.length - 1)];
+    if (v != null && (terlihat === undefined || terlihat)) x.push(v);
+  });
+  if (!x.length) return 50;
+  return x.reduce((a, b) => a + b, 0) / x.length;
+}
+
+/**
+ * Susunan awal yang MENIRU bingkai otomatis yang sedang terlihat.
+ *
+ * Dipakai saat berpindah ke "Susun sendiri" dari "Ikuti wajah" atau "Ikuti
+ * gerakan". Tanpa ini, susunannya mulai dari kotak bawaan yang letaknya tidak
+ * ada hubungannya dengan apa yang barusan di layar, dan yang terlihat adalah
+ * gambar melompat lalu berkedip hitam sesaat sebelum kotak barunya terpasang.
+ *
+ * `pusatX` dalam persen lebar sumber, dari jejak wajah pada detik itu. Bila
+ * tidak ada jejaknya, kotaknya diletakkan di tengah.
+ */
+export function layoutDariCrop(sourceAspect, canvasAspect, pusatX = 50) {
+  const dasar = presetLayout('single');
+  const bingkai = dasar.frames[0];
+  // Lebar jendela 9:16 yang dipotong dari sumber 16:9: sekian persen lebarnya.
+  const lebar = Math.max(MIN_PCT,
+    Math.min(100, (canvasAspect / sourceAspect) * 100));
+  const x = Math.max(0, Math.min(100 - lebar, pusatX - lebar / 2));
+  return {
+    ...dasar,
+    frames: [{ ...bingkai, src: { x, y: 0, w: lebar, h: 100 },
+               dst: { x: 0, y: 0, w: 100, h: 100 } }],
+  };
 }
 
 /** Bingkai baru yang tidak menimpa persis bingkai sebelumnya. */

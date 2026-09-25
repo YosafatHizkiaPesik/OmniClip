@@ -143,13 +143,26 @@ class CaptionStyle:
     # Mematikan pewarnaan per penutur tanpa menghapus paletnya.
     #
     # Menebak siapa bicara kapan adalah bagian paling rapuh dari seluruh alur
-    # ini, dan ketika ia meleset hasilnya bukan sekadar kurang tepat — warna
-    # subtitle berganti-ganti di tengah kalimat orang yang sama, yang jauh
+    # ini, dan ketika ia meleset hasilnya bukan sekadar kurang tepat: warna
+    # subtitle berganti ganti di tengah kalimat orang yang sama, yang jauh
     # lebih mengganggu daripada satu warna untuk semuanya. Mematikannya di
     # sini membuat setiap baris memakai `primary`, jadi temanya sama sepanjang
     # klip, sementara palet dan label penuturnya tetap tersimpan untuk
     # dinyalakan lagi kalau deteksinya diperbaiki.
-    per_speaker_colors: bool = True
+    #
+    # Bawaannya MATI sejak 24 September 2026. Alasannya terukur, bukan selera:
+    # pada podcast tiga orang, bukti wajah memang menemukan tiga orang, tapi
+    # model suara yang dilatih dari bukti itu hanya benar 62% pada potongan
+    # yang tidak dilatihkan (37 dari 60), dan menambah bukti dari 8 ke 15 klip
+    # justru menurunkannya ke 60%. Empat dari sepuluh kalimat berwarna salah
+    # lebih buruk daripada satu warna yang tidak pernah salah.
+    per_speaker_colors: bool = False
+    # Jarak antar kata, dalam satuan "em" tinggi font. Lihat JARAK_KATA.
+    #
+    # Bisa disetel karena selera dan font berbeda beda: angka yang pas untuk
+    # Montserrat terasa renggang pada huruf yang lebih lebar. `None` berarti
+    # memakai JARAK_KATA, dan itu yang dipakai seluruh gaya lama.
+    jarak_kata: Optional[float] = None
     max_words_per_line: int = 5
     max_chars_per_line: int = 22
 
@@ -184,6 +197,34 @@ class HookSpec:
 ALIGNMENT = {"bottom": 2, "middle": 5, "top": 8}
 
 
+# --- Sakelar induk warna per penutur ------------------------------------------
+#
+# Satu kebenaran untuk seluruh aplikasi, bukan satu kotak centang per klip.
+#
+# Pemisahan penutur sudah diukur dan belum layak dipakai: pada podcast tiga
+# orang, penambatan wajah menemukan tiga orang dengan benar, tapi model suara
+# yang dilatih dari bukti itu hanya benar 62% pada potongan yang tidak
+# dilatihkan. Selama angka itu di bawah ambang, warna per penutur mati di
+# seluruh aplikasi dan kotak centang di Studio hanya menampilkan keadaannya,
+# tidak melawannya. Menyalakannya kembali cukup satu sakelar di Pengaturan,
+# jadi tidak ada kode yang perlu diubah saat pemisahannya sudah bisa dipercaya.
+NAMA_WARNA_PENUTUR = "subtitle.warna_penutur"
+
+
+def warna_penutur_aktif() -> bool:
+    """Apakah warna per penutur boleh dipakai sama sekali. Bawaannya mati."""
+    try:
+        from ..repos import settings as settings_repo
+        return (settings_repo.get(NAMA_WARNA_PENUTUR) or "").strip() == "1"
+    except Exception:
+        return False
+
+
+def setel_warna_penutur(aktif: bool) -> None:
+    from ..repos import settings as settings_repo
+    settings_repo.set_value(NAMA_WARNA_PENUTUR, "1" if aktif else "0")
+
+
 def hex_to_ass(color: str) -> str:
     """
     '#RRGGBB' -> '&HBBGGRR&'. ASS memakai urutan byte terbalik.
@@ -197,7 +238,7 @@ def hex_to_ass(color: str) -> str:
     """
     c = (color or "").strip().lstrip("#")
     if len(c) != 6 or any(ch not in "0123456789abcdefABCDEF" for ch in c):
-        log.warning("Warna tidak terbaca: %r — dipakai putih", color)
+        log.warning("Warna tidak terbaca: %r, dipakai putih", color)
         return "&H00FFFFFF&"
     r, g, b = c[0:2], c[2:4], c[4:6]
     return f"&H00{b}{g}{r}".upper() + "&"
@@ -368,19 +409,41 @@ def _normalkan(st: CaptionStyle) -> CaptionStyle:
 # Yang dilebarkan HANYA spasinya, bukan jarak antar huruf: `\fsp` dipasang di
 # sekeliling satu spasi lalu dikembalikan ke nol, jadi huruf di dalam kata
 # tetap rapat seperti seharusnya.
-JARAK_KATA = 0.40
+# Diukur dua kali pada bingkai sungguhan, bukan ditebak.
+#
+# 0,40 membuat kotak sorotan MENEMPEL pada kata berikutnya: pelat kotak melebar
+# 0,16 em ke kanan-kirinya, jadi yang tersisa di sebelah kata bersorot cuma
+# 0,24 em, dan pada huruf kapital tebal itu terbaca sebagai satu kata panjang.
+# 0,62 terlalu jauh, dilaporkan pemiliknya: barisnya jadi renggang dan mata
+# harus melompat antar kata. 0,46 menyisakan 0,30 em di sebelah kotak, dan pada
+# empat nilai yang disandingkan (0,40 / 0,46 / 0,52 / 0,62) itu yang terbaca
+# paling wajar.
+JARAK_KATA = 0.46
+# Batas yang boleh disetel pengguna. Bawah 0,12 sama dengan tidak ada jarak
+# sama sekali pada font mana pun, dan di atas 0,90 kalimatnya pecah menjadi
+# kata-kata yang tidak lagi terbaca sebagai satu baris.
+JARAK_KATA_MIN = 0.12
+JARAK_KATA_MAKS = 0.90
+
+
+def jarak_kata(st: CaptionStyle) -> float:
+    """Jarak antar kata yang berlaku untuk gaya ini, sudah dijepit ke batasnya."""
+    nilai = st.jarak_kata
+    if nilai is None:
+        return JARAK_KATA
+    return max(JARAK_KATA_MIN, min(JARAK_KATA_MAKS, float(nilai)))
 
 
 def _sela(st: CaptionStyle) -> str:
     """
-    Pemisah antar kata untuk ASS: satu spasi yang dilebarkan sampai JARAK_KATA.
+    Pemisah antar kata untuk ASS: satu spasi yang dilebarkan sampai jaraknya.
 
     Yang disamakan adalah HASILNYA, bukan tambahannya. Menambah jarak yang sama
     ke semua font akan membuat Archivo Black terlalu renggang sementara Bebas
-    Neue masih rapat — lebar spasi bawaan keduanya berbeda dua kali lipat.
+    Neue masih rapat: lebar spasi bawaan keduanya berbeda dua kali lipat.
     """
     from .fonts import lebar_spasi
-    tambahan = max(0.0, JARAK_KATA - lebar_spasi(st.font))
+    tambahan = max(0.0, jarak_kata(st) - lebar_spasi(st.font))
     n = int(round(st.size * tambahan))
     return rf"{{\fsp{n}}} {{\fsp0}}" if n > 0 else " "
 
@@ -597,6 +660,14 @@ def _tanpa_tumpang(lines: list[dict]) -> list[dict]:
     return keluar
 
 
+# Aksara yang tidak punya huruf besar-kecil. Menyalakan HURUF KAPITAL pada
+# teks Jepang, Korea, Mandarin, atau Arab tidak mengubah satu pun huruf, tapi
+# ia MENGUBAH lebar barisnya di kepala penyusun: ukuran huruf dan lebar kotak
+# dipilih pemiliknya sambil melihat pratinjau yang berbohong. Lebih jujur
+# mematikannya sendiri, dan mengatakannya di log.
+TANPA_KAPITAL = {"jp", "kr", "sc", "ar"}
+
+
 def _font_aksara(st: CaptionStyle, lines: Optional[list[dict]]) -> CaptionStyle:
     """Gaya yang sama, dengan font yang sanggup menggambar hurufnya."""
     if st is None:
@@ -605,15 +676,21 @@ def _font_aksara(st: CaptionStyle, lines: Optional[list[dict]]) -> CaptionStyle:
     if not teks.strip():
         return st
     try:
-        from .fonts import keluarga_untuk
+        from .fonts import aksara, keluarga_untuk
         keluarga = keluarga_untuk(teks)
+        jenis = aksara(teks)
     except Exception as e:                # font bukan alasan render gagal
         log.warning("Font aksara tidak bisa disiapkan: %s", str(e)[:200])
         return st
-    if not keluarga or keluarga == st.font:
-        return st
-    log.info("Subtitle memakai font %s (aksara non-Latin)", keluarga)
-    return replace(st, font=keluarga)
+
+    ubah = {}
+    if keluarga and keluarga != st.font:
+        log.info("Subtitle memakai font %s (aksara non-Latin)", keluarga)
+        ubah["font"] = keluarga
+    if st.uppercase and jenis in TANPA_KAPITAL:
+        log.info("Huruf kapital dimatikan: aksara %s tidak mengenalnya", jenis)
+        ubah["uppercase"] = False
+    return replace(st, **ubah) if ubah else st
 
 
 def build_ass(

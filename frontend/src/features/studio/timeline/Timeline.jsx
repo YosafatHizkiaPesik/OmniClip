@@ -188,7 +188,7 @@ export default function Timeline({
       }}>
         <span style={{ fontWeight: 700 }}>Timeline video sumber</span>
         <span style={{ fontVariantNumeric: 'tabular-nums' }}>
-          {formatTime(view.start)} – {formatTime(view.end)}
+          {formatTime(view.start)}-{formatTime(view.end)}
         </span>
         <div style={{ flex: 1 }} />
         <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>

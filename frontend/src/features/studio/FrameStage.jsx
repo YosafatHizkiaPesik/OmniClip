@@ -291,7 +291,7 @@ export default function FrameStage({
       // tunjukkan lebar jendelanya di tengah, dan katakan begitu.
       const w = Math.min(100, (target / aspect) * 100);
       return { x: (100 - w) / 2, y: 0, w, h: 100,
-               label: 'Ikuti gerakan — jendela ini bergeser mengikuti tokoh' };
+               label: 'Ikuti gerakan, jendela ini bergeser mengikuti tokoh' };
     }
     if (frameMode === 'smart' && reframe?.available && reframe.source_w) {
       return {
@@ -306,20 +306,20 @@ export default function FrameStage({
     /* Pelatnya MEMELUK videonya.
        
        Sebelum ini pelat memenuhi kolomnya dan videonya duduk di tengah dengan
-       pelat kosong di kiri-kanan — terukur, sumur 745 piksel untuk video
+       pelat kosong di kiri-kanan, terukur, sumur 745 piksel untuk video
        selebar 439. Yang terlihat bukan "video di dalam kotaknya" melainkan
        kotak besar yang sebagian besar kosong. Videonya sendiri sudah sebesar
        yang tingginya izinkan; yang bisa dihilangkan adalah kotaknya.
        
        Batasnya diturunkan dari TINGGI sumur saja, bukan dari ukuran kotak yang
-       sudah dihitung. Percobaan pertama memakai lebar kotak — dan itu
+       sudah dihitung. Percobaan pertama memakai lebar kotak, dan itu
        mengumpankan lebar hasil kembali ke pengukur lebarnya sendiri, sehingga
        tiap putaran menyusutkannya sedikit: terukur, video 488 piksel menciut
        jadi 416. Tinggi sumur tidak bergantung pada lebar pelat, jadi ia satu-
        satunya masukan yang tidak melingkar.
        
        Dan yang ditulis adalah LEBAR, bukan batas lebar. Dengan `max-width`
-       saja, pelat yang dipusatkan mengambil lebar sesuai isinya — dan isinya
+       saja, pelat yang dipusatkan mengambil lebar sesuai isinya, dan isinya
        adalah kotak yang lebarnya diukur dari pelat itu juga. Terukur, lingkaran
        itu mengendap di 285 piksel padahal batasnya 773. Lebar yang ditetapkan
        memutusnya: sumur langsung punya lebar pasti, dan kotaknya tinggal
@@ -339,7 +339,7 @@ export default function FrameStage({
         {/* Judul pelat sebagai LENCANA di atas gambar, bukan baris tersendiri.
             
             Sebagai baris ia memakan 38 piksel tinggi, dan di studio berlabuh
-            tinggi adalah satu-satunya hal yang mengikat besar gambarnya —
+            tinggi adalah satu-satunya hal yang mengikat besar gambarnya,
             terukur, 38 piksel itu sama dengan 67 piksel lebar video yang tidak
             pernah terpakai, sementara di sebelahnya ada ratusan piksel kosong.
             Keterangannya tetap ada, hanya berhenti menuntut barisnya sendiri. */}
@@ -351,7 +351,7 @@ export default function FrameStage({
                 ? 'seret kotak untuk memindahkan · tarik sudutnya untuk mengubah ukuran'
                 : 'mencari kamera wajah pemain…')
               : frameMode === 'layout'
-              ? `${layout?.frames?.length ?? 0} bingkai — seret kotaknya`
+              ? `${layout?.frames?.length ?? 0} bingkai, seret kotaknya`
               : frameMode === 'original' ? 'dipakai utuh, tanpa dipotong'
                 : frameMode === 'blur' ? 'muat seluruhnya, sisi diisi versi kabur'
                   : staticCrop ? 'kotak menandai bagian yang diambil'
@@ -362,18 +362,18 @@ export default function FrameStage({
             
             Versi sebelumnya menyatakan batas tinggi sebagai batas lebar
             (`58vh * rasio`) dan membiarkan `width: 100%` menentukan sisanya.
-            Itu bekerja selama halamannya bisa digulir — kotak yang menjulur
+            Itu bekerja selama halamannya bisa digulir, kotak yang menjulur
             tinggal digulir. Di studio berlabuh tidak ada gulir yang
             menyelamatkannya, dan `58vh` tidak tahu apa-apa tentang tinggi yang
             BENAR-BENAR tersisa setelah bilah dan dok mengambil bagiannya.
-            Terukur pada layar 1366x690: sumurnya 717x270, isinya 717x414 —
+            Terukur pada layar 1366x690: sumurnya 717x270, isinya 717x414,
             144 piksel terpotong diam-diam oleh `overflow: hidden`, dan yang
             hilang adalah bagian bawah wajah orangnya.
             
             CSS murni tidak bisa menjawab ini: elemen ber-`aspect-ratio` yang
             kedua sisinya `auto` tidak punya ukuran intrinsik, sedangkan
             menetapkan salah satunya membuat sisi yang lain menang dan kotaknya
-            gepeng. Jadi sumurnya diukur, dan ukurannya dihitung — sekali per
+            gepeng. Jadi sumurnya diukur, dan ukurannya dihitung, sekali per
             perubahan ukuran, bukan tiap bingkai. */}
         <div ref={boxRef} className="frame-stage-box"
              style={boxFit.w > 0
@@ -389,7 +389,7 @@ export default function FrameStage({
 
           {/* Penanda orang, hanya di mode ikut-wajah.
 
-              Pencocokan otomatis bisa keliru — mulut yang tertutup mikrofon
+              Pencocokan otomatis bisa keliru: mulut yang tertutup mikrofon
               hampir tidak bergerak di gambar, dan sistem lalu mengunci orang
               yang sedang menyimak. Saat itu terjadi, yang dibutuhkan bukan
               tebakan yang lebih pintar melainkan cara membetulkannya. */}

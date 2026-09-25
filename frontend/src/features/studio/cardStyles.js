@@ -25,7 +25,7 @@ export const CARD_VARIANTS = [
   {
     id: 'garis',
     label: 'Garis tebal',
-    note: 'Huruf putih bergaris tepi tebal. Terbaca di atas gambar apa pun — inilah yang dipakai kebanyakan klip.',
+    note: 'Huruf putih bergaris tepi tebal. Terbaca di atas gambar apa pun, inilah yang dipakai kebanyakan klip.',
     // BorderStyle 1 = garis tepi + bayangan.
     ass: { border: 1, outline: 9, shadow: 4, back: null },
     css: (shadow, scale) => ({

@@ -175,7 +175,7 @@ def susun(src: Path, segments: list[dict], *, out_w: int = 1080,
                          rasio_potongan=rasio_bidang_wajah(out_w, out_h))
     if not fc:
         return {"jenis": "tidak_dikenali", "keys": [], "layers": [], "kejutan": [],
-                "catatan": ["Tidak ada facecam yang diam di satu tempat — klip ini "
+                "catatan": ["Tidak ada facecam yang diam di satu tempat, klip ini "
                             "bukan rekaman gameplay berkamera pemain. Susunan "
                             "otomatis untuk jenis video lain belum ada."]}
 
@@ -185,33 +185,33 @@ def susun(src: Path, segments: list[dict], *, out_w: int = 1080,
 
     keys: list[dict] = [{
         "t": 0.0, "mode": "gaming", "asal": "otomatis",
-        "alasan": "Facecam ditemukan — wajah di atas, permainan di bawah",
+        "alasan": "Facecam ditemukan: wajah di atas, permainan di bawah",
     }]
     layers: list[dict] = []
     for k in kejutan:
         t0 = max(0.0, k["t"] - MENDAHULUI)
         keys.append({
             "t": round(t0, 2), "mode": "box", "rect": reaksi, "asal": "otomatis",
-            "alasan": (f"Reaksi kaget — suara {k['di_atas_db']:.0f} dB di atas "
+            "alasan": (f"Reaksi kaget: suara {k['di_atas_db']:.0f} dB di atas "
                        f"kebiasaannya, mendadak. Wajah dibuat penuh."),
         })
         keys.append({
             "t": round(min(durasi, t0 + TAHAN_REAKSI), 2), "mode": "gaming",
             "asal": "otomatis", "alasan": "Kembali ke permainan",
         })
-        layers.append({
-            "aset": "efek:dentum", "jenis": "audio", "nama": "Dentum",
-            "t": round(t0, 2), "dur": 1.6, "volume": 0.7,
-            "asal": "otomatis",
-            "alasan": "Dentum menegaskan momen kagetnya",
-        })
+        # Dulu di sini ditambahkan satu dentum bawaan di tiap momen kaget.
+        # Dibuang 25 September 2026 bersama seluruh pustaka efek bawaan, atas
+        # keputusan pemiliknya sesudah mendengarkannya. Menaruh efek yang tidak
+        # disukai pemiliknya di tiap klip, otomatis, lebih buruk daripada tidak
+        # ada efek sama sekali: yang pertama harus dicari dan dihapus satu per
+        # satu, yang kedua tinggal ditambahkan sendiri kalau memang mau.
     keys = [k for k in keys if k["t"] < durasi - 0.05]
 
     catatan = [f"Facecam di x={fc['x']:.0f}% y={fc['y']:.0f}%, "
                f"hadir {fc.get('kehadiran', 0) * 100:.0f}% waktu."]
     catatan.append(f"{len(kejutan)} reaksi kaget ditemukan." if kejutan else
                    "Tidak ada reaksi yang cukup menonjol dibanding kebiasaan "
-                   "pemainnya — bingkai tetap wajah di atas, permainan di bawah.")
+                   "pemainnya, bingkai tetap wajah di atas, permainan di bawah.")
     log.info("Sutradara: gameplay, %d kejutan di %s", len(kejutan),
              [k["t"] for k in kejutan])
     return {"jenis": "gameplay", "keys": keys, "layers": layers,
