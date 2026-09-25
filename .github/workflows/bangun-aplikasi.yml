@@ -105,16 +105,26 @@ jobs:
       # build tetap jalan dan hasilnya tetap terbit, hanya tanpa identitas
       # bawaan, jadi penggunanya memasang berkas OAuth-nya sendiri seperti
       # sebelumnya.
+      # Tanpa `if:`, dan itu disengaja. Konteks `env` di dalam `if` sebuah
+      # langkah TIDAK melihat blok `env` langkah itu sendiri pada semua kasus,
+      # jadi syarat yang ditulis di sana bisa selalu salah tanpa memberi tahu
+      # siapa pun. Di sini langkahnya selalu berjalan dan memeriksa sendiri,
+      # lalu mengatakan apa yang ia lakukan. Rilis tanpa rahasia tetap jadi,
+      # hanya tanpa identitas bawaan.
       - name: Tanam identitas Google
-        if: env.GOOGLE_ID != ''
         working-directory: backend
         shell: bash
         env:
           GOOGLE_ID: ${{ secrets.OMNICLIP_GOOGLE_CLIENT_ID }}
           GOOGLE_RAHASIA: ${{ secrets.OMNICLIP_GOOGLE_CLIENT_SECRET }}
         run: |
-          python -c "import os, pathlib; pathlib.Path('app/identitas_google.py').write_text('\"\"\"Ditulis alur build. Jangan disunting, jangan di-commit.\"\"\"\n' + 'CLIENT_ID = %r\n' % os.environ['GOOGLE_ID'] + 'CLIENT_SECRET = %r\n' % os.environ['GOOGLE_RAHASIA'], encoding='utf-8')"
-          echo "identitas Google ditanam"
+          if [ -z "$GOOGLE_ID" ] || [ -z "$GOOGLE_RAHASIA" ]; then
+            echo "Rahasia OMNICLIP_GOOGLE_CLIENT_ID/SECRET belum dipasang;"
+            echo "rilis ini tanpa identitas bawaan, penggunanya memasang berkas OAuth sendiri."
+            exit 0
+          fi
+          python ../tools/tanam_identitas.py
+          echo "Identitas Google ditanam ke dalam bundel." 
 
       - name: Bungkus
         working-directory: backend
