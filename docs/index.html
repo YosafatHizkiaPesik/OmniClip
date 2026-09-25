@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OmniClip</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { max-width: 46rem; margin: 0 auto; padding: 2.5rem 1.25rem 4rem;
+         font: 16px/1.65 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  h1 { font-size: 2rem; margin: 0 0 .25rem; }
+  h2 { margin-top: 2.25rem; font-size: 1.15rem; }
+  .sub { color: #666; margin: 0 0 2rem; }
+  ul { padding-left: 1.2rem; }
+  li { margin: .35rem 0; }
+  a { color: #0a58ca; }
+  footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid #8884;
+           color: #666; font-size: .9rem; }
+  .en { color: #555; }
+</style>
+</head>
+<body>
+
+<h1>OmniClip</h1>
+<p class="sub">Memotong video panjang jadi klip vertikal, di komputer Anda sendiri.</p>
+
+<p>
+  OmniClip adalah aplikasi desktop untuk Windows dan Linux yang mengubah video
+  panjang, seperti podcast dan siaran gameplay, menjadi klip pendek berformat
+  9:16. Ia mengunduh videonya, membuat transkrip, memilih bagian yang layak
+  dijadikan klip, memasang subtitle, dan membingkai gambar supaya mengikuti
+  orang yang sedang bicara.
+</p>
+
+<h2>Cara kerjanya</h2>
+<ul>
+  <li>Seluruh pemrosesan berjalan di komputer Anda. Tidak ada server milik kami.</li>
+  <li>Video, klip, dan basis datanya disimpan di folder yang Anda pilih sendiri.</li>
+  <li>Pemilihan klip boleh memakai AI, dengan kunci API milik Anda sendiri, dan
+      boleh juga memakai mesin lokal tanpa internet sama sekali.</li>
+  <li>Unggah ke YouTube dan Google Drive bersifat pilihan, dan hanya ke akun
+      yang Anda sambungkan sendiri.</li>
+</ul>
+
+<h2>Unduh</h2>
+<p>
+  Paket Windows dan Linux ada di
+  <a href="https://github.com/YosafatHizkiaPesik/OmniClip/releases">halaman rilis</a>.
+  Kode sumbernya terbuka di
+  <a href="https://github.com/YosafatHizkiaPesik/OmniClip">GitHub</a>.
+</p>
+
+<h2>Izin Google yang diminta</h2>
+<p>
+  OmniClip meminta izin seminimal mungkin, dan hanya saat Anda menekan tombol
+  untuk menyambungkan akun:
+</p>
+<ul>
+  <li><code>youtube.upload</code> untuk mengunggah klip ke kanal Anda sendiri.</li>
+  <li><code>drive.file</code> untuk menyimpan klip ke Google Drive Anda. Izin ini
+      hanya menjangkau berkas yang dibuat OmniClip, bukan isi Drive Anda yang lain.</li>
+  <li><code>openid</code> dan <code>userinfo.email</code> untuk menampilkan nama
+      akun yang sedang tersambung.</li>
+</ul>
+
+<h2 class="en">In English</h2>
+<p class="en">
+  OmniClip is an open source desktop application that turns long videos into
+  short vertical clips. All processing happens on the user's own computer; we
+  operate no servers and collect no data. Google account access is optional and
+  used only to upload clips to the user's own YouTube channel or Google Drive.
+  See the <a href="privasi.html">privacy policy</a> and
+  <a href="ketentuan.html">terms of service</a>.
+</p>
+
+<footer>
+  <a href="privasi.html">Kebijakan privasi</a> ·
+  <a href="ketentuan.html">Ketentuan layanan</a> ·
+  <a href="https://github.com/YosafatHizkiaPesik/OmniClip">Kode sumber</a>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kebijakan Privasi OmniClip</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { max-width: 46rem; margin: 0 auto; padding: 2.5rem 1.25rem 4rem;
+         font: 16px/1.65 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+  h2 { margin-top: 2rem; font-size: 1.1rem; }
+  .sub { color: #666; margin: 0 0 2rem; }
+  ul { padding-left: 1.2rem; } li { margin: .35rem 0; }
+  a { color: #0a58ca; }
+  table { border-collapse: collapse; width: 100%; margin: .75rem 0; font-size: .95rem; }
+  th, td { border: 1px solid #8884; padding: .5rem .6rem; text-align: left; vertical-align: top; }
+  footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid #8884;
+           color: #666; font-size: .9rem; }
+  .en { color: #555; }
+</style>
+</head>
+<body>
+
+<h1>Kebijakan Privasi OmniClip</h1>
+<p class="sub">Berlaku sejak 25 September 2026.</p>
+
+<h2>Ringkasnya</h2>
+<p>
+  OmniClip berjalan sepenuhnya di komputer Anda. Kami tidak menjalankan server,
+  tidak mengumpulkan data apa pun, dan tidak pernah menerima video, transkrip,
+  maupun isi akun Google Anda.
+</p>
+
+<h2>Data yang tinggal di komputer Anda</h2>
+<p>Semuanya disimpan di folder penyimpanan yang Anda pilih sendiri:</p>
+<ul>
+  <li>Video sumber yang Anda unduh, dan klip hasil rendernya.</li>
+  <li>Transkrip, subtitle, dan setelan tiap klip, di dalam satu berkas basis data.</li>
+  <li>Riwayat pencarian dan nama akun, supaya beranda bisa menampilkan yang relevan.</li>
+  <li>Kunci API dan token Google yang Anda pasang sendiri.</li>
+</ul>
+<p>
+  Menghapus folder itu menghapus seluruhnya. Tidak ada salinan di tempat lain.
+</p>
+
+<h2>Layanan luar yang dihubungi, dan kapan</h2>
+<table>
+  <tr><th>Layanan</th><th>Kapan dihubungi</th><th>Yang dikirim</th></tr>
+  <tr>
+    <td>YouTube</td>
+    <td>Saat Anda mencari atau mengunduh video</td>
+    <td>Kata kunci dan alamat video yang Anda ketik</td>
+  </tr>
+  <tr>
+    <td>Google Gemini atau OpenRouter</td>
+    <td>Hanya bila Anda memasang kunci API sendiri</td>
+    <td>Transkrip video yang sedang diproses, untuk memilih klip dan menulis
+        judul. Dimatikan berarti OmniClip memakai mesin lokal tanpa internet.</td>
+  </tr>
+  <tr>
+    <td>YouTube Data API</td>
+    <td>Hanya saat Anda menekan unggah</td>
+    <td>Berkas klip, judul, dan deskripsi, ke kanal Anda sendiri</td>
+  </tr>
+  <tr>
+    <td>Google Drive</td>
+    <td>Hanya saat Anda menekan unggah</td>
+    <td>Berkas klip, ke Drive Anda sendiri</td>
+  </tr>
+</table>
+<p>
+  Semua sambungan itu berjalan langsung dari komputer Anda ke layanan yang
+  bersangkutan. Tidak ada yang melewati kami.
+</p>
+
+<h2>Data akun Google</h2>
+<ul>
+  <li>Token akses disimpan hanya di komputer Anda, di dalam folder penyimpanan,
+      dengan izin berkas yang dibatasi untuk pengguna Anda sendiri.</li>
+  <li>Alamat surel akun dipakai semata untuk menamai akun di dalam aplikasi,
+      supaya Anda tahu akun mana yang sedang aktif.</li>
+  <li>Izin <code>drive.file</code> hanya menjangkau berkas yang dibuat OmniClip.
+      Isi Drive Anda yang lain tidak pernah bisa dibaca aplikasi ini.</li>
+  <li>Anda bisa memutus sambungannya kapan saja dari halaman Akun di dalam
+      aplikasi, atau dari
+      <a href="https://myaccount.google.com/permissions">halaman izin akun Google</a>.
+      Memutus sambungan menghapus tokennya dari komputer Anda.</li>
+</ul>
+<p>
+  Pemakaian data Google oleh OmniClip mengikuti
+  <a href="https://developers.google.com/terms/api-services-user-data-policy">Kebijakan Data Pengguna Layanan API Google</a>,
+  termasuk ketentuan Penggunaan Terbatas.
+</p>
+
+<h2>Yang tidak kami lakukan</h2>
+<ul>
+  <li>Tidak ada analitik, pelacak, maupun laporan penggunaan.</li>
+  <li>Tidak ada data yang dijual atau dibagikan ke pihak ketiga.</li>
+  <li>Data Anda tidak dipakai untuk melatih model apa pun.</li>
+</ul>
+
+<h2>Anak-anak</h2>
+<p>OmniClip bukan ditujukan untuk anak di bawah 13 tahun.</p>
+
+<h2>Perubahan dan pertanyaan</h2>
+<p>
+  Perubahan kebijakan ini akan tampil di halaman ini beserta tanggalnya.
+  Pertanyaan bisa dikirim lewat
+  <a href="https://github.com/YosafatHizkiaPesik/OmniClip/issues">halaman issue</a>.
+</p>
+
+<h2 class="en">In English (summary)</h2>
+<p class="en">
+  OmniClip is a desktop application that runs entirely on the user's own
+  computer. We operate no servers and collect no personal data whatsoever.
+  Videos, transcripts, settings and credentials are stored only in a folder the
+  user chooses, and deleting that folder deletes everything. The application
+  contacts YouTube, Google Gemini or OpenRouter directly from the user's
+  machine, and only when the user asks it to. Google account tokens never leave
+  the user's computer. The <code>drive.file</code> scope grants access only to
+  files the application itself creates. OmniClip's use of information received
+  from Google APIs adheres to the
+  <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>,
+  including the Limited Use requirements. Users can revoke access at any time
+  from within the application or from their Google account permissions page.
+</p>
+
+<footer>
+  <a href="index.html">Beranda</a> ·
+  <a href="ketentuan.html">Ketentuan layanan</a>
+</footer>
+
+</body>
+</html>
