@@ -1449,6 +1449,43 @@ async def clip_jenis(req: FacecamRequest):
     return hasil
 
 
+def _kunci_facecam(video_id: str, segments: list[dict]) -> str:
+    """Kunci simpanan facecam: video plus batas tiap potongannya."""
+    import hashlib
+
+    tanda = ";".join(f"{float(s['start']):.3f}-{float(s['end']):.3f}" for s in segments)
+    return "facecam:" + hashlib.sha1(
+        f"{video_id}|{tanda}".encode()).hexdigest()[:24]
+
+
+def _facecam_tersimpan(video_id: str, segments: list[dict]):
+    """
+    Susunan game yang sudah pernah dihitung untuk potongan yang sama persis.
+
+    Sampai 25 September 2026 endpoint ini tidak punya simpanan apa pun, jadi
+    SETIAP klip yang dibuka memindai ulang videonya, dan menutup aplikasi
+    menghapus seluruhnya. Pada video gameplay 1 jam 45 menit berisi 28 klip,
+    itu berarti dua puluh delapan kali pemindaian, tiap kali orangnya menunggu
+    di depan layar. Terlapor: "sudah menunggu beberapa menit, satu klip pun
+    bingkainya belum tersusun".
+
+    Isi sebuah potongan video tidak pernah basi, jadi tidak ada TTL.
+    """
+    from ..repos import cache as cache_repo
+    try:
+        return cache_repo.ambil(_kunci_facecam(video_id, segments), ttl=float("inf"))
+    except Exception:                                # noqa: BLE001
+        return None
+
+
+def _simpan_facecam(video_id: str, segments: list[dict], payload: dict) -> None:
+    from ..repos import cache as cache_repo
+    try:
+        cache_repo.simpan(_kunci_facecam(video_id, segments), payload)
+    except Exception:           # simpanan yang gagal bukan alasan menggagalkan
+        pass
+
+
 @router.post("/clip-facecam")
 async def clip_facecam(req: FacecamRequest):
     """
@@ -1475,6 +1512,10 @@ async def clip_facecam(req: FacecamRequest):
         raise NotFound("Video sumber belum diunduh.")
     segs = [s.model_dump() for s in req.segments] or [{"start": 0.0, "end": 30.0}]
 
+    tersimpan = _facecam_tersimpan(req.video_id, segs)
+    if tersimpan is not None:
+        return tersimpan
+
     def kerja():
         info = probe(str(src))
         w = int(info.get("width") or 1920)
@@ -1487,4 +1528,6 @@ async def clip_facecam(req: FacecamRequest):
                 "src_w": w, "src_h": h,
                 "layout": susun_layout_gaming(posisi, src_w=w, src_h=h)}
 
-    return await asyncio.to_thread(kerja)
+    hasil = await asyncio.to_thread(kerja)
+    _simpan_facecam(req.video_id, segs, hasil)
+    return hasil

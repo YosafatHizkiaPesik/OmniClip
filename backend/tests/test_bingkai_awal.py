@@ -158,3 +158,56 @@ class SakelarPemanasanBingkai(unittest.TestCase):
         # Dan yang memeriksa sakelarnya adalah pembungkus otomatisnya.
         otomatis = sumber.split("def _jadwalkan_jejak(")[1][:1400]
         self.assertIn("not pemanasan_bingkai()", otomatis)
+
+
+class FacecamDisimpanDanDipanaskan(unittest.TestCase):
+    """
+    Video gameplay tidak memakai jejak wajah: Studio memintanya lewat
+    `/clip-facecam`. Sampai 25 September 2026 endpoint itu tidak punya simpanan
+    APA PUN, jadi tiap klip memindai ulang videonya dan menutup aplikasi
+    menghapus seluruhnya. Pada gameplay 1 jam 45 menit berisi 28 klip, itu dua
+    puluh delapan pemindaian, tiap kali orangnya menunggu di depan layar.
+
+    Pemanasan pun menghitung hal yang tidak pernah dipakai pada video seperti
+    itu: jejak wajah, bukan facecam.
+    """
+
+    def test_kunci_simpanan_mengikuti_potongannya(self):
+        from app.routers.clips import _kunci_facecam
+        a = _kunci_facecam("vid", [{"start": 1.0, "end": 2.0}])
+        self.assertEqual(a, _kunci_facecam("vid", [{"start": 1.0, "end": 2.0}]))
+        # Potongan lain berarti gambar lain, jadi simpanan lain.
+        self.assertNotEqual(a, _kunci_facecam("vid", [{"start": 1.0, "end": 3.0}]))
+        # Video lain juga.
+        self.assertNotEqual(a, _kunci_facecam("lain", [{"start": 1.0, "end": 2.0}]))
+
+    def test_yang_tersimpan_dibaca_kembali(self):
+        from unittest import mock
+        from app.routers import clips as r
+
+        simpanan = {}
+        with mock.patch("app.repos.cache.simpan",
+                        side_effect=lambda k, v: simpanan.__setitem__(k, v)), \
+             mock.patch("app.repos.cache.ambil",
+                        side_effect=lambda k, ttl=None: simpanan.get(k)):
+            segmen = [{"start": 5.0, "end": 9.0}]
+            self.assertIsNone(r._facecam_tersimpan("vid", segmen))
+            r._simpan_facecam("vid", segmen, {"ditemukan": True, "layout": {"a": 1}})
+            self.assertEqual(r._facecam_tersimpan("vid", segmen),
+                             {"ditemukan": True, "layout": {"a": 1}})
+
+    def test_endpoint_membaca_simpanan_sebelum_memindai(self):
+        """Urutannya menentukan: memindai dulu lalu menyimpan tidak menolong."""
+        from pathlib import Path
+        sumber = (Path(__file__).resolve().parents[1] / "app" / "routers"
+                  / "clips.py").read_text(encoding="utf-8")
+        badan = sumber.split('async def clip_facecam')[1][:1400]
+        self.assertLess(badan.index("_facecam_tersimpan"), badan.index("def kerja"))
+
+    def test_pemanasan_ikut_menghitung_facecam(self):
+        from pathlib import Path
+        sumber = (Path(__file__).resolve().parents[1] / "app" / "services"
+                  / "bingkai_awal.py").read_text(encoding="utf-8")
+        self.assertIn("_panaskan_facecam(video_id, segmen)", sumber)
+        # Dan memakai simpanan yang SAMA dengan yang dibaca endpointnya.
+        self.assertIn("_kunci_facecam", sumber)

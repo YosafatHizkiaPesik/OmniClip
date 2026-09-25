@@ -59,6 +59,14 @@ def run_bingkai_awal(ctx) -> dict:
         try:
             hitung_reframe(video_id=video_id, segments=segmen,
                            aspect_ratio=rasio, turns=turns)
+            # Video gameplay TIDAK memakai jejak wajah di atas: Studio
+            # memintanya lewat `/clip-facecam`, dan sampai 25 September 2026
+            # pemanasan tidak menyentuhnya sama sekali. Jadi pada video game
+            # pemanasan menghitung hal yang tidak pernah dipakai, sementara
+            # yang benar-benar dibutuhkan tetap dihitung satu per satu saat
+            # klipnya dibuka. Terlapor: "sudah menunggu beberapa menit, satu
+            # klip pun bingkainya belum tersusun".
+            _panaskan_facecam(video_id, segmen)
             siap += 1
         except JobCancelled:
             raise
@@ -95,6 +103,42 @@ def run_bingkai_awal(ctx) -> dict:
     log.info("Bingkai awal video %s: %d siap, %d gagal, %d tema",
              video_id, siap, gagal, tema_siap)
     return {"siap": siap, "gagal": gagal, "tema": tema_siap}
+
+
+def _panaskan_facecam(video_id: str, segmen: list[dict]) -> None:
+    """
+    Menghitung susunan Main game untuk satu klip, lalu menyimpannya.
+
+    Memakai simpanan yang SAMA dengan yang dibaca `/clip-facecam`, jadi saat
+    klipnya dibuka Studio menemukannya sudah jadi. Kegagalannya ditelan:
+    pemanasan yang gagal bukan alasan menggagalkan sisanya, dan klip itu akan
+    menghitung sendiri saat dibuka, persis seperti sebelumnya.
+    """
+    try:
+        from ..routers.clips import _facecam_tersimpan, _kunci_facecam
+        from ..repos import cache as cache_repo
+        from .media import probe
+        from .paths import find_local_video
+        from .reframe import deteksi_facecam_waktu
+        from .render import rasio_bidang_wajah, susun_layout_gaming
+
+        if _facecam_tersimpan(video_id, segmen) is not None:
+            return
+        src = find_local_video(video_id)
+        if not src:
+            return
+        info = probe(str(src))
+        w = int(info.get("width") or 1920)
+        h = int(info.get("height") or 1080)
+        posisi = deteksi_facecam_waktu(str(src), segmen, w, h,
+                                       rasio_potongan=rasio_bidang_wajah(1080, 1920))
+        hasil = ({"ditemukan": False, "layout": None} if not posisi else
+                 {"ditemukan": True, "facecam": posisi[0]["facecam"],
+                  "src_w": w, "src_h": h,
+                  "layout": susun_layout_gaming(posisi, src_w=w, src_h=h)})
+        cache_repo.simpan(_kunci_facecam(video_id, segmen), hasil)
+    except Exception as e:                           # noqa: BLE001
+        log.info("Pemanasan facecam dilewati: %s", str(e)[:140])
 
 
 def _tema_untuk_semua(ctx, daftar: list[dict], video_id: str) -> int:

@@ -482,3 +482,53 @@ class SalinanPratinjauYangTidakMenahanPemiliknya(unittest.TestCase):
         self.assertIn("from .enkoder import pilih as _enkoder", sumber)
         # Dan kegagalannya tidak boleh menjatuhkan pembuatan salinan.
         self.assertIn("except Exception:", sumber.split("_enkoder")[2][:200])
+
+
+class TagarShortsHanyaBilaMemangShorts(unittest.TestCase):
+    """
+    Klip tegak 51 detik naik ke YouTube sebagai video biasa, bukan Shorts,
+    dilaporkan 25 September 2026. YouTube menentukan sendiri dari bentuk dan
+    panjangnya, dan tagar ini penanda yang membuatnya memutuskan lebih pasti.
+
+    Yang dijaga di sini: penandanya TIDAK ditempel pada klip yang memang bukan
+    Shorts. Klip 4:5, dan klip yang lebih panjang dari tiga menit, bukan
+    Shorts, dan menempelkan tagarnya di sana cuma bohong pada penontonnya.
+    """
+
+    def _cek(self, rasio, durasi, tagar=()):
+        import json
+        import tempfile
+        from pathlib import Path
+        from unittest import mock
+        from app.services import unggah
+
+        with tempfile.TemporaryDirectory() as tmp:
+            jalur = Path(tmp) / "klip.mp4"
+            jalur.with_suffix(".json").write_text(
+                json.dumps({"aspect_ratio": rasio, "duration": durasi}),
+                encoding="utf-8")
+            with mock.patch("app.services.paths.safe_media_path", return_value=jalur), \
+                 mock.patch("app.services.profil.kategori_klip", return_value="x"), \
+                 mock.patch("app.services.profil.kini", return_value=1):
+                return unggah._pastikan_shorts(list(tagar), "klip.mp4")
+
+    def test_klip_tegak_pendek_diberi_penanda(self):
+        self.assertIn("#Shorts", self._cek("9:16", 51.0))
+
+    def test_klip_tegak_tapi_terlalu_panjang_tidak(self):
+        """Di atas tiga menit YouTube tidak menganggapnya Shorts sama sekali."""
+        self.assertNotIn("#Shorts", self._cek("9:16", 400.0))
+
+    def test_klip_mendatar_tidak(self):
+        self.assertNotIn("#Shorts", self._cek("16:9", 51.0))
+
+    def test_tidak_ditempel_dua_kali(self):
+        hasil = self._cek("9:16", 51.0, tagar=["#shorts", "#horor"])
+        self.assertEqual(sum(1 for t in hasil if t.lower().lstrip("#") == "shorts"), 1)
+
+    def test_catatan_render_yang_hilang_tidak_menggagalkan(self):
+        from unittest import mock
+        from app.services import unggah
+        with mock.patch("app.services.paths.safe_media_path",
+                        side_effect=OSError("tidak ada")):
+            self.assertEqual(unggah._pastikan_shorts(["#horor"], "hilang.mp4"), ["#horor"])

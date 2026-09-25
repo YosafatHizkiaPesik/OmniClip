@@ -78,14 +78,55 @@ def setelah_render(*, clip_name: str, judul: str, hashtag: list[str],
                           "galat": "Akun Google profil ini belum tersambung."})
             continue
         jam = _jam_tayang(target, pid, float(pilihan.get("jadwal_jam") or 0))
+        tagar_kirim = (_pastikan_shorts(tagar, clip_name)
+                       if target == "youtube" else tagar)
         job_id, _ = antrekan(
             clip_name=clip_name, target=target, title=judul,
-            description=deskripsi(setel.get("deskripsi", ""), judul=judul, hashtag=tagar),
-            tags=[h.lstrip("#") for h in tagar][:15],
+            description=deskripsi(setel.get("deskripsi", ""), judul=judul,
+                                  hashtag=tagar_kirim),
+            tags=[h.lstrip("#") for h in tagar_kirim][:15],
             privacy=pilihan.get("privasi") or "private", profil_id=pid,
             mulai_setelah=jam)
         hasil.append({"target": target, "job_id": job_id, "mulai_setelah": jam})
     return hasil
+
+
+# Ambang Shorts milik YouTube: tegak, dan paling lama tiga menit.
+SHORTS_DETIK_MAKS = 180.0
+
+
+def _pastikan_shorts(tagar: list[str], clip_name: str) -> list[str]:
+    """
+    Menambahkan #Shorts bila klipnya memang memenuhi syarat Shorts.
+
+    YouTube menentukan sendiri sebuah unggahan masuk rak Shorts atau tidak,
+    dari bentuk dan panjangnya, dan tagar ini adalah penanda yang membantunya
+    memutuskan lebih cepat dan lebih pasti. Terlapor 25 September 2026: klip
+    tegak 51 detik naik sebagai video biasa, bukan Shorts.
+
+    Syaratnya diperiksa dari catatan render klipnya sendiri, bukan ditebak:
+    klip 4:5 atau 16:9, dan klip yang lebih panjang dari tiga menit, memang
+    BUKAN Shorts, dan menempelkan tagarnya di sana cuma bohong pada
+    penontonnya.
+    """
+    if any(t.lower().lstrip("#") == "shorts" for t in tagar):
+        return tagar
+    try:
+        import json
+        from . import profil as profil_svc
+        from .paths import safe_media_path
+
+        jalur = safe_media_path(profil_svc.kategori_klip(profil_svc.kini()), clip_name)
+        meta = json.loads(jalur.with_suffix(".json").read_text(encoding="utf-8"))
+        rasio = str(meta.get("aspect_ratio") or "9:16")
+        durasi = float(meta.get("duration") or 0)
+        lebar, tinggi = (rasio.split(":") + ["1"])[:2]
+        tegak = float(lebar) < float(tinggi)
+        if tegak and 0 < durasi <= SHORTS_DETIK_MAKS:
+            return [*tagar, "#Shorts"]
+    except Exception as e:                           # noqa: BLE001
+        log.info("Syarat Shorts tidak terbaca untuk %s: %s", clip_name, str(e)[:120])
+    return tagar
 
 
 def _jam_tayang(target: str, pid: int, jarak_jam: float) -> float:
