@@ -137,6 +137,41 @@ def urutkan(semua: list[dict]) -> list[dict]:
                   key=_peringkat)
 
 
+def _peringkat_teks(m: dict) -> tuple:
+    """Untuk tugas teks murni yang jendelanya besar: konteks dulu, baru JSON."""
+    return (0 if m["json"] else 1, -m["konteks"], m["id"])
+
+
+# Transkrip podcast satu jam sekitar 60 ribu token. Model dengan jendela lebih
+# kecil daripada ini akan menolak atau memotong diam-diam di tengah, dan
+# potongan yang hilang justru bagian akhir video.
+KONTEKS_TRANSKRIP = 120_000
+
+
+def rantai_teks(pilihan: Optional[str] = None, *, maks: int = 4) -> list[dict]:
+    """
+    Urutan model untuk tugas TEKS panjang: memilih klip dari transkrip.
+
+    Terpisah dari `rantai` karena syaratnya berlawanan. Sutradara bingkai
+    butuh model yang bisa MENONTON, dan model penonton berjendela kecil; ini
+    butuh model yang muat membaca transkrip satu jam penuh, dan tidak peduli
+    sama sekali apakah ia bisa melihat gambar.
+    """
+    try:
+        semua = daftar()
+    except Exception as e:
+        log.warning("Daftar model OpenRouter tidak terbaca: %s", str(e)[:160])
+        semua = []
+    urut = sorted((m for m in semua
+                   if m["gratis"] and m["konteks"] >= KONTEKS_TRANSKRIP),
+                  key=_peringkat_teks)[:maks]
+    if pilihan:
+        dipilih = next((m for m in semua if m["id"] == pilihan), None)
+        if dipilih is not None:
+            urut = [dipilih] + [m for m in urut if m["id"] != dipilih["id"]]
+    return urut
+
+
 def rantai(pilihan: Optional[str] = None, *, maks: int = 4) -> list[dict]:
     """
     Urutan model yang dicoba: pilihan pengguna di depan, lalu model gratis yang
@@ -375,10 +410,15 @@ def tanya(bahan: list[dict], *, skema: dict, sistem: str, api_key: str,
     gagal: list[str] = []
     _cadangan: Optional[list[dict]] = None
     berat = _muat(bahan) > BATAS_VIDEO_MB
+    # OpenRouter menagih SALDO untuk masukan video, bahkan pada model ":free".
+    # Terukur 24 September 2026: "This request requires at least $1.00 in
+    # balance for video", kode 402, dengan kunci yang jatah teksnya masih utuh.
+    # Jadi yang habis bukan kuncinya, melainkan satu jenis masukan saja.
+    video_terlarang = False
 
     def bahan_untuk(m: dict) -> Optional[list[dict]]:
         nonlocal _cadangan
-        pakai_video = m["video"] and not berat
+        pakai_video = m["video"] and not berat and not video_terlarang
         if not pakai_video and cadangan is not None:
             if _cadangan is None:
                 if kabar is not None:
@@ -389,7 +429,13 @@ def tanya(bahan: list[dict], *, skema: dict, sistem: str, api_key: str,
             calon = bahan
         return calon if _bisa(calon, m) else None
 
-    for urutan, m in enumerate(models):
+    # Indeks diurus sendiri, bukan lewat `enumerate`: satu model boleh dicoba
+    # DUA KALI, sekali dengan videonya dan sekali dengan gambar kunci + suara,
+    # dan hanya bila OpenRouter sendiri yang bilang videonya butuh saldo.
+    urutan = 0
+    diulang_tanpa_video: set[str] = set()
+    while urutan < len(models):
+        m = models[urutan]
         if batal is not None:
             batal()
         if tenggat - time.monotonic() <= 5:
@@ -398,6 +444,7 @@ def tanya(bahan: list[dict], *, skema: dict, sistem: str, api_key: str,
         isi_bahan = bahan_untuk(m)
         if isi_bahan is None:
             gagal.append(f"{m['id']}: tidak bisa melihat bahannya")
+            urutan += 1
             continue
         if kabar is not None:
             kabar(f"Menonton klip lewat OpenRouter ({m['id']})…")
@@ -413,12 +460,25 @@ def tanya(bahan: list[dict], *, skema: dict, sistem: str, api_key: str,
             gagal.append(f"{m['id']}: {str(e)[:140]}")
             log.warning("OpenRouter %s gagal: %s", m["id"], str(e)[:200])
             if kode == 402:
-                # Saldo habis berlaku untuk seluruh kunci, bukan satu model.
+                # Dua hal berbeda memakai kode yang sama. "butuh saldo untuk
+                # video" hanya menutup satu jenis masukan, dan menyerah di situ
+                # berarti membuang kunci yang teksnya masih bisa dipakai.
+                if ("video" in str(e).lower() and not video_terlarang
+                        and cadangan is not None
+                        and m["id"] not in diulang_tanpa_video):
+                    video_terlarang = True
+                    diulang_tanpa_video.add(m["id"])
+                    gagal.append(f"{m['id']}: video butuh saldo, "
+                                 "dicoba lagi dengan gambar kunci + suara")
+                    if kabar is not None:
+                        kabar("Video butuh saldo OpenRouter, beralih ke gambar kunci…")
+                    continue          # model yang sama, bahan yang berbeda
                 gagal.append("saldo/jatah OpenRouter habis")
                 break
             if kode in (401, 403):
                 gagal.append("kunci OpenRouter ditolak")
                 break
             if kode in _SIBUK_KODE and kabar is not None and urutan + 1 < len(models):
-                kabar(f"{m['id']} sedang sibuk — mencoba model berikutnya…")
-    raise Ditolak("OpenRouter gagal — " + " | ".join(gagal))
+                kabar(f"{m['id']} sedang sibuk, mencoba model berikutnya…")
+        urutan += 1
+    raise Ditolak("OpenRouter gagal, " + " | ".join(gagal))

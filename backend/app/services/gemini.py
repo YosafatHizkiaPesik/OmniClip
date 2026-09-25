@@ -23,7 +23,9 @@ from typing import Optional
 
 from .clipmodel import normalize_hashtags
 from .heuristics import Candidate, make_hook_text
-from .peringkat_model import catat_gagal, tanpa_kuota
+from .peringkat_model import (catat_berhasil, catat_gagal, catat_habis_harian,
+                              kuota_habis, tanpa_kuota)
+from .teks import tanpa_pisah
 from .transcript import Sentence
 
 log = logging.getLogger("omniclip.gemini")
@@ -46,7 +48,7 @@ Ia tidak tahu apa yang dibicarakan sebelum potongan dimulai. Maka:
    yang merujuk ke hal sebelumnya, jawaban atas pertanyaan yang belum diajukan,
    atau lanjutan dari sebuah cerita/aturan/istilah yang dijelaskan lebih awal.
    Bila begitu, MUNDURKAN start_sentence ke tempat topik, cerita, atau
-   pertanyaan itu dimulai — sejauh apa pun perlu.
+   pertanyaan itu dimulai, sejauh apa pun perlu.
 
 2. AKHIR. Potongan harus sampai ke puncaknya: jawaban dari pertanyaannya,
    punchline/tawa dari leluconnya, kesimpulan dari ceritanya. Jangan berhenti
@@ -56,7 +58,7 @@ Ia tidak tahu apa yang dibicarakan sebelum potongan dimulai. Maka:
 3. PANJANG adalah hasil, bukan target. Kebanyakan gagasan utuh dalam obrolan
    atau podcast butuh 40-100 detik. Di bawah 25 detik hanya pantas bila satu
    lelucon atau pernyataan memang lengkap sendirian. Kandidat sistem SERING
-   TERLALU PENDEK karena dihitung dari pola bicara, bukan dari isi — jangan
+   TERLALU PENDEK karena dihitung dari pola bicara, bukan dari isi, jangan
    meniru panjangnya.
 
 4. PADAT. Setelah awal dan akhirnya benar, potongan terbaik adalah yang
@@ -75,13 +77,13 @@ dengan -1 lalu tentukan start_sentence dan end_sentence sendiri. Bila beberapa
 kandidat sebenarnya satu pembahasan yang sama, jadikan satu potongan.
 
 Tolak bagian yang intinya tidak bisa dibuat utuh. Tapi video panjang hampir
-selalu punya banyak momen yang layak — telusuri SELURUH transkrip, dari awal
+selalu punya banyak momen yang layak, telusuri SELURUH transkrip, dari awal
 sampai akhir, dan penuhi jumlah yang diminta bila momennya memang ada.
 
 Aturan lain:
 - Rentang ditentukan lewat start_sentence (kalimat pertama yang masuk) dan
   end_sentence (kalimat TERAKHIR yang masuk), yaitu NOMOR KALIMAT di
-  transkrip — sama seperti "kalimat 114-119" pada daftar kandidat. Jangan
+  transkrip, sama seperti "kalimat 114-119" pada daftar kandidat. Jangan
   pernah menulis angka detik.
 - Dua potongan tidak boleh berisi bagian yang sama.
 - hook_text harus SETIA pada isi klip. Dilarang menjanjikan sesuatu yang tidak
@@ -89,16 +91,20 @@ Aturan lain:
 - suggested_title adalah kalimat yang akan dibaca orang sambil menggulir, bukan
   nama berkas. Maksimal 70 karakter, memuat hal KONKRET dari klipnya (angka,
   nama, kejadian, pernyataan yang mengejutkan), dan memuat kata yang akan
-  diketik orang saat MENCARI topik ini — orang sekarang mencari di TikTok
+  diketik orang saat MENCARI topik ini, orang sekarang mencari di TikTok
   seperti mencari di Google. Menarik tapi tidak heboh: tanpa huruf kapital
   semua, tanpa tanda seru bertumpuk, tanpa "WAJIB NONTON".
-- hashtags: lima sampai delapan, semuanya dari ISI klip — topiknya, bidangnya,
+- hashtags: lima sampai delapan, semuanya dari ISI klip, topiknya, bidangnya,
   nama orang atau tempat yang disebut. Dilarang memakai #fyp, #viral, #foryou,
   atau #trending: keduanya tidak menaikkan apa pun dan membuat unggahan
   terlihat seperti spam.
 - reason maksimal 20 kata, bahasa Indonesia, sebutkan gagasan apa yang dibahas.
 - score adalah 0-100 dan harus mencerminkan penilaian jujur; potongan biasa
-  memang pantas mendapat nilai sedang."""
+  memang pantas mendapat nilai sedang.
+- Jangan pernah memakai tanda pisah panjang (em dash) di teks mana pun. Pakai
+  koma, titik, titik dua, atau tanda kurung. Tanda itu langka dalam tulisan
+  orang Indonesia sehari-hari, jadi kehadirannya membuat caption langsung
+  terbaca sebagai tulisan mesin."""
 
 
 def _build_schema():
@@ -142,6 +148,63 @@ def _build_schema():
     )
 
 
+def _prompt_pilih(*, sentences, pool, video_title: str, max_clips: int,
+                  max_chars: int, max_seconds: float) -> str:
+    """Permintaan pemilihan klip. Satu teks, dipakai semua penyedia."""
+    return (
+        f"Judul video: {video_title}\n\n"
+        f"=== TRANSKRIP ({len(sentences)} kalimat) ===\n"
+        f"{_format_transcript(sentences, max_chars)}\n\n"
+        f"=== KANDIDAT POTONGAN ===\n{_format_candidates(pool, sentences)}\n\n"
+        f"Pilih {max_clips} potongan terbaik (boleh kurang hanya bila videonya "
+        f"memang tidak punya cukup momen yang layak) dan urutkan dari yang paling kuat.\n"
+        f"Batas durasi satu potongan: {max_seconds:.0f} detik. Pastikan setiap "
+        f"potongan lolos uji penonton baru: awalnya bisa dimengerti tanpa "
+        f"konteks sebelumnya, dan akhirnya sampai ke puncak gagasannya."
+    )
+
+
+def _skema_polos() -> dict:
+    """
+    Skema yang sama dengan `_build_schema`, dalam bentuk dict biasa.
+
+    Dibutuhkan penyedia selain Google, yang tidak mengenal `types.Schema`.
+    Ditulis dua kali dengan sengaja daripada diturunkan dari yang satu ke yang
+    lain: bentuk SDK Google dan JSON Schema tidak benar-benar sama, dan
+    penerjemah di antara keduanya adalah tempat yang bagus untuk menyembunyikan
+    kesalahan. Uji `test_layanan` menjaga keduanya tetap sebangun.
+    """
+    return {
+        "type": "OBJECT",
+        "required": ["selections"],
+        "properties": {
+            "selections": {
+                "type": "ARRAY",
+                "items": {
+                    "type": "OBJECT",
+                    "required": ["konteks", "candidate_id", "start_sentence",
+                                 "end_sentence", "score", "reason", "hook_text",
+                                 "suggested_title"],
+                    "property_ordering": ["konteks", "candidate_id", "start_sentence",
+                                          "end_sentence", "score", "reason", "hook_text",
+                                          "suggested_title", "hashtags"],
+                    "properties": {
+                        "konteks": {"type": "STRING"},
+                        "candidate_id": {"type": "INTEGER"},
+                        "start_sentence": {"type": "INTEGER"},
+                        "end_sentence": {"type": "INTEGER"},
+                        "score": {"type": "NUMBER"},
+                        "reason": {"type": "STRING"},
+                        "hook_text": {"type": "STRING"},
+                        "suggested_title": {"type": "STRING"},
+                        "hashtags": {"type": "ARRAY", "items": {"type": "STRING"}},
+                    },
+                },
+            }
+        },
+    }
+
+
 def _format_transcript(sentences: list[Sentence], max_chars: int) -> str:
     """Transkrip padat: satu baris per kalimat, diberi indeks dan waktu."""
     lines = []
@@ -175,6 +238,36 @@ def _format_candidates(candidates: list[Candidate], sentences: list[Sentence]) -
 # Jawaban normal untuk transkrip sejam datang dalam 60-100 detik.
 PER_PANGGILAN_MS = 150_000
 BATAS_TOTAL_DETIK = 360
+
+# Jeda sebelum mencoba ulang model yang menjawab "sedang sibuk", dan berapa
+# putaran rantai boleh diulang. Keduanya ada karena 503 dari Gemini berarti
+# "coba lagi nanti", bukan "model ini tidak bisa dipakai".
+JEDA_SIBUK = 20.0
+PUTARAN_SIBUK = 2
+
+
+def _pakai(model: str, resp, pekerjaan: str, *, berhasil: bool = True,
+           sebab: str = "") -> None:
+    """Mencatat pemakaian token satu panggilan. Tidak pernah melempar."""
+    try:
+        from .pemakaian_ai import catat
+        u = getattr(resp, "usage_metadata", None) if resp is not None else None
+        pakai = {"masuk": getattr(u, "prompt_token_count", 0) or 0,
+                 "keluar": getattr(u, "candidates_token_count", 0) or 0,
+                 "berpikir": getattr(u, "thoughts_token_count", 0) or 0} if u else None
+        catat(model=model, pekerjaan=pekerjaan, pakai=pakai,
+              berhasil=berhasil, sebab=sebab)
+    except Exception:
+        pass
+
+
+def _tunggu(detik: float, batal=None) -> None:
+    """Menunggu, tapi tetap bisa dibatalkan setiap setengah detik."""
+    habis = time.monotonic() + detik
+    while time.monotonic() < habis:
+        if batal is not None:
+            batal()
+        time.sleep(min(0.5, habis - time.monotonic()))
 
 
 def refine_candidates(
@@ -217,17 +310,9 @@ def refine_candidates(
         # bila model itu kebetulan sedang penuh atau sudah dipensiunkan.
         models = [model_override] + [m for m in models if m != model_override]
 
-    prompt = (
-        f"Judul video: {video_title}\n\n"
-        f"=== TRANSKRIP ({len(sentences)} kalimat) ===\n"
-        f"{_format_transcript(sentences, max_chars)}\n\n"
-        f"=== KANDIDAT POTONGAN ===\n{_format_candidates(pool, sentences)}\n\n"
-        f"Pilih {max_clips} potongan terbaik (boleh kurang hanya bila videonya "
-        f"memang tidak punya cukup momen yang layak) dan urutkan dari yang paling kuat.\n"
-        f"Batas durasi satu potongan: {max_seconds:.0f} detik. Pastikan setiap "
-        f"potongan lolos uji penonton baru: awalnya bisa dimengerti tanpa "
-        f"konteks sebelumnya, dan akhirnya sampai ke puncak gagasannya."
-    )
+    prompt = _prompt_pilih(sentences=sentences, pool=pool, video_title=video_title,
+                           max_clips=max_clips, max_chars=max_chars,
+                           max_seconds=max_seconds)
 
     config = types.GenerateContentConfig(
         response_mime_type="application/json",
@@ -245,81 +330,169 @@ def refine_candidates(
 
     last_error: Optional[Exception] = None
     failures: list[str] = []
-    for urutan, model_name in enumerate(models):
-        if tanpa_kuota(model_name) and urutan + 1 < len(models):
-            continue
-        for attempt in range(2):
-            if batal is not None:
-                batal()
-            sisa = tenggat - time.monotonic()
-            if sisa <= 5:
-                failures.append(f"batas waktu {BATAS_TOTAL_DETIK} dtk habis")
-                break
-            if kabar is not None:
-                kabar(f"Menunggu jawaban {model_name}"
-                      + (f" (percobaan {attempt + 1})" if attempt else "") + "…")
-            try:
-                resp = client.models.generate_content(
-                    model=model_name, contents=prompt, config=config
-                )
-                text = resp.text or ""
+    # Model yang menjawab "sedang sibuk" tidak dicoret, ia diantre ulang.
+    # Terukur 23 September 2026: empat dari enam model flash menjawab 503
+    # serentak, dan model yang sama menjawab normal setengah menit kemudian.
+    # Sebelum ini satu gelombang sibuk cukup untuk menjatuhkan seluruh rantai
+    # ke mesin lokal, dan pemiliknya tidak pernah tahu sebabnya.
+    antrean = list(models)
+    putaran = 1
+    sibuk_lagi: list[str] = []
+    while antrean:
+        sibuk_lagi = []
+        for urutan, model_name in enumerate(antrean):
+            if tanpa_kuota(model_name) and urutan + 1 < len(antrean):
+                continue
+            for attempt in range(2):
+                if batal is not None:
+                    batal()
+                sisa = tenggat - time.monotonic()
+                if sisa <= 5:
+                    failures.append(f"batas waktu {BATAS_TOTAL_DETIK} dtk habis")
+                    break
+                if kabar is not None:
+                    kabar(f"Menunggu jawaban {model_name}"
+                          + (f" (percobaan {attempt + 1})" if attempt else "") + "…")
                 try:
-                    data = json.loads(text)
-                except json.JSONDecodeError as e:
-                    # Alasan berhenti dan panjang teks membedakan "model salah
-                    # format" dari "model kehabisan token" — dua kegagalan yang
-                    # tanpa ini terlihat sama persis di log.
-                    reason = getattr(
-                        (resp.candidates or [None])[0], "finish_reason", None)
-                    raise ValueError(
-                        f"JSON tidak lengkap ({len(text)} karakter, "
-                        f"finish_reason={reason}): {e}") from e
-                refined = _apply_selections(data, pool, sentences, max_clips,
-                                            max_seconds=max_seconds)
-                if refined:
-                    log.info("Gemini %s memilih %d klip", model_name, len(refined))
-                    return refined, model_name
-                raise ValueError("Gemini tidak mengembalikan satupun kandidat yang dikenal")
-            except Exception as e:
-                last_error = e
-                failures.append(f"{model_name}: {str(e)[:160]}")
-                log.warning("Gemini %s gagal (percobaan %d): %s",
-                            model_name, attempt + 1, str(e)[:200])
-                msg = str(e)
-                berikut = models[urutan + 1] if urutan + 1 < len(models) else None
-                if catat_gagal(model_name, e):
-                    # Kuota nol atau model sudah ditutup: mengulang tidak
-                    # akan pernah berhasil. Pindah model tanpa menunggu.
-                    if kabar is not None and berikut:
-                        kabar(f"{model_name} tidak tersedia untuk kunci ini — mencoba {berikut}…")
-                    break
-                sibuk = any(x in msg for x in ("503", "UNAVAILABLE", "overloaded",
-                                               "high demand", "timed out", "Timeout",
-                                               "timeout", "504", "DEADLINE"))
-                if sibuk:
-                    # Model yang sedang penuh jarang pulih dalam beberapa detik;
-                    # mengulanginya hanya menambah waktu tunggu. Pindah model.
-                    if kabar is not None:
-                        kabar(f"{model_name} sedang sibuk"
-                              + (f" — mencoba {berikut}…" if berikut else "."))
-                    break
-                if "429" in msg or "RESOURCE_EXHAUSTED" in msg:
+                    resp = client.models.generate_content(
+                        model=model_name, contents=prompt, config=config
+                    )
+                    text = resp.text or ""
+                    try:
+                        data = json.loads(text)
+                    except json.JSONDecodeError as e:
+                        # Alasan berhenti dan panjang teks membedakan "model salah
+                        # format" dari "model kehabisan token" — dua kegagalan yang
+                        # tanpa ini terlihat sama persis di log.
+                        reason = getattr(
+                            (resp.candidates or [None])[0], "finish_reason", None)
+                        raise ValueError(
+                            f"JSON tidak lengkap ({len(text)} karakter, "
+                            f"finish_reason={reason}): {e}") from e
+                    refined = _apply_selections(data, pool, sentences, max_clips,
+                                                max_seconds=max_seconds)
+                    if refined:
+                        log.info("Gemini %s memilih %d klip", model_name, len(refined))
+                        # Dicatat supaya percobaan berikutnya mulai dari sini,
+                        # bukan dari model terkuat yang sedang penuh.
+                        catat_berhasil(model_name)
+                        _pakai(model_name, resp, "pilih-klip")
+                        return refined, model_name
+                    raise ValueError("Gemini tidak mengembalikan satupun kandidat yang dikenal")
+                except Exception as e:
+                    last_error = e
+                    failures.append(f"{model_name}: {str(e)[:160]}")
+                    log.warning("Gemini %s gagal (percobaan %d): %s",
+                                model_name, attempt + 1, str(e)[:200])
+                    msg = str(e)
+                    berikut = antrean[urutan + 1] if urutan + 1 < len(antrean) else None
+                    if catat_gagal(model_name, e):
+                        # Kuota nol atau model sudah ditutup: mengulang tidak
+                        # akan pernah berhasil. Pindah model tanpa menunggu.
+                        if kabar is not None and berikut:
+                            kabar(f"{model_name} tidak tersedia untuk kunci ini, mencoba {berikut}…")
+                        break
+                    sibuk = any(x in msg for x in ("503", "UNAVAILABLE", "overloaded",
+                                                   "high demand", "timed out", "Timeout",
+                                                   "timeout", "504", "DEADLINE"))
+                    if sibuk:
+                        # Model yang sedang penuh jarang pulih dalam beberapa detik;
+                        # mengulanginya SEKARANG hanya menambah waktu tunggu. Jadi
+                        # rantainya jalan terus, dan model ini diantre untuk
+                        # putaran berikutnya.
+                        sibuk_lagi.append(model_name)
+                        if kabar is not None:
+                            kabar(f"{model_name} sedang sibuk"
+                                  + (f", mencoba {berikut}…" if berikut else "."))
+                        break
+                    if kuota_habis(e):
+                        # Jatah harian dihitung per MODEL, jadi model berikutnya
+                        # masih punya jatahnya sendiri. Yang tidak berguna cuma
+                        # MENGULANG model ini: percobaan kedua pasti 429 lagi.
+                        catat_habis_harian(model_name, e)
+                        if kabar is not None and berikut:
+                            kabar(f"Jatah harian {model_name} habis, mencoba {berikut}…")
+                        break
+                    if "429" in msg or "RESOURCE_EXHAUSTED" in msg:
+                        if attempt == 0:
+                            time.sleep(3)
+                            continue
+                        break            # kuota NOL -> model berikutnya
+                    if "404" in msg or "NOT_FOUND" in msg:
+                        break            # model tidak ada -> model berikutnya
                     if attempt == 0:
-                        time.sleep(3)
+                        config.temperature = 0.1
                         continue
-                    break            # kuota habis -> model berikutnya
-                if "404" in msg or "NOT_FOUND" in msg:
-                    break            # model tidak ada -> model berikutnya
-                if attempt == 0:
-                    config.temperature = 0.1
-                    continue
-                break
+                    break
+
+        # Satu putaran ulang khusus model yang tadi sibuk, selama waktunya
+        # masih cukup untuk benar-benar mencoba.
+        sisa = tenggat - time.monotonic()
+        if not (sibuk_lagi and putaran < PUTARAN_SIBUK and sisa > JEDA_SIBUK + 40):
+            break
+        if kabar is not None:
+            kabar(f"Semua model sedang sibuk. Menunggu {JEDA_SIBUK:.0f} detik, "
+                  f"lalu mencoba {sibuk_lagi[0]} lagi…")
+        _tunggu(JEDA_SIBUK, batal)
+        antrean, putaran = sibuk_lagi, putaran + 1
 
     # Seluruh riwayat kegagalan dilaporkan, bukan hanya yang terakhir. Model
-    # terakhir dalam rantai biasanya yang paling tidak menarik penyebabnya —
+    # terakhir dalam rantai biasanya yang paling tidak menarik penyebabnya:
     # kegagalan model PERTAMA-lah yang menjelaskan apa yang sebenarnya salah.
-    raise RuntimeError("Semua model Gemini gagal — " + " | ".join(failures)
+    raise RuntimeError("Semua model Gemini gagal. " + " | ".join(failures)
                        or f"Semua model Gemini gagal: {last_error}")
+
+
+def refine_openrouter(
+    *,
+    sentences: list[Sentence],
+    candidates: list[Candidate],
+    video_title: str,
+    max_clips: int = 8,
+    max_chars: int = 350000,
+    shortlist: int = 25,
+    max_seconds: float = 80.0,
+    kabar=None,
+    batal=None,
+) -> tuple[list[Candidate], Optional[str]]:
+    """
+    Pemilihan klip lewat OpenRouter, saat SELURUH model Gemini tidak menjawab.
+
+    Ada karena hari seperti 23 September 2026: enam dari enam model Gemini
+    menjawab 503 sepanjang hari, tiga kali auto-klip berturut-turut jatuh ke
+    mesin lokal, dan yang dilihat pemiliknya cuma daftar klip yang tidak
+    menarik. Mesin lokal menemukan momen yang terukur keras dan berjeda tepat;
+    ia tidak bisa menilai apakah sebuah momen LUCU atau mengejutkan, dan
+    perbedaan itulah yang dirasakan.
+
+    Cadangannya sudah ada di aplikasi untuk sutradara bingkai, tapi tidak
+    pernah disambungkan ke pemilihan klip. Sekarang disambungkan, memakai
+    permintaan dan skema yang sama persis, jadi tidak ada jalur kedua yang
+    bisa berbeda diam-diam.
+    """
+    from . import openrouter
+
+    if not openrouter.aktif():
+        raise RuntimeError("Kunci OpenRouter belum diisi.")
+    models = openrouter.rantai_teks()
+    if not models:
+        raise RuntimeError("Tidak ada model OpenRouter berjendela cukup besar.")
+
+    pool = candidates[:shortlist]
+    prompt = _prompt_pilih(sentences=sentences, pool=pool, video_title=video_title,
+                           max_clips=max_clips, max_chars=max_chars,
+                           max_seconds=max_seconds)
+    data, model_name, _ = openrouter.tanya(
+        [{"teks": prompt}], skema=_skema_polos(), sistem=SYSTEM_ID,
+        api_key=openrouter.kunci(), models=models, suhu=0.4,
+        maks_keluaran=min(32768, 6144 + max_clips * 800),
+        kabar=kabar, batal=batal)
+    refined = _apply_selections(data, pool, sentences, max_clips,
+                                max_seconds=max_seconds)
+    if not refined:
+        raise RuntimeError("OpenRouter tidak mengembalikan satupun kandidat yang dikenal")
+    log.info("OpenRouter %s memilih %d klip", model_name, len(refined))
+    return refined, model_name
 
 
 def _apply_selections(data: dict, pool: list[Candidate],
@@ -416,8 +589,10 @@ def _apply_selections(data: dict, pool: list[Candidate],
         )
         # Alasan tulisan model disimpan terpisah dari reason_keys yang terukur,
         # supaya UI bisa membedakan mana yang dihitung dan mana yang ditulis AI.
-        cand.gemini_reason = reason[:200]           # type: ignore[attr-defined]
-        cand.suggested_title = (sel.get("suggested_title") or "").strip()[:120]  # type: ignore[attr-defined]
+        cand.gemini_reason = tanpa_pisah(reason)[:200]   # type: ignore[attr-defined]
+        # Tanda pisah panjang dibuang, bukan sekadar dilarang di prompt: satu
+        # em dash cukup membuat judulnya terbaca sebagai tulisan mesin.
+        cand.suggested_title = tanpa_pisah(sel.get("suggested_title") or "")[:120]  # type: ignore[attr-defined]
         cand.hashtags = [h for h in (sel.get("hashtags") or []) if isinstance(h, str)][:8]  # type: ignore[attr-defined]
         out.append(cand)
         if len(out) >= max_clips:
@@ -435,13 +610,13 @@ tengah ucapan.
 
 Periksa dua hal saja:
 
-1. AWAL — bisakah penonton yang belum pernah melihat video ini memahami
+1. AWAL, bisakah penonton yang belum pernah melihat video ini memahami
    kalimat pertama? Bila kalimat pertama menjawab pertanyaan yang tidak ikut,
    melanjutkan cerita yang awalnya tidak ikut, atau memakai "itu/dia/gitu/
    terus/makanya" yang merujuk ke belakang, mundurkan start_sentence ke tempat
    topiknya dimulai. Bila awalnya berisi basa-basi yang tidak perlu, majukan.
 
-2. AKHIR — apakah potongan berhenti setelah puncaknya (jawaban, punchline,
+2. AKHIR, apakah potongan berhenti setelah puncaknya (jawaban, punchline,
    kesimpulan)? Bila berhenti di tengah ucapan (misalnya berakhir dengan
    "kalau", "yang", "tapi", "terus") atau sebelum intinya keluar, majukan
    end_sentence. Bila setelah puncaknya masih ada obrolan yang tidak perlu,
@@ -515,7 +690,7 @@ def rapikan_batas(
             mm, ss = divmod(int(sentences[idx]["s"]), 60)
             baris.append(f"[{idx}] {mm}:{ss:02d} {sentences[idx]['text'][:220]}")
         bagian.append(
-            f"=== POTONGAN {k} — sekarang kalimat {i}-{j - 1} "
+            f"=== POTONGAN {k}, sekarang kalimat {i}-{j - 1} "
             f"({c.end - c.start:.0f} detik) ===\n" + "\n".join(baris))
     prompt = ("\n\n".join(bagian)
               + f"\n\nPeriksa awal dan akhir setiap potongan (nomor 0-{len(candidates) - 1}). "
@@ -551,7 +726,7 @@ def rapikan_batas(
             gagal.append(f"{model_name}: {str(e)[:120]}")
             log.warning("Pemeriksaan batas gagal di %s: %s", model_name, str(e)[:200])
     if data is None:
-        raise RuntimeError("Pemeriksaan batas gagal — " + " | ".join(gagal))
+        raise RuntimeError("Pemeriksaan batas gagal, " + " | ".join(gagal))
 
     lama = [(c.start, c.end, c.sentence_span, c.text) for c in candidates]
     berubah = 0
@@ -698,7 +873,7 @@ def rewrite_titles(
                 idx = int(row["index"])
             except (KeyError, TypeError, ValueError):
                 continue
-            judul = str(row.get("title") or "").strip().strip('"')[:100]
+            judul = tanpa_pisah(str(row.get("title") or "").strip().strip('"'))[:100]
             tags = normalize_hashtags(row.get("hashtags") or [])
             if judul:
                 out[idx] = {"title": judul, "hashtags": tags}

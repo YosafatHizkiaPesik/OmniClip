@@ -14,11 +14,14 @@ permintaan yang tidak pernah dijawab menahan pekerjaan selamanya.
 """
 
 import json
+import contextvars
 import logging
+from contextlib import contextmanager
 import time
 from typing import Callable, Optional
 
-from .peringkat_model import catat_gagal, tanpa_kuota
+from .peringkat_model import (catat_gagal, catat_habis_harian, kuota_habis,
+                              tanpa_kuota)
 
 log = logging.getLogger("omniclip.penyedia")
 
@@ -29,11 +32,41 @@ _SIBUK = ("503", "UNAVAILABLE", "overloaded", "high demand", "timed out",
           "Timeout", "timeout", "504", "DEADLINE")
 
 
+# Pekerjaan yang sedang berjalan, supaya catatan pemakaian tahu panggilan ini
+# untuk apa dan untuk video mana. Sebuah variabel konteks, bukan argumen, karena
+# jalur panggilannya melewati enam lapis yang tidak satu pun peduli soal ini.
+_pekerjaan: contextvars.ContextVar = contextvars.ContextVar(
+    "pekerjaan_ai", default=("ai", None))
+
+
+@contextmanager
+def pekerjaan(nama: str, video_id=None):
+    """
+    Menandai panggilan AI di dalam blok ini sebagai milik pekerjaan `nama`.
+
+    Dipakai pemanggil paling luar, supaya catatan pemakaian bisa menjawab
+    "token habis untuk apa" tanpa tiap lapis di antaranya harus meneruskan
+    argumen yang tidak ada urusannya dengan pekerjaannya sendiri.
+    """
+    token = _pekerjaan.set((nama, video_id))
+    try:
+        yield
+    finally:
+        _pekerjaan.reset(token)
+
+
+def _catat(model, pakai, *, berhasil: bool, sebab: str = "") -> None:
+    from .pemakaian_ai import catat
+    nama, vid = _pekerjaan.get()
+    catat(model=model, pekerjaan=nama, video_id=vid, pakai=pakai,
+          berhasil=berhasil, sebab=sebab)
+
+
 class SemuaGagal(RuntimeError):
     """Tidak satu model pun menjawab dengan benar. `.rincian` berisi alasannya."""
 
     def __init__(self, rincian: list[str]):
-        super().__init__("Semua model gagal — " + " | ".join(rincian))
+        super().__init__("Semua model gagal, " + " | ".join(rincian))
         self.rincian = rincian
 
 
@@ -108,18 +141,28 @@ def tanya_gemini(bahan: list[dict], *, schema, sistem: str, api_key: str,
                          "berpikir": getattr(u, "thoughts_token_count", None)}
                 log.info("%s menjawab: %s token masuk, %s keluar", model,
                          pakai["masuk"], pakai["keluar"])
+                _catat(model, pakai, berhasil=True)
                 return data, model, pakai
             except Exception as e:
                 pesan = str(e)
+                _catat(model, None, berhasil=False, sebab=pesan)
                 gagal.append(f"{model}: {pesan[:140]}")
                 log.warning("%s gagal (percobaan %d): %s", model, percobaan + 1, pesan[:200])
                 if catat_gagal(model, e):
                     if kabar is not None and berikut:
-                        kabar(f"{model} tidak tersedia untuk kunci ini — mencoba {berikut}…")
+                        kabar(f"{model} tidak tersedia untuk kunci ini, mencoba {berikut}…")
                     break
                 if any(x in pesan for x in _SIBUK):
                     if kabar is not None:
-                        kabar(f"{model} sedang sibuk" + (f" — mencoba {berikut}…" if berikut else "."))
+                        kabar(f"{model} sedang sibuk" + (f", mencoba {berikut}…" if berikut else "."))
+                    break
+                if kuota_habis(e):
+                    # Jatah harian dihitung per MODEL: yang berikutnya masih
+                    # punya jatahnya sendiri. Yang percuma cuma mengulang model
+                    # yang sama.
+                    catat_habis_harian(model, e)
+                    if kabar is not None and berikut:
+                        kabar(f"Jatah harian {model} habis, mencoba {berikut}…")
                     break
                 if "429" in pesan or "RESOURCE_EXHAUSTED" in pesan:
                     if percobaan == 0:
@@ -173,7 +216,7 @@ def tanya(bahan: list[dict], *, schema, sistem: str, api_key: str,
     if batal is not None:
         batal()
     if kabar is not None:
-        kabar("Gemini tidak bisa dipakai — mencoba OpenRouter…")
+        kabar("Gemini tidak bisa dipakai, mencoba OpenRouter…")
     try:
         return openrouter.tanya(
             bahan, skema=schema, sistem=sistem, api_key=kunci_or,

@@ -70,20 +70,27 @@ export default function OpenRouterCard({ card, sectionTitle, helpText }) {
     }
   };
 
-  const daftar = info?.tersedia || [];
+  // Daftar model hanya muncul setelah kuncinya ada. Memilih model tanpa kunci
+  // tidak mengubah apa pun, dan menu yang tidak berpengaruh membuat orang
+  // mengira cadangannya sudah menyala.
+  const daftar = info?.openrouter_key_set ? (info?.tersedia || []) : [];
   return (
     <div style={card}>
       <div style={sectionTitle}>
         <LifeBuoy size={18} style={{ color: 'var(--reh)' }} />
-        Sutradara bingkai: cadangan dan otomatis
+        Cadangan bila Gemini tidak bisa dipakai
       </div>
       <p style={helpText}>
-        Opsional. Kuota gratis Gemini terbatas per hari, dan begitu habis sutradara
-        bingkai berhenti sampai besok. Dengan kunci{' '}
+        Opsional, tapi ini yang menyelamatkan hari buruk. Kuota gratis Gemini
+        terbatas per hari, dan servernya sendiri bisa menjawab "sedang sibuk"
+        berjam-jam. Saat itu terjadi, <strong>pemilihan klip</strong> dan{' '}
+        <strong>penyusunan bingkai</strong> jatuh ke mesin lokal: momennya tetap
+        ditemukan, tapi tidak ada yang menilai apakah momen itu lucu atau
+        mengejutkan, dan daftar klipnya terasa datar. Dengan kunci{' '}
         <a href="https://openrouter.ai/keys" target="_blank" rel="noreferrer"
            style={{ color: 'var(--reh)' }}>openrouter.ai</a>{' '}
-        OmniClip pindah sendiri ke model gratis di sana dan pekerjaannya jalan terus.
-        Gemini tetap yang dipakai lebih dulu selama masih bisa.
+        OmniClip pindah sendiri ke model gratis di sana. Gemini tetap yang
+        dicoba lebih dulu selama masih bisa.
       </p>
 
       {info && (
@@ -96,7 +103,7 @@ export default function OpenRouterCard({ card, sectionTitle, helpText }) {
           ) : (
             <>
               <Info size={15} style={{ color: 'var(--text-muted)' }} />
-              Belum diisi — saat kuota Gemini habis, bingkai disusun mesin lokal.
+              Belum diisi. Saat Gemini sibuk atau kuotanya habis, pemilihan klip dan penyusunan bingkai jatuh ke mesin lokal.
             </>
           )}
         </div>
@@ -156,11 +163,11 @@ export default function OpenRouterCard({ card, sectionTitle, helpText }) {
                     background: 'transparent', color: 'var(--ink)',
                   }}>
             <option value="">
-              Otomatis — yang paling cocok{info?.terkuat ? ` (sekarang ${info.terkuat})` : ''}
+              Otomatis (yang paling cocok){info?.terkuat ? ` (sekarang ${info.terkuat})` : ''}
             </option>
             {daftar.map((m) => (
               <option key={m.id} value={m.id}>
-                {m.id}{m.video ? ' — bisa menonton video' : ' — hanya gambar'}{m.suara ? ' + suara' : ''}
+                {m.id}{m.video ? ' · bisa menonton video' : ' · hanya gambar'}{m.suara ? ' + suara' : ''}
               </option>
             ))}
           </select>

@@ -38,6 +38,12 @@ OmniClip_Storage/*.db-shm
 # riwayat git, termasuk bila repo ini nanti dijadikan publik.
 OmniClip_Storage/google_client_secret.json
 OmniClip_Storage/google_token.json
+# Token per profil. Sejak tiap profil boleh menyambungkan akun Google-nya
+# sendiri, token penyegarnya tidak lagi tinggal di satu berkas di atas
+# melainkan di OmniClip_Storage/akun/<nomor profil>/google_token*.json.
+# Aturan yang sama berlaku: satu berkas ini cukup untuk mengunggah ke kanal
+# YouTube pemiliknya tanpa kata sandi apa pun.
+OmniClip_Storage/akun/
 !OmniClip_Storage/**/.gitkeep
 backend/models/campplus_sv.onnx
 # Pengenal wajah SFace: 37 MB. Yang membuat nomor orang menunjuk ORANG dan
@@ -88,3 +94,8 @@ OmniClip_Storage/fonts/
 
 # Cadangan basis data (services/pemeliharaan.py) — puluhan MB per berkas.
 OmniClip_Storage/cadangan/
+
+# Rekaman layar yang dipakai untuk melaporkan cacat. Berguna saat dilaporkan,
+# tidak berguna di dalam riwayat, dan ukurannya puluhan megabita.
+simplescreenrecorder-*.mkv
+*.mkv
