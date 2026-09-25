@@ -346,7 +346,17 @@ def slugify(text: str) -> str:
 # jadi kecil dengan lubang kosong besar di bawahnya, dan yang dilaporkan
 # pemiliknya adalah "tidak full klipnya". Subtitle memang lebih baik duduk di
 # atas gambar daripada di atas kekosongan.
-GAMING_WAJAH_TINGGI = 40.0
+# Tinggi bidang WAJAH sebagai persen kanvas. Sisanya untuk permainannya.
+#
+# Turun dari 40 ke 32 pada 25 September 2026 atas permintaan pemiliknya:
+# "adjust lagi agar tampilan game lebih besar daripada reaksi". Pada 40 kedua
+# bidang nyaris sama besar, dan yang sebenarnya jadi isi klip justru
+# permainannya; wajah pemain di situ adalah reaksi, bukan subjek.
+#
+# 32 memberi permainan 68% kanvas. Batas bawahnya tetap dijaga oleh
+# `tinggi_wajah_otomatis`: kalau kotak reaksi tidak muat di panel sependek itu,
+# ia naik sendiri sampai muat.
+GAMING_WAJAH_TINGGI = 32.0
 
 
 def rasio_bidang_wajah(out_w: int, out_h: int) -> float:
@@ -395,7 +405,10 @@ KEPALA_ATAS = 0.35
 KEPALA_BAWAH = 0.22
 KEPALA_SAMPING = 0.25
 # Batas tinggi bidang wajah otomatis, persen kanvas.
-GAMING_WAJAH_MIN, GAMING_WAJAH_MAKS = 40.0, 50.0
+# Rentang yang boleh dipilih `tinggi_wajah_otomatis`. Batas bawah turun
+# bersama GAMING_WAJAH_TINGGI; batas atas tetap, karena ia yang menyelamatkan
+# facecam yang bentuknya tinggi dan tidak muat di bidang pendek.
+GAMING_WAJAH_MIN, GAMING_WAJAH_MAKS = 30.0, 50.0
 # Porsi kotak reaksi yang boleh berada di luar panel facecam (berisi permainan).
 REAKSI_LUAR_MAKS = 0.08
 # Geser potongan permainan sejauh ini (persen) demi menghindari seluruh panel

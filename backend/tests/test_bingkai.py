@@ -78,12 +78,31 @@ class GeometriGaming(unittest.TestCase):
                 self.assertGreaterEqual(f["src"][sisi], -0.001)
 
     def test_tinggi_panel_wajah_dijaga_di_rentang_yang_masuk_akal(self):
-        # Panel wajah yang terlalu pendek memotong dagu, yang terlalu tinggi
-        # menyisakan sedikit ruang untuk permainannya.
+        """
+        Panel wajah yang terlalu pendek memotong dagu, yang terlalu tinggi
+        menyisakan sedikit ruang untuk permainannya.
+
+        Batas bawahnya turun dari 40 ke 30 pada 25 September 2026, atas
+        permintaan pemiliknya: "adjust lagi agar tampilan game lebih besar
+        daripada reaksi". Yang jadi isi klip memang permainannya; wajah pemain
+        di situ reaksi, bukan subjek. Yang menjaga agar tidak terlalu pendek
+        bukan angka ini melainkan `tinggi_wajah_otomatis` sendiri, yang naik
+        lagi begitu kotak reaksinya tidak muat.
+        """
+        from app.services.render import GAMING_WAJAH_MAKS, GAMING_WAJAH_MIN
         posisi = [{"facecam": dict(self.FACECAM, awan_kotak=None)}]
         n = tinggi_wajah_otomatis(posisi, 1920 / 1080, 1080, 1920)
-        self.assertGreaterEqual(n, 40.0)
-        self.assertLessEqual(n, 50.0)
+        self.assertGreaterEqual(n, GAMING_WAJAH_MIN)
+        self.assertLessEqual(n, GAMING_WAJAH_MAKS)
+
+    def test_permainan_dapat_bagian_lebih_besar_daripada_wajah(self):
+        """Inti permintaannya, dinyatakan sebagai angka: wajah di bawah separuh."""
+        from app.services.render import GAMING_WAJAH_MAKS, GAMING_WAJAH_TINGGI
+        self.assertLess(GAMING_WAJAH_TINGGI, 50.0)
+        # Dan bawaannya jelas lebih kecil daripada bagian permainannya.
+        self.assertLess(GAMING_WAJAH_TINGGI, 100 - GAMING_WAJAH_TINGGI)
+        # Batas atas tetap ada untuk facecam bentuk tinggi yang tidak muat.
+        self.assertGreaterEqual(GAMING_WAJAH_MAKS, 50.0)
 
     def test_kotak_reaksi_tetap_di_dalam_gambar(self):
         r = kotak_reaksi(self.FACECAM, None, 1080 / (1920 * 0.45), 1920 / 1080)

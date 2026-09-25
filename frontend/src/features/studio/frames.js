@@ -674,7 +674,10 @@ export function withoutFrameKey(keys, index) {
 // Cermin `render.susun_layout_gaming` di server. Keduanya harus menghitung hal
 // yang sama, karena yang disetel di sini dikirim apa adanya ke render.
 
-export const GAMING_WAJAH_BAWAAN = 40;
+// Cermin `GAMING_WAJAH_TINGGI` di render.py. Turun dari 40 ke 32 supaya
+// permainannya lebih besar daripada reaksinya: yang jadi isi klip adalah
+// permainannya, dan wajah pemain di situ reaksi, bukan subjek.
+export const GAMING_WAJAH_BAWAAN = 32;
 const RASIO_KELUARAN = { '9:16': 9 / 16, '1:1': 1, '4:5': 4 / 5, '16:9': 16 / 9 };
 
 export function rasioKeluaran(aspectRatio) {

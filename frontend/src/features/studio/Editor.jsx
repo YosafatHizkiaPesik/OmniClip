@@ -664,6 +664,29 @@ export default function Editor({ project, onBack }) {
     return n;
   }, [selected?.frame_keys]);
   const posisiTukarRef = useRef(null);
+  // Pemanasan bingkai dijalankan sendiri saat proyek DIBUKA, bukan hanya
+  // sesudah auto-klip.
+  //
+  // Diminta 25 September 2026: "saya lebih suka menunggu di awal, tapi tidak
+  // terlalu lama, agar bisa langsung melihat bingkai yang tersusun". Video
+  // yang diklip sebelum sakelarnya ada, atau yang pemanasannya gagal, dulu
+  // tidak punya jalan selain menunggu per klip selamanya. Server menolak
+  // duplikat lewat dedupe_key, jadi membukanya berkali-kali tidak menumpuk
+  // pekerjaan.
+  const pemanasanDimintaRef = useRef(null);
+  useEffect(() => {
+    if (!videoId || !data?.clips?.length || pemanasanDimintaRef.current === videoId) return;
+    pemanasanDimintaRef.current = videoId;
+    let batal = false;
+    apiGet('/settings')
+      .then((r) => {
+        if (batal || r?.pemanasan_bingkai === false) return null;
+        return apiPost(`/projects/${videoId}/siapkan-bingkai`, {});
+      })
+      .catch(() => { /* pemanasan yang gagal diantre bukan kegagalan halaman */ });
+    return () => { batal = true; };
+  }, [videoId, data?.clips?.length]);
+
   useEffect(() => {
     if (!videoId || !data?.pratinjau_disiapkan) return undefined;
     let batal = false;
@@ -1419,14 +1442,46 @@ export default function Editor({ project, onBack }) {
           kabar({ status: 'done', progress: 1, eta: null,
                   message: `Tersimpan di folder klip · bingkai ${mode}` });
 
-          // Unggahan diantrekan SERVER sesudah render (services/unggah.py);
-          // di sini hanya diberitakan.
-          const antre = (job.result.unggahan ?? []).filter((u) => u.job_id)
-            .map((u) => (u.target === 'youtube' ? 'YouTube' : 'Drive'));
+          // Unggahan diantrekan SERVER sesudah render (services/unggah.py).
+          //
+          // Dulu berhenti di kata "antre", dan tidak pernah ada kabar
+          // sesudahnya. Terlapor 25 September 2026: kotak YouTube dicentang,
+          // klipnya BERHASIL naik, dan pemiliknya tidak tahu sama sekali.
+          // Sekarang tiap unggahan diikuti sampai selesai, dan hasilnya
+          // dikatakan, berhasil maupun gagal.
+          const unggahan = (job.result.unggahan ?? []).filter((u) => u.job_id);
           const galatUnggah = (job.result.unggahan ?? []).find((u) => u.galat);
-          if (antre.length || galatUnggah) {
+          if (unggahan.length) {
+            const nama = (t) => (t === 'youtube' ? 'YouTube' : 'Drive');
             setExportLog((l) => l.map((e) => (e.name === name
-              ? { ...e, message: `${e.message} · ${antre.length ? `antre ke ${antre.join(' & ')}` : galatUnggah.galat}` }
+              ? { ...e, message: `${e.message} · mengunggah ke ${unggahan.map((u) => nama(u.target)).join(' & ')}…` }
+              : e)));
+            // Tidak ditunggu dengan `await`: render klip berikutnya jalan
+            // terus, dan kabar unggahan menyusul ke barisnya sendiri.
+            Promise.all(unggahan.map(async (u) => {
+              try {
+                const j = await waitForJob(u.job_id, {});
+                return { t: nama(u.target),
+                         ok: j.status === 'done',
+                         pesan: j.status === 'done' ? '' : (j.error || 'gagal') };
+              } catch (err) {
+                return { t: nama(u.target), ok: false, pesan: err.message };
+              }
+            })).then((hasil) => {
+              const naik = hasil.filter((h) => h.ok).map((h) => h.t);
+              const gagal = hasil.filter((h) => !h.ok);
+              const kata = [
+                naik.length ? `terunggah ke ${naik.join(' & ')}` : '',
+                ...gagal.map((h) => `${h.t} gagal: ${h.pesan}`),
+              ].filter(Boolean).join(' · ');
+              setExportLog((l) => l.map((e) => (e.name === name
+                ? { ...e, message: `${e.message.split(' · mengunggah')[0]} · ${kata}`,
+                    unggahGagal: gagal.length > 0 }
+                : e)));
+            });
+          } else if (galatUnggah) {
+            setExportLog((l) => l.map((e) => (e.name === name
+              ? { ...e, message: `${e.message} · ${galatUnggah.galat}`, unggahGagal: true }
               : e)));
           }
         } else {
@@ -1690,7 +1745,10 @@ export default function Editor({ project, onBack }) {
                 <div key={e.name} style={{ fontSize: '.8rem' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
                     {e.status === 'running' && <Loader2 size={13} className="animate-spin" style={{ color: 'var(--reh)' }} />}
-                    {e.status === 'done' && <CheckCircle2 size={13} style={{ color: 'var(--entry)' }} />}
+                    {e.status === 'done' && !e.unggahGagal
+                      && <CheckCircle2 size={13} style={{ color: 'var(--entry)' }} />}
+                    {e.status === 'done' && e.unggahGagal
+                      && <AlertTriangle size={13} style={{ color: 'var(--danger)' }} />}
                     {e.status === 'failed' && <AlertTriangle size={13} style={{ color: 'var(--danger)' }} />}
                     <b style={{ minWidth: '64px' }}>{e.urut}{e.name}</b>
                     <span style={{ color: 'var(--ink-2)' }}>
