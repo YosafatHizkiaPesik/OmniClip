@@ -48,8 +48,24 @@ LEBAR = 1280
 LEBAR_PUTAR = 1600
 # Di atas lebar ini, mendekode sumbernya lebih mahal daripada mendekode salinan.
 AMBANG_LEBAR = 1280
-# Inti yang boleh dipakai. Sisanya untuk apa pun yang sedang ditunggu pengguna.
+# Inti yang boleh dipakai saat salinan dibuat DI LATAR, tanpa ada yang
+# menunggunya. Sisanya untuk apa pun yang sedang ditunggu pengguna.
 INTI = 2
+INTI_DITUNGGU = 4
+# Inti saat Studio JUSTRU SEDANG MENUNGGU salinan itu. Di situ ia bukan lagi
+# pekerjaan latar: ia adalah yang ditunggu, dan menahannya di dua inti berarti
+# menahan pemiliknya.
+#
+# Terukur pada gameplay 2560x1440 VP9 60 fps, per 30 detik sumber, dengan
+# enkoder kartu grafis dan 30 fps:
+#
+#   2 inti  13,9 detik   -> 49 menit untuk video 1 jam 45 menit
+#   4 inti  10,5 detik   -> 37 menit
+#   6 inti  10,2 detik   -> 35 menit
+#   8 inti  10,3 detik   -> 36 menit
+#
+# Jenuh di empat, jadi empat. Mengambil seluruh inti tidak membuatnya lebih
+# cepat dan hanya membuat sisa aplikasi tersendat.
 
 _antrean: "queue.Queue[Path]" = queue.Queue()
 _diantre: set[str] = set()
@@ -115,15 +131,67 @@ def _ambil_kunci(tujuan: Path) -> bool:
     return False
 
 
+# Mutu salinan pratinjau, dalam satuan qp/crf. Lebih longgar daripada mutu
+# render, dan memang harus: `enkoder.pilih()` menyetel qp 19 karena yang ia
+# layani adalah video yang akan diterbitkan. Salinan ini cuma ditonton di
+# editor dan dibaca pelacak wajah. Terukur pada gameplay 1440p: qp 19 memakan
+# 13,9 detik per 30 detik sumber dan menghasilkan 17 MB; qp 26 memakan 10,3
+# detik dan 6 MB, dengan wajah yang sama jelasnya di layar editor.
+QP_PROKSI = "26"
+
+
+def _mutu_proksi(video: list[str]) -> list[str]:
+    """Menukar angka mutu enkoder dengan mutu salinan. Daftar kosong dibiarkan."""
+    keluar = list(video)
+    for i, arg in enumerate(keluar[:-1]):
+        if arg in ("-qp", "-crf", "-cq", "-global_quality"):
+            keluar[i + 1] = QP_PROKSI
+    return keluar
+
+
 def _buat(src: Path, tujuan: Path) -> None:
     from .proses import jalankan
 
     if tujuan.is_file() or not _ambil_kunci(tujuan):
         return
     sementara = tujuan.with_suffix(".tmp.mp4")
+    # Kartu grafis dipakai bila ada, dan itu bukan sekadar optimasi di sini.
+    #
+    # Terukur 25 September 2026 pada gameplay 2560x1440 VP9 60 fps sepanjang
+    # 1 jam 45 menit, per 30 detik sumber:
+    #
+    #   dekode saja (batas bawah)                    5,9 detik
+    #   seperti dulu: 1600p 60 fps x264 veryfast    17,5 detik  -> 62 menit
+    #   1600p 30 fps x264 veryfast                  14,2 detik
+    #   1600p 30 fps x264 ultrafast                 10,4 detik  (berkas 2x besar)
+    #   1600p 30 fps vaapi                          10,3 detik  (berkas tetap kecil)
+    #
+    # Jadi 30 fps plus enkoder kartu grafis: 41% lebih cepat tanpa membesarkan
+    # berkasnya. Enam puluh dua menit jadi sekitar tiga puluh tujuh, dan itu
+    # yang dilaporkan sebagai "loading terus tidak selesai-selesai".
+    #
+    # 30 fps aman: salinan ini ditonton di editor dan dibaca analisis pada 8
+    # sampel per detik, dan tidak satu pun dari keduanya butuh 60.
+    with _kunci:
+        buru = str(src) in _diburu
+    inti = INTI_DITUNGGU if buru else INTI
+
+    from .enkoder import pilih as _enkoder
+    try:
+        enk = _enkoder()
+    except Exception:                                # noqa: BLE001
+        enk = {}
+    global_gpu = list(enk.get("global") or [])
+    saring_gpu = enk.get("saring") or ""
+    video_gpu = _mutu_proksi(list(enk.get("video") or []))
+
+    saring = f"scale={_lebar_untuk(src)}:-2,fps={FPS_PROKSI}"
+    if saring_gpu:
+        saring += "," + saring_gpu
     cmd = ["ffmpeg", "-y", "-hide_banner", "-nostdin", "-loglevel", "error",
-           "-threads", str(INTI), "-i", str(src),
-           "-vf", f"scale={_lebar_untuk(src)}:-2",
+           *global_gpu,
+           "-threads", str(inti), "-i", str(src),
+           "-vf", saring,
            # Suara ikut: salinan ini juga yang diputar Studio. Firefox
            # memutar sumber 4K VP9 pada 0,44x kecepatan — terlihat macet atau
            # hitam (terukur 21 September 2026).
@@ -134,8 +202,8 @@ def _buat(src: Path, tujuan: Path) -> None:
            # berubah. Pada crf 30 salinan 1280x720 keluar di 322 kbit/detik,
            # dan wajah di Studio terlihat berbintik dan pudar dibanding
            # sumbernya — dilaporkan sebagai "kualitas videonya jelek".
-           "-c:v", "libx264", "-preset", "veryfast", "-crf", "26",
-           "-threads", str(INTI),
+           *(video_gpu or ["-c:v", "libx264", "-preset", "veryfast", "-crf", "26"]),
+           "-threads", str(inti),
            # Keyframe tiap detik: analisis selalu melompat ke tengah video.
            "-g", "30", "-keyint_min", "30",
            # Kemajuan ditulis ke berkas, bukan dibaca dari stderr.
@@ -149,9 +217,8 @@ def _buat(src: Path, tujuan: Path) -> None:
            "-progress", str(sementara.with_suffix(".kemajuan")),
            str(sementara)]
     try:
-        log.info("Membuat salinan analisis: %s", src.name)
-        with _kunci:
-            buru = str(src) in _diburu
+        log.info("Membuat salinan analisis: %s (%d inti%s)", src.name, inti,
+                 ", ditunggu Studio" if buru else "")
         hasil = jalankan(cmd, rendah=not buru)
         if hasil.returncode == 0 and sementara.is_file():
             sementara.replace(tujuan)
@@ -327,6 +394,12 @@ def untuk_pratinjau(src: Path) -> Path | None:
 AMBANG_PUTAR = 1920
 # Codec yang mahal didekode peramban. Terukur 21 September 2026: Firefox
 # memutar sumber 4K VP9 pada 0,44x kecepatan, terlihat macet atau hitam.
+# Laju bingkai salinan. Sumber 60 fps disalin jadi 30: yang menontonnya adalah
+# editor, dan yang membacanya adalah analisis pada 8 sampel per detik. Tidak
+# satu pun dari keduanya butuh 60, sementara mengencode 60 memakan dua kali
+# lipat kerja.
+FPS_PROKSI = 30
+
 CODEC_BERAT = {"vp9", "av1", "av01", "hevc", "h265"}
 
 

@@ -424,3 +424,61 @@ class KemajuanSalinanPratinjau(unittest.TestCase):
         self.assertIn('"-progress", str(sementara.with_suffix(".kemajuan"))', sumber)
         # Dan dibersihkan sesudahnya, kalau tidak ia tertinggal selamanya.
         self.assertIn('sementara.with_suffix(".kemajuan").unlink(missing_ok=True)', sumber)
+
+
+class SalinanPratinjauYangTidakMenahanPemiliknya(unittest.TestCase):
+    """
+    "Loading terus tidak selesai-selesai sehingga mengganggu proses klipping",
+    dilaporkan 25 September 2026 pada gameplay 2560x1440 VP9 60 fps sepanjang
+    1 jam 45 menit. Salinannya memang selesai, setelah SATU SETENGAH JAM.
+
+    Diukur per 30 detik sumber, dan angkanya yang menentukan ketiga perubahan
+    di bawah:
+
+        dekode saja, batas bawah                      5,9 detik
+        seperti dulu: 1600p 60 fps x264 veryfast, 2 inti   17,5 detik
+        1600p 30 fps, enkoder kartu grafis, 2 inti        13,9 detik
+        1600p 30 fps, enkoder kartu grafis, 4 inti        10,5 detik
+
+    62 menit jadi sekitar 37.
+    """
+
+    def test_laju_bingkai_diturunkan(self):
+        """
+        Salinan ini ditonton di editor dan dibaca analisis pada 8 sampel per
+        detik. Tidak satu pun butuh 60 fps, dan 60 memakan dua kali kerja.
+        """
+        from app.services.proksi import FPS_PROKSI
+        self.assertEqual(FPS_PROKSI, 30)
+
+    def test_inti_lebih_banyak_saat_studio_menunggu(self):
+        """
+        Dua inti benar untuk pekerjaan latar. Begitu Studio menunggunya, ia
+        BUKAN lagi pekerjaan latar, dan menahannya di dua inti berarti menahan
+        pemiliknya. Jenuh di empat, jadi empat, bukan seluruhnya.
+        """
+        from app.services.proksi import INTI, INTI_DITUNGGU
+        self.assertGreater(INTI_DITUNGGU, INTI)
+        self.assertLessEqual(INTI_DITUNGGU, 6)
+
+    def test_mutu_salinan_lebih_longgar_daripada_mutu_render(self):
+        """
+        `enkoder.pilih()` menyetel qp 19 karena yang ia layani video yang akan
+        diterbitkan. Salinan ini cuma ditonton di editor: qp 19 menghasilkan
+        17 MB per 30 detik, qp 26 menghasilkan 7 MB dengan wajah sama jelasnya.
+        """
+        from app.services.proksi import _mutu_proksi
+        asli = ["-c:v", "h264_vaapi", "-rc_mode", "CQP", "-qp", "19"]
+        self.assertEqual(_mutu_proksi(asli)[-1], "26")
+        # Enkoder CPU memakai -crf, dan itu pun ditukar.
+        self.assertEqual(_mutu_proksi(["-c:v", "libx264", "-crf", "18"])[-1], "26")
+        # Tanpa enkoder kartu grafis, tidak ada yang perlu ditukar.
+        self.assertEqual(_mutu_proksi([]), [])
+
+    def test_kartu_grafis_dipakai_bila_ada(self):
+        from pathlib import Path
+        sumber = (Path(__file__).resolve().parents[1] / "app" / "services"
+                  / "proksi.py").read_text(encoding="utf-8")
+        self.assertIn("from .enkoder import pilih as _enkoder", sumber)
+        # Dan kegagalannya tidak boleh menjatuhkan pembuatan salinan.
+        self.assertIn("except Exception:", sumber.split("_enkoder")[2][:200])
