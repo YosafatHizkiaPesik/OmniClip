@@ -1,7 +1,7 @@
 # Windows Defender dan tanda tangan digital
 
 Ditulis untuk pemilik OmniClip. Harga dan syarat di bawah berlaku September
-2026 — keduanya berubah, jadi periksa lagi sebelum membeli.
+2026, keduanya berubah, jadi periksa lagi sebelum membeli.
 
 ---
 
@@ -10,7 +10,7 @@ Ditulis untuk pemilik OmniClip. Harga dan syarat di bawah berlaku September
 Berkas `.exe` yang **tidak ditandatangani** dan **belum pernah diunduh banyak
 orang** adalah bentuk yang paling mirip malware bagi Windows. Ia tidak punya
 nama penerbit untuk diperiksa dan tidak punya riwayat untuk dibandingkan.
-Ditambah lagi, OmniClip dibungkus PyInstaller — bentuk yang juga dipakai
+Ditambah lagi, OmniClip dibungkus PyInstaller, bentuk yang juga dipakai
 sebagian besar malware Python, sehingga polanya sudah dikenali mesin pemindai.
 
 Tidak ada cara membuat peringatan itu hilang seluruhnya tanpa tanda tangan.
@@ -20,9 +20,9 @@ Yang bisa dilakukan tanpa membayar sudah dikerjakan (lihat bagian terakhir).
 
 ## Tiga jalan, dari yang gratis
 
-### 1. Laporkan sebagai salah deteksi — gratis, bisa hari ini
+### 1. Laporkan sebagai salah deteksi, gratis, bisa hari ini
 
-Microsoft menerima laporan salah deteksi dan biasanya menjawab dalam 1–3 hari.
+Microsoft menerima laporan salah deteksi dan biasanya menjawab dalam 1-3 hari.
 Sesudah diterima, Defender berhenti menandai berkas itu **untuk semua orang**.
 
 - Buka <https://www.microsoft.com/en-us/wdsi/filesubmission>
@@ -31,37 +31,37 @@ Sesudah diterima, Defender berhenti menandai berkas itu **untuk semua orang**.
   tautan rilisnya.
 
 **Kekurangannya:** harus diulang **setiap rilis**, karena yang dikenali adalah
-sidik berkasnya. Ini penambal, bukan penyelesaian — tapi ia gratis dan cepat.
+sidik berkasnya. Ini penambal, bukan penyelesaian, tapi ia gratis dan cepat.
 
-### 2. Sertifikat gratis untuk proyek sumber terbuka — SignPath Foundation
+### 2. Sertifikat gratis untuk proyek sumber terbuka, SignPath Foundation
 
 <https://signpath.io/solutions/open-source-community> memberi sertifikat
 penandatanganan **gratis** untuk proyek sumber terbuka.
 
 **Syaratnya:** kode harus publik **dan** memakai lisensi sumber terbuka yang
-diakui. OmniClip sudah publik di GitHub, tapi **belum punya berkas lisensi** —
+diakui. OmniClip sudah publik di GitHub, tapi **belum punya berkas lisensi**,
 tanpa itu, secara hukum ia "hak cipta penuh", dan pendaftaran akan ditolak.
 
 Ini juga keputusan yang harus dipikirkan matang kalau OmniClip nanti dijual:
 lisensi sumber terbuka mengizinkan orang lain memakai dan menyebarkan kodenya.
 Menjual perangkat lunak sumber terbuka itu sah dan biasa, tapi yang dijual
-menjadi kemudahan, dukungan, dan layanannya — bukan hak memakainya.
+menjadi kemudahan, dukungan, dan layanannya, bukan hak memakainya.
 
-### 3. Beli sertifikat sendiri — ± Rp 4–7 juta per tahun
+### 3. Beli sertifikat sendiri, ± Rp 4-7 juta per tahun
 
 Yang dibutuhkan **OV Code Signing** (Organization Validation). Harga pasaran
-US$250–400 per tahun dari penjual seperti Sectigo, SSL.com, atau Comodo.
+US$250-400 per tahun dari penjual seperti Sectigo, SSL.com, atau Comodo.
 
 Satu hal yang menghemat uang Anda: **sejak Maret 2024, sertifikat EV tidak lagi
 memberi kekebalan SmartScreen seketika.** EV dan OV sekarang membangun reputasi
 dengan cara yang sama, yaitu dari jumlah unduhan. Jadi **jangan bayar lebih
-untuk EV** — itu dulu satu-satunya alasan orang membelinya.
+untuk EV**, itu dulu satu-satunya alasan orang membelinya.
 
 Penerbit akan memverifikasi identitas Anda: badan usaha (PT/CV) dengan dokumen
 resmi, atau perorangan dengan KTP/paspor pada sebagian penerbit.
 
 **Azure Artifact Signing** (dulu Trusted Signing) hanya US$9,99/bulan dan jauh
-lebih murah — tapi verifikasi peroranganya **baru terbuka untuk Amerika Serikat
+lebih murah, tapi verifikasi peroranganya **baru terbuka untuk Amerika Serikat
 dan Kanada**. Untuk Indonesia, jalur ini tertutup kecuali lewat badan usaha
 yang bisa diverifikasi Microsoft.
 
@@ -78,7 +78,7 @@ Alur build sudah siap menerimanya. Pasang dua rahasia di GitHub
 | `WINDOWS_PFX_PASSWORD` | kata sandi berkas `.pfx` itu |
 
 Selesai. Rilis berikutnya akan ditandatangani sendiri, lengkap dengan stempel
-waktu — stempel waktu itu yang membuat tanda tangannya tetap sah bahkan setelah
+waktu, stempel waktu itu yang membuat tanda tangannya tetap sah bahkan setelah
 sertifikatnya kedaluwarsa. Selama rahasianya belum ada, langkah itu dilewati
 dan build tetap berhasil.
 
@@ -106,4 +106,4 @@ Semuanya ada di rilis 1.0.8 ke atas:
   memastikan berkas yang ia unduh sama dengan yang dibangun.
 
 Keempat hal pertama mengurangi kemungkinan ditandai. Tidak ada yang
-menghilangkannya — hanya tanda tangan dan reputasi yang bisa.
+menghilangkannya, hanya tanda tangan dan reputasi yang bisa.

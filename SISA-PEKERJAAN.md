@@ -4,11 +4,11 @@
 >
 > Berkas ini ditulis 12 September 2026 dan terus ditambahi catatan pengerjaan
 > sampai 23 September, tapi daftar "belum selesai" di bagian atasnya tidak
-> pernah ikut dikoreksi — sebagian besar sudah dikerjakan. Disimpan karena
+> pernah ikut dikoreksi, sebagian besar sudah dikerjakan. Disimpan karena
 > angka-angka pengukurannya masih berguna, bukan karena daftarnya masih benar.
 
 Catatan hal-hal yang **belum selesai**, ditulis 12 September 2026 setelah commit
-`b4f991f`. Tiap poin memuat apa yang sudah terukur, bukan hanya apa yang terasa —
+`b4f991f`. Tiap poin memuat apa yang sudah terukur, bukan hanya apa yang terasa,
 supaya saat dikerjakan nanti tidak perlu menebak ulang dari awal.
 
 Urutan yang disepakati: **subtitle dulu**, lalu **membuat sistem bisa diakses
@@ -16,10 +16,10 @@ online**. Bingkai sengaja ditinggalkan dulu dalam keadaan sekarang.
 
 ---
 
-## 1. Bingkai otomatis — ditunda, sekitar 80% benar
+## 1. Bingkai otomatis, ditunda, sekitar 80% benar
 
 Sudah bekerja: bingkai mengikuti orang yang sedang bicara. Kuncinya bukan
-algoritma pencocokannya melainkan cara mulut diukur — dulu petaknya diskalakan
+algoritma pencocokannya melainkan cara mulut diukur, dulu petaknya diskalakan
 jarak antar mata, yang menyusut sampai 0,30 lebar wajah ketika orang duduk
 saling menghadap, sehingga yang terukur dinding di belakangnya. Sekarang
 diskalakan lebar kotak wajah, dan yang diukur **bukaan** mulut ditambah
@@ -27,7 +27,7 @@ diskalakan lebar kotak wajah, dan yang diukur **bukaan** mulut ditambah
 
 | cara mengukur | pemisahan (simpangan baku) |
 |---|---|
-| beda piksel, petak lama | 0,023 — setara nol |
+| beda piksel, petak lama | 0,023, setara nol |
 | beda piksel, petak benar | 0,181 |
 | bukaan mulut | 0,512 |
 | bukaan + ragamnya | **1,074** |
@@ -42,12 +42,12 @@ Diperiksa pada `XtAoIx6-EWw` detik 469. Kejenuhan warna separuh kanan layar
 jatuh dari ~120 ke 46,8 (efek hitam-putih), dan jumlah wajah terdeteksi turun
 dari 2 ke 1. Tapi penyebabnya **bukan semata warnanya**: pada bingkai itu
 orangnya juga sedang menutupi wajah dengan tangan sambil menunduk. Empat
-penawar murah sudah dicoba dan semuanya gagal — sampel diperbesar ke 960 px,
+penawar murah sudah dicoba dan semuanya gagal, sampel diperbesar ke 960 px,
 seluruh bingkai dijadikan abu-abu, kontras lokal dinaikkan (CLAHE), dan
 gabungan CLAHE + sampel besar. Tidak satu pun menemukan wajahnya.
 
 Perlu diputuskan nanti: ini soal **deteksi wajah** (butuh detektor yang tahan
-oklusi) atau soal **pilihan editorial**. Momen itu adalah reaksi, bukan ucapan —
+oklusi) atau soal **pilihan editorial**. Momen itu adalah reaksi, bukan ucapan,
 membingkainya butuh kemampuan yang berbeda dari mengikuti penutur, yaitu
 mengenali momen penting. Keduanya sah, tapi bukan satu pekerjaan yang sama.
 
@@ -62,13 +62,13 @@ suatu saat 80% dirasa belum cukup.
 
 ---
 
-## 2. Subtitle — hasil render berbeda dari pratinjau
+## 2. Subtitle, hasil render berbeda dari pratinjau
 
 **Ini pekerjaan berikutnya.**
 
 Sudah dibetulkan sebelumnya (commit `37aa145`): **ukuran huruf** dan
 **pembungkus baris**. Penyebabnya, `size` adalah Fontsize pada berkas ASS, dan
-libass tidak memperlakukannya seperti `font-size` CSS — terukur, tinggi kapital
+libass tidak memperlakukannya seperti `font-size` CSS, terukur, tinggi kapital
 lurus terhadap Fontsize dengan kemiringan 0,521, sedangkan pratinjau memakai
 0,756, jadi teks di editor 1,45× lebih besar daripada di video.
 
@@ -92,10 +92,10 @@ terlihat selama berminggu-minggu.
 
 ---
 
-## 3. Auto-subtitle per orang — yang paling sulit
+## 3. Auto-subtitle per orang, yang paling sulit
 
 Tujuannya: sistem sendiri yang menentukan **ada berapa orang**, lalu
-memasangkan **suara** dengan **wajah**, lalu memberi warna subtitle per orang —
+memasangkan **suara** dengan **wajah**, lalu memberi warna subtitle per orang,
 tanpa pembetulan manual.
 
 Tiga bagian, dan masing-masing punya masalahnya sendiri:
@@ -116,15 +116,15 @@ pernah terlihat bersamaan" saat sidiknya lemah.
 
 Diamati pengguna pada video lima orang dengan susunan **2 kiri, 1 tengah,
 2 kanan**: yang kiri dapat nomor 1 dan 2, tengah 3, tapi **yang kanan dapat 1
-dan 4** — nomor 1 terpakai dua kali untuk orang berbeda.
+dan 4**, nomor 1 terpakai dua kali untuk orang berbeda.
 
 Penyebab yang sudah diketahui dari video lain: kemiripan sidik wajah antar
-orang **yang sama** bisa jatuh ke 0,133–0,175 saat wajahnya kecil atau
-menyamping, sementara antar orang **berbeda** bisa naik ke 0,262–0,279. Kedua
+orang **yang sama** bisa jatuh ke 0,133-0,175 saat wajahnya kecil atau
+menyamping, sementara antar orang **berbeda** bisa naik ke 0,262-0,279. Kedua
 sebaran itu bertumpang tindih, jadi tidak ada satu ambang yang memisahkannya.
 
 Arah yang masuk akal: gunakan **posisi duduk** sebagai pengunci pada video
-berkamera diam — dua orang yang terlihat bersamaan di tempat berbeda pasti
+berkamera diam, dua orang yang terlihat bersamaan di tempat berbeda pasti
 orang berbeda, apa pun kata sidik wajahnya. Itu kendala keras yang belum
 dipakai untuk mencegah tabrakan nomor.
 
@@ -148,14 +148,14 @@ dipakai; di bawahnya, sistem kembali ke pengelompokan suara biasa.
 
 **Yang masih kurang:** rekaman berkamera diam yang tidak pernah memotong ke satu
 orang. Di sana jangkar "satu wajah di layar" hampir tidak ada (terukur 1,4 detik
-untuk enam klip), jadi yang tersisa hanya bukaan mulut — dan bukaan mulut saja
+untuk enam klip), jadi yang tersisa hanya bukaan mulut, dan bukaan mulut saja
 menghasilkan jangkar yang tercemar reaksi penyimak. Arah yang belum dicoba:
 model deteksi penutur aktif sungguhan (TalkNet/SyncNet ONNX) untuk menggantikan
 bukaan mulut sebagai sumber jangkar kedua.
 
 ---
 
-## 4. Dipakai di mana saja — sebagai aplikasi desktop
+## 4. Dipakai di mana saja, sebagai aplikasi desktop
 
 **Arahnya berubah 12 September 2026.** Rencana hosting ditinggalkan: tidak ada
 anggaran untuk domain, VPS, maupun mini PC selama clipping belum menghasilkan,
@@ -166,8 +166,8 @@ sendiri-sendiri. Lihat `PANDUAN-APLIKASI-DESKTOP.md`.
 `.apk` tidak dikerjakan, dan alasannya terukur: keempat dependensi inti punya
 **nol** wheel Android (ctranslate2, onnxruntime, opencv, av), sementara Windows
 punya semuanya. Tiap satu harus dikompilasi silang dari sumber untuk
-`aarch64-linux-android`, dan `ffmpeg-kit` — satu-satunya jalur ffmpeg praktis di
-Android — sudah diarsipkan pengembangnya.
+`aarch64-linux-android`, dan `ffmpeg-kit`, satu-satunya jalur ffmpeg praktis di
+Android, sudah diarsipkan pengembangnya.
 
 ### Sudah selesai dan diuji
 
@@ -177,13 +177,13 @@ Android — sudah diarsipkan pengembangnya.
 - **Penyimpanan pindah ke folder pengguna** saat terbungkus
   (`%LOCALAPPDATA%\OmniClip`), supaya memperbarui aplikasi tidak menghapus klip.
   `OMNICLIP_STORAGE` menimpa keduanya.
-- **ffmpeg statis dibundel**, ditaruh di depan `PATH` — satu baris, bukan
+- **ffmpeg statis dibundel**, ditaruh di depan `PATH`, satu baris, bukan
   sebelas suntingan di tempat pemanggilan, dan yt-dlp ikut menemukannya.
 - **SFace mengunduh dirinya sendiri.** Dulu hanya bisa didapat lewat perintah
   curl di requirements.txt: cukup saat satu-satunya pengguna adalah penulis
   kodenya, dan berarti pengenal wajah tidak akan pernah menyala di komputer
   siapa pun begitu aplikasinya dibagikan.
-- **`--periksa`**: bundel memeriksa dirinya sendiri — 16 pustaka, berkas
+- **`--periksa`**: bundel memeriksa dirinya sendiri, 16 pustaka, berkas
   bundelan, ffmpeg beserta 7 filter dan 2 encoder yang dipakai, detektor wajah,
   migrasi basis data, dan satu subtitle yang benar-benar dibakar. CI
   menggagalkan build kalau ada yang kurang.
@@ -201,7 +201,7 @@ memperlakukan `:` sebagai pemisah opsi, dan di Windows nilainya berbentuk
 Could not create a libass track when reading file 'uji/OmniClip/fonts'
 ```
 
-Bukan font yang keliru — **setiap render bersubtitle gagal**, hanya di Windows.
+Bukan font yang keliru, **setiap render bersubtitle gagal**, hanya di Windows.
 Tiga tempat menyusun path untuk filtergraph dengan tiga salinan kode yang tidak
 sama, dan salinan `fontsdir` tidak pernah mendapat perlakuan itu sama sekali.
 Sekarang ketiganya memakai `services/paths.ffpath()`.
@@ -209,7 +209,7 @@ Sekarang ketiganya memakai `services/paths.ffpath()`.
 ### Bukti bundel Linux, menyeluruh
 
 Dijalankan terhadap pustaka video asli: render 12 detik selesai dalam 15 detik,
-1080x1920 h264 30fps, AAC 48kHz stereo. Bingkai diperiksa dengan mata — reframe
+1080x1920 h264 30fps, AAC 48kHz stereo. Bingkai diperiksa dengan mata, reframe
 mengikuti orang yang bicara, subtitle terbakar dengan font bundelan, sorotan
 kata kuning, tanda air di tempatnya. SFace terunduh sendiri di tengah analisis.
 
@@ -224,7 +224,7 @@ kata kuning, tanda air di tempatnya. SFace terunduh sendiri di tengah analisis.
    antarmuka.
 4. **Tidak ada pembersihan otomatis.** Terukur: 3,8 GB per bulan, dan 82%-nya
    video sumber yang sebenarnya bisa dibuang setelah klipnya jadi.
-5. ~~Pembaruan masih manual~~ — **selesai.** Aplikasi mengecek GitHub
+5. ~~Pembaruan masih manual~~, **selesai.** Aplikasi mengecek GitHub
    Releases, dan bisa mengunduh serta memasang sendiri lewat proses penolong
    yang menukar folder setelah aplikasi tertutup. Diuji dengan membangun bundel
    0.9.0 dan membiarkannya memperbarui diri ke 1.0.0: unduh 319 MB, tukar,
@@ -252,7 +252,7 @@ kalau suatu saat ada anggaran untuk domain.
 # Catatan: gulir tak hingga, dan kenapa ia "masih rusak" tiga kali
 
 Dilaporkan rusak tiga kali berturut-turut, dan dua kali pertama saya menjawab
-dengan bukti bahwa kodenya benar. Buktinya memang benar — dan tidak menjawab
+dengan bukti bahwa kodenya benar. Buktinya memang benar, dan tidak menjawab
 apa pun, karena saya mengukur hal yang salah.
 
 Kesalahan ukur saya: potret daftar diambil SETELAH semuanya tenang. Yang
@@ -275,11 +275,11 @@ posisi gulir, rekam JEJAKNYA, bukan keadaan akhirnya.
 
 # Antrean pembaruan berikutnya
 
-Ditulis 16 September 2026. Empat hal yang diminta dan sengaja **ditunda** —
+Ditulis 16 September 2026. Empat hal yang diminta dan sengaja **ditunda**,
 bukan karena sulit, melainkan karena gulir tak hingga dan pembaruan pustaka
 didahulukan. Urutan di bawah adalah urutan yang masuk akal untuk dikerjakan.
 
-## A. Pemilih folder — SELESAI 16 September 2026
+## A. Pemilih folder, SELESAI 16 September 2026
 
 Dikerjakan dengan jalan nomor 1 di bawah: penjelajah folder di backend
 (`GET /api/settings/jelajah`) plus dialog `FolderPicker.jsx`. Ada pintasan ke
@@ -298,7 +298,7 @@ berarti folder yang tidak ada.
 Yang menghalangi, dan perlu diputuskan lebih dulu: **halaman web tidak pernah
 diberi jalur berkas sungguhan oleh peramban.** `<input type="file" webkitdirectory>`
 memberi nama berkas di dalam folder, bukan jalur folder itu di cakram.
-`showDirectoryPicker()` memberi pegangan yang hanya berlaku di dalam peramban —
+`showDirectoryPicker()` memberi pegangan yang hanya berlaku di dalam peramban,
 tidak bisa dipakai ffmpeg. Jadi ada dua jalan:
 
 1. **Penjelajah folder buatan sendiri di backend.** Endpoint yang mendaftar isi
@@ -308,13 +308,13 @@ tidak bisa dipakai ffmpeg. Jadi ada dua jalan:
    membaca seluruh cakram dari jauh.
 2. **Dialog folder milik sistem operasi**, dipanggil dari backend (`tkinter`,
    `zenity`, atau PowerShell). Terasa paling benar di komputer sendiri, tapi
-   TIDAK bekerja saat OmniClip dibuka dari perangkat lain — dialognya muncul di
+   TIDAK bekerja saat OmniClip dibuka dari perangkat lain, dialognya muncul di
    komputer yang menjalankan backend.
 
 Saran: nomor 1, dengan daftar tempat umum (Home, Desktop, Videos, cakram yang
 terpasang) sebagai titik awal supaya jarang perlu menyusur jauh.
 
-## B. Durasi klip per proyek — SELESAI 16 September 2026
+## B. Durasi klip per proyek, SELESAI 16 September 2026
 
 Pemilihnya (`features/studio/PanjangKlip.jsx`) sekarang ada di dua tempat klip
 DIMULAI: panel "Klip video baru" di Partitur, dan di bawah tombol "Potong jadi
@@ -331,7 +331,7 @@ ditepati tanpa menganalisis ulang seluruh video.
 Sekarang `omniclip_clip_length` tinggal di `localStorage` dan berlaku untuk
 semua. Yang diinginkan: tiap proyek membawa durasinya sendiri.
 
-Tabel `projects` sudah punya `state_json`, jadi tempatnya sudah tersedia — yang
+Tabel `projects` sudah punya `state_json`, jadi tempatnya sudah tersedia, yang
 perlu dikerjakan adalah memindahkan pilihannya ke panel proyek, memakai nilai
 pengaturan utama hanya sebagai **bawaan untuk proyek baru**, dan meneruskannya
 lewat `AutoClipRequest` alih-alih membacanya dari localStorage saat job dibuat.
@@ -342,27 +342,27 @@ Sudah beres di pembaruan ini: "terpopuler" diurutkan ulang di sisi kita memakai
 jumlah tayangan yang memang ikut di hasil pencarian datar, jadi urutannya benar
 menurun. Yang belum:
 
-- **Durasi** (pendek / sedang / panjang) — YouTube punya parameternya, dan
+- **Durasi** (pendek / sedang / panjang), YouTube punya parameternya, dan
   untuk auto-clip inilah filter yang paling berguna: video 40 menit dan video
   3 menit menuntut perlakuan yang sama sekali berbeda.
 - **Tanggal unggah** sebagai penyaring (minggu ini, bulan ini, tahun ini),
   bukan hanya sebagai pengurut.
 - **"Rating"** masih diserahkan sepenuhnya ke YouTube. Tidak seperti tayangan,
   angkanya tidak ikut di hasil pencarian datar, jadi mengurutkannya di sini
-  menuntut satu permintaan per video — persis pola yang memicu verifikasi bot.
+  menuntut satu permintaan per video, persis pola yang memicu verifikasi bot.
   Perlu diputuskan: hapus pilihannya, atau ambil datanya hanya untuk kartu yang
   terlihat.
 
-## D-1. Klip gameplay — SELESAI SEBAGIAN 16 September 2026
+## D-1. Klip gameplay, SELESAI SEBAGIAN 16 September 2026
 
 Mode bingkai baru `gaming`: wajah pemain di bidang atas, permainannya UTUH di
 bidang tengah, sisanya latar kabur tempat subtitle duduk. Letak facecam dicari
-sendiri dari videonya (`reframe.deteksi_facecam`) — tidak ada yang perlu
+sendiri dari videonya (`reframe.deteksi_facecam`), tidak ada yang perlu
 digambar pengguna.
 
 Yang menandai facecam bukan "wajah terbesar" melainkan wajah yang semuanya
-terkurung di petak kecil yang tidak berpindah. Model pertama saya — semua wajah
-berbagi satu titik tengah — SALAH, dan bahan uji yang membuktikannya: sebaran
+terkurung di petak kecil yang tidak berpindah. Model pertama saya, semua wajah
+berbagi satu titik tengah, SALAH, dan bahan uji yang membuktikannya: sebaran
 tegaknya 0,005 tapi mendatarnya 0,061, bukan karena panel bergerak melainkan
 karena ada DUA orang di dalam panel yang sama.
 
@@ -370,12 +370,12 @@ Diuji: facecam buatan di x=72,9% terdeteksi di x=72,0%; dua podcast sebagai
 kontrol keduanya ditolak; render menghasilkan 1080x1920 dengan wajah diperbesar
 penuh di atas dan permainan utuh tanpa diregangkan.
 
-BELUM diuji pada rekaman gameplay sungguhan — unduhan bahan ujinya gagal dua
+BELUM diuji pada rekaman gameplay sungguhan, unduhan bahan ujinya gagal dua
 kali. Yang masih perlu dilihat: facecam berbentuk lingkaran (banyak dipakai
 streamer), facecam yang berpindah sisi di tengah video, dan video tanpa facecam
 sama sekali yang seharusnya jatuh ke mode `smart`.
 
-## D-3. Linimasa bingkai — SELESAI 16 September 2026
+## D-3. Linimasa bingkai, SELESAI 16 September 2026
 
 Satu klip, beberapa cara membingkai, masing-masing berlaku di potongan waktunya
 sendiri (`frame_keys`). Tiap kunci menghasilkan kanvas penuh lewat cabangnya
@@ -384,7 +384,7 @@ sendiri, lalu ditumpuk dengan `enable=between(t,…)`.
 Alternatif yang DITOLAK: satu crop yang ukurannya digerakkan `sendcmd`. Jauh
 lebih murah, tapi mengubah lebar crop di tengah aliran mengubah ukuran bingkai
 yang masuk ke `scale` dan memaksa ffmpeg menyusun ulang filter graph-nya di
-tengah jalan. Menggerakkan posisi saja aman — itulah yang dipakai "ikuti
+tengah jalan. Menggerakkan posisi saja aman, itulah yang dipakai "ikuti
 wajah"; mengganti ukuran tidak. Ongkos cara yang dipakai: tiap cabang tetap
 dihitung walau tidak terlihat, jadi render melambat kira-kira sebanding jumlah
 kuncinya.
@@ -395,7 +395,7 @@ karaoke tetap berjalan melintasi ketiganya.
 
 Yang BELUM: kotak untuk mode "box" masih diisi lewat empat kolom angka (x/y/w/h
 persen), belum bisa diseret di atas pratinjau. Seretan sudah ada untuk mode
-"Susun sendiri", jadi bahannya tersedia — yang perlu dikerjakan adalah
+"Susun sendiri", jadi bahannya tersedia, yang perlu dikerjakan adalah
 menyambungkan kotak kunci terpilih ke editor persegi yang sama.
 
 ## D-2. Apakah pemilihan klip menyesuaikan jenis kontennya
@@ -403,7 +403,7 @@ menyambungkan kotak kunci terpilih ke editor persegi yang sama.
 Pertanyaan yang belum dijawab dan belum diuji: gameplay, kartun anak, dan
 podcast diperlakukan sama atau tidak.
 
-Yang sudah pasti dari kode: **bingkai** sudah menyesuaikan — `plan_reframe()`
+Yang sudah pasti dari kode: **bingkai** sudah menyesuaikan, `plan_reframe()`
 mengukur `face_coverage`, dan di bawah 0,20 ia otomatis pindah ke mode bilah
 kabur. Rekaman layar dan gameplay jatuh ke sana dengan sendirinya.
 
@@ -412,14 +412,14 @@ Yang **belum** menyesuaikan sama sekali adalah pemilihan klipnya. Bobot di
 kekhasan 0,15 · panjang 0,10) disusun untuk **orang berbicara**. Leksikon
 hook-nya bahasa Indonesia percakapan, dan `density` menghitung kata per detik.
 Pada gameplay tanpa komentar, atau kartun anak yang momen terbaiknya visual dan
-bunyi alih-alih kalimat, seluruh timbangan itu mengukur hal yang salah — bukan
+bunyi alih-alih kalimat, seluruh timbangan itu mengukur hal yang salah, bukan
 gagal dengan keras, tapi memilih bagian yang paling banyak bicaranya, yang
 belum tentu bagian yang paling layak jadi klip.
 
 Langkah yang jujur sebelum mengubah apa pun: **uji dulu**. Jalankan tiga jenis
 video, catat klip yang dipilih, dan bandingkan dengan pilihan manusia. Kalau
 timbangannya memang meleset, yang dibutuhkan kemungkinan besar bukan bobot baru
-melainkan sinyal baru — puncak audio dan perpindahan adegan (`scdet` sudah
+melainkan sinyal baru, puncak audio dan perpindahan adegan (`scdet` sudah
 tersedia di ffmpeg mesin ini) untuk konten yang nilainya tidak ada di kata-kata.
 
 
@@ -438,7 +438,7 @@ tersedia di ffmpeg mesin ini) untuk konten yang nilainya tidak ada di kata-kata.
      ===================================================================== -->
 
 # ══════════════════════════════════════════════════════════════════════
-# DAFTAR BARU — disepakati 16 September 2026
+# DAFTAR BARU, disepakati 16 September 2026
 # ══════════════════════════════════════════════════════════════════════
 
 Dipisahkan dari catatan di atas atas permintaan pemilik proyek: yang di atas
@@ -446,16 +446,16 @@ belum sempat diperiksa apakah benar-benar sudah dikerjakan, jadi keduanya tidak
 boleh bercampur.
 
 Sudah selesai hari ini dan TIDAK masuk daftar ini: lajur **Bingkai** di linimasa
-klip — tiap potongan waktu punya caranya sendiri (ikuti wajah / kotak tetap /
+klip, tiap potongan waktu punya caranya sendiri (ikuti wajah / kotak tetap /
 main game / potong tengah / bilah kabur), bisa dibelah dengan klik dua kali atau
 tombol "Potong bingkai", batasnya bisa diseret.
 
 ---
 
-## 1. Kotak manual digambar di pratinjau — SELESAI 16 September 2026
+## 1. Kotak manual digambar di pratinjau, SELESAI 16 September 2026
 
 Kotak mode "Kotak tetap" sekarang diseret dan diubah ukurannya langsung di
-pratinjau **Video sumber**, dengan empat pegangan sudut — memakai mesin seret
+pratinjau **Video sumber**, dengan empat pegangan sudut, memakai mesin seret
 yang sama (`beginRectDrag`) dengan bingkai susun-sendiri, supaya keduanya terasa
 sama di tangan. Perubahannya ditulis balik ke kunci yang sedang berlaku di lajur
 Bingkai, jadi tiap potongan waktu punya kotaknya sendiri.
@@ -477,7 +477,7 @@ sudah bisa dipasang per potongan waktu, tapi ukuran kotaknya masih diisi lewat
 empat kolom angka (x/y/w/h dalam persen) di panel Bingkai.
 
 Yang seharusnya: pilih potongan di lajur Bingkai, lalu seret kotaknya langsung
-di atas pratinjau **Video sumber**. Bahannya sudah ada — `FrameStage.jsx` sudah
+di atas pratinjau **Video sumber**. Bahannya sudah ada, `FrameStage.jsx` sudah
 bisa menggambar dan menyeret persegi untuk mode "Susun sendiri", lewat
 `rectDrag.js`. Yang perlu dikerjakan adalah menyambungkan potongan yang sedang
 terpilih ke editor persegi yang sama, dan menahan kotak itu tetap terlihat
@@ -486,7 +486,7 @@ selama playhead berada di dalam rentangnya.
 Ini yang membuat contoh "lima orang bereaksi" benar-benar enak dipakai: kotaknya
 digambar sekali mengelilingi kelima orang, bukan ditebak lewat angka persen.
 
-## 2. Klip gaming — sebagian SELESAI 16 September 2026
+## 2. Klip gaming, sebagian SELESAI 16 September 2026
 
 Dua hal selesai hari itu:
 
@@ -497,7 +497,7 @@ Dua hal selesai hari itu:
 - **Tidak perlu disetel tangan.** Memilih "Main game" memanggil
   `POST /api/clip-facecam`, yang mengembalikan susunan dua bidang siap pakai.
   Kedua kotaknya digambar di pratinjau sumber dengan label "Permainan" dan
-  "Reaksi", dan pratinjau 9:16 menampilkan hasil susunnya — jadi apa yang akan
+  "Reaksi", dan pratinjau 9:16 menampilkan hasil susunnya, jadi apa yang akan
   dirender terlihat sebelum dirender. Sebelumnya mode ini otomatis tapi tak
   terlihat, dan "otomatis tapi tak terlihat" sulit dibedakan dari "tidak
   bekerja".
@@ -512,14 +512,14 @@ bawah, dan letak facecam dicari sendiri (`reframe.deteksi_facecam`).
 Sudah diuji pada satu rekaman gameplay sungguhan dan hasilnya tepat (lihat
 bagian di atas). Yang masih belum diperiksa:
 
-- facecam berbentuk lingkaran — banyak dipakai streamer, dan detektor sekarang
+- facecam berbentuk lingkaran, banyak dipakai streamer, dan detektor sekarang
   mengasumsikan persegi;
 - facecam yang berpindah sisi di tengah video;
 - video tanpa facecam sama sekali, yang harus jatuh ke mode `smart`;
 - penajaman batas panel. Dua cara sudah dicoba dan dibuang (kontras gerakan,
   lalu tepi lurus yang tidak berpindah); catatannya ada di `reframe.py`. Cara
   kedua sempat menemukan tepi kanan dan bawah TEPAT, jadi ia layak dicoba lagi
-  dengan ambang yang disetel pada bahan nyata — bukan dengan algoritma lain.
+  dengan ambang yang disetel pada bahan nyata, bukan dengan algoritma lain.
 
 ## 3. Jumpscare: berpindah sendiri ke reaksi penuh
 
@@ -528,7 +528,7 @@ Bingkai. Yang diinginkan: sistem menemukannya sendiri.
 
 Bahannya sudah tersedia dan belum dipakai: `scdet` (deteksi potongan adegan) dan
 `silencedetect`/`astats` sudah ada di ffmpeg mesin ini, dan jejak energi audio
-sudah dihitung di `heuristics.py`. Jumpscare punya tanda tangan yang tajam —
+sudah dihitung di `heuristics.py`. Jumpscare punya tanda tangan yang tajam,
 lonjakan energi audio mendadak sesudah periode tenang, sering bersamaan dengan
 potongan adegan. Begitu titiknya ditemukan, yang dilakukan tinggal menyisipkan
 kunci bingkai: mode `box` seputar facecam, mulai di titik itu, selama 2-3 detik.
@@ -563,7 +563,7 @@ dan lama minimum tiap bidikan.
 Contoh yang diberikan: orang membahas sepak bola di bidang atas, cuplikan
 pertandingannya di bidang bawah.
 
-Ini yang paling jauh dari kode sekarang, dan bukan karena susunannya —
+Ini yang paling jauh dari kode sekarang, dan bukan karena susunannya,
 `build_layout_graph` sudah bisa menyusun beberapa bidang. Yang belum ada adalah
 **sumber kedua**: seluruh jalur render hari ini berangkat dari SATU berkas
 masukan, dan tiap bidang adalah jendela ke dalam berkas yang sama. Menambah
@@ -571,8 +571,8 @@ berkas kedua berarti menyentuh `_build_segment_graph`, penyelarasan waktu antara
 dua sumber, dan pertanyaan yang belum punya jawaban: bagian mana dari cuplikan
 yang dipakai, dan apakah audionya ikut atau dibisukan.
 
-Sebaiknya dikerjakan paling akhir, dan sebaiknya dimulai dari versi manual —
-pengguna memilih berkasnya dan menentukan rentangnya sendiri — sebelum ada
+Sebaiknya dikerjakan paling akhir, dan sebaiknya dimulai dari versi manual,
+pengguna memilih berkasnya dan menentukan rentangnya sendiri, sebelum ada
 apa pun yang dikerjakan otomatis.
 
 ---
@@ -583,7 +583,7 @@ Nomor 3, 4, dan 5 semuanya menambah keputusan yang diambil sistem tanpa diminta.
 Tiap keputusan otomatis yang meleset lebih mahal daripada ketiadaannya, karena
 pengguna harus menemukannya dulu sebelum bisa membetulkannya. Jadi masing-masing
 sebaiknya lahir sebagai kunci bingkai yang BISA DILIHAT dan bisa dihapus di lajur
-Bingkai — bukan sebagai perilaku tersembunyi di dalam renderer.
+Bingkai, bukan sebagai perilaku tersembunyi di dalam renderer.
 
 ---
 
@@ -592,7 +592,7 @@ Bingkai — bukan sebagai perilaku tersembunyi di dalam renderer.
 `group_people()` melempar `too many values to unpack (expected 2)` pada sebagian
 video. Terlihat di log sebagai `Pengelompokan orang gagal: …`.
 
-Bukan kegagalan keras — `plan_reframe` menangkapnya dan jatuh ke penomoran
+Bukan kegagalan keras, `plan_reframe` menangkapnya dan jatuh ke penomoran
 berdasarkan tempat duduk, jadi render tetap jalan dan bingkai tetap mengikuti
 wajah. Akibatnya halus dan justru karena itu perlu dicatat: nomor orang jatuh ke
 urutan duduk, yang benar untuk bidikan lebar dan keliru begitu kamera berpindah
@@ -605,7 +605,7 @@ Sudah dipastikan BUKAN akibat pekerjaan 16 September: `git diff` pada
 
 ---
 
-## 7. Catatan: dua sumber kebenaran untuk cara membingkai — SELESAI 16 September 2026
+## 7. Catatan: dua sumber kebenaran untuk cara membingkai, SELESAI 16 September 2026
 
 Dilaporkan sebagai "timeline bingkai tidak sinkron dengan menu bingkai", dan
 diagnosisnya persis itu: panel menulis ke `frameMode`, lajur menulis ke
@@ -615,7 +615,7 @@ menyala di "Wajah".
 
 Sekarang keduanya lewat satu pintu (`pilihCaraBingkai`):
 
-- Lajur menggambar `modeDasar` — cara milik klip — selama linimasanya kosong,
+- Lajur menggambar `modeDasar`, cara milik klip, selama linimasanya kosong,
   jadi ia tidak lagi selalu menulis "Ikuti wajah".
 - Panel menampilkan mode **efektif** di posisi garis main, bukan `frameMode`
   mentah.
@@ -625,12 +625,12 @@ Sekarang keduanya lewat satu pintu (`pilihCaraBingkai`):
   punya susunannya sendiri (`frame_keys[].layout`).
 
 Pelajaran untuk yang berikutnya: setiap kali ada dua tempat di layar yang
-menjawab pertanyaan yang sama, salah satunya harus menjadi cermin — bukan
+menjawab pertanyaan yang sama, salah satunya harus menjadi cermin, bukan
 penyimpan kedua.
 
 ---
 
-## 8. Empat perbaikan dari peninjauan hasil render — 16 September 2026 (sore)
+## 8. Empat perbaikan dari peninjauan hasil render, 16 September 2026 (sore)
 
 **Susunan klip gaming.** Versi pertama salah di dua hal sekaligus, dan keduanya
 baru terlihat setelah hasilnya benar-benar dilihat: wajah pemain muncul DUA
@@ -646,11 +646,11 @@ permainan), dan bidang permainannya kecil dengan lubang kabur besar di bawahnya.
   "Contain" yang dipakai sebelumnya menjaga gambar tetap utuh, tapi di bingkai
   tegak ruang layar terlalu mahal untuk dibuang jadi bilah.
 
-**Layar hitam di editor.** Bukan isi videonya — bingkai aslinya di menit 23:25
+**Layar hitam di editor.** Bukan isi videonya, bingkai aslinya di menit 23:25
 terang (kecerahan 48/255, ada karakter di tengah layar). Pemutar berhenti di
 detik 0 SUMBER sementara klip yang dipilih mulai di menit 23, dan detik 0 pada
 video itu memang hampir gelap. `selectClip` sudah melompat ke awal klip, tapi
-hanya saat klipnya DIKLIK — bukan saat editor pertama terbuka, dan bukan saat
+hanya saat klipnya DIKLIK, bukan saat editor pertama terbuka, dan bukan saat
 `videoRef` belum terisi atau metadatanya belum termuat (menyetel `currentTime`
 pada elemen yang belum siap tidak melakukan apa-apa, tanpa galat). Sekarang ada
 efek yang memarkir pemutar di dalam klip, ikut mendengarkan `loadedmetadata`.
@@ -658,22 +658,22 @@ efek yang memarkir pemutar di dalam klip, ikut mendengarkan `loadedmetadata`.
 **Bingkai kecil tidak bisa diseret.** Bingkai digambar menurut urutan daftar,
 jadi bingkai yang menutupi seluruh gambar berdiri di atas bingkai kecil di
 dalamnya dan setiap klik mengenai yang besar. Sekarang bingkai yang lebih KECIL
-berada di atas — yang dipilih orang hampir selalu yang kecil, karena yang besar
+berada di atas, yang dipilih orang hampir selalu yang kecil, karena yang besar
 bisa diraih di mana saja di luarnya.
 
 **Berpindah dari Main game ke Susun sendiri membuang kedua bingkainya.** Kini
-diwariskan, jadi susunan otomatis itu bisa digeser sedikit lalu dipakai — bukan
+diwariskan, jadi susunan otomatis itu bisa digeser sedikit lalu dipakai, bukan
 dimulai ulang dari satu bingkai kosong.
 
 ---
 
-## 9. Susunan gaming, tiga perbaikan lanjutan — 16 September 2026 (malam)
+## 9. Susunan gaming, tiga perbaikan lanjutan, 16 September 2026 (malam)
 
 **Yang membuat perbaikan sebelumnya tidak terlihat: backend tidak dijalankan
 ulang.** Kode `susun_layout_gaming` sudah benar, tapi proses uvicorn yang
 melayani peramban masih memegang versi lama, jadi `/api/clip-facecam` tetap
 mengirim susunan lama (`fit=contain`, sumber bingkai penuh). Render yang saya
-uji memakai proses Python baru, jadi ia memakai kode baru — dan itulah yang
+uji memakai proses Python baru, jadi ia memakai kode baru, dan itulah yang
 menyesatkan saya: dua jalur yang saya kira sama ternyata menjalankan versi yang
 berbeda. Pelajarannya: setelah mengubah kode backend, yang harus diperiksa
 adalah jawaban SERVER, bukan hasil pemanggilan fungsi langsung.
@@ -682,7 +682,7 @@ adalah jawaban SERVER, bukan hasil pemanggilan fungsi langsung.
 mengikuti rasio bidang tujuan supaya tidak ada yang perlu diregangkan. Itu
 salah arah: panel facecam sering TEGAK (pada video uji ~17% x 38% bingkai,
 rasio 0,8) sementara bidang tujuannya melebar (rasio 1,48), jadi memaksakannya
-melebarkan potongan sampai 28,5% — dan 11% kelebihan itu berisi permainan.
+melebarkan potongan sampai 28,5%, dan 11% kelebihan itu berisi permainan.
 Sekarang potongannya dibentuk dari petak wajah saja (terukur jadi 16,4%, sesuai
 panel sebenarnya), dan "cover" di tahap penyusunan yang memangkasnya. Memangkas
 sedikit rambut selalu lebih baik daripada memasukkan permainan ke bidang wajah.
@@ -697,11 +697,11 @@ sekarang ikut dipicu oleh jumlah bidang, bukan hanya oleh pergantian klip.
 
 ---
 
-## 10. Tokoh bukan manusia, dan kecepatan muat — 16 September 2026 (malam)
+## 10. Tokoh bukan manusia, dan kecepatan muat, 16 September 2026 (malam)
 
 **Mode bingkai baru: "Ikuti gerakan".** YuNet adalah pendeteksi wajah MANUSIA;
 pada kartun, maskot, atau hewan ia tidak menemukan apa pun. Terukur pada video
-Pinkfong di folder unduhan: mode wajah menemukan wajah di **4%** sampel — di
+Pinkfong di folder unduhan: mode wajah menemukan wajah di **4%** sampel, di
 bawah ambang, jadi seluruh klip jatuh ke bilah kabur dan tokohnya tidak pernah
 diikuti. Mode gerak pada klip yang sama: **89%**, bingkainya bergerak 265 piksel
 mengikuti tokoh.
@@ -709,7 +709,7 @@ mengikuti tokoh.
 Cara kerjanya tidak memerlukan model apa pun: pusat massa perubahan antar
 bingkai. Pada video bertokoh, yang bergerak paling banyak hampir selalu yang
 sedang jadi pusat perhatian. Seluruh penghalusan, deteksi potongan adegan, dan
-penyusunan keyframe dipakai bersama mode wajah — yang berbeda hanya APA yang
+penyusunan keyframe dipakai bersama mode wajah, yang berbeda hanya APA yang
 dijejak. Batasnya jujur dan sudah ditulis di kodenya: pada bidikan diam tidak
 ada yang bisa diikuti, dan pada panning kamera pusatnya melayang ke tengah.
 
@@ -720,22 +720,22 @@ ada yang bisa diikuti, dan pada panning kamera pusatnya melayang ke tengah.
 | `/api/projects` | 0,60 dtk | **0,03 dtk** |
 | `/api/clips` | 0,86 dtk | **0,06 dtk** |
 
-- `list_projects` mengurai JSON analisis UTUH untuk tiap proyek — 50 KB sampai
-  343 KB per proyek, sepuluh megabita untuk lima puluh dua analisis — padahal
+- `list_projects` mengurai JSON analisis UTUH untuk tiap proyek, 50 KB sampai
+  343 KB per proyek, sepuluh megabita untuk lima puluh dua analisis, padahal
   kartunya hanya perlu judul, durasi, mesin, dan BERAPA klipnya. Sekarang
   keempatnya dibaca lewat `json_extract` SQLite, jadi penguraian itu tidak
   pernah terjadi di Python.
 - `list_local_clips` membaca satu `stat` dan satu sidecar JSON per klip setiap
-  kali dipanggil — 49 klip di cakram luar. Sekarang ditahan di memori dengan
+  kali dipanggil, 49 klip di cakram luar. Sekarang ditahan di memori dengan
   kunci waktu-ubah FOLDER, jadi klip yang baru dirender tetap langsung terlihat.
 
 **Regresi yang saya buat dan perbaiki di sini juga.** Penggantian blok saat
 menulis ulang susunan gaming ikut MENGHAPUS `build_frame_keys_graph`,
-`_cabang_kunci`, dan `_urut_kunci` — seluruh pembangun graf linimasa bingkai.
+`_cabang_kunci`, dan `_urut_kunci`, seluruh pembangun graf linimasa bingkai.
 Tidak ketahuan karena sesudahnya saya hanya menguji `frame_mode='gaming'`, bukan
 `frame_keys`. Ketiganya sudah ditulis ulang dan diuji dengan render dua kunci
 (`motion` -> `center`). Pelajarannya: penggantian yang dipatok pada DUA jangkar
-akan membuang semua yang kebetulan berada di antaranya — dan berkas yang belum
+akan membuang semua yang kebetulan berada di antaranya, dan berkas yang belum
 pernah di-commit tidak punya jalan pulang.
 
 ---
@@ -746,7 +746,7 @@ pernah di-commit tidak punya jalan pulang.
 
 Versi pertama memakai **pusat massa** seluruh gerakan di layar. Itu menjawab
 pertanyaan yang salah. Ketika dua tokoh bergerak di sisi berlawanan, pusat
-massanya jatuh di antara keduanya — bingkai memuat tepi kiri yang satu dan tepi
+massanya jatuh di antara keduanya, bingkai memuat tepi kiri yang satu dan tepi
 kanan yang lain, dan tidak memuat satu pun secara utuh. Ketika latar ikut
 bergerak, pusatnya ditarik ke tengah. Hasilnya bingkai yang nyaris diam sambil
 bergetar sedikit.
@@ -764,23 +764,23 @@ sembarangan):
 | pusat massa (lama) | 60,6% | 44,6% | 63,7% |
 | jendela dominan (baru) | **68,6%** | **54,4%** | **71,0%** |
 
-Dan bingkainya benar-benar berpindah: simpangan posisi naik dari 46–87 px
-menjadi 126–139 px. Sesudah penghalusan, pada t=300 versi lama hanya bergerak
-96 px sepanjang dua puluh detik — praktis parkir — versi baru 386 px.
+Dan bingkainya benar-benar berpindah: simpangan posisi naik dari 46-87 px
+menjadi 126-139 px. Sesudah penghalusan, pada t=300 versi lama hanya bergerak
+96 px sepanjang dua puluh detik, praktis parkir, versi baru 386 px.
 
 **Dua penangkal yang diuji lalu DIBUANG,** karena diukur dan ternyata tidak
 membantu:
 
 - *Pengurangan latar* (membandingkan dengan rata-rata bergerak, bukan bingkai
-  sebelumnya): 59,9% / 51,6% / 60,7% — lebih buruk di ketiga titik, karena
+  sebelumnya): 59,9% / 51,6% / 60,7%, lebih buruk di ketiga titik, karena
   kamera yang bergeser membuat seluruh layar jadi latar depan.
 - *Kompensasi geser kamera* (korelasi silang profil tepi): 65,1% → 64,8%
   agregat. Tidak ada keuntungan, tapi ada ongkos per sampel.
 
 **Batas yang tersisa, jujur:** pada kompilasi kartun dengan transisi menyapu
 beranimasi, sapuannya menghasilkan gerakan yang jauh lebih besar daripada
-tokohnya, dan jendela ikut ke sana. Pada gameplay — diuji pada Minecraft
-1920×1080 — hasilnya justru bagus: kotak mendarat pada domba yang bergerak,
+tokohnya, dan jendela ikut ke sana. Pada gameplay, diuji pada Minecraft
+1920×1080, hasilnya justru bagus: kotak mendarat pada domba yang bergerak,
 pada tokoh pemain, dan pada minecart yang menyala.
 
 ### Panjang klip: preset dihapus seluruhnya
@@ -792,35 +792,35 @@ dan keduanya bukan gaya.
 
 Menghapus presetnya ternyata bagian yang mudah. Yang sulit: **hampir setiap
 komponen skor naik ketika jendelanya diperpanjang**, jadi tanpa target panjang,
-setiap klip tumbuh sampai langit-langit — batas kaku yang sama dengan nama lain.
+setiap klip tumbuh sampai langit-langit, batas kaku yang sama dengan nama lain.
 Terukur pada podcast satu jam, skor rata-rata naik monoton 0,52 (20 dtk) →
 0,63 (240 dtk). Tiga sebabnya ditemukan satu per satu:
 
 1. **`koherensi`** dihitung di dalam jendela: 0,53 pada 20 detik → 0,99 pada
    220 detik. Ia bukan mengukur keterpaduan, melainkan durasi dengan nama lain.
    Diganti kohesi yang diukur dalam lingkungan selebar **tetap** (±20 detik).
-   Sesudahnya: 0,641 → 0,651 — datar.
+   Sesudahnya: 0,641 → 0,651, datar.
 2. **`salience`** memakai jumlah lima tf-idf tertinggi, dinormalisasi ke
    maksimum global. Jendela panjang pasti menemukan kelimanya; jendela pendek
    tidak. Diganti rata-rata per kata isi, dipatok pada persentil 95.
 3. **`batas topik` (baru, TextTiling).** Ini yang benar-benar memutuskan di mana
    klip berhenti, karena ia milik SATU TITIK dalam transkrip, bukan milik sebuah
-   rentang — nilainya sama saja apakah jendela yang berakhir di situ dua belas
+   rentang, nilainya sama saja apakah jendela yang berakhir di situ dua belas
    detik atau tiga menit.
 
-Dan satu bug yang tersingkap di jalan: **leksikon hook hanya kena di 3–6%
+Dan satu bug yang tersingkap di jalan: **leksikon hook hanya kena di 3-6%
 kalimat** (75 dari 1498; 96 dari 1605; 43 dari 1284), padahal bobotnya terbesar
-di seluruh rumus — nilai rata-ratanya 0,057 dari 1,0. Jadi komponen yang paling
+di seluruh rumus, nilai rata-ratanya 0,057 dari 1,0. Jadi komponen yang paling
 menentukan hampir tidak pernah bersuara. Diperlebar dari 17 pola ke 34, dan yang
 lebih penting, `_hook_score` tidak lagi bergantung pada leksikon saja: dua
-sinyal baru di sana **rapat** — lonjakan energi suara tepat di pembuka, dan
+sinyal baru di sana **rapat**, lonjakan energi suara tepat di pembuka, dan
 denda untuk pembuka yang dibuka kata penyambung ("jadi", "terus", "tapi",
 "nah"), yang pada transkrip percakapan kena di seperempat kalimat.
 
 Dua angka terakhir dipilih dari sapuan pada lima transkrip nyata, dilihat dari
 SEBARAN panjangnya (bukan rata-ratanya, karena yang diminta memang keragaman):
 
-| toleransi | cukup | <30dtk | 30–60 | 60–120 | >120 | median |
+| toleransi | cukup | <30dtk | 30-60 | 60-120 | >120 | median |
 |---|---|---|---|---|---|---|
 | 0,02 | 0,6 | 7 | 7 | 24 | 22 | 102 dtk |
 | 0,04 | 0,6 | 13 | 15 | 22 | 10 | 66 |
@@ -838,12 +838,12 @@ berdampingan.
 - **`highlight_words` dipisah dari animasi masuk.** Tanpa ini, gaya bersih
   mustahil dibuat: sorotan menyala pada setiap animasi kecuali "tanpa animasi",
   dan "tanpa animasi" juga mematikan pudarnya.
-- **Pelat di belakang teks** (`bg`), padanan BorderStyle 3 di libass —
+- **Pelat di belakang teks** (`bg`), padanan BorderStyle 3 di libass,
   pengganti garis luar tujuh piksel. Empat template baru memakainya: **Apple**,
   **Sinema**, **Stiker**, plus **Ketik** (animasi `typewriter`).
 - **Bahasa tidak lagi terkunci di Indonesia.** Dua perbaikan terpisah:
   `transcribe_audio` dulu berbawaan `language="id"` dan **tidak ada satu pun
-  pemanggil yang mengirim nilai lain** — setiap video tanpa caption dipaksa
+  pemanggil yang mengirim nilai lain**, setiap video tanpa caption dipaksa
   ditranskrip sebagai bahasa Indonesia. Sekarang dikenali sendiri. Dan
   pengambil caption, yang dulu berhenti di id/en, sekarang melanjutkan ke
   bahasa yang **benar-benar dimiliki videonya** (maksimal 5 percobaan, karena
@@ -856,12 +856,12 @@ Keduanya sudah ada sebelum pekerjaan ini, dan keduanya merusak setiap subtitle
 dari takarir resmi kanal:
 
 1. **43% "kata" hanya spasi tak terlihat.** Pada satu transkrip: 7.550 dari
-   17.426. Akibatnya berantai dan tidak satu pun terlihat seperti kesalahan —
+   17.426. Akibatnya berantai dan tidak satu pun terlihat seperti kesalahan,
    kerapatan kata jadi dua kali lipat yang sebenarnya, pemecah baris
    menghitungnya sebagai kata, dan sorotan karaoke berhenti 60 milidetik pada
    kata yang tidak kelihatan.
 2. **Blok kata terduplikasi utuh.** `_dedupe` hanya membandingkan dengan kata
-   SEBELUMNYA, sedangkan rolling caption mengulang seluruh BARIS — tujuh kata
+   SEBELUMNYA, sedangkan rolling caption mengulang seluruh BARIS, tujuh kata
    yang sama dengan timestamp identik sampai milidetik. Kata kedua dari
    pengulangan dibandingkan dengan kata terakhir baris pertama, dan keduanya
    memang berbeda, jadi tidak pernah tertangkap. Hasilnya dua baris subtitle
@@ -875,19 +875,19 @@ menghasilkan 18 baris subtitle (banyak yang kembar dan bertumpuk) sekarang
 menghasilkan 6.
 
 **Sisa yang belum dikerjakan di sini:** takarir rolling menaruh dua kalimat
-BERBEDA pada rentang waktu yang tumpang tindih — bukan kembar lagi, tapi masih
+BERBEDA pada rentang waktu yang tumpang tindih, bukan kembar lagi, tapi masih
 dua baris di layar sekaligus. Itu cacat waktu di sumbernya dan butuh
 penjadwalan ulang batas baris, bukan sekadar pembersihan.
 
 ---
 
-## 12. Sutradara otomatis, sisipan media, dan tiga cacat render yang tersingkap — 18 September 2026
+## 12. Sutradara otomatis, sisipan media, dan tiga cacat render yang tersingkap, 18 September 2026
 
 ### "Lacak gerakan" yang loading tanpa akhir
 
 Dua sebab. (1) Berpindah dari "Ikuti wajah" ke "Ikuti gerakan" saat pelacakan
 wajah masih berjalan membatalkan permintaannya, tapi tanda sibuknya tidak
-pernah dimatikan — `Editor.jsx` kini mematikannya di cabang yang tidak
+pernah dimatikan, `Editor.jsx` kini mematikannya di cabang yang tidak
 melacak. (2) Pratinjau mode gerak tidak pernah meminta apa pun ke server; ia
 menggambar kotak diam. Sekarang `/api/clip-reframe` menerima `subjek: "gerak"`
 dan pratinjaunya bergeser mengikuti rencana yang sama dengan render.
@@ -897,7 +897,7 @@ memakan 5,1 detik, dan membaginya jadi empat proses paralel tidak membantu
 (4,8 dtk). Jawabannya **salinan analisis** (`services/proksi.py`): 1280 px
 H.264, dibuat sekali di latar begitu video diunduh, dipakai oleh semua
 analisis. Terukur: klip 60 dtk 31 → **3,3 dtk**; baca 20 dtk 5,1 → 0,5 dtk.
-Wajah terdeteksi 66,7% / 66,9% / 66,0% pada crf 26/30/33 — kompresinya tidak
+Wajah terdeteksi 66,7% / 66,9% / 66,0% pada crf 26/30/33, kompresinya tidak
 mengubah deteksi, jadi dipakai crf 30 (± 9 MB per menit video). Salinan yang
 sumbernya sudah dihapus ikut dibuang.
 
@@ -905,13 +905,13 @@ sumbernya sudah dihapus ikut dibuang.
 
 Tab baru **Sisipan** di Studio. Impor video, gambar, musik; taruh di waktu
 dan posisi tertentu (penuh, separuh atas, separuh bawah, tengah, pojok).
-Musik bisa "dikecilkan saat orang bicara" — terukur, musik -21 dB turun ke
+Musik bisa "dikecilkan saat orang bicara", terukur, musik -21 dB turun ke
 -39,5 dB saat ada ucapan. Enam efek suara bawaan (dentum, whoosh, ding, pop,
 naik, gedebuk) DISINTESIS oleh ffmpeg, jadi tidak ada lisensi yang perlu
 diperiksa dan tidak butuh internet.
 
 Bug yang ditemukan saat mengujinya: `loudnorm` mengeluarkan 192 kHz, dan
-mencampurnya dengan sisipan 48 kHz memotong audio klip — 10 detik keluar 7,1
+mencampurnya dengan sisipan 48 kHz memotong audio klip, 10 detik keluar 7,1
 detik. Audio utama kini diseragamkan ke 48 kHz sebelum dicampur.
 
 ### Sutradara otomatis (`services/sutradara.py`)
@@ -919,15 +919,15 @@ detik. Audio utama kini diseragamkan ke 48 kHz sebelum dicampur.
 Tombol "Susun otomatis" di tab Sisipan. Untuk gameplay berfacecam: wajah di
 atas + permainan di bawah, lalu **wajah penuh 9:16 selama 2,6 detik** saat
 pemainnya kaget, plus dentum di titik itu. Semua keluarannya kunci bingkai dan
-sisipan biasa bertanda "otomatis" dengan alasannya — bisa dihapus satu-satu.
+sisipan biasa bertanda "otomatis" dengan alasannya, bisa dihapus satu-satu.
 
 Yang dikenali adalah **reaksi kaget**, BUKAN "jumpscare", dan itu disengaja.
 Versi pertama (lonjakan suara saja) menandai satu kejutan tiap 6-15 detik, dan
 dilihat bingkai demi bingkai tidak satu pun kandidat terkuatnya jumpscare:
 yang tertangkap adalah pemain tertawa di layar kredit dan kamera berbalik.
-Suara permainan dan suara mikrofon ada di SATU trek. Syarat tambahan — keras
-di atas kebiasaan orang itu sendiri (persentil 90 klipnya) dan datang mendadak
-— menurunkannya ke kira-kira satu per menit, dan pada empat yang diperiksa
+Suara permainan dan suara mikrofon ada di SATU trek. Syarat tambahan, keras
+di atas kebiasaan orang itu sendiri (persentil 90 klipnya) dan datang mendadak,
+menurunkannya ke kira-kira satu per menit, dan pada empat yang diperiksa
 pemainnya memang terlihat kaget (mulut terbuka, kamera berbalik mendadak).
 
 **Belum:** pola untuk podcast (beberapa orang bereaksi sekaligus) dan kartun
@@ -941,14 +941,14 @@ pemainnya memang terlihat kaget (mulut terbuka, kamera berbalik mendadak).
    (`render.kabur`): tidak bisa dibedakan di samping-sampingan, 3,6 detik.
 2. **Linimasa bingkai dengan dua susunan macet.** Dua kunci gaming memakai
    label graf yang SAMA (`[lsrc0]`, `[lbg]`…). Kesalahan saya dari sesi
-   sebelumnya — waktu itu hanya diuji dengan satu kunci susunan. Kini tiap
+   sebelumnya, waktu itu hanya diuji dengan satu kunci susunan. Kini tiap
    susunan diberi awalan, dan seluruh linimasa dirakit dengan `concat` per
    potongan, bukan tumpukan `overlay`: gaming → kotak → gaming 6 detik dari
    macet ke 3,0 detik.
 3. **Satu kunci diabaikan.** Linimasa berisi satu kunci jatuh kembali ke mode
    dasar; usulan "gaming untuk seluruh klip" dirender sebagai ikuti wajah.
 
-### Unduhan berlubang — PERLU DIUNDUH ULANG
+### Unduhan berlubang, PERLU DIUNDUH ULANG
 
 `AKU_PERGI_SHOLAT_PADA_MALAM_HARI…_qgTmLOW-coo.mp4` punya **tiga celah, total
 15,2 detik** tanpa gambar (mis. 32:35,7 dan 32:50,9, masing-masing 5,08 dtk),
@@ -956,14 +956,14 @@ sementara audionya utuh. yt-dlp secara bawaan MELEWATI potongan yang gagal
 lalu tetap merakit berkasnya. Kini `skip_unavailable_fragments=False` dan
 `fragment_retries=15`: unduhan yang kehilangan potongan berhenti dengan pesan
 yang jelas dan bisa dilanjutkan. Render juga dibuat tahan celah (`fps=30` di
-depan linimasa), jadi gambar dan suara tetap sinkron — tapi bagian yang hilang
+depan linimasa), jadi gambar dan suara tetap sinkron, tapi bagian yang hilang
 tetap tampil beku sampai videonya diunduh ulang. `services/lubang.py` bisa
 memeriksa berkas mana pun dalam hitungan detik; dari semua unduhan sekarang,
 hanya video itu yang berlubang.
 
 ---
 
-## 13. "Selalu loading" — penyebabnya, render, lajur Sisipan, dan Lanjutkan proses — 19 September 2026
+## 13. "Selalu loading", penyebabnya, render, lajur Sisipan, dan Lanjutkan proses, 19 September 2026
 
 ### Penyebab utama semua loading lambat: ffmpeg liar (kesalahan saya)
 
@@ -973,7 +973,7 @@ backend yang sudah dimatikan, tidak ada lagi). Sumbernya `proksi.py` versi
 pertama: kunci hanya di dalam satu proses, tanpa batas jumlah, prioritas
 penuh. Diperbaiki:
 
-- `services/proses.py`: ffmpeg anak ikut mati bersama backend — di Linux
+- `services/proses.py`: ffmpeg anak ikut mati bersama backend, di Linux
   lewat `PR_SET_PDEATHSIG` (terbukti: backend dibunuh paksa, anaknya mati),
   di semua sistem lewat daftar yang dihentikan saat backend berhenti.
 - Salinan analisis: SATU antrean, satu salinan di seluruh mesin (berkas
@@ -992,7 +992,7 @@ Sesudahnya, terukur di peramban: Partitur 1,0 dtk · Studio (29 klip, video
    sama (dua pembacaan berkas 3 GB di cakram eksternal). Kini permintaan
    kedua menunggu yang pertama, dan pipeline sudah menghitungnya dari WAV
    pendek sebelum Studio dibuka.
-3. **`/api/clips` 357 KB** — subtitle setiap klip ikut terkirim di dalam
+3. **`/api/clips` 357 KB**, subtitle setiap klip ikut terkirim di dalam
    `metadata` padahal tidak ditampilkan. Kini 29 KB. **`/api/aset`** 1,5 dtk
    (ffprobe enam efek tiap kali) → 22 ms.
 
@@ -1004,21 +1004,21 @@ Sesudahnya, terukur di peramban: Partitur 1,0 dtk · Studio (29 klip, video
 - x264 tanpa `-threads 4`: ± 10% lebih cepat.
 - Klip 10 dtk gaming → reaksi → gaming: 96 dtk → 46 dtk (keduanya diukur saat
   mesin sibuk).
-- Yang DITOLAK: preset `superfast` — 17% lebih cepat pada mutu setara (SSIM
+- Yang DITOLAK: preset `superfast`, 17% lebih cepat pada mutu setara (SSIM
   0,9897 vs 0,9895) tapi berkasnya 30% lebih besar. Separuh waktu render
   adalah mendekode sumber VP9, yang tidak bisa dipercepat tanpa GPU.
 
 ### Lajur Sisipan di linimasa
 
 Seret untuk memindah, tarik ujung untuk mengubah panjang (ujung kiri memotong
-awal cuplikan, bukan menggesernya), klik untuk membuka rinciannya di panel —
+awal cuplikan, bukan menggesernya), klik untuk membuka rinciannya di panel,
 panel menyorot dan menggulir ke sana. Blok selebar minimal 44 px: efek suara
 0,8 dtk pada zoom 1× tadinya 15 px, seluruhnya tertutup pegangan ujung.
 
 ### Lanjutkan proses
 
 Kartu gagal/terputus di Partitur punya tombol **Lanjutkan proses**: pekerjaan
-dijalankan ulang dengan setelan yang sama, dan yang sudah selesai dilewati —
+dijalankan ulang dengan setelan yang sama, dan yang sudah selesai dilewati,
 video yang sudah terunduh, transkrip yang tersimpan, unduhan `.part` yang
 setengah jadi. Diuji pada pekerjaan 108 menit yang terputus di 82%: selesai,
 29 klip. Bar kemajuan kini tidak pernah mundur (tadinya 82% → 56% saat audio
@@ -1026,14 +1026,14 @@ disiapkan untuk perkiraan narasumber).
 
 ---
 
-## 14. Penutur gameplay, subtitle terjemahan, dan dua subtitle — 19 September 2026
+## 14. Penutur gameplay, subtitle terjemahan, dan dua subtitle, 19 September 2026
 
 ### Satu pemain terbaca tujuh orang
 
 Jumlah penutur ditebak dari SUARA. Pada gameplay horor, bisikan dan teriakan
 pemain, suara tokoh permainan, dan efek suara terbaca sebagai orang berbeda:
 "AKU MENCOBA HOROR KELAS SEKOLAH…" (Windah, sendirian) keluar 7 penutur,
-ditandai yakin. Porsi bicara saja tidak bisa membedakannya — 41/27/14/6/5/4/3%
+ditandai yakin. Porsi bicara saja tidak bisa membedakannya, 41/27/14/6/5/4/3%
 pada gameplay itu, sementara podcast lima orang sungguhan juga punya penutur
 4,2%.
 
@@ -1043,7 +1043,7 @@ sebelum pengelompokan suara, di analisis klip DAN di deteksi ulang penutur.
 
 | video | hasil |
 |---|---|
-| gameplay Windah (2 video) | 1 orang — pengelompokan suara dilewati |
+| gameplay Windah (2 video) | 1 orang, pengelompokan suara dilewati |
 | podcast 5 orang, dr. Tirta, kartun anak | tidak ada facecam → tebakan suara |
 | wawancara Elon, Andry/Atta | "facecam" 53-79% lebar = close-up → ditolak |
 
@@ -1073,11 +1073,11 @@ saja: matikan subtitle asli.
 **Belum:** subtitle kedua belum bisa diseret langsung di pratinjau (posisinya
 diatur dari panel), dan belum ada terjemahan tanpa kunci Gemini.
 
-## 15. Warna tiap orang, deteksi ulang yang cepat, dan bingkai yang menyorot pembicara — 19 September 2026
+## 15. Warna tiap orang, deteksi ulang yang cepat, dan bingkai yang menyorot pembicara, 19 September 2026
 
 ### Warna subtitle tiap orang
 
-Paletnya sudah lama ada, tapi hanya di Gaya → Warna → "Warna per narasumber" —
+Paletnya sudah lama ada, tapi hanya di Gaya → Warna → "Warna per narasumber",
 bagian yang tertutup dan jauh dari tempat orang-orangnya ditandai. Sekarang tab
 **Subtitle** punya deretan keping "Orang N · sekian baris"; klik keping untuk
 memilih warnanya (8 warna siap pakai + pemilih bebas). Keduanya menulis ke palet
@@ -1085,7 +1085,7 @@ yang sama. Memilih warna menyalakan kembali warna per orang bila sedang
 diseragamkan.
 
 Subtitle terjemahan bisa ikut: centang "Ikuti warna tiap orang" di panel
-terjemahan. Bukan bawaan — tanpa diminta, warna terjemahan tidak boleh tertimpa
+terjemahan. Bukan bawaan, tanpa diminta, warna terjemahan tidak boleh tertimpa
 warna orang pertama. Penuturnya dibaca dari subtitle UTAMA pada titik tengah
 baris (pratinjau dan ASS), bukan disimpan di baris terjemahan, supaya deteksi
 ulang tidak membuat warnanya basi.
@@ -1100,8 +1100,8 @@ Terukur pada gameplay 1 jam 48 menit (3,9 GB, cakram NTFS):
 | jumlah lain, pertama kali | 148 dtk | 91 dtk |
 | jumlah lain, berikutnya | ~105 dtk | 1,0 dtk |
 
-Tiga sebab: (1) audio diekstrak ulang dari video 3,9 GB setiap kali — 64 dtk
-hanya untuk membaca berkasnya — bahkan untuk 1 orang yang tidak butuh audio;
+Tiga sebab: (1) audio diekstrak ulang dari video 3,9 GB setiap kali, 64 dtk
+hanya untuk membaca berkasnya, bahkan untuk 1 orang yang tidak butuh audio;
 (2) WAV-nya dibuang sesudahnya; (3) sidik suara per jendela (bagian mahal,
 tidak bergantung pada jumlah orang) dihitung ulang setiap kali, dan dua kali
 bila jalur wajah ikut jalan.
@@ -1140,7 +1140,7 @@ Enam cacat:
 1. **Penutur yang hanya muncul saat ia sendiri bicara tidak pernah terpetakan.**
    Statistiknya membandingkan mulut saat bicara vs saat TIDAK bicara; orang yang
    hanya tampil di close-up gilirannya tidak punya sampel kedua. Di bidikan
-   lebar bingkai lalu jatuh ke wajah terbesar — di Yono klip 3, tamu yang sedang
+   lebar bingkai lalu jatuh ke wajah terbesar, di Yono klip 3, tamu yang sedang
    tertawa. Sekarang potongan kamera ikut jadi bukti (`SOLO_*`): selama giliran
    penutur, sebagian besar bidikan tunggal menampilkan orang yang sama, dan saat
    orang itu sendirian sebagian besar yang terdengar memang penutur itu.
@@ -1152,14 +1152,14 @@ Enam cacat:
    RUANG KOSONG di antara keduanya (dr. Tirta klip 2). Kini perjodohan lewat
    tempat duduk dipegang selama jejaknya berlanjut.
 4. **Jalur cadangan `group_people` selalu gagal** (membongkar deteksi 3-nilai
-   sebagai pasangan) — bidikan lebar tanpa sidik wajah kehilangan seluruh daftar
+   sebagai pasangan), bidikan lebar tanpa sidik wajah kehilangan seluruh daftar
    orangnya. Tidak mengenai 24 klip uji (semuanya bersidik), tapi pasti gagal
    di rekaman yang wajahnya kecil semua.
 5. **Pemetaan menyerah bila baru satu orang dikenali.** Klip pendek yang dibuka
    close-up pembicara lalu memotong ke bidikan lebar berisi wajah kecil tak
    bersidik: `assign_faces_to_speakers` mensyaratkan ≥2 orang, jadi bingkai
    jatuh ke tamu terbesar. Ditemukan dengan RENDER sungguhan (16 dtk), bukan
-   oleh alat ukur 60 dtk — di sana klipnya kebetulan memuat close-up tamu juga.
+   oleh alat ukur 60 dtk, di sana klipnya kebetulan memuat close-up tamu juga.
    Bukti potongan kamera kini jalan dengan satu orang; statistik mulut
    dipisah ke `_peta_dari_mulut`. Keterlihatannya juga kini dari `seen`, bukan
    dari jejak posisi yang menahan nilai (yang membuat semua orang "terlihat"
@@ -1170,7 +1170,7 @@ Enam cacat:
    ke orang lain. Kini: bila tidak satu pun wajah yang terlihat barusan
    berlanjut dan semua wajah sekarang baru, itu potongan.
 
-**Wajah yang bukan orang** (logo, lukisan, pola daun): tanda hidup per jejak —
+**Wajah yang bukan orang** (logo, lukisan, pola daun): tanda hidup per jejak,
 selisih petak wajah terhadap dirinya setengah detik sebelumnya, setelah
 kecerahan dinormalkan (`HIDUP_*`). Jejak di bawah 0,06 disingkirkan dari calon
 subjek, daftar orang, dan pemetaan penutur. Terukur: logo berwajah di Najwa
@@ -1182,25 +1182,25 @@ terpotong di tepi bingkai); dari 27 klip tidak ada wajah asli yang tercoret.
   deteksinya ikut bergoyang terhadap gambar, jadi terlihat hidup (uji tiruan:
   0,14 dan 0,46). Di kamera diam tertangkap, kecuali derau sangat berat.
 - Keyakinan detektor TIDAK bisa memisahkan daun dari wajah asli yang menoleh
-  (keduanya 0,69) — jangan dipakai sebagai ambang.
+  (keduanya 0,69), jangan dipakai sebagai ambang.
 - Bukti mulut (`speaking_evidence`) keliru di bidikan lebar yang riuh: tawa
   terbaca sebagai bicara. Jangan dipakai sebagai kebenaran acuan.
 - Nomor orang bisa berbeda antar klip bergantung klip mana yang dipindai lebih
   dulu (daftar orang per video disimpan di memori).
-- Hitungan sidik suara pertama untuk video panjang masih 1,5–3 menit.
+- Hitungan sidik suara pertama untuk video panjang masih 1,5-3 menit.
 
-## 16. Warna orang yang berganti, dan Cari ulang klip — 19 September 2026 (siang)
+## 16. Warna orang yang berganti, dan Cari ulang klip, 19 September 2026 (siang)
 
 ### Satu orang, beberapa warna
 
-Laporan: A bicara, lalu B, lalu A lagi — dan A kembali dengan warna orang lain.
+Laporan: A bicara, lalu B, lalu A lagi, dan A kembali dengan warna orang lain.
 Terbukti pada Titik Kumpul klip D (dideteksi ulang dengan 6 orang): cerita Kang
 Sule tentang anaknya (dtk 29-61, dikonfirmasi dengan gambar) berlabel
 1,1,1,1,1,5,5,5,1,1.
 
 Sebabnya: k-means dengan k melebihi jumlah orang sebenarnya MEMBELAH suara yang
 paling banyak bicara. Pusat kelompok (sidik mentah, kosinus) dua belahan satu
-suara 0,90-0,96; dua orang berbeda paling tinggi 0,82 — pada lima video.
+suara 0,90-0,96; dua orang berbeda paling tinggi 0,82, pada lima video.
 `diarize._gabung_kembar` menggabungkan kelompok ≥ 0,88 (`SUARA_KEMBAR`) setelah
 pengelompokan, termasuk bila jumlahnya diminta pengguna; pesan deteksi ulang
 menyebut "Diminta 6 orang, tapi 1 kelompok ternyata suara orang yang sama".
@@ -1210,15 +1210,15 @@ menyebut "Diminta 6 orang, tapi 1 kelompok ternyata suara orang yang sama".
 | Sule klip D, 6 diminta | Sule 3 warna | 1 warna (jadi 5 orang) |
 | Andry & Atta, 3-6 diminta (konsisten, acuan wajah sendirian) | 0,53-0,58 | 0,88-0,89 |
 | Elon (2 orang) dipaksa 3 / 4 | terbelah | 2 |
-| mode tebak sendiri (semua video), Yono | — | tidak berubah |
+| mode tebak sendiri (semua video), Yono |, | tidak berubah |
 
 Dicoba dan DITOLAK: pengelompokan bertingkat (average linkage) sebagai
-pengganti k-means — lebih baik di Andry, lebih buruk di Yono (0,53-0,63 vs
+pengganti k-means, lebih baik di Andry, lebih buruk di Yono (0,53-0,63 vs
 0,64-0,67). Acuan "wajah sendirian di layar" berderau (shot reaksi), jadi hanya
 selisih besar yang dipercaya.
 
 **Belum:** Sule klip D dtk 10-29 masih berlabel orang ketiga (dari gambar, itu
-Sule juga — kemiripannya dengan kelompok Sule di bawah 0,88). Bingkai di situ
+Sule juga, kemiripannya dengan kelompok Sule di bawah 0,88). Bingkai di situ
 tetap salah (tangkapan layar pengguna, dtk 12) karena penutur itu tidak bisa
 dicocokkan ke wajah mana pun. Menurunkan ambang berisiko menggabung dua orang
 berbeda (0,82). Proyek lama perlu "Deteksi ulang" untuk mendapat penggabungan.
@@ -1242,7 +1242,7 @@ dari audio tersimpan (18 → 4 dtk); Gemini 107 dtk (94 dtk menunggu model). Diu
 ### Server yang tidak mau berhenti
 
 Uvicorn menunggu SEMUA sambungan tertutup sebelum berhenti, dan Studio yang
-terbuka menahan sambungan (aliran video, pantau job) selamanya — proses lama
+terbuka menahan sambungan (aliran video, pantau job) selamanya, proses lama
 tetap hidup setelah diminta berhenti. `timeout_graceful_shutdown=5` di run.py;
 terukur berhenti dalam 5,3 dtk dengan sambungan terbuka.
 
@@ -1250,12 +1250,12 @@ terukur berhenti dalam 5,3 dtk dengan sambungan terbuka.
 
 Laporan: "Cari ulang" dengan Gemini masih memuat setelah setengah jam. Job
 berjalan 1,5 jam: gemini-3.8-flash dan 3.6-flash menjawab 503 ("high demand"),
-lalu satu permintaan berikutnya tidak pernah dijawab — `refine_candidates`
+lalu satu permintaan berikutnya tidak pernah dijawab, `refine_candidates`
 membuat klien Gemini TANPA batas waktu (fungsi judul di berkas yang sama sudah
 punya 90 dtk). Sekarang: 150 dtk per permintaan, 360 dtk untuk seluruh
 rangkaian model; 503/timeout langsung pindah ke model berikutnya (dulu diulang
 dulu); pembatalan diperiksa di antara percobaan; tiap percobaan dilaporkan
-("gemini-3.6-flash sedang sibuk — mencoba gemini-3.5-flash…"); bila semua gagal,
+("gemini-3.6-flash sedang sibuk, mencoba gemini-3.5-flash…"); bila semua gagal,
 klip dari mesin lokal dan pesannya MENGATAKAN itu (`gemini_gagal`). Pesan akhir
 menyebut model yang benar-benar menjawab. Diuji ulang di proyek Kang Sule:
 76 dtk, 3.6-flash sibuk → 3.5-flash, 20 klip (19 lama bisa dikembalikan).
@@ -1268,29 +1268,29 @@ Job kini membawa `started_at` dan `eta_seconds` ke kartu.
 
 ## 17. Klip ulang yang kehilangan konteks, dan "pakai AI paling kuat"
 
-**Laporan:** video lama yang dulu klipnya 60+ detik, setelah "Cari ulang" berisi klip 16 detik yang tidak bisa dimengerti (ohJbKVkrZ4U, 339–354 dtk: "Setelah di smash mulu…" — topiknya mulai di 296 dtk, lucunya keluar di 370 dtk).
+**Laporan:** video lama yang dulu klipnya 60+ detik, setelah "Cari ulang" berisi klip 16 detik yang tidak bisa dimengerti (ohJbKVkrZ4U, 339-354 dtk: "Setelah di smash mulu…", topiknya mulai di 296 dtk, lucunya keluar di 370 dtk).
 
 **Penyebab (tiga, saling menguatkan):**
 - Prompt tidak pernah menuntut klip bisa dimengerti penonton baru; kandidat heuristik memang cenderung pendek dan model meniru panjangnya.
-- `_apply_selections` hanya mengizinkan awal mundur 8 kalimat — pada obrolan berkalimat pendek itu belasan detik. Model yang ingin mundur ke awal topik dibatalkan diam-diam.
+- `_apply_selections` hanya mengizinkan awal mundur 8 kalimat, pada obrolan berkalimat pendek itu belasan detik. Model yang ingin mundur ke awal topik dibatalkan diam-diam.
 - `end_sentence` dibaca sebagai "sesudah yang terakhir" tanpa pernah diberitahukan ke model, sementara daftar kandidat menulis rentang inklusif. Sekarang inklusif di kedua sisi.
 
 **Perbaikan:**
 - Prompt: "uji penonton baru" (awal tidak merujuk ke belakang, akhir sampai puncak, padat), kolom `konteks` yang ditulis SEBELUM nomor kalimat (`property_ordering`), dan permintaan memenuhi jumlah klip.
 - Batas dari model diterima apa adanya selama sah; pilihan yang tumpang tindih >50% dengan pilihan lebih kuat dibuang.
 - Pemeriksaan kedua `rapikan_batas`: model melihat ±25/15 kalimat di sekitar tiap klip dan hanya memperbaiki awal/akhir (~45 dtk; gagal → batas pertama dipakai). Terukur 9/14 dan 7/20 klip dirapikan.
-- `services/peringkat_model.py`: urutan model disusun dari daftar kunci — pro > flash, generasi terbaru dulu; lite/Gemma/agen dibuang. Model yang menjawab 429 "limit: 0" atau 404 dicatat di `settings` (`ai.model_tak_terpakai`) dan dilewati 24 jam. Dipakai oleh pencarian klip, tulis-ulang judul, dan terjemahan. `OMNICLIP_GEMINI_MODELS` tetap menang bila diisi.
+- `services/peringkat_model.py`: urutan model disusun dari daftar kunci, pro > flash, generasi terbaru dulu; lite/Gemma/agen dibuang. Model yang menjawab 429 "limit: 0" atau 404 dicatat di `settings` (`ai.model_tak_terpakai`) dan dilewati 24 jam. Dipakai oleh pencarian klip, tulis-ulang judul, dan terjemahan. `OMNICLIP_GEMINI_MODELS` tetap menang bila diisi.
 - `/settings/models` menambah `cocok`, `terkuat`, `tanpa_kuota`; menu model di Pengaturan dan Cari ulang hanya menampilkan yang cocok.
 
-**Fakta kunci:** paket gratis Gemini memberi kuota **0** untuk seri Pro (`gemini-3.1-pro`); `gemini-2.5-pro` 404. Terkuat yang bisa dipakai kunci ini: `gemini-3.8-flash` — tetapi 3.8/3.7/3.6 sering 503, jadi yang benar-benar menjawab hari ini 3.5-flash.
+**Fakta kunci:** paket gratis Gemini memberi kuota **0** untuk seri Pro (`gemini-3.1-pro`); `gemini-2.5-pro` 404. Terkuat yang bisa dipakai kunci ini: `gemini-3.8-flash`, tetapi 3.8/3.7/3.6 sering 503, jadi yang benar-benar menjawab hari ini 3.5-flash.
 
-**Hasil:** ohJbKVkrZ4U 14 klip 35–147 dtk (dulu 16–149 dengan klip teratas 16 dtk tanpa konteks); XtAoIx6-EWw tetap 20 klip. Sisa: transkrip otomatis tanpa tanda baca masih membuat sebagian awal berupa potongan ucapan ("Al program yang enggak nyangka.").
+**Hasil:** ohJbKVkrZ4U 14 klip 35-147 dtk (dulu 16-149 dengan klip teratas 16 dtk tanpa konteks); XtAoIx6-EWw tetap 20 klip. Sisa: transkrip otomatis tanpa tanda baca masih membuat sebagian awal berupa potongan ucapan ("Al program yang enggak nyangka.").
 
 ## 18. Bingkai mengikuti wajah di iklan sponsor
 
-**Laporan:** JHrjjPbD7I4 klip P (40:33) — bingkai mengunci wajah di iklan Flimeal yang ditempel di pojok kiri video, bukan orang yang bicara.
+**Laporan:** JHrjjPbD7I4 klip P (40:33), bingkai mengunci wajah di iklan Flimeal yang ditempel di pojok kiri video, bukan orang yang bicara.
 
-**Penyebab:** tanda hidup membandingkan petak wajah di kotak deteksi SEKARANG dengan petak setengah detik lalu. Wajah iklan hanya ±21 px; kotak detektor bergoyang 1-2 px sehingga tepi kontras (kacamata, batas ungu) terbaca sebagai perubahan — wajah iklan yang diam dinilai 0,19-0,34, setara orang bicara.
+**Penyebab:** tanda hidup membandingkan petak wajah di kotak deteksi SEKARANG dengan petak setengah detik lalu. Wajah iklan hanya ±21 px; kotak detektor bergoyang 1-2 px sehingga tepi kontras (kacamata, batas ungu) terbaca sebagai perubahan, wajah iklan yang diam dinilai 0,19-0,34, setara orang bicara.
 
 **Perbaikan (`reframe.py`):**
 - Petak pembanding diambil di KOTAK YANG SAMA dengan setengah detik lalu (`rujukan_kotak`). Gambar diam → 0,00-0,05; orang yang diam mendengarkan terendah 0,07 (30 klip, 10 video). `HIDUP_AMBANG` 0,06 → 0,05 untuk jarak aman.
@@ -1302,28 +1302,28 @@ Job kini membawa `started_at` dan `eta_seconds` ke kartu.
 
 ## 19. Sutradara bingkai AI (tahap 1-2 dari rencana; belum di-commit)
 
-Rencana lengkap: bingkai berganti per momen — podcast: tawa → wajah yang bereaksi (bergantian atau ditumpuk) → kembali ikut wajah; game horor: jumpscare → wajah penuh → kembali gameplay. Gemini utama, OpenRouter cadangan (belum), tombol di Studio (sudah) + otomatis setelah auto-klip (belum).
+Rencana lengkap: bingkai berganti per momen, podcast: tawa → wajah yang bereaksi (bergantian atau ditumpuk) → kembali ikut wajah; game horor: jumpscare → wajah penuh → kembali gameplay. Gemini utama, OpenRouter cadangan (belum), tombol di Studio (sudah) + otomatis setelah auto-klip (belum).
 
 **Sudah jadi:**
-- `reframe.py`: `ReframePlan.people_box` (cy, lebar wajah per orang per sampel), `cut_times`, `kotak_orang()` (None bila orangnya tak terlihat di rentang — jangan pakai posisi dari bidikan lain).
+- `reframe.py`: `ReframePlan.people_box` (cy, lebar wajah per orang per sampel), `cut_times`, `kotak_orang()` (None bila orangnya tak terlihat di rentang, jangan pakai posisi dari bidikan lain).
 - `peristiwa_suara.py`: YAMNet ONNX (16 MB, sha256 diperiksa, `backend/models/yamnet.onnx`, di-.gitignore) → tawa/sorak/teriak. Caption YouTube Indonesia tidak pernah menandai tawa dan meregangkan kata sampai 100% klip, jadi YAMNet satu-satunya sinyal tawa yang andal. Ambang: skor mutlak ≥0,015 DAN ≥20× median klip.
 - `momen.py`: gabungan kejut, tanpa-kata, mulut bersama, potong kamera, dan YAMNet → momen kandidat ber-id.
 - `penyedia_ai.py`: `tanya_gemini(bahan=[video|gambar|teks])`, rantai model + catat_gagal seperti gemini.py.
 - `sutradara_ai.py`: proksi 360p dengan JAM KLIP ditulis di pojok (tanpa itu Gemini menaruh momen di detik 100 dari video 70 detik), lembar wajah P0…Pn (OpenCV), menu bingkai tetap, validasi (tempel ke bukti lokal ±2 dtk, bidikan ≥0,6 dtk, momen ≤5 dtk, jarak ≥3 dtk, kekuatan ≥0,55, wajah <44 px → bidikan lebar, pecah di potongan kamera), `susun_lokal` tanpa AI, job `sutradara` (lajur net), `POST /api/clip-sutradara-ai`.
 - Bidikan wajah/terbagi = susunan dengan bingkai `follow` + `person` eksplisit (FrameModel.person, render, serializeLayout, followX).
 - Studio: kartu "Sutradara bingkai" di panel Sisipan (AI / Mesin lokal / Buang), bilah kemajuan, konfirmasi bila lajur sudah diatur tangan; lajur Bingkai menandai kunci ✦ dengan alasannya; menyunting kunci melepas `asal`.
-- **Bug lama diperbaiki:** pratinjau terlempar ke awal klip setiap kali pemutaran masuk kunci "Susun"/"Game" — elemen <video> baru lahir di detik 0 sumber dan penjaga "parkir" Editor menariknya ke awal klip. `ClipPreview.pasangUtama` kini menyerahkan posisi+status putar ke elemen pengganti SEKETIKA.
+- **Bug lama diperbaiki:** pratinjau terlempar ke awal klip setiap kali pemutaran masuk kunci "Susun"/"Game", elemen <video> baru lahir di detik 0 sumber dan penjaga "parkir" Editor menariknya ke awal klip. `ClipPreview.pasangUtama` kini menyerahkan posisi+status putar ke elemen pengganti SEKETIKA.
 - **ffmpeg bundelan (`backend/bin/ffmpeg` 7.0.2 statis) TIDAK punya `drawtext`.** Jangan pakai drawtext di mana pun; jam proksi ditulis lewat ASS/libass.
 
 **Terukur:** job lewat API 74-104 dtk (sebagian besar menunggu model sibuk), ±5-13 rb token/klip. Render dengan kunci AI berhasil (mode `keys`).
 
-**Sisa:** setengah detik hitam saat masuk susunan di pratinjau; sel terbagi bisa berisi orang yang sama bila kamera berpindah di tengah momen (jalur lokal); model memberi kekuatan 1,0 hampir ke semua momen; nomor orang di render bergantung pada roster yang sama (restart backend di antara susun dan render → risiko nomor tertukar); tahap 3 game horor (butuh video uji — minta izin unduh), tahap 4 OpenRouter, tahap 5 otomatis setelah auto-klip + cache.
+**Sisa:** setengah detik hitam saat masuk susunan di pratinjau; sel terbagi bisa berisi orang yang sama bila kamera berpindah di tengah momen (jalur lokal); model memberi kekuatan 1,0 hampir ke semua momen; nomor orang di render bergantung pada roster yang sama (restart backend di antara susun dan render → risiko nomor tertukar); tahap 3 game horor (butuh video uji, minta izin unduh), tahap 4 OpenRouter, tahap 5 otomatis setelah auto-klip + cache.
 
 ## 20. Unduhan paralel dan lebih cepat (belum di-commit)
 
-- **Kecepatan.** Satu sambungan ke YouTube diperlambat setelah ±30 dtk (terukur 9,8 → 2–5 MB/s di internet 100 Mbps).
+- **Kecepatan.** Satu sambungan ke YouTube diperlambat setelah ±30 dtk (terukur 9,8 → 2-5 MB/s di internet 100 Mbps).
   `ytdlp._opsi_paralel`: `extractor_args youtube formats=dashy` + `concurrent_fragment_downloads=8`
-  (`OMNICLIP_SAMBUNGAN_UNDUH`). Terukur 10–12 MB/s stabil. Bila gagal, diulang sekali dengan satu sambungan.
+  (`OMNICLIP_SAMBUNGAN_UNDUH`). Terukur 10-12 MB/s stabil. Bila gagal, diulang sekali dengan satu sambungan.
 - **Paralel.** Auto-klip pindah ke lajur baru `klip` (lebar 3, `OMNICLIP_LANE_KLIP`). Pekerjaan berat bergiliran
   lewat `jobs.gerbang_cpu` (semafor selebar lane `cpu`): job lane `cpu` memegangnya penuh, auto-klip mengambilnya
   sesudah unduhan (`ctx.giliran_cpu`) dengan pesan "menunggu giliran analisis". Job antre versi lama dipindah
@@ -1343,8 +1343,8 @@ Rencana lengkap: bingkai berganti per momen — podcast: tawa → wajah yang ber
 - Studio: `FramePanel.GamingSetelan` (Permainan utuh / Penuhi bawah, penggeser tinggi wajah, cari ulang);
   kotak di meja bingkai bisa diseret, sudutnya berasio terkunci (`beginRectDrag({aspek})`). Setelan per video
   di localStorage `omniclip.gaming` (`muatGaming`/`simpanGaming`).
-- Bug: Main game → Susun sendiri membuat dua kotak "menyatu" — susunan dari server tanpa `id`. Sekarang id baru.
-- Susun sendiri: `frames.selaraskanBentuk` — mengubah ukuran kotak sumber menyesuaikan tinggi bidang tujuan,
+- Bug: Main game → Susun sendiri membuat dua kotak "menyatu", susunan dari server tanpa `id`. Sekarang id baru.
+- Susun sendiri: `frames.selaraskanBentuk`, mengubah ukuran kotak sumber menyesuaikan tinggi bidang tujuan,
   mengubah bidang tujuan menyesuaikan kotak sumber (cover saja). Terlapor: notifikasi donasi terpotong kiri-kanan.
 
 ## 22. Main game per klip dengan wajah yang berpindah; potongan Susun sendiri yang mandiri (belum di-commit)
@@ -1355,7 +1355,7 @@ Rencana lengkap: bingkai berganti per momen — podcast: tawa → wajah yang ber
 - Kotak Reaksi dibentuk DI DALAM panel facecam (`_pas_rasio(dalam=True)`), bukan dilebarkan ke layar permainan.
 - Kotak Permainan bebas bentuk; bidangnya selebar kanvas setinggi bentuknya (`bidangPermainan` / `_bidang_permainan`).
 - Setelan disimpan di klip (`susunan_game`, ikut Simpan); hasil deteksi yang belum disentuh hanya di-cache di Editor.
-  Setelan per video di localStorage (bagian 21) dibuang — itulah yang membuat klip M dibingkai di kiri atas.
+  Setelan per video di localStorage (bagian 21) dibuang, itulah yang membuat klip M dibingkai di kiri atas.
 - Susun sendiri: tiap potongan memegang salinan susunannya (`Editor.setFrameKeys` + `frameCuts` membawa `layout`).
   Teruji: potong di 0:10, ubah potongan kedua, kembali ke 0:00 → potongan pertama tetap.
 - Sisa: kotak facecam hasil deteksi sedikit lebih lebar dari panel aslinya (strip tipis permainan di tepi panel wajah).
@@ -1366,7 +1366,7 @@ Rencana lengkap: bingkai berganti per momen — podcast: tawa → wajah yang ber
   facecam (`render._permainan_tanpa_wajah` / `frames.permainanTanpaWajah`). "utuh" tetap tersedia.
 - Tepi panel facecam ditajamkan dari garis diam lintas waktu (`reframe._tepi_panel`): puncak gradien ≥2,5×
   median jalurnya DAN kuat di ≥70% panjang sisinya; sisi di pinggir bingkai tidak dicari; ditolak bila panel
-  hampir selebar wajah. Terukur: 96GQgDkHC64 → 0–18,4% × 71,5–100% (tepat); Devour (facecam tanpa bingkai,
+  hampir selebar wajah. Terukur: 96GQgDkHC64 → 0-18,4% × 71,5-100% (tepat); Devour (facecam tanpa bingkai,
   orang dipotong dari latar) tetap memakai perkiraan dari awan wajah.
 - Pindah letak facecam harus dibenarkan potongan 8 dtk berikutnya; ukuran dianggap berubah bila >2,5×.
 - Studio: kedua bingkai Main game bebas seperti Susun sendiri (kotak sumber di meja bingkai, bidang di layar
@@ -1376,7 +1376,7 @@ Rencana lengkap: bingkai berganti per momen — podcast: tawa → wajah yang ber
 ## 24. Subtitle bahasa asli, tab Sutradara, dan bingkai lebar saat tak ada wajah (belum di-commit)
 
 - **Subtitle ikut bahasa video.** `CAPTION_LANGS` menaruh "id" di depan, dan YouTube MENERJEMAHKAN caption
-  otomatis ke bahasa apa pun yang diminta — video Inggris keluar dengan subtitle Indonesia hasil mesin
+  otomatis ke bahasa apa pun yang diminta, video Inggris keluar dengan subtitle Indonesia hasil mesin
   (terlapor pada "I Survived 100 Days on One Block"). `ytdlp.get_video_info` kini membawa `language`,
   `captions.fetch_youtube_captions(asli=…)` memintanya lebih dulu, dan hasil ASR dalam bahasa yang bukan
   bahasa video dianggap terjemahan lalu diulang. Teruji: kJu5VMN3yow → en manual 6.024 kata;
@@ -1384,8 +1384,8 @@ Rencana lengkap: bingkai berganti per momen — podcast: tawa → wajah yang ber
 - **Sutradara punya tabnya sendiri** (`SutradaraPanel.jsx`, tab "Sutradara"), keluar dari panel Sisipan.
 - **Tanpa wajah → bingkai lebar.** `sutradara_ai._tanpa_wajah` + aturan di `jadikan_kunci`: rentang ≥2,5 dtk
   tanpa satu wajah pun jadi kunci `blur`, lalu kembali ke bingkai dasar. Teruji pada klip Minecraft:
-  4 bagian dilebarkan (6,9–11,4 / 17,5–20,4 / 22,4–26,9 / 29,4–36,8 dtk).
-- Sisa untuk sutradara: gaya subtitle per penutur (font, warna, letak) — belum ada sama sekali; bidikan
+  4 bagian dilebarkan (6,9-11,4 / 17,5-20,4 / 22,4-26,9 / 29,4-36,8 dtk).
+- Sisa untuk sutradara: gaya subtitle per penutur (font, warna, letak), belum ada sama sekali; bidikan
   reaksi masih kurang rapi; mode otomatis setelah auto-klip; cadangan OpenRouter.
 
 ## 25. Kemajuan yang terlihat untuk setiap proses (belum di-commit)
@@ -1404,14 +1404,14 @@ Rencana lengkap: bingkai berganti per momen — podcast: tawa → wajah yang ber
   diambil. Sebelumnya bitrate menentukan: 13 jalur 129,474-129,476 kbps pada video MrBeast → bahasa acak.
   Bila berkas di disk bertag bahasa lain (`bahasa_audio` lewat ffprobe), berkasnya disingkirkan (.lama) lalu
   diunduh ulang; dipulihkan bila unduhan gagal. Partitur: pilihan "Unduh suara" muncul di bawah kolom tautan.
-- **Video hilang.** /api/projects menaruh `local_url` SESUDAH `**result` — sebelumnya `local_url` lama dari
+- **Video hilang.** /api/projects menaruh `local_url` SESUDAH `**result`, sebelumnya `local_url` lama dari
   hasil tersimpan menimpanya dan Studio memutar berkas yang tidak ada (layar hitam). Studio kini menampilkan
   `VideoHilang` dengan tombol unduh ulang + pilihan audio + bilah kemajuan. Teruji: MrBeast pulih, 1080p, eng.
 - **Transkrip berbahasa lain.** Cari ulang tidak memakai lagi transkrip caption tersimpan yang bahasanya bukan
   bahasa video; `transcripts.get_best` memilih yang terbaru bila peringkat sumber sama.
 - Gerbang unduhan (bagian 25) teruji ulang di dalam proses: 3 bersamaan, 2 menunggu, batal saat menunggu OK.
 - Catatan proses: pola `pgrep` "Projek Coding/.../python run.py" tidak cocok dengan perintah backend
-  ("venv/bin/python run.py") — pakai `pgrep -f "python run.py"` (tidak mengenai aplikasi desktop).
+  ("venv/bin/python run.py"), pakai `pgrep -f "python run.py"` (tidak mengenai aplikasi desktop).
 
 ## 27. Sutradara tanpa bilah kabur (belum di-commit)
 
@@ -1427,7 +1427,7 @@ Rencana lengkap: bingkai berganti per momen — podcast: tawa → wajah yang ber
 ## 28. Bingkai dasar per saat: game / wajah / gerakan (belum di-commit)
 
 - Aturan pemilik: game + wajah bersamaan → bingkai game; hanya game → ikuti gerakan; hanya wajah → ikuti wajah.
-- `sutradara_ai._label_per_sampel`: wajah "facecam" = lebar ≤14% bingkai DAN di pojok (x <25%/>75%, y <30%/>55%) —
+- `sutradara_ai._label_per_sampel`: wajah "facecam" = lebar ≤14% bingkai DAN di pojok (x <25%/>75%, y <30%/>55%),
   angka dari rekaman MrBeast (wajah pemain 6-12,6%, x 9-20%/83-91%; wajah kamera orang x 52-55%).
   Potongan <1,5 dtk disatukan (`_rapikan_potongan`). Tiap potongan game mencari panel facecam-nya sendiri
   (`deteksi_facecam` pada potongan itu; cadangan `_kotak_dari_wajah`) dan membawa `layout`-nya di kunci.
@@ -1436,7 +1436,7 @@ Rencana lengkap: bingkai berganti per momen — podcast: tawa → wajah yang ber
 - Studio: kunci game yang membawa susunannya sendiri ditampilkan dan disunting dari kuncinya.
 - Teruji MrBeast 0-40 dtk: gerak / game (11,4-17,5) / gerak / game (20,4-22,4) / gerak / wajah (36,8); dirender
   dan diperiksa bingkainya. Podcast Sule dan horor klip M tidak berubah.
-- Sisa: potongan game yang sangat pendek (2 dtk) memakai kotak perkiraan dari ukuran wajah — tepi panel ikut masuk.
+- Sisa: potongan game yang sangat pendek (2 dtk) memakai kotak perkiraan dari ukuran wajah, tepi panel ikut masuk.
 
 ## 29. Pratinjau tidak lagi melacak ulang di tiap potongan (belum di-commit)
 
@@ -1446,7 +1446,7 @@ Rencana lengkap: bingkai berganti per momen — podcast: tawa → wajah yang ber
 - Sekarang: `cacheJejakRef` menyimpan jejak per (video, segmen, rasio, gaya gerak, subjek, tanda orang, penutur);
   `ambilJejak` menyatukan permintaan yang sama; semua subjek yang dibutuhkan linimasa (`subjekDibutuhkan`)
   diambil di latar sejak awal. Server sudah punya `_REFRAME_CACHE` untuk muat ulang halaman.
-- Teruji di browser (MrBeast klip A, 4 potongan wajah/gerak): dua pemutaran penuh termasuk putar ulang —
+- Teruji di browser (MrBeast klip A, 4 potongan wajah/gerak): dua pemutaran penuh termasuk putar ulang,
   0 permintaan jejak baru, tanda "Melacak" 0 dtk.
 
 ## 30. Bingkai bawaan dipilih dari isi klip (2026-09-21)
@@ -1464,7 +1464,7 @@ Dulu klip dibuka dengan cara bingkai terakhir untuk videonya (biasanya ikut waja
   - 9 klip game (3 video horor) → game;
   - podcast Sule → ikut wajah;
   - kartun pemadam → gerakan.
-- Waktu deteksi pertama 20–140 dtk per klip; pembukaan ulang ±3 dtk.
+- Waktu deteksi pertama 20-140 dtk per klip; pembukaan ulang ±3 dtk.
 
 ## 31. Verifikasi bot: runtime JS, PO Token, cookies yang kini berfungsi (2026-09-21)
 
@@ -1511,7 +1511,7 @@ Dulu klip dibuka dengan cara bingkai terakhir untuk videonya (biasanya ikut waja
 
 **Game:**
 - `render.kotak_reaksi` memuat kepala utuh dari `awan_kotak` (+35% atas, 22% bawah, 25% samping).
-- `tinggi_wajah_otomatis` memilih tinggi bidang wajah 40–50% sesuai bentuk panel (luapan ≤8%).
+- `tinggi_wajah_otomatis` memilih tinggi bidang wajah 40-50% sesuai bentuk panel (luapan ≤8%).
 - `_permainan_tanpa_wajah(wajah_saja=...)` hanya menghindari kepala bila menghindari panel menggeser >3%.
 - Cermin JS di `frames.js` (`kotakReaksi`, `permainanTanpaWajah`) terverifikasi 0 beda pada 7 klip.
 - Ruang di atas alis: dulu ~17% tinggi wajah, kini 35%.

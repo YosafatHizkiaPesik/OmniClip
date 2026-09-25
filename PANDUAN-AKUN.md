@@ -10,8 +10,8 @@ menambah akun kedua, ketiga, dan seterusnya cuma satu tekan.
 ## Kenapa tidak bisa langsung "login"
 
 Google tidak menerima unggahan dari program sembarangan. Ia hanya menerima dari
-**aplikasi yang terdaftar**, dan kuota unggah YouTube dihitung **per aplikasi**
-— bukan per akun. Kalau OmniClip membawa satu kunci bawaan untuk semua
+**aplikasi yang terdaftar**, dan kuota unggah YouTube dihitung **per aplikasi**,
+bukan per akun. Kalau OmniClip membawa satu kunci bawaan untuk semua
 penggunanya, kuota satu orang akan menghabiskan kuota semua orang, dan pada
 hari yang sibuk tidak ada satu pun yang bisa mengunggah.
 
@@ -20,7 +20,7 @@ sepuluh menit.
 
 ---
 
-## Langkah 1 — daftarkan aplikasinya (sekali saja)
+## Langkah 1: daftarkan aplikasinya (sekali saja)
 
 Semua langkah ini juga ada **di dalam aplikasi**: buka **Akun → Tambah akun →
 Tunjukkan langkahnya**, lengkap dengan alamat yang tinggal disalin.
@@ -30,25 +30,44 @@ Tunjukkan langkahnya**, lengkap dengan alamat yang tinggal disalin.
 2. Masuk ke **APIs & Services → Library**, lalu nyalakan dua ini:
    - **YouTube Data API v3**
    - **Google Drive API**
-3. Masuk ke **OAuth consent screen**:
-   - Pilih **External**.
-   - Isi nama aplikasi dan alamat surel Anda.
-   - Pada **Test users**, tambahkan **setiap alamat Gmail** yang akan Anda pakai
-     di OmniClip. Ini bagian yang paling sering terlewat: akun yang tidak
+3. Masuk ke **Google Auth Platform**. Google mengganti namanya; kalau Anda
+   mencari "OAuth consent screen" dan tidak menemukannya, inilah halaman yang
+   sama. Ada tiga bagian yang harus diisi:
+   - **Branding**: nama aplikasi (bebas, misalnya OmniClip) dan **User support
+     email**.
+   - **Audience**: pilih **External**. Di halaman yang sama, pada **Test users**
+     tekan **Add users** dan masukkan **setiap alamat Gmail** yang akan Anda
+     pakai di OmniClip. Ini bagian yang paling sering terlewat: akun yang tidak
      terdaftar di sini akan **ditolak Google** saat login, dengan pesan yang
      tidak menjelaskan sebabnya.
-4. Masuk ke **Credentials → Create credentials → OAuth client ID**:
+   - **Data access** → **Add or remove scopes**. Daftarnya 57 baris dan
+     **tidak punya kotak cari**, jadi jangan dicari satu per satu. Gulir ke
+     bawah sampai **Manually add scopes**, tempel tiga baris ini sekaligus,
+     lalu tekan **Add to table** dan **Update**:
+
+     ```
+     https://www.googleapis.com/auth/youtube.upload
+     https://www.googleapis.com/auth/drive.file
+     https://www.googleapis.com/auth/userinfo.email
+     ```
+
+     Berturut-turut: mengunggah video ke kanal Anda; menaruh berkas di Drive
+     tapi hanya berkas yang dibuat OmniClip sendiri; dan membaca alamat surel
+     supaya akun yang tersambung bisa diberi nama. `openid` tidak perlu
+     ditambahkan, Google memberikannya sendiri.
+4. Masuk ke **Clients → Create client** (dulu bernama
+   *Credentials → Create credentials → OAuth client ID*):
    - Pilih jenis **Desktop app** (paling mudah).
    - Kalau Anda memilih **Web application**, tambahkan alamat pengalihan yang
      ditampilkan aplikasi ke daftar **Authorized redirect URIs**. Alamatnya
-     memuat nomor port yang sedang dipakai, jadi salin dari layar — jangan
+     memuat nomor port yang sedang dipakai, jadi salin dari layar, jangan
      diketik dari ingatan.
 5. Unduh berkas JSON-nya.
 6. Di OmniClip: **Akun → Tambah akun → Pasang berkas OAuth client**.
 
 ---
 
-## Langkah 2 — tambah akun (berkali-kali)
+## Langkah 2: tambah akun (berkali-kali)
 
 Sesudah langkah 1 selesai, kartu **Tambah akun** berubah jadi satu tombol:
 
@@ -88,7 +107,7 @@ menyiapkan semuanya sampai satu langkah terakhir: buka **Klip jadi → tombol
 kirim** pada sebuah klip, lalu salin captionnya dan simpan berkasnya.
 
 Itu keputusan, bukan kekurangan. Unggah otomatis ke ketiganya menuntut
-pendaftaran aplikasi, peninjauan berminggu-minggu, dan badan usaha — sementara
+pendaftaran aplikasi, peninjauan berminggu-minggu, dan badan usaha, sementara
 yang dihemat cuma dua menit per klip. Dan unggahan lewat API tidak bisa memakai
 sound yang sedang tren, stiker, atau efek, padahal di TikTok dan Reels justru
 itu yang sering menentukan.
@@ -99,5 +118,5 @@ di atas.
 ## Kalau ada yang tidak jalan
 
 Buka **Pengaturan → Kesehatan sistem**. Di sana tertulis apa yang sudah siap
-dan apa yang belum, beserta akibatnya masing-masing — termasuk akun mana yang
+dan apa yang belum, beserta akibatnya masing-masing, termasuk akun mana yang
 belum tersambung.

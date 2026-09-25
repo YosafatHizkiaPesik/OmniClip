@@ -1,6 +1,6 @@
 ---
 name: OmniClip
-description: Partitur bertanda pensil konduktor — satu jam rekaman dibaca sekali pandang.
+description: Partitur bertanda pensil konduktor, satu jam rekaman dibaca sekali pandang.
 colors:
   stage: "#0B0E14"
   stage-2: "#151A24"
@@ -158,11 +158,11 @@ components:
 
 **Creative North Star: "Partitur Bertanda Pensil Konduktor"**
 
-Aplikasi ini membaca satu jam rekaman seperti seorang konduktor membaca partitur: satu balok not per narasumber, satu huruf latihan per klip, satu balok dinamika di bawahnya. Yang terbangun bukan papan editor gelap dengan kartu kaca dan gelombang neon — itu susunan bawaan kategori dan ditolak secara sadar. Yang terbangun adalah **pelat kertas terang yang duduk di dalam panggung gelap**: `--stage` (#0B0E14) memagari layar dari tepi, `--ground` (#DDE4EC) adalah meja kerjanya, dan `--plate` (#EDF1F6) adalah kertas partiturnya. Cangkangnya gelap; pekerjaannya terang.
+Aplikasi ini membaca satu jam rekaman seperti seorang konduktor membaca partitur: satu balok not per narasumber, satu huruf latihan per klip, satu balok dinamika di bawahnya. Yang terbangun bukan papan editor gelap dengan kartu kaca dan gelombang neon, itu susunan bawaan kategori dan ditolak secara sadar. Yang terbangun adalah **pelat kertas terang yang duduk di dalam panggung gelap**: `--stage` (#0B0E14) memagari layar dari tepi, `--ground` (#DDE4EC) adalah meja kerjanya, dan `--plate` (#EDF1F6) adalah kertas partiturnya. Cangkangnya gelap; pekerjaannya terang.
 
 Empat pensil konduktor bekerja sebagai **peran fungsional, bukan hiasan**. Merah latihan menandai klip dan hanya klip. Biru isyarat dan hijau masuk menandai penutur. Stabilo kuning menandai satu-satunya hal yang sedang aktif. Tidak ada warna kelima yang "berarti sesuatu"; sisanya grafit (`--ink-2`, `--ink-3`). Karena maknanya melekat pada perannya, warna tidak pernah dipakai untuk membuat sebuah kotak tampak menarik.
 
-Kepadatannya tinggi dan sadar diri: jari-jari 2–4px karena kertas tidak melengkung, garis 1px, angka tabular di seluruh badan, dan tepat satu momen gerak yang dikoreografi. Video bergerak hanya di dalam lubang orkestra — satu-satunya permukaan gelap yang dipakai untuk isi, bukan untuk cangkang.
+Kepadatannya tinggi dan sadar diri: jari-jari 2-4px karena kertas tidak melengkung, garis 1px, angka tabular di seluruh badan, dan tepat satu momen gerak yang dikoreografi. Video bergerak hanya di dalam lubang orkestra, satu-satunya permukaan gelap yang dipakai untuk isi, bukan untuk cangkang.
 
 **Key Characteristics:**
 - Pelat terang di dalam panggung gelap; pelat tidak pernah lebih gelap dari tanahnya, di tema terang maupun gelap.
@@ -181,7 +181,7 @@ Palet dua-kutub: panggung gelap dan pelat terang, dengan empat pensil jenuh yang
 - **Stabilo** (`hl`) dan **Cucian Stabilo** (`hl-wash`): pita yang menandai frasa/baris yang **sedang** terpilih, latar chip aktif, latar baris indeks aktif, huruf `CLIP` pada logo, dan `::selection`. Menandai kekinian, bukan identitas.
 
 ### Secondary
-- **Biru Isyarat** (`cue`): pensil penutur, warna tautan, dan huruf latihan untuk klip buatan tangan (`.reh--manual`) — yang membedakannya dari klip mesin tanpa memakai ikon atau label tambahan.
+- **Biru Isyarat** (`cue`): pensil penutur, warna tautan, dan huruf latihan untuk klip buatan tangan (`.reh--manual`), yang membedakannya dari klip mesin tanpa memakai ikon atau label tambahan.
 - **Hijau Masuk** (`entry`): pensil penutur pertama pada tangga suara.
 
 ### Tertiary
@@ -207,25 +207,25 @@ Palet dua-kutub: panggung gelap dan pelat terang, dengan empat pensil jenuh yang
 ## Typography
 
 **Display Font:** Archivo Black (self-hosted, `ArchivoBlack-Regular.ttf`)
-**Body Font:** Archivo Variable (self-hosted, `Archivo-var.ttf`, berat 100–900, lebar 62–125%), dengan `ui-sans-serif, system-ui, 'Segoe UI', sans-serif`
-**Label Font:** Archivo pada `font-stretch: 80%` — lebar sempit itulah yang membuatnya terbaca sebagai tanda pensil, bukan sebagai judul kecil.
+**Body Font:** Archivo Variable (self-hosted, `Archivo-var.ttf`, berat 100-900, lebar 62-125%), dengan `ui-sans-serif, system-ui, 'Segoe UI', sans-serif`
+**Label Font:** Archivo pada `font-stretch: 80%`, lebar sempit itulah yang membuatnya terbaca sebagai tanda pensil, bukan sebagai judul kecil.
 
-**Character:** Satu keluarga grotesk yang dipakai di dua ekstrem. Archivo Black hanya untuk judul karya, logo, dan huruf latihan — di sanalah ia bersikap seperti stempel cetak. Archivo variabel membawa sisanya, dengan berat pecahan (420 badan, 620 tombol, 680–720 keadaan aktif) supaya penekanan bisa naik tanpa mengganti ukuran.
+**Character:** Satu keluarga grotesk yang dipakai di dua ekstrem. Archivo Black hanya untuk judul karya, logo, dan huruf latihan, di sanalah ia bersikap seperti stempel cetak. Archivo variabel membawa sisanya, dengan berat pecahan (420 badan, 620 tombol, 680-720 keadaan aktif) supaya penekanan bisa naik tanpa mengganti ukuran.
 
 ### Hierarchy
-- **Display** (Archivo Black 400, clamp 1.35–1.95rem, tinggi baris 1.08, `text-wrap: balance`): judul karya di blok judul tiap halaman. Satu per layar.
+- **Display** (Archivo Black 400, clamp 1.35-1.95rem, tinggi baris 1.08, `text-wrap: balance`): judul karya di blok judul tiap halaman. Satu per layar.
 - **Headline** (Archivo 680, .84rem): judul pilihan, kepala baris di panel editor.
-- **Title** (Archivo 620–720, .8–.86rem): teks tombol, chip, tautan navigasi, kepala tab.
-- **Body** (Archivo 420, 15px, tinggi baris 1.5): teks berjalan dan isian. Keterangan pendukung turun ke .74–.84rem pada `--ink-2`.
+- **Title** (Archivo 620-720, .8.86rem): teks tombol, chip, tautan navigasi, kepala tab.
+- **Body** (Archivo 420, 15px, tinggi baris 1.5): teks berjalan dan isian. Keterangan pendukung turun ke .74.84rem pada `--ink-2`.
 - **Label** (`.mark`; Archivo 700, lebar 80%, .68rem, spasi huruf .1em, HURUF BESAR, `--ink-3`): penanda pensil di kepala pelat dan di tepi partitur.
 - **Caption/Nama Balok** (Archivo 700, lebar 80%, .62rem, spasi huruf .08em, HURUF BESAR, `--ink`): nama instrumen di kolom kiri tiap balok; menyusut ke .58rem di bawah 760px.
-- **Rehearsal** (Archivo Black, .72rem, spasi huruf .02em): huruf latihan A–Z lalu AA–ZZ di dalam kotak tinta pekat.
+- **Rehearsal** (Archivo Black, .72rem, spasi huruf .02em): huruf latihan A-Z lalu AA-ZZ di dalam kotak tinta pekat.
 
 ### Named Rules
 
 **Aturan Angka Tabular.** `font-variant-numeric: tabular-nums` disetel di `body`, bukan per komponen. Semua kode waktu, durasi, dan skor sejajar secara vertikal secara bawaan. Jangan matikan.
 
-**Aturan Dua Wajah Saja.** Hanya dua wajah dimuat sendiri: Archivo variabel dan Archivo Black. Tidak ada wajah tampilan sistem, tidak ada wajah ketiga, tidak ada monospace — kolom angka dijaga oleh angka tabular, bukan dengan mengganti keluarga huruf.
+**Aturan Dua Wajah Saja.** Hanya dua wajah dimuat sendiri: Archivo variabel dan Archivo Black. Tidak ada wajah tampilan sistem, tidak ada wajah ketiga, tidak ada monospace, kolom angka dijaga oleh angka tabular, bukan dengan mengganti keluarga huruf.
 
 ## Layout
 
@@ -237,7 +237,7 @@ Editor memakai grid tiga kolom `250px | 1fr | 336px` dengan jarak 14px: indeks h
 
 Titik potong: **1180px** (editor jadi dua kolom), **1100px / 720px** (jumlah sistem balok), **900px** (rel kiri turun jadi bilah jempol), **760px** (editor satu kolom, partitur menyempit).
 
-Irama jarak berjalan pada langkah kecil karena kepadatannya tinggi: 4 / 6 / 8 / 10 / 14 / 18 / 22px. 8px dan 10px adalah kerja harian; 14px adalah jarak antar pelat; 18–22px hanya di sekitar blok judul dan padding halaman.
+Irama jarak berjalan pada langkah kecil karena kepadatannya tinggi: 4 / 6 / 8 / 10 / 14 / 18 / 22px. 8px dan 10px adalah kerja harian; 14px adalah jarak antar pelat; 18-22px hanya di sekitar blok judul dan padding halaman.
 
 ### Named Rules
 
@@ -247,11 +247,11 @@ Irama jarak berjalan pada langkah kecil karena kepadatannya tinggi: 4 / 6 / 8 / 
 
 ## Elevation & Depth
 
-Sistem ini hampir datar dan mendapat kedalamannya dari **lapisan nada** (panggung → meja → pelat → pelat terangkat), bukan dari tumpukan bayang. Hanya ada dua bayang, keduanya lembut dan dua-lapis, dan keduanya berperan struktural: memisahkan kertas dari mejanya. Tidak ada bayang hover, tidak ada bayang keras beroffset, tidak ada cahaya berwarna — `--shadow-glow` sengaja dipetakan ke `none`.
+Sistem ini hampir datar dan mendapat kedalamannya dari **lapisan nada** (panggung → meja → pelat → pelat terangkat), bukan dari tumpukan bayang. Hanya ada dua bayang, keduanya lembut dan dua-lapis, dan keduanya berperan struktural: memisahkan kertas dari mejanya. Tidak ada bayang hover, tidak ada bayang keras beroffset, tidak ada cahaya berwarna, `--shadow-glow` sengaja dipetakan ke `none`.
 
 ### Shadow Vocabulary
 - **Pelat** (`box-shadow: 0 1px 2px rgba(14,20,32,.10), 0 8px 24px -12px rgba(14,20,32,.35)`): tiap lembar kertas di atas meja. Tetap saat rehat, tidak berubah saat hover.
-- **Angkat** (`box-shadow: 0 2px 4px rgba(14,20,32,.12), 0 14px 34px -14px rgba(14,20,32,.45)`): hanya untuk yang benar-benar melayang — lubang orkestra dan kotak modal.
+- **Angkat** (`box-shadow: 0 2px 4px rgba(14,20,32,.12), 0 14px 34px -14px rgba(14,20,32,.45)`): hanya untuk yang benar-benar melayang, lubang orkestra dan kotak modal.
 - **Sumur panggung** (`box-shadow: inset 0 0 0 1px #ffffff12` pada `.pit-frame`): garis dalam setipis rambut yang membuat bingkai gelap terbaca sebagai sumur, bukan sebagai lubang.
 
 ### Named Rules
@@ -260,7 +260,7 @@ Sistem ini hampir datar dan mendapat kedalamannya dari **lapisan nada** (panggun
 
 ## Shapes
 
-Kertas tidak melengkung. Jari-jari hampir nol dan bertingkat sangat rapat: 2px untuk kendali dan isian, 3px untuk pelat dan lubang orkestra, 4px untuk modal, dan **1px** untuk huruf latihan, lencana, dan sumur gambar — nyaris siku, tepat seperti kotak yang digambar tangan di atas partitur. Satu-satunya lingkaran penuh di sistem ini adalah titik penutur 11px dan ibu jari scrollbar.
+Kertas tidak melengkung. Jari-jari hampir nol dan bertingkat sangat rapat: 2px untuk kendali dan isian, 3px untuk pelat dan lubang orkestra, 4px untuk modal, dan **1px** untuk huruf latihan, lencana, dan sumur gambar, nyaris siku, tepat seperti kotak yang digambar tangan di atas partitur. Satu-satunya lingkaran penuh di sistem ini adalah titik penutur 11px dan ibu jari scrollbar.
 
 Batasnya garis 1px `--rule` atau `--rule-2` di hampir semua tempat. Dua pengecualian sengaja, keduanya meniru partitur cetak: **batas kanan 2px `--ink`** yang memisahkan kolom nama instrumen dari baloknya, dan **garis atas/bawah 2px `--hl`** yang membentuk pita stabilo. Keadaan aktif ditandai dengan garis tebal di satu sisi (kiri 3px di rel lebar, atas 3px di bilah jempol, bawah 2px pada tab), bukan dengan mengisi latar dengan warna.
 
@@ -270,12 +270,12 @@ Batasnya garis 1px `--rule` atau `--rule-2` di hampir semua tempat. Dua pengecua
 - **Bentuk:** nyaris siku (2px), tinggi minimum 36px (42px di bawah 760px), padding `8px 14px`, isi mendatar dengan jarak 7px untuk ikon.
 - **Primer:** merah latihan penuh dengan tinta putih. Hover menggelapkan sendiri lewat `color-mix(in srgb, var(--reh) 86%, #000)`.
 - **Sekunder/Ghost:** pelat terangkat dengan garis `--rule` dan tinta penuh; hover turun ke `plate-2` dan batasnya menguat ke `--ink-3`.
-- **Fokus:** cincin bersama seluruh aplikasi — `outline: 2px solid var(--reh)` dengan offset 2px, disetel lewat `:focus-visible` pada `:where(a, button, input, select, textarea, [tabindex])`.
-- **Nonaktif:** opasitas .45, latar jatuh ke `plate-2`, tinta ke `--ink-3` — termasuk yang primer, yang kehilangan merahnya sepenuhnya.
+- **Fokus:** cincin bersama seluruh aplikasi, `outline: 2px solid var(--reh)` dengan offset 2px, disetel lewat `:focus-visible` pada `:where(a, button, input, select, textarea, [tabindex])`.
+- **Nonaktif:** opasitas .45, latar jatuh ke `plate-2`, tinta ke `--ink-3`, termasuk yang primer, yang kehilangan merahnya sepenuhnya.
 - **Transisi:** `background/border-color/color .12s ease`. Tidak ada `transform`.
 
 ### Chips
-- **Gaya:** tanda pensil di tepi partitur, bukan pil berwarna — pelat, garis `--rule`, jari-jari 2px, tinta keterangan.
+- **Gaya:** tanda pensil di tepi partitur, bukan pil berwarna, pelat, garis `--rule`, jari-jari 2px, tinta keterangan.
 - **Keadaan:** terpilih memakai tinta merah + batas merah + cucian stabilo dan berat naik ke 720; tidak terpilih hanya menguatkan batas saat hover.
 
 ### Cards / Containers
@@ -298,8 +298,8 @@ Seluruh durasi rekaman dibaca sekali pandang: satu balok per narasumber (maksimu
 
 - **Anatomi baris:** grid `118px | 1fr` (62px di bawah 760px). Kolom nama diakhiri batas kanan 2px tinta. Balok setinggi 58px (44px di layar sempit) berisi garis-garis 1px dari `repeating-linear-gradient` setiap 9px pada opasitas .8.
 - **Frasa klip:** isian `color-mix(in srgb, <pensil> 24%, transparent)` dengan batas kiri 1px pensil penuh, hover meredup lewat `filter: brightness(.94)`. Huruf latihannya duduk 11px di atas frasa; yang dekat tepi kanan berpindah titik jangkar sendiri supaya tidak terpotong. Huruf latihan terpilih membesar `scale(1.14)` dalam 180ms.
-- **Membungkus jadi beberapa sistem:** `systemCountFor(width, duration)` — **satu sistem di ≥1100px**, **maksimum tiga di 720–1100px** (`ceil(durasi/2400)`), dan di bawah 720px `ceil(durasi/900)` hingga delapan, yakni satu sistem per ~15 menit. Sistem kedua dan seterusnya dipisahkan garis atas 1px. Ini menggantikan pemampatan: partitur cetak membungkus, ia tidak menyusut sampai tak terbaca.
-- **Balok dinamika:** simpangan **z-skor** dari garis tengah, 320 batang setebal 1.5px — di atas garis pada `--ink-2`, di bawah pada `--ink-3`. Bukan gelombang amplitudo. Bila puncak belum dihitung, baris itu berisi kalimat, bukan grafik kosong.
+- **Membungkus jadi beberapa sistem:** `systemCountFor(width, duration)`, **satu sistem di ≥1100px**, **maksimum tiga di 720-1100px** (`ceil(durasi/2400)`), dan di bawah 720px `ceil(durasi/900)` hingga delapan, yakni satu sistem per ~15 menit. Sistem kedua dan seterusnya dipisahkan garis atas 1px. Ini menggantikan pemampatan: partitur cetak membungkus, ia tidak menyusut sampai tak terbaca.
+- **Balok dinamika:** simpangan **z-skor** dari garis tengah, 320 batang setebal 1.5px, di atas garis pada `--ink-2`, di bawah pada `--ink-3`. Bukan gelombang amplitudo. Bila puncak belum dihitung, baris itu berisi kalimat, bukan grafik kosong.
 - **Baris waktu:** langkah dipilih dari `[15, 30, 60, 120, 300, 600, 900, 1800]` detik menurut lebar nyata, dicetak dengan angka tabular. Barline dan nomor birama tidak digambar.
 
 ## Do's and Don'ts
@@ -308,25 +308,25 @@ Seluruh durasi rekaman dibaca sekali pandang: satu balok per narasumber (maksimu
 - **Do** bangun wadah baru dari `.plate` + `.plate-head` + sebuah label `.mark`, bukan dari div bergaya sebaris.
 - **Do** pakai empat pensil menurut perannya: merah = klip, biru/hijau = penutur, stabilo = yang sedang aktif.
 - **Do** lewatkan tiap warna produk melalui `inkSafe` (4.5:1) sebelum memakainya sebagai teks, dan melalui uji 3:1 sebelum memakainya sebagai isian atau titik di balok.
-- **Do** tandai keadaan aktif dengan garis 2–3px di satu sisi dan pergeseran berat huruf, bukan dengan mengisi latar berwarna.
-- **Do** pertahankan jari-jari di 1–4px; kertas tidak melengkung.
+- **Do** tandai keadaan aktif dengan garis 2-3px di satu sisi dan pergeseran berat huruf, bukan dengan mengisi latar berwarna.
+- **Do** pertahankan jari-jari di 1-4px; kertas tidak melengkung.
 - **Do** batasi gerak pada perubahan warna/batas ~120ms, kecuali satu pita stabilo yang meluncur.
 - **Do** bingkai tiap gambar bergerak dengan `.pit-frame` supaya video hanya hidup di dalam panggung.
 - **Do** biarkan `body` yang memasok angka tabular.
 
 ### Don't:
 - **Don't** pakai merah latihan untuk mengidentifikasi seorang penutur, dan jangan tambahkan pensil kelima ke tangga suara.
-- **Don't** buat pelat lebih gelap dari tanahnya, di tema mana pun; jangan balik hubungan panggung–pelat.
+- **Don't** buat pelat lebih gelap dari tanahnya, di tema mana pun; jangan balik hubungan panggung-pelat.
 - **Don't** tambahkan bayang baru. Dua yang ada sudah lengkap, dan bayang bukan penanda hover di sini.
 - **Don't** pakai alias token lama (`--bg-card`, `--accent-cyan`, `--text-primary`, `--radius-md`, …) di kode baru; itu lapisan peralihan yang hanya dibaca.
 - **Don't** animasikan properti tata letak (`left`, `width`, `top`, `height`). Pita stabilo dan garis main digerakkan lewat `transform` di dalam satu loop rAF.
-- **Don't** ganti sistem balok yang membungkus dengan satu garis yang dimampatkan, dan jangan ganti balok dinamika jadi gelombang amplitudo — keduanya adalah susunan yang ditolak layar ini.
+- **Don't** ganti sistem balok yang membungkus dengan satu garis yang dimampatkan, dan jangan ganti balok dinamika jadi gelombang amplitudo, keduanya adalah susunan yang ditolak layar ini.
 - **Don't** tambahkan wajah huruf ketiga atau wajah tampilan sistem.
 - **Don't** pakai gelap untuk cangkang isi; satu-satunya permukaan gelap adalah panggung, rel, kepala aplikasi, dan lubang orkestra.
 
 <!--
 Yang belum terpenuhi di build ini, dicatat jujur sebagai belum-dikomitkan, bukan sebagai aturan:
-- Pelat masih rata (#EDF1F6, garis 1px, satu bayang lembut). Bahan "kertas yang disorot lampu meja" — serat, tepi pelat, luruh cahaya lampu — belum diterapkan.
+- Pelat masih rata (#EDF1F6, garis 1px, satu bayang lembut). Bahan "kertas yang disorot lampu meja", serat, tepi pelat, luruh cahaya lampu, belum diterapkan.
 - Barline dan nomor birama belum digambar; baris waktu masih jam biasa.
 - Balok bergaris baru dipakai sebagai perangkat di dalam editor; Studio, Klip jadi, dan Unduhan masih wadah generik.
 - Watch menyisakan ~740px pelat kosong di bawah baris metanya.

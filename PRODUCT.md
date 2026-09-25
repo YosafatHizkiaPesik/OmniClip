@@ -34,7 +34,7 @@ Mesin pemilih momennya **tidak pernah mengarang**. Batas klip selalu jatuh di
 batas kalimat nyata, setiap baris subtitle adalah kata yang benar-benar
 diucapkan, dan skor berasal dari perhitungan yang komponennya bisa dilihat.
 Ketika AI tidak tersedia, sistem mengatakannya dan tetap bekerja dengan mesin
-heuristik lokal — bukan menyembunyikan kegagalan di balik data karangan.
+heuristik lokal, bukan menyembunyikan kegagalan di balik data karangan.
 
 Semuanya berjalan lokal: video, transkrip, model suara, dan hasil render tidak
 pernah meninggalkan mesin pengguna kecuali transkrip yang dikirim ke Gemini saat
@@ -45,7 +45,7 @@ penajaman peringkat dinyalakan.
 Dijalankan di mesin pribadi Linux: backend FastAPI di `127.0.0.1:8000`, frontend
 Vite di `localhost:5173`. **Karena backend terikat ke localhost, aplikasi ini
 saat ini tidak bisa dibuka dari perangkat lain di jaringan yang sama.** Membuka
-akses dari HP memerlukan perubahan bind dan CORS — keputusan yang belum diambil.
+akses dari HP memerlukan perubahan bind dan CORS, keputusan yang belum diambil.
 
 Anggaran mesin: 8 inti, tanpa GPU, RAM bebas sekitar 2,9 GB. Batas itu
 menentukan arsitekturnya: antrean job dengan lane `cpu` berkonkurensi satu,
@@ -75,7 +75,7 @@ Kemampuan nyata hari ini:
 - Render ffmpeg dengan normalisasi loudness; nama berkas memuat judul video.
 
 Batasan yang mengikat desain:
-- Video sumbernya panjang (satu sampai dua jam) dan klipnya banyak (bisa 19–40
+- Video sumbernya panjang (satu sampai dua jam) dan klipnya banyak (bisa 19-40
   dari satu video). Daftar panjang adalah keadaan normal, bukan kasus tepi.
 - Pekerjaan berat berjalan di latar dengan progres nyata dari server; UI tidak
   boleh mengarang teks progres dari angka.
@@ -92,7 +92,7 @@ Belum diputuskan: apakah aplikasi akan dibuka dari HP lewat jaringan lokal, atau
 Nama produk: **OmniClip AI**. Bahasa antarmuka: Indonesia, seluruhnya.
 
 Tidak ada logo, palet, atau tipografi yang dijadikan pengikat oleh pengguna;
-tampilan yang ada sekarang diperlakukan sebagai bukti, bukan otoritas — pengguna
+tampilan yang ada sekarang diperlakukan sebagai bukti, bukan otoritas, pengguna
 meminta rancang ulang total.
 
 ## Evidence on Hand
@@ -109,7 +109,7 @@ meminta rancang ulang total.
 ## Product Principles
 
 1. **Jangan pernah mengarang.** Subtitle, batas klip, dan skor selalu berasal
-   dari sumber nyata. Bila datanya tidak ada, katakan — jangan isi.
+   dari sumber nyata. Bila datanya tidak ada, katakan, jangan isi.
 2. **Perkiraan harus terbaca sebagai perkiraan.** Penutur, skor, dan bingkai
    otomatis semuanya tebakan; semuanya bisa dibetulkan tangan.
 3. **Kerja berat berjalan di latar.** Pengguna boleh mengantre beberapa video

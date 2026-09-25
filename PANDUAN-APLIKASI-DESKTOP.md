@@ -10,17 +10,17 @@ Tersedia untuk **Windows** dan **Linux**.
 
 ## Untuk pengguna
 
-1. Unduh — tautan ini selalu menunjuk versi terbaru, tanpa perlu akun GitHub:
+1. Unduh, tautan ini selalu menunjuk versi terbaru, tanpa perlu akun GitHub:
 
    - Windows: <https://github.com/YosafatHizkiaPesik/OmniClip/releases/latest/download/OmniClip-windows.zip>
    - Linux: <https://github.com/YosafatHizkiaPesik/OmniClip/releases/latest/download/OmniClip-linux.tar.gz>
 
-2. Ekstrak ke mana saja — Desktop, Documents, diska mana pun. **Jangan** ke
+2. Ekstrak ke mana saja, Desktop, Documents, diska mana pun. **Jangan** ke
    Program Files: pembaruan otomatis butuh folder yang bisa Anda tulis sendiri.
 3. Jalankan `OmniClip.exe` (Windows) atau `./OmniClip` (Linux).
 
 Sebuah jendela hitam terbuka dan menuliskan alamatnya, lalu peramban terbuka
-sendiri. **Jendela itu jangan ditutup** selama OmniClip dipakai — itulah
+sendiri. **Jendela itu jangan ditutup** selama OmniClip dipakai, itulah
 aplikasinya. Menutupnya sama dengan mematikan OmniClip.
 
 ### Saat pertama dipakai
@@ -30,7 +30,7 @@ Beberapa model diunduh sendiri, sekali seumur pemasangan:
 | model | ukuran | untuk apa |
 |---|---|---|
 | YuNet | sudah ikut | menemukan wajah |
-| SFace | 37 MB | mengenali SIAPA wajah itu — tanpanya nomor orang memakai tempat duduk |
+| SFace | 37 MB | mengenali SIAPA wajah itu, tanpanya nomor orang memakai tempat duduk |
 | CAM++ | 27 MB | membedakan suara per orang |
 | Whisper | ± 150 MB | menyalin ucapan, hanya untuk video yang tidak punya subtitle di YouTube |
 | Piper | 63 MB | membacakan judul, hanya bila dipakai |
@@ -38,19 +38,19 @@ Beberapa model diunduh sendiri, sekali seumur pemasangan:
 ### Memperbarui
 
 Aplikasi menanyakan sendiri ke GitHub apakah ada versi baru. Kalau ada, muncul
-pita kecil di kepala halaman — klik, lalu **Pengaturan → Pembaruan aplikasi →
+pita kecil di kepala halaman, klik, lalu **Pengaturan → Pembaruan aplikasi →
 Unduh dan pasang**.
 
 Yang terjadi setelah itu: berkasnya diunduh, diperiksa, lalu aplikasi menutup
 sendiri dan terbuka kembali pada versi baru. Klip, setelan, API key, dan model
-yang sudah diunduh tidak tersentuh — semuanya tinggal di folder terpisah.
+yang sudah diunduh tidak tersentuh, semuanya tinggal di folder terpisah.
 
 Kalau tombol **Unduh dan pasang** tidak muncul padahal ada versi baru,
 alasannya tertulis di situ. Yang paling sering: aplikasi dipasang di folder
 yang tidak bisa ditulis. Pindahkan ke Documents, lalu coba lagi.
 
 Menukar folder dikerjakan proses penolong yang menunggu aplikasi benar-benar
-mati — sebuah `.exe` yang sedang berjalan tidak bisa menimpa dirinya sendiri.
+mati, sebuah `.exe` yang sedang berjalan tidak bisa menimpa dirinya sendiri.
 Folder lama tidak dihapus melainkan diganti nama dulu, jadi kalau langkah
 terakhir gagal, yang lama masih utuh di sebelahnya.
 
@@ -61,7 +61,7 @@ terakhir gagal, yang lama masih utuh di sebelahnya.
 | Windows | `C:\Users\<nama>\AppData\Local\OmniClip` |
 | Linux | `~/.local/share/OmniClip` |
 
-**Bukan** di dalam folder aplikasi — sengaja, supaya memperbarui OmniClip tidak
+**Bukan** di dalam folder aplikasi, sengaja, supaya memperbarui OmniClip tidak
 menghapus klip Anda.
 
 Mau memindahkannya ke diska lain? Setel `OMNICLIP_STORAGE`:
@@ -77,7 +77,7 @@ Aplikasi berjalan di PC, HP membukanya lewat Wi-Fi yang sama. Tanpa domain,
 tanpa biaya:
 
 1. Buka **Pengaturan → Kata sandi & akses**, pasang kata sandi. **Lakukan ini
-   lebih dulu** — tanpa kata sandi, siapa pun di Wi-Fi yang sama bisa masuk,
+   lebih dulu**, tanpa kata sandi, siapa pun di Wi-Fi yang sama bisa masuk,
    termasuk ke kanal YouTube yang tersambung.
 2. Jalankan dengan alamat terbuka:
    ```
@@ -88,7 +88,7 @@ tanpa biaya:
    `http://<ip-itu>:8000` dari HP.
 
 Di Windows, izinkan saat Windows Firewall bertanya, dan pilih **jaringan
-privat** saja — jangan publik.
+privat** saja, jangan publik.
 
 ### Kalau ada masalah
 
@@ -124,7 +124,7 @@ git tag v1.0.2 && git push --tags
 Alur build menolak tag yang tidak cocok dengan `app/version.py`. Itu bukan
 kerewelan: rilis `v1.0.2` yang isinya mengaku `1.0.1` akan membuat setiap
 pemasangan menawarkan pembaruan yang sama, memasangnya, lalu menawarkannya
-lagi — selamanya.
+lagi, selamanya.
 
 Beberapa menit kemudian, `.exe` Windows dan `.tar.gz` Linux muncul di halaman
 Releases. Alurnya ada di `.github/workflows/bangun-aplikasi.yml`, dan bisa juga
@@ -147,7 +147,7 @@ dibangun di Windows. Itulah sebabnya GitHub Actions ada di sini.
 ### `--periksa` adalah gerbangnya, bukan pelengkap
 
 Sebuah bundel bisa terbangun mulus dan tetap kehilangan satu pustaka biner atau
-satu berkas font. Kehilangan seperti itu tidak muncul saat membangun — ia
+satu berkas font. Kehilangan seperti itu tidak muncul saat membangun, ia
 muncul di mesin pengguna, berminggu-minggu kemudian, sebagai satu fitur yang
 diam-diam tidak bekerja.
 
@@ -166,7 +166,7 @@ dan mengira sisanya adalah nama berkas subtitle:
 Could not create a libass track when reading file 'uji/OmniClip/fonts'
 ```
 
-Setiap render bersubtitle akan gagal — **hanya di Windows**, dan hanya di mesin
+Setiap render bersubtitle akan gagal, **hanya di Windows**, dan hanya di mesin
 pengguna. Di Linux ketiga tempat yang menyusun path tampak benar karena path
 Linux tidak punya `:` maupun `\`. Sekarang ketiganya memakai satu fungsi,
 `services/paths.ffpath()`, dan `--periksa` membuktikannya di path sungguhan.
@@ -187,12 +187,12 @@ Linux tidak punya `:` maupun `\`. Sekarang ketiganya memakai satu fungsi,
 
 Dua pemangkasan yang sudah dilakukan, keduanya tanpa kehilangan fungsi:
 
-- **101 MB**: `googleapiclient` membawa deskripsi setiap layanan Google — 586
+- **101 MB**: `googleapiclient` membawa deskripsi setiap layanan Google, 586
   berkas. OmniClip memakai dua (`youtube`, `drive`). Sisanya dibuang di dalam
   spec, bukan lewat `excludes`, karena paketnya sendiri tetap dibutuhkan.
 - **185 MB**: ffmpeg dari BtbN berukuran 345 MB sepasang; build statis
   johnvansickle 160 MB, dengan ketujuh filter dan kedua encoder yang dipakai
-  OmniClip. Diukur, bukan ditebak — `tools/ambil_ffmpeg.py` menjalankan binernya
+  OmniClip. Diukur, bukan ditebak, `tools/ambil_ffmpeg.py` menjalankan binernya
   dan menanyakan kemampuannya sebelum menyatakan berhasil.
 
 ### Lisensi ffmpeg
