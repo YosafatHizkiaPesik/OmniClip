@@ -23,7 +23,7 @@ lewat fontconfig, dan hasil render berhenti cocok dengan pratinjau.
 import os
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_all, collect_data_files
+from PyInstaller.utils.hooks import collect_all, collect_data_files, collect_submodules
 
 HERE = Path(SPECPATH).resolve()
 PROJECT = HERE.parent
@@ -75,6 +75,9 @@ hiddenimports += [
     # Ekstraktor yt-dlp juga diimpor lewat nama.
     "yt_dlp.extractor",
 ]
+# fontTools memuat pembaca tiap tabel font (head, hhea, OS/2, hmtx) lewat nama
+# saat tabelnya pertama dibaca, jadi tidak ada impor yang bisa dilihat.
+hiddenimports += collect_submodules("fontTools.ttLib.tables")
 
 a = Analysis(
     ["omniclip_app.py"],

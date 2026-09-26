@@ -4,6 +4,9 @@ import {
 } from 'lucide-react';
 import { apiGet, apiPost } from '../../lib/api';
 import { CARD_VARIANTS } from './cardStyles';
+import {
+  DEFAULT_JUDUL_VIDEO, GaleriTema, iniTema, useDaftarTema,
+} from './JudulTema';
 
 const TITLE_MAX = 100;
 
@@ -66,7 +69,16 @@ function ContohGaya({ v, teks, warna, bayang, aktif, onPilih }) {
   );
 }
 
-export default function TitlePanel({ clip, onChange, onRetitle = null, retitling = false }) {
+/** Pilihan lama tampil judul di dalam video. `null` berarti sepanjang klip. */
+const LAMA_JUDUL = [
+  { id: null, label: 'Sepanjang klip' },
+  { id: 5, label: '5 detik pertama' },
+  { id: 10, label: '10 detik pertama' },
+];
+
+export default function TitlePanel({
+  clip, onChange, onRetitle = null, retitling = false, onJudulSemua = null,
+}) {
   const [copied, setCopied] = useState(false);
   const [draft, setDraft] = useState('');
   // Keadaan suara pembaca: ada/tidak, sedang dipasang, sedang dibacakan.
@@ -76,6 +88,8 @@ export default function TitlePanel({ clip, onChange, onRetitle = null, retitling
   const [heard, setHeard] = useState(null);
   const [voiceError, setVoiceError] = useState(null);
   const audioRef = useRef(null);
+  const daftarTema = useDaftarTema();
+  const [tersebar, setTersebar] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -105,6 +119,11 @@ export default function TitlePanel({ clip, onChange, onRetitle = null, retitling
   const patchCard = (patch) => onChange({ title_card: { ...card, ...patch } });
   // Teks kartu mengikuti judul klip kecuali pengguna menuliskan yang lain.
   const cardText = (card.text || '').trim() || title;
+  // Judul yang menempel di dalam video, juga milik klipnya sendiri.
+  const jv = { ...DEFAULT_JUDUL_VIDEO, ...clip.judul_video };
+  const patchJv = (patch) => onChange({ judul_video: { ...jv, ...patch } });
+  const jvText = (jv.teks || '').trim() || title;
+  const catatanTema = (id) => daftarTema.find((t) => t.id === id)?.catatan;
 
   /** Membacakan judulnya sekarang, supaya tempo dan nadanya bisa dinilai. */
   const dengar = async () => {
@@ -282,6 +301,11 @@ export default function TitlePanel({ clip, onChange, onRetitle = null, retitling
                   "buatkan juga preview tampilannya seperti apa agar jelas saat
                   kita memilih". Gerakannya diputar ulang saat disentuh tetikus,
                   memakai CSS yang SAMA dengan pratinjau klip. */}
+              <GaleriTema teks={cardText} pilihan={card.variant}
+                          onPilih={(id) => patchCard({ variant: id })} />
+              <div className="mark" style={{ color: 'var(--ink-3)', margin: '12px 0 6px' }}>
+                Hanya teks bergerak, tanpa latar
+              </div>
               <div className="judul-galeri">
                 {CARD_VARIANTS.map((v) => (
                   <ContohGaya key={v.id} v={v} teks={cardText || 'JUDUL KLIP ANDA'}
@@ -291,7 +315,9 @@ export default function TitlePanel({ clip, onChange, onRetitle = null, retitling
                 ))}
               </div>
               <p style={{ fontSize: '.72rem', color: 'var(--ink-3)', lineHeight: 1.55, margin: '8px 0 0' }}>
-                {CARD_VARIANTS.find((v) => v.id === (card.variant || 'garis'))?.note}
+                {iniTema(card.variant)
+                  ? catatanTema(card.variant)
+                  : CARD_VARIANTS.find((v) => v.id === (card.variant || 'garis'))?.note}
               </p>
               <p style={{
                 fontSize: '.72rem', color: 'var(--ink-3)', lineHeight: 1.6,
@@ -403,6 +429,77 @@ export default function TitlePanel({ clip, onChange, onRetitle = null, retitling
 
             {voiceError && (
               <p style={{ fontSize: '.75rem', color: 'var(--danger)', margin: 0 }}>{voiceError}</p>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ── Judul di dalam video ───────────────────────────────────────────
+          Berbeda dari kartu di atas: kartu tampil di depan klip lalu pergi,
+          judul ini ikut berjalan di atas videonya. Penonton yang masuk di
+          tengah klip tetap tahu klip ini tentang apa. */}
+      <div style={{ borderTop: '1px solid var(--rule-2)', paddingTop: '12px' }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+          <input type="checkbox" checked={jv.aktif}
+                 onChange={(e) => patchJv({ aktif: e.target.checked })}
+                 style={{ width: '15px', height: '15px' }} />
+          <span className="mark" style={{ color: 'var(--ink)' }}>
+            Judul di dalam video
+          </span>
+        </label>
+        <p style={{ fontSize: '.72rem', color: 'var(--ink-3)', lineHeight: 1.55, margin: '6px 0 0' }}>
+          Judulnya menempel di atas video selama klip berjalan, bukan hanya di
+          awal. Letak dan ukurannya diseret langsung di pratinjau.
+        </p>
+
+        {jv.aktif && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '11px' }}>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+              <span className="mark" style={{ color: 'var(--ink)' }}>Teks judul</span>
+              <textarea className="field" rows={2} value={jv.teks} maxLength={240}
+                        placeholder={title || 'ikut judul klip di atas'}
+                        onChange={(e) => patchJv({ teks: e.target.value })}
+                        style={{ resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }} />
+            </label>
+
+            <div>
+              <div className="mark" style={{ color: 'var(--ink)', marginBottom: '6px' }}>
+                Lama tampil
+              </div>
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                {LAMA_JUDUL.map((l) => (
+                  <button key={String(l.id)} type="button"
+                          className={`chip${(jv.durasi ?? null) === l.id ? ' is-on' : ''}`}
+                          onClick={() => patchJv({ durasi: l.id })}>
+                    {l.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <div className="mark" style={{ color: 'var(--ink)', marginBottom: '6px' }}>
+                Tema
+              </div>
+              <GaleriTema teks={jvText} pilihan={jv.tema}
+                          onPilih={(id) => patchJv({ tema: id })} />
+              <p style={{ fontSize: '.72rem', color: 'var(--ink-3)', lineHeight: 1.55, margin: '8px 0 0' }}>
+                {catatanTema(jv.tema)}
+              </p>
+            </div>
+
+            {onJudulSemua && (
+              <button className="btn-secondary" style={{ justifyContent: 'center' }}
+                      onClick={() => {
+                        // Teks tidak ikut disebar: tiap klip memakai judulnya
+                        // sendiri, kecuali teks itu memang diisi di klip itu.
+                        onJudulSemua({ ...jv, teks: '' });
+                        setTersebar(true);
+                        setTimeout(() => setTersebar(false), 1800);
+                      }}>
+                {tersebar ? <Check size={14} style={{ color: 'var(--entry)' }} /> : <Copy size={14} />}
+                {tersebar ? 'Diterapkan ke semua klip' : 'Terapkan tema & letak ini ke semua klip'}
+              </button>
             )}
           </div>
         )}

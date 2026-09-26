@@ -54,6 +54,11 @@ onnxruntime>=1.17,<2
 # mencabutnya tanpa satu baris pun berubah di sini.
 numpy>=1.26,<3
 
+# --- Judul bertema ---
+# Membaca ukuran huruf langsung dari berkas fontnya, supaya pelat latar judul
+# pas mengelilingi hurufnya di semua font, bukan ditebak.
+fonttools>=4.40
+
 # --- AI (opsional) ---
 # Tanpa API key, pemilihan klip tetap berjalan memakai mesin heuristik lokal.
 google-genai>=0.1.1

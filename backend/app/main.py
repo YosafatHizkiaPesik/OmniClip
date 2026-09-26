@@ -25,6 +25,7 @@ from .routers import aset as aset_router
 from .routers import auth as auth_router
 from .routers import clips as clips_router
 from .routers import jobs as jobs_router
+from .routers import judul as judul_router
 from .routers import media as media_router
 from .routers import profil as profil_router
 from .routers import projects as projects_router
@@ -195,6 +196,7 @@ register_exception_handlers(app)
 app.include_router(aset_router.router)
 app.include_router(auth_router.router)
 app.include_router(jobs_router.router)
+app.include_router(judul_router.router)
 app.include_router(settings_router.router)
 app.include_router(videos_router.router)
 app.include_router(clips_router.router)

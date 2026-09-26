@@ -1431,3 +1431,50 @@ body.is-studio .app-viewport,
 }
 .judul-contoh-nama { font-size: .72rem; font-weight: 700; color: var(--ink-2); padding: 0 2px; }
 .judul-contoh.is-on .judul-contoh-nama { color: var(--ink); }
+
+/* Tema lengkap: kotak contohnya sedikit lebih tinggi, dan gambarnya PNG
+   seukuran kanvas 9:16 yang dipotong ke pita tengahnya, tempat judulnya. */
+.tema-contoh .judul-contoh-layar { height: 78px; padding: 0; }
+.tema-contoh .judul-contoh-layar img {
+  width: 100%; height: 100%; object-fit: cover; object-position: center;
+}
+
+/* Gerak masuk judul bertema di pratinjau. Tiruan kasar dari tag ASS-nya
+   (tema_judul.GERAK): rupa diamnya tetap gambar libass yang sebenarnya, hanya
+   cara ia masuk yang ditiru, supaya bedanya antartema terasa saat memilih. */
+.gerak-muncul { animation: gj-muncul .22s ease-out both; }
+.gerak-pop    { animation: gj-pop .28s ease-out both; }
+.gerak-hentak { animation: gj-hentak .25s ease-out both; }
+.gerak-naik   { animation: gj-naik .3s ease-out both; }
+.gerak-turun  { animation: gj-turun .3s ease-out both; }
+.gerak-geser  { animation: gj-geser .3s ease-out both; }
+.gerak-lempar { animation: gj-lempar .28s ease-out both; }
+.gerak-getar  { animation: gj-getar .64s linear both; }
+.gerak-kedip  { animation: gj-kedip .34s steps(1) both; }
+.gerak-pelan  { animation: gj-muncul .7s ease-out both; }
+@keyframes gj-muncul { from { opacity: 0; } to { opacity: 1; } }
+@keyframes gj-pop {
+  0% { opacity: 0; transform: scale(.88); } 57% { opacity: 1; transform: scale(1.04); }
+  100% { transform: scale(1); }
+}
+@keyframes gj-hentak {
+  0% { opacity: 0; transform: scale(.7); } 52% { opacity: 1; transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+@keyframes gj-naik { from { opacity: 0; transform: translateY(4%); } to { opacity: 1; transform: none; } }
+@keyframes gj-turun { from { opacity: 0; transform: translateY(-4%); } to { opacity: 1; transform: none; } }
+@keyframes gj-geser { from { opacity: 0; transform: translateX(-12%); } to { opacity: 1; transform: none; } }
+@keyframes gj-lempar {
+  from { opacity: 0; transform: rotate(9deg) scale(.84); } to { opacity: 1; transform: none; }
+}
+@keyframes gj-getar {
+  0% { opacity: 0; transform: rotate(-1.4deg); } 25% { opacity: 1; transform: rotate(1.4deg); }
+  50% { transform: rotate(-1.4deg); } 75% { transform: rotate(1.2deg); } 100% { transform: none; }
+}
+@keyframes gj-kedip {
+  0% { opacity: 0; } 18% { opacity: 1; } 35% { opacity: .45; } 60% { opacity: 1; }
+  78% { opacity: .6; } 100% { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  [class^="gerak-"], [class*=" gerak-"] { animation: none !important; }
+}

@@ -7,7 +7,7 @@ from typing import Optional
 from ..errors import AppError, JobCancelled, RenderError
 from ..repos import media as media_repo
 from .jobs import JobContext
-from .paths import find_local_video
+from .paths import find_local_video, url_sumber
 from .ytdlp import YtdlpError, download_youtube_media, get_video_info
 
 log = logging.getLogger("omniclip.pipeline")
@@ -261,6 +261,7 @@ def run_render(ctx: JobContext) -> dict:
         subtitles=subtitles,
         aspect_ratio=ctx.payload.get("aspect_ratio", "9:16"),
         hook_text=ctx.payload.get("hook_text", ""),
+        judul_video=ctx.payload.get("judul_video"),
         watermark=ctx.payload.get("watermark", ""),
         video_filter=ctx.payload.get("video_filter", "normal"),
         caption_style=style,
@@ -1231,7 +1232,7 @@ def run_auto_clip(ctx: JobContext) -> dict:
                 int(words[s_["wi"][0]].get("sp", 0)) if s_["wi"][0] < len(words) else 0
                 for s_ in sentences],
             "clips": clips,
-            "local_url": f"/api/media/local_downloads/{source.name}",
+            "local_url": url_sumber(video_id, source),
         }
         if sebelumnya:
             payload["sebelumnya"] = {

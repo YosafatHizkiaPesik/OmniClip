@@ -708,6 +708,9 @@ def build_ass(
     # True = warna tiap baris terjemahan mengikuti warna orang yang sedang
     # bicara, dengan palet subtitle utama.
     kedua_ikut_orang: bool = False,
+    # Baris Dialogue siap pakai dari luar: judul bertema di dalam video.
+    # Membawa semua gayanya sebagai tag sebaris, jadi tidak butuh baris Style.
+    tambahan: Optional[list[str]] = None,
 ) -> str:
     """
     Menyusun file ASS lengkap.
@@ -772,6 +775,12 @@ def build_ass(
         sela_kedua = _sela(kedua_style)
         gaya_kedua = _style_line("Caption2", kedua_style, w) + "\n"
 
+    # Gaya netral untuk judul bertema: semua rupanya dibawa tag sebarisnya, jadi
+    # yang penting di sini hanya bahwa gaya ini TIDAK menambahkan garis tepi
+    # atau bayangan pada pelat dan huruf yang digambarnya.
+    gaya_judul = ("Style: Default,Montserrat,60,&H00FFFFFF,&H000000FF,&H00000000,"
+                  "&H00000000,0,0,0,0,100,100,0,0,1,0,0,5,0,0,0,1\n") if tambahan else ""
+
     head = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {w}
@@ -785,7 +794,7 @@ Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour,
 Style: Caption,{st.font},{st.size},{primary},&H000000FF,{garis_warna},{bayang_ass},-1,0,0,0,100,100,0,0,{border_style},{garis_tebal},{bayang},{align},{margin_l},{margin_r},{st.margin_v},1
 {gaya_kotak}{gaya_kedua}Style: Hook,{st.font},{hook.size if hook else 64},{hook_color},&H000000FF,&H00000000,&HB4000000,-1,0,0,0,100,100,0,0,3,0,0,8,100,100,150,1
 Style: Mark,{wm_font},{st.wm_size},{wm_warna},&H000000FF,&H80000000,&H00000000,0,0,0,0,100,100,0,0,1,{st.wm_outline},0,5,0,0,0,1
-
+{gaya_judul}
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
@@ -1002,6 +1011,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             f"Dialogue: 0,{_ts(0)},{_ts(clip_duration)},Mark,,0,0,0,,"
             rf"{{\pos({wx},{wy})}}{escape_ass(watermark.strip())}"
         )
+
+    # --- Judul di dalam video -------------------------------------------------
+    events.extend(tambahan or [])
 
     return head + "\n".join(events) + "\n"
 

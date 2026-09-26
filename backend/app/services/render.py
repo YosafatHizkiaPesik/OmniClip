@@ -1253,6 +1253,26 @@ def build_clip_filename(*, title: str, index: Optional[int], start: float,
     return candidate
 
 
+def _baris_judul_video(judul: Optional[dict], durasi_klip: float,
+                       out_w: int, out_h: int) -> list[str]:
+    """Baris ASS judul di dalam video, atau kosong bila tidak dinyalakan."""
+    if not judul or not judul.get("aktif") or not (judul.get("teks") or "").strip():
+        return []
+    from .tema_judul import ass_judul
+    mulai = max(0.0, float(judul.get("mulai") or 0.0))
+    durasi = judul.get("durasi")
+    akhir = durasi_klip if not durasi else min(durasi_klip, mulai + float(durasi))
+    if akhir <= mulai:
+        return []
+    return ass_judul(str(judul.get("tema") or "kartu-putih"), str(judul["teks"]),
+                     mulai=mulai, akhir=akhir,
+                     pos_x=float(judul.get("pos_x", 50.0)), pos_y=float(judul.get("pos_y", 14.0)),
+                     box_w=float(judul.get("box_w", 84.0)), ukuran=float(judul.get("ukuran", 72.0)),
+                     out_w=out_w, out_h=out_h,
+                     # Di atas subtitle, di bawah tanda air.
+                     lapis=20)
+
+
 def render_clip(
     *,
     source_video_path: str,
@@ -1260,6 +1280,7 @@ def render_clip(
     subtitles: Optional[list[dict]] = None,
     aspect_ratio: str = "9:16",
     hook_text: str = "",
+    judul_video: Optional[dict] = None,
     watermark: str = "",
     video_filter: str = "normal",
     caption_style: Optional[CaptionStyle] = None,
@@ -1602,7 +1623,8 @@ def render_clip(
         # perlu melewati filter `ass` sama sekali.
         ada_teks = (style_for_render.aktif and subtitles
                     and any((l.get("text") or "").strip() for l in subtitles))
-        if ada_teks or kedua_lines or hook_text.strip() or watermark.strip():
+        judul_baris = _baris_judul_video(judul_video, total_duration, out_w, out_h)
+        if ada_teks or kedua_lines or hook_text.strip() or watermark.strip() or judul_baris:
             ass_path = workdir / "captions.ass"
             ass_path.write_text(
                 build_ass(
@@ -1616,6 +1638,7 @@ def render_clip(
                     kedua_style=kedua_style,
                     kedua_ikut_orang=bool(((subtitle_kedua or {}).get("style") or {})
                                           .get("ikut_warna_orang")),
+                    tambahan=judul_baris,
                 ),
                 encoding="utf-8",
             )

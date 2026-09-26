@@ -145,7 +145,8 @@ class TitleCardSpec:
             pos_y=max(0.0, min(100.0, float(data.get("pos_y") or 50.0))),
             box_w=max(20.0, min(100.0, float(data.get("box_w") or 84.0))),
             variant=(str(data.get("variant") or DEFAULT_VARIANT)
-                     if str(data.get("variant") or "") in VARIANTS
+                     if (str(data.get("variant") or "") in VARIANTS
+                         or str(data.get("variant") or "") in _tema_judul().TEMA)
                      else DEFAULT_VARIANT),
             font=str(data.get("font") or "Montserrat"),
         )
@@ -198,6 +199,8 @@ def card_ass(spec: TitleCardSpec, seconds: float, out_w: int, out_h: int) -> str
     Terpisah dari ASS subtitle klip karena waktunya juga terpisah — kartu
     dimulai dari nol pada linimasanya sendiri, sebelum klipnya ada.
     """
+    if spec.variant in _tema_judul().TEMA:
+        return _card_ass_tema(spec, seconds, out_w, out_h)
     factor = (out_h or 1920) / 1920.0
     size = max(24, int(round(spec.size * factor)))
     v = VARIANTS.get(spec.variant, VARIANTS[DEFAULT_VARIANT])
@@ -252,6 +255,39 @@ Style: Kartu,{spec.font},{size},{primary},&H000000FF,{outline_c},{back_c},-1,0,0
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 Dialogue: 0,{_ts(0.0)},{_ts(seconds)},Kartu,,0,0,0,,{{\\an5{letak}{gerak}}}{body}
 """
+
+
+def _tema_judul():
+    from . import tema_judul
+    return tema_judul
+
+
+def _card_ass_tema(spec: TitleCardSpec, seconds: float, out_w: int, out_h: int) -> str:
+    """
+    Kartu judul bertema: latar, warna, dan gerak dari `tema_judul`.
+
+    Jalur ini TERPISAH dari varian lama, dan varian lama tetap dirender persis
+    seperti sebelumnya: klip yang sudah disetel dengan "Garis tebal" tidak boleh
+    berubah rupa sendiri hanya karena tema baru ditambahkan.
+    """
+    tj = _tema_judul()
+    baris = tj.ass_judul(spec.variant, spec.text, mulai=0.0, akhir=seconds,
+                         pos_x=spec.pos_x, pos_y=spec.pos_y, box_w=spec.box_w,
+                         ukuran=spec.size, out_w=out_w, out_h=out_h)
+    return (f"""[Script Info]
+ScriptType: v4.00+
+PlayResX: {out_w}
+PlayResY: {out_h}
+WrapStyle: 2
+ScaledBorderAndShadow: yes
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,{spec.font},60,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,5,0,0,0,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+""" + "\n".join(baris) + "\n")
 
 
 def _ts(t: float) -> str:

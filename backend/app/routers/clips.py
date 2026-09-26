@@ -305,6 +305,27 @@ class TitleCardModel(BaseModel):
     card_seconds: float = Field(0.0, ge=0.0, le=12.0)
 
 
+class JudulVideoModel(BaseModel):
+    """
+    Judul yang menempel DI DALAM video, sepanjang klip atau sebagian awalnya.
+
+    Berbeda dari kartu judul: kartu berdiri di depan klip lalu hilang, judul
+    ini berjalan bersama klipnya. Diminta pemiliknya: "jika saya ingin membuat
+    judul selalu muncul di klip dimana opsinya". Sebelumnya yang ada hanya
+    "hook", berwarna tetap, di letak tetap, dan hilang sesudah 3,5 detik.
+    """
+    aktif: bool = False
+    teks: str = Field("", max_length=240)
+    tema: str = Field("kartu-putih", max_length=40)
+    pos_x: float = Field(50.0, ge=0.0, le=100.0)
+    pos_y: float = Field(14.0, ge=0.0, le=100.0)
+    box_w: float = Field(84.0, ge=10.0, le=100.0)
+    ukuran: float = Field(72.0, ge=20.0, le=260.0)
+    mulai: float = Field(0.0, ge=0.0)
+    # Kosong = sampai akhir klip.
+    durasi: Optional[float] = Field(None, gt=0.0, le=3600.0)
+
+
 class RenderClipRequest(BaseModel):
     # Referensi video, bukan path filesystem: klien tidak menentukan file mana
     # yang dibuka server.
@@ -353,6 +374,7 @@ class RenderClipRequest(BaseModel):
     lock_person: Optional[int] = Field(None, ge=0, le=7)
     person_keys: List[PersonKeyModel] = Field(default_factory=list)
     title_card: Optional[TitleCardModel] = None
+    judul_video: Optional[JudulVideoModel] = None
     # Nomor klip, dipakai untuk menamai berkas hasilnya.
     clip_index: Optional[int] = None
     # Judul dan tagar klip. Judulnya jadi nama berkas hasil; tanpanya semua
@@ -1329,6 +1351,7 @@ async def render_clip(req: RenderClipRequest):
             "lock_person": req.lock_person,
             "person_keys": [k.model_dump() for k in req.person_keys],
             "title_card": (req.title_card.model_dump() if req.title_card else None),
+            "judul_video": (req.judul_video.model_dump() if req.judul_video else None),
             "frame_layout": (req.frame_layout.model_dump()
                              if req.frame_layout else None),
             "frame_keys": [k.model_dump(exclude_none=True) for k in req.frame_keys],

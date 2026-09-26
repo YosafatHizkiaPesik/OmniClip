@@ -6,6 +6,7 @@ import { CARD_VARIANTS } from './cardStyles';
 import { CANVAS_ASPECT, coverPercent, followX, frameInk } from './frames';
 import { beginRectDrag } from './rectDrag';
 import MediaOverlay from './MediaOverlay';
+import { LapisJudul, iniTema, useDaftarTema } from './JudulTema';
 
 // `r` adalah rasio yang sama dengan `aspect`, dalam bentuk angka. Batas tinggi
 // kanvas dinyatakan lewat lebar (lebar = tinggi x rasio) karena membatasi
@@ -93,6 +94,7 @@ export default function ClipPreview({
   onSelectFrame = null,
   onStyleChange = null,    // menggeser/mengubah ukuran subtitle di atas gambar
   onCardChange = null,     // menggeser/mengubah ukuran JUDUL kartu di atas gambar
+  onJudulVideoChange = null,  // sama, untuk judul yang menempel di dalam video
   // Sisipan: yang sedang dipilih, cara menyimpan petak barunya, dan cara
   // memilihnya dengan mengklik di atas gambar. Ketiganya kosong di luar tab
   // Sisipan, dan di sana pratinjau tidak menggambar pegangan apa pun.
@@ -158,6 +160,8 @@ export default function ClipPreview({
   const [batasSeret, setBatasSeret] = useState(null);  // tinggi wajah saat diseret
 
   const card = clip?.title_card;
+  const daftarTema = useDaftarTema();
+  const gerakTema = (id) => daftarTema.find((t) => t.id === id)?.gerak || '';
   const cardText = ((card?.text || '').trim() || (clip?.title || '').trim());
   const cardSeconds = Math.max(1.2, Number(card?.card_seconds || card?.seconds || 3));
   const cardOn = !!card?.enabled && !!cardText;
@@ -859,6 +863,17 @@ export default function ClipPreview({
   const showCard = constrained && cardOn
     && (cardHolds ? cardLeft !== null : clipTime < cardSeconds);
 
+  // Judul di dalam video: tampil dalam rentang waktunya, dan tidak selama
+  // kartu judul menahan layar, karena saat dirender kartu itu berdiri di
+  // DEPAN klip, bukan di atasnya.
+  const jv = clip?.judul_video;
+  const jvTeks = ((jv?.teks || '').trim() || (clip?.title || '').trim());
+  const jvMulai = Math.max(0, Number(jv?.mulai || 0));
+  const showJudulVideo = constrained && !!jv?.aktif && !!jvTeks
+    && !(cardHolds && cardLeft !== null)
+    && clipTime >= jvMulai
+    && (jv?.durasi == null || clipTime < jvMulai + Number(jv.durasi));
+
   /**
    * Letak dan ukuran judul, dalam satuan yang SAMA dengan yang dipakai render.
    *
@@ -1280,9 +1295,11 @@ export default function ClipPreview({
               outlineOffset: '5px',
             }}
                  onPointerDown={onCardChange ? startCardDrag('move') : undefined}>
+              {!iniTema(card?.variant) && (
               <span key={card?.variant || 'garis'} data-kartu-judul
                     style={cardTextStyle}>{cardText}</span>
-              {onCardChange && (
+              )}
+              {onCardChange && !iniTema(card?.variant) && (
                 <span
                   onPointerDown={startCardDrag('size')}
                   title="Seret untuk mengubah ukuran judul"
@@ -1295,6 +1312,31 @@ export default function ClipPreview({
               )}
             </div>
           </>
+        )}
+
+        {showCard && boxH > 0 && iniTema(card?.variant) && (
+          <LapisJudul
+            nilai={{
+              tema: card.variant, teks: cardText, pos_x: card.pos_x ?? 50,
+              pos_y: card.pos_y ?? 50, box_w: card.box_w ?? 84, ukuran: card.size ?? 104,
+            }}
+            aspek={aspectRatio} boxW={boxW} boxH={boxH} zIndex={3}
+            gerak={gerakTema(card.variant)}
+            onUbah={onCardChange
+              ? ({ ukuran, ...lain }) => onCardChange(
+                ukuran != null ? { ...lain, size: ukuran } : lain)
+              : null} />
+        )}
+
+        {showJudulVideo && boxH > 0 && (
+          <LapisJudul
+            nilai={{
+              tema: jv.tema || 'kartu-putih', teks: jvTeks, pos_x: jv.pos_x ?? 50,
+              pos_y: jv.pos_y ?? 14, box_w: jv.box_w ?? 84, ukuran: jv.ukuran ?? 72,
+            }}
+            aspek={aspectRatio} boxW={boxW} boxH={boxH} zIndex={3}
+            gerak={gerakTema(jv.tema || 'kartu-putih')}
+            onUbah={onJudulVideoChange} />
         )}
 
         {showCard && (

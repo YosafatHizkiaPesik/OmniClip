@@ -16,6 +16,7 @@ import BilahBingkaiAwal from './BilahBingkaiAwal';
 import ClipTimeline from './ClipTimeline';
 import FramePanel from './FramePanel';
 import TitlePanel from './TitlePanel';
+import { DEFAULT_JUDUL_VIDEO } from './JudulTema';
 import SutradaraPanel from './SutradaraPanel';
 import VideoHilang from './VideoHilang';
 import MediaPanel from './MediaPanel';
@@ -558,6 +559,27 @@ export default function Editor({ project, onBack }) {
       title_card: { ...selected.title_card, ...patch },
     });
   }, [selected, editor]);
+
+  /** Sama seperti `patchCard`, untuk judul yang menempel di dalam video. */
+  const patchJudulVideo = useCallback((patch) => {
+    if (!selected) return;
+    editor.updateClip(selected.clip_id, {
+      judul_video: { ...DEFAULT_JUDUL_VIDEO, ...selected.judul_video, ...patch },
+    });
+  }, [selected, editor]);
+
+  /**
+   * Menyalakan judul di dalam video di SEMUA klip dengan tema, letak, dan lama
+   * yang sama. Teks yang sudah diisi sendiri di sebuah klip tetap dipakai;
+   * klip lain memakai judulnya masing-masing.
+   */
+  const judulSemua = useCallback((jv) => {
+    clips.forEach((c) => {
+      editor.updateClip(c.clip_id, {
+        judul_video: { ...jv, teks: c.judul_video?.teks || '' },
+      });
+    });
+  }, [clips, editor]);
 
   /**
    * Menandai bahwa studio sedang terbuka, di `body`.
@@ -1390,6 +1412,12 @@ export default function Editor({ project, onBack }) {
         text: (clip.title_card.text || '').trim() || (clip.title || '').trim(),
       }
       : null,
+    judul_video: clip.judul_video?.aktif
+      ? {
+        ...clip.judul_video,
+        teks: (clip.judul_video.teks || '').trim() || (clip.title || '').trim(),
+      }
+      : null,
     caption_style: style,
     unggah: googleReady ? unggahSetelah : { youtube: false, drive: false },
   });
@@ -1822,6 +1850,7 @@ export default function Editor({ project, onBack }) {
                            boxRect={kunciBingkaiAktif?.rect ?? null}
                            reframe={reframe} reframeLoading={reframeLoading}
                            onStyleChange={patchStyle} onCardChange={patchCard}
+                           onJudulVideoChange={patchJudulVideo}
                            layout={susunanTampil} onLayoutChange={setSusunanEfektif}
                            onGamingWajah={(wajah) => setelGaming({ wajah })}
                            frameEditing={tab === 'frame'}
@@ -1932,6 +1961,7 @@ export default function Editor({ project, onBack }) {
               {tab === 'title' && (
                 <TitlePanel clip={selected}
                             onRetitle={handleRetitle} retitling={retitling}
+                            onJudulSemua={clips.length > 1 ? judulSemua : null}
                             onChange={(patch) => selected
                               && editor.updateClip(selected.clip_id, patch)} />
               )}
