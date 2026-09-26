@@ -36,6 +36,36 @@ const MODES = [
  * Keduanya bisa disunting, dan yang disunting itulah yang dipakai: jadi nama
  * berkas hasil render, dan mengisi sendiri formulir unggah.
  */
+/**
+ * Satu kotak contoh gaya judul: gambar kecil gelap dengan judulnya sendiri di
+ * atasnya, digambar persis seperti pratinjau klip menggambarnya.
+ *
+ * `key` pada teksnya dinaikkan setiap tetikus masuk, supaya elemennya lahir
+ * ulang dan animasinya berputar lagi — tanpa itu gerakannya hanya terlihat
+ * sekali, saat panel pertama dibuka, lalu tidak pernah lagi.
+ */
+function ContohGaya({ v, teks, warna, bayang, aktif, onPilih }) {
+  const [putar, setPutar] = useState(0);
+  const skala = 0.34;               // kotak contoh setinggi ±34% kanvas 1920
+  return (
+    <button type="button" onClick={onPilih} onMouseEnter={() => setPutar((n) => n + 1)}
+            className={`judul-contoh${aktif ? ' is-on' : ''}`} title={v.note}>
+      <span className="judul-contoh-layar">
+        <span key={putar} data-kartu-judul style={{
+          display: 'inline-block', color: warna, fontWeight: 900,
+          fontSize: `${Math.round(104 * skala * 0.34)}px`, lineHeight: 1.12,
+          textTransform: 'uppercase', textAlign: 'center',
+          animation: v.anim || undefined,
+          ...v.css(bayang, skala * 0.34),
+        }}>
+          {teks.length > 26 ? `${teks.slice(0, 24).trim()}…` : teks}
+        </span>
+      </span>
+      <span className="judul-contoh-nama">{v.label}</span>
+    </button>
+  );
+}
+
 export default function TitlePanel({ clip, onChange, onRetitle = null, retitling = false }) {
   const [copied, setCopied] = useState(false);
   const [draft, setDraft] = useState('');
@@ -245,15 +275,24 @@ export default function TitlePanel({ clip, onChange, onRetitle = null, retitling
               <div className="mark" style={{ color: 'var(--ink)', marginBottom: '6px' }}>
                 Gaya judul
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {/* Tiap pilihan MEMPERLIHATKAN dirinya, bukan hanya menyebut
+                  namanya. Dulu yang ada cuma nama dan satu kalimat keterangan,
+                  jadi satu-satunya cara tahu rupa "Stiker dilempar" adalah
+                  memilihnya lalu memutar pratinjau klipnya. Diminta pemiliknya:
+                  "buatkan juga preview tampilannya seperti apa agar jelas saat
+                  kita memilih". Gerakannya diputar ulang saat disentuh tetikus,
+                  memakai CSS yang SAMA dengan pratinjau klip. */}
+              <div className="judul-galeri">
                 {CARD_VARIANTS.map((v) => (
-                  <button key={v.id} onClick={() => patchCard({ variant: v.id })}
-                          className={`choice${(card.variant || 'garis') === v.id ? ' is-on' : ''}`}>
-                    <div className="choice-t">{v.label}</div>
-                    <div className="choice-h">{v.note}</div>
-                  </button>
+                  <ContohGaya key={v.id} v={v} teks={cardText || 'JUDUL KLIP ANDA'}
+                              warna={card.color || '#FFFFFF'} bayang={card.shadow || '#000000'}
+                              aktif={(card.variant || 'garis') === v.id}
+                              onPilih={() => patchCard({ variant: v.id })} />
                 ))}
               </div>
+              <p style={{ fontSize: '.72rem', color: 'var(--ink-3)', lineHeight: 1.55, margin: '8px 0 0' }}>
+                {CARD_VARIANTS.find((v) => v.id === (card.variant || 'garis'))?.note}
+              </p>
               <p style={{
                 fontSize: '.72rem', color: 'var(--ink-3)', lineHeight: 1.6,
                 margin: '8px 0 0',

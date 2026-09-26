@@ -122,3 +122,73 @@ class ResolusiBawaan(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class KotakCariSepertiYouTube(unittest.TestCase):
+    """
+    Riwayat pencarian tampil sebagai dropdown yang menempel di bawah kotak cari,
+    bukan deretan chip di bawah seluruh formulir. Diminta pemiliknya: "buat
+    search bar itu mirip milik youtube atau google karena lebih bagus seperti
+    itu dan clean".
+    """
+
+    HOME = Path(__file__).resolve().parents[2] / "frontend" / "src" / "routes" / "Home.jsx"
+
+    def test_dropdown_dengan_papan_ketik(self):
+        jsx = self.HOME.read_text(encoding="utf-8")
+        self.assertIn('role="combobox"', jsx)
+        self.assertIn('role="listbox"', jsx)
+        for tombol in ("ArrowDown", "ArrowUp", "Escape"):
+            self.assertIn(tombol, jsx)
+
+    def test_klik_saran_tidak_hilang(self):
+        """
+        Menekan saran lebih dulu melepas fokus dari kotaknya. Dulu jeda 180
+        milidetik dipakai supaya tekanannya sempat sampai, dan klik yang sedikit
+        lebih lambat hilang begitu saja. `onMouseDown` + `preventDefault`
+        menjalankan pilihannya sebelum fokus lepas.
+        """
+        jsx = self.HOME.read_text(encoding="utf-8")
+        self.assertIn("onMouseDown={(e) => { e.preventDefault(); pilihSaran(r.query); }}", jsx)
+        self.assertNotIn("setTimeout(() => setCariAktif(false), 180)", jsx)
+
+    def test_pencarian_otomatis_tidak_masuk_riwayat(self):
+        """
+        Panel video terkait mencari dengan "nama kanal + empat kata judul".
+        Tanpa `catat=0`, tiap video yang dibuka menambah baris riwayat yang tidak
+        pernah diketik siapa pun — terlihat di dropdown sebagai "Windah Basudara
+        AKU HARUS LINDUNGI PRESIDENT" dan sejenisnya.
+        """
+        watch = (Path(__file__).resolve().parents[2] / "frontend" / "src" / "routes"
+                 / "Watch.jsx").read_text(encoding="utf-8")
+        self.assertIn("&limit=15&catat=0", watch)
+        sumber = (ROUTERS / "videos.py").read_text(encoding="utf-8")
+        self.assertIn("if limit <= 20 and catat:", sumber)
+
+
+class GaleriGayaJudul(unittest.TestCase):
+    """
+    Tiap gaya judul memperlihatkan dirinya. Dulu hanya nama dan satu kalimat,
+    jadi satu-satunya cara tahu rupa "Stiker dilempar" adalah memilihnya lalu
+    memutar pratinjau klip. Diminta pemiliknya: "buatkan juga preview
+    tampilannya seperti apa agar jelas saat kita memilih".
+    """
+
+    PANEL = (Path(__file__).resolve().parents[2] / "frontend" / "src" / "features"
+             / "studio" / "TitlePanel.jsx")
+
+    def test_contoh_memakai_gaya_dan_gerak_yang_sama(self):
+        jsx = self.PANEL.read_text(encoding="utf-8")
+        self.assertIn("function ContohGaya", jsx)
+        badan = jsx.split("function ContohGaya")[1].split("\nexport default")[0]
+        # CSS dan gerak diambil dari entri yang SAMA dengan pratinjau klip.
+        self.assertIn("v.css(", badan)
+        self.assertIn("v.anim", badan)
+        # Gerak diputar ulang saat disentuh: `key` yang berubah membuat
+        # elemennya lahir ulang.
+        self.assertIn("key={putar}", badan)
+        self.assertIn("onMouseEnter", badan)
+
+    def test_judul_klip_sendiri_yang_dipakai(self):
+        jsx = self.PANEL.read_text(encoding="utf-8")
+        self.assertIn("teks={cardText ||", jsx)

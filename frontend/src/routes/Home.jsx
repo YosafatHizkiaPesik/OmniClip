@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useMemo, useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Search, Loader2, Video, RefreshCw, History, X, Scissors, CheckCircle2 } from 'lucide-react';
 import { apiDelete, apiGet, apiPost } from '../lib/api';
@@ -132,6 +132,44 @@ export default function Home() {
   const buangRiwayat = (kueri) => {
     setRiwayat((r) => r.filter((x) => x.query !== kueri));
     apiDelete(`/riwayat-cari?q=${encodeURIComponent(kueri)}`).catch(() => {});
+  };
+
+  // Saran di bawah kotak cari, seperti YouTube dan Google: riwayat yang
+  // cocok dengan yang sedang diketik, bukan seluruh riwayat apa adanya.
+  // Kosong berarti yang terbaru lebih dulu.
+  const [sorot, setSorot] = useState(-1);
+  const saran = useMemo(() => {
+    const k = draft.trim().toLowerCase();
+    const cocok = k ? riwayat.filter((r) => r.query.toLowerCase().includes(k)
+                                         && r.query.toLowerCase() !== k)
+                    : riwayat;
+    return cocok.slice(0, 8);
+  }, [riwayat, draft]);
+  useEffect(() => { setSorot(-1); }, [draft, cariAktif]);
+
+  const pilihSaran = (kueri) => {
+    setDraft(kueri);
+    setCariAktif(false);
+    setParams({ q: kueri }, { replace: false });
+  };
+
+  const tombolCari = (e) => {
+    if (!cariAktif || !saran.length) {
+      if (e.key === 'ArrowDown' && saran.length) { setCariAktif(true); e.preventDefault(); }
+      return;
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setSorot((i) => (i + 1) % saran.length);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setSorot((i) => (i <= 0 ? saran.length - 1 : i - 1));
+    } else if (e.key === 'Enter' && sorot >= 0) {
+      e.preventDefault();
+      pilihSaran(saran[sorot].query);
+    } else if (e.key === 'Escape') {
+      setCariAktif(false);
+    }
   };
 
   // Identitas daftar yang sedang ditampilkan. Kueri, urutan, atau tombol
@@ -282,22 +320,79 @@ export default function Home() {
         )}
       </div>
 
-      <form onSubmit={submit} className="search-container">
+      <form onSubmit={(e) => { setCariAktif(false); submit(e); }}
+            className="search-container">
         <div className="search-input-wrapper">
-          {/* Riwayat muncul saat kotak ini dipakai, dan menghilang sesaat
-              SESUDAH fokusnya lepas. Penundaan itu perlu: menekan sebuah kata
-              di daftar riwayat lebih dulu melepas fokus dari kotaknya, dan
-              menyembunyikan daftarnya saat itu juga membuat tekanan tersebut
-              tidak pernah sampai ke tujuannya. */}
-          <input
-            type="text"
-            className="search-input"
-            placeholder="Tempel tautan YouTube, atau ketik kata kunci"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onFocus={() => setCariAktif(true)}
-            onBlur={() => setTimeout(() => setCariAktif(false), 180)}
-          />
+          {/* Kotak dan saran-sarannya satu kesatuan: saran MENEMPEL di bawah
+              kotaknya, selebar kotaknya, seperti YouTube dan Google.
+
+              Versi sebelumnya menaruh riwayat sebagai deretan chip DI LUAR
+              kotak, di bawah seluruh formulir. Diminta pemiliknya diganti:
+              "buat search bar itu mirip milik youtube atau google karena
+              lebih bagus seperti itu dan clean". */}
+          <div className="cari-kotak">
+            <Search size={16} className="cari-ikon" aria-hidden="true" />
+            <input
+              type="text"
+              className="search-input"
+              placeholder="Tempel tautan YouTube, atau ketik kata kunci"
+              value={draft}
+              role="combobox"
+              aria-expanded={cariAktif && saran.length > 0}
+              aria-controls="cari-saran"
+              aria-activedescendant={sorot >= 0 ? `saran-${sorot}` : undefined}
+              autoComplete="off"
+              onChange={(e) => { setDraft(e.target.value); setCariAktif(true); }}
+              onFocus={() => setCariAktif(true)}
+              onBlur={() => setCariAktif(false)}
+              onKeyDown={tombolCari}
+            />
+            {draft && (
+              <button type="button" className="cari-hapus" aria-label="Kosongkan"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => { setDraft(''); setCariAktif(true); }}>
+                <X size={16} />
+              </button>
+            )}
+            {cariAktif && saran.length > 0 && (
+              <ul id="cari-saran" className="cari-saran" role="listbox">
+                {saran.map((r, i) => {
+                  const k = draft.trim();
+                  const at = k ? r.query.toLowerCase().indexOf(k.toLowerCase()) : -1;
+                  return (
+                    <li key={r.query} id={`saran-${i}`} role="option"
+                        aria-selected={i === sorot}
+                        className={i === sorot ? 'is-on' : undefined}
+                        // Tekan tetikus menjalankan pilihan SEBELUM kotak
+                        // kehilangan fokus. Dulu jeda 180 milidetik dipakai
+                        // untuk itu, dan klik yang sedikit lebih lambat
+                        // hilang begitu saja.
+                        onMouseDown={(e) => { e.preventDefault(); pilihSaran(r.query); }}
+                        onMouseEnter={() => setSorot(i)}>
+                      <History size={15} className="cari-saran-ikon" aria-hidden="true" />
+                      <span className="cari-saran-teks">
+                        {at < 0 ? r.query : (
+                          <>
+                            {r.query.slice(0, at)}
+                            <b>{r.query.slice(at, at + k.length)}</b>
+                            {r.query.slice(at + k.length)}
+                          </>
+                        )}
+                      </span>
+                      <button type="button" className="cari-saran-buang"
+                              aria-label={`Hapus "${r.query}" dari riwayat`}
+                              onMouseDown={(e) => {
+                                e.preventDefault(); e.stopPropagation();
+                                buangRiwayat(r.query);
+                              }}>
+                        Hapus
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
           <button type="submit" className="btn-primary" disabled={loading}
                   style={{ minWidth: '104px' }}>
             {loading ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
@@ -305,35 +400,6 @@ export default function Home() {
           </button>
         </div>
       </form>
-
-      {/* Riwayat pencarian hanya muncul saat kotak carinya sedang dipakai.
-          Sebelumnya ia selalu berdiri di beranda, dan beranda yang isinya
-          delapan kata yang pernah diketik bukan beranda, melainkan catatan.
-          Semua kotak pencarian yang dikenal orang berperilaku begini. */}
-      {cariAktif && riwayat.length > 0 && (
-        <div style={{ display: 'flex', gap: '7px', flexWrap: 'wrap', alignItems: 'center',
-                      marginBottom: '10px' }}>
-          <span className="mark" style={{ color: 'var(--ink-3)', display: 'inline-flex', gap: '5px',
-                                          alignItems: 'center' }}>
-            <History size={13} />Terakhir dicari
-          </span>
-          {riwayat.slice(0, 8).map((r) => (
-            <span key={r.query} className={`chip${q === r.query ? ' is-on' : ''}`}
-                  style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }}>
-              <button onClick={() => setParams({ q: r.query })}
-                      style={{ background: 'none', border: 0, padding: 0, cursor: 'pointer',
-                               color: 'inherit', font: 'inherit' }}>
-                {r.query}
-              </button>
-              <button onClick={() => buangRiwayat(r.query)} aria-label={`Hapus ${r.query} dari riwayat`}
-                      style={{ background: 'none', border: 0, padding: 0, cursor: 'pointer',
-                               color: 'inherit', display: 'inline-flex', opacity: 0.6 }}>
-                <X size={12} />
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
 
       <div style={{
         display: 'flex', gap: '8px', overflowX: 'auto',

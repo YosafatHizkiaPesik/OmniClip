@@ -75,7 +75,9 @@ export default function Watch() {
     if (!video?.title) return undefined;
     setRelatedLoading(true);
     const q = `${video.channel ?? ''} ${video.title.split(' ').slice(0, 4).join(' ')}`;
-    apiGet(`/search?q=${encodeURIComponent(q)}&limit=15`)
+    // `catat=0`: kueri ini buatan halaman, bukan ketikan orangnya, jadi tidak
+    // boleh masuk riwayat pencarian.
+    apiGet(`/search?q=${encodeURIComponent(q)}&limit=15&catat=0`)
       .then((data) => {
         if (cancelled) return;
         setRelated((Array.isArray(data) ? data : []).filter((v) => v.id !== videoId).slice(0, 12));

@@ -659,6 +659,55 @@ a { color: var(--cue); text-underline-offset: 3px; text-decoration-thickness: 1p
 .search-input::placeholder { color: var(--ink-3); }
 .search-input:focus { border-color: var(--reh); outline: none; }
 
+/* ── Kotak cari dan sarannya, seperti YouTube dan Google ─────────────────────
+   Saran menempel di bawah kotaknya dan selebar kotaknya. Sudut bawah kotak
+   dirapatkan saat daftar terbuka, jadi keduanya terbaca sebagai satu benda,
+   bukan kotak dengan daftar yang kebetulan berada di dekatnya. */
+.cari-kotak { position: relative; flex: 1; display: flex; align-items: center; }
+.cari-kotak .search-input { padding-left: 38px; padding-right: 38px; width: 100%; }
+.cari-kotak .cari-ikon {
+  position: absolute; left: 13px; color: var(--ink-3); pointer-events: none;
+}
+.cari-hapus {
+  position: absolute; right: 6px; display: inline-flex; padding: 6px;
+  background: none; border: 0; border-radius: 99px; cursor: pointer;
+  color: var(--ink-3);
+}
+.cari-hapus:hover { background: var(--plate-3); color: var(--ink); }
+.cari-kotak:has(.cari-saran) .search-input {
+  border-bottom-left-radius: 0; border-bottom-right-radius: 0;
+}
+.cari-saran {
+  position: absolute; top: 100%; left: 0; right: 0; z-index: 30;
+  margin: 0; padding: 6px 0; list-style: none;
+  background: var(--plate); border: 1px solid var(--reh); border-top: 0;
+  border-radius: 0 0 var(--r-sm) var(--r-sm);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, .18);
+  max-height: 360px; overflow-y: auto;
+}
+.cari-saran li {
+  display: flex; align-items: center; gap: 12px;
+  padding: 8px 12px 8px 13px; cursor: pointer;
+  font-size: .92rem; color: var(--ink);
+}
+.cari-saran li.is-on { background: var(--plate-3); }
+.cari-saran-ikon { color: var(--ink-3); flex: none; }
+.cari-saran-teks {
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* Yang cocok dengan ketikan dicetak tipis, sisanya tebal — cara Google:
+   mata langsung jatuh ke bagian yang BELUM diketik, yaitu yang ditawarkan. */
+.cari-saran-teks { font-weight: 600; }
+.cari-saran-teks b { font-weight: 400; }
+.cari-saran-buang {
+  flex: none; background: none; border: 0; cursor: pointer;
+  font: inherit; font-size: .75rem; color: var(--ink-3);
+  padding: 2px 6px; border-radius: 4px; opacity: 0;
+}
+.cari-saran li.is-on .cari-saran-buang,
+.cari-saran li:hover .cari-saran-buang { opacity: 1; }
+.cari-saran-buang:hover { color: var(--danger); text-decoration: underline; }
+
 /* Modal */
 .modal-overlay {
   position: fixed; inset: 0; z-index: 50;
@@ -1355,3 +1404,23 @@ body.is-studio .app-viewport,
 .reh-row:hover .studio-row-x,
 .reh-row.is-on .studio-row-x,
 .reh-row .studio-row-x:focus-visible { opacity: 1; }
+
+/* ── Galeri gaya judul ───────────────────────────────────────────────────────
+   Dua kolom kotak contoh. Latarnya gelap dan bergradasi seperti bingkai video,
+   karena gaya judul dinilai di atas GAMBAR, bukan di atas panel putih — garis
+   tepi tebal terlihat berlebihan di atas putih dan pas di atas video. */
+.judul-galeri { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.judul-contoh {
+  display: flex; flex-direction: column; gap: 5px; padding: 5px;
+  background: var(--plate); border: 1px solid var(--rule-2);
+  border-radius: var(--r-sm); cursor: pointer; font: inherit; text-align: left;
+}
+.judul-contoh:hover { border-color: var(--ink-3); }
+.judul-contoh.is-on { border-color: var(--reh); box-shadow: 0 0 0 1px var(--reh); }
+.judul-contoh-layar {
+  height: 62px; border-radius: 4px; overflow: hidden;
+  display: flex; align-items: center; justify-content: center; padding: 0 6px;
+  background: linear-gradient(135deg, #3a4a5c 0%, #1b2430 55%, #2b1f26 100%);
+}
+.judul-contoh-nama { font-size: .72rem; font-weight: 700; color: var(--ink-2); padding: 0 2px; }
+.judul-contoh.is-on .judul-contoh-nama { color: var(--ink); }

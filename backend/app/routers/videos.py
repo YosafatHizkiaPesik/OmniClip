@@ -152,7 +152,8 @@ def _lengkapi_di_latar(kunci: str, ambil: Callable[[], list], penuh: int,
 @router.get("/search")
 async def search(q: str = Query(..., description="Kata kunci pencarian"),
                  limit: int = 20, sort: str = "relevan",
-                 durasi: Optional[str] = None, tanggal: Optional[str] = None):
+                 durasi: Optional[str] = None, tanggal: Optional[str] = None,
+                 catat: bool = True):
     if not q.strip():
         return []
     if sort not in SEARCH_SORTS:
@@ -160,7 +161,16 @@ async def search(q: str = Query(..., description="Kata kunci pencarian"),
     from ..services.ytdlp import DURASI_KODE, TANGGAL_KODE
     durasi = durasi if durasi in DURASI_KODE else None
     tanggal = tanggal if tanggal in TANGGAL_KODE else None
-    if limit <= 20:
+    # Hanya pencarian yang DIKETIK orang yang masuk riwayat.
+    #
+    # Panel "video terkait" di halaman Tonton memakai jalur ini juga, dengan
+    # kueri buatannya sendiri: nama kanal ditambah empat kata pertama judul.
+    # Tanpa `catat=0` darinya, setiap video yang dibuka menambah satu baris
+    # riwayat yang tidak pernah diketik siapa pun — "Windah Basudara AKU HARUS
+    # LINDUNGI PRESIDENT", "TAULANY TV PODCAST PALING PENDEK SEDUNIA". Terlihat
+    # begitu riwayat ditampilkan sebagai dropdown di bawah kotak cari, dan
+    # judul-judul itu juga yang membuat beranda mengembalikan segelintir video.
+    if limit <= 20 and catat:
         from ..repos import profil as profil_repo
         from ..services import profil
         try:
