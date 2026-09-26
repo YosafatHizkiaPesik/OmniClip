@@ -76,7 +76,7 @@ async def get_project(video_id: str):
 
     # Transkrip dipakai untuk membangun ulang baris yang memang rusak sejak
     # dibuat. Dibaca sekali, bukan per klip.
-    tersimpan = tx_repo.get_best(vid)
+    tersimpan = (await asyncio.to_thread(tx_repo.get_best, vid))
     kata_video = tersimpan["words"] if tersimpan else []
 
     def _kalimat_utuh(lines: list[dict]) -> bool:

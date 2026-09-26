@@ -36,11 +36,15 @@ async def pasang():
     pada versi baru — penukaran foldernya dikerjakan proses penolong, karena
     sebuah .exe yang sedang berjalan tidak bisa menimpa dirinya sendiri.
     """
+    import asyncio
+
     bisa, alasan = updater.bisa_memasang()
     if not bisa:
         raise AppError(alasan, code="UPDATE_TIDAK_BISA", status=409)
 
-    info = updater.cek(paksa=True)
+    # Di utas terpisah: ini menghubungi GitHub dengan batas 20 detik, dan
+    # memanggilnya langsung di sini membekukan seluruh server selama itu.
+    info = await asyncio.to_thread(updater.cek, True)
     if not info["ada_pembaruan"]:
         raise AppError(f"Sudah memakai versi terbaru ({__version__}).",
                        code="UPDATE_SUDAH_TERBARU", status=409)

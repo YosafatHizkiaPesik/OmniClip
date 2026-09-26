@@ -10,14 +10,15 @@ import JobProgress from '../components/JobProgress';
 import { ChannelAvatar, RelatedVideoCard, formatViews } from '../components/VideoCards';
 import { formatDurationHuman } from '../utils/timeFormat';
 
-// "Terbaik" lebih dulu, dan ia yang jadi bawaan.
+// 1080p jadi bawaan, sama dengan RESOLUSI_BAWAAN di backend/app/services/ytdlp.
 //
-// Keluaran klip 9:16 adalah 1080x1920, dan jendela yang dipotong dari sumber
-// 16:9 hanya selebar 9/16 tingginya — dari 720p itu 405 piksel yang lalu
-// diregangkan hampir tiga kali lipat. Resolusi sumber adalah plafon kualitas
-// seluruh klip, dan tidak ada filter yang bisa mengembalikan detail yang memang
-// tidak pernah terekam.
-const RESOLUTIONS = ['Terbaik', '360p', '480p', '720p', '1080p', 'Audio MP3'];
+// Dulu "Terbaik" (sampai 2160p), dan itulah asal keluhan "video yang
+// didownload terlalu besar hingga proses lama": terukur 42 video, 37,9 GB,
+// terbesar 3,99 GB. Keluaran klip 9:16 adalah 1080x1920, dan jendela yang
+// dipotong dari sumber 1080p selebar 608 piksel — cukup dekat. Dari 720p hanya
+// 405, itu sebabnya 720p tidak dijadikan bawaan.
+const RESOLUSI_BAWAAN = '1080p';
+const RESOLUTIONS = ['1080p', 'Terbaik', '720p', '480p', '360p', 'Audio MP3'];
 
 /**
  * Halaman tonton.
@@ -44,7 +45,7 @@ export default function Watch() {
   const [relatedLoading, setRelatedLoading] = useState(true);
 
   const [showDownload, setShowDownload] = useState(false);
-  const [resolution, setResolution] = useState('Terbaik');
+  const [resolution, setResolution] = useState(RESOLUSI_BAWAAN);
   const downloadJob = useJobRunner();
 
   const [queueing, setQueueing] = useState(false);

@@ -1,5 +1,6 @@
 """Analisis auto-clip dan render klip."""
 
+import asyncio
 import re
 from typing import Any, Dict, List, Literal, Optional
 
@@ -17,21 +18,18 @@ from ..services.paths import (
 )
 from ..services.render import list_local_clips
 
+from ..services.ytdlp import RESOLUSI_BAWAAN
+
 router = APIRouter(prefix="/api", tags=["clips"])
 
 
 class AutoClipRequest(BaseModel):
     video_id: str = Field(..., description="ID atau URL YouTube")
-    # "Terbaik", bukan "720p".
-    #
-    # Bawaan lama adalah plafon kualitas SELURUH hasil, diam-diam. Frontend
-    # tidak pernah mengirim field ini, jadi nilai inilah yang selalu dipakai —
-    # dan pipeline yang di bawahnya sudah menulis "auto-clip SELALU mengambil
-    # yang terbaik kecuali diminta lain" hanya melihat "720p" dan menurutinya.
-    # Keluarannya 1080x1920, sedangkan jendela 9:16 dari sumber 720p cuma
-    # 405x720: diregangkan 2,67x, dan tidak ada filter yang bisa mengembalikan
-    # detail yang tidak pernah terekam.
-    quality: str = "Terbaik"
+    # Bawaannya `RESOLUSI_BAWAAN` (1080p) — lihat alasannya di services/ytdlp.
+    # Frontend tidak pernah mengirim field ini, jadi nilai inilah yang selalu
+    # dipakai. Dulu "720p" (terlalu kecil: jendela 9:16-nya 405x720), lalu
+    # "Terbaik" (terlalu besar: sampai 4 GB per video).
+    quality: str = RESOLUSI_BAWAAN
     whisper_model: str = "base"
     # 0 = biarkan sistem menghitungnya dari durasi video. Angka tetap 8 dulu
     # memperlakukan podcast dua jam sama dengan video sepuluh menit.
@@ -470,7 +468,7 @@ async def lanjutkan_proses(video_id: str):
     dilewati: list[str] = []
     if find_local_video(vid) is not None:
         dilewati.append("unduhan (video sudah ada)")
-    if tx_repo.get_best(vid):
+    if (await asyncio.to_thread(tx_repo.get_best, vid)):
         dilewati.append("transkrip (sudah tersimpan)")
 
     job_id, created = queue.enqueue(
@@ -509,7 +507,7 @@ async def cari_ulang(video_id: str, req: CariUlangRequest):
     if find_local_video(vid) is None:
         raise AppError("Video sumber belum ada di penyimpanan. Unduh ulang dulu.",
                        code="SOURCE_NOT_DOWNLOADED", status=409)
-    if not tx_repo.get_best(vid):
+    if not (await asyncio.to_thread(tx_repo.get_best, vid)):
         raise AppError("Video ini belum punya transkrip, jalankan klip otomatis dulu.",
                        code="NO_TRANSCRIPT", status=409)
     if req.mesin == "gemini" and not get_api_key():
@@ -1035,7 +1033,7 @@ async def clip_preview(req: ClipPreviewRequest):
     from ..services.clipmodel import rebuild_subtitles_for_segments
 
     video_id = _resolve_video_id(req.video_id)
-    stored = tx_repo.get_best(video_id)
+    stored = (await asyncio.to_thread(tx_repo.get_best, video_id))
     if not stored:
         raise NotFound("Video ini belum punya transkrip.")
 
@@ -1078,7 +1076,7 @@ async def clip_rapatkan(req: RapatRequest):
     from ..services.rapat import rapatkan, ringkas
 
     video_id = _resolve_video_id(req.video_id)
-    stored = tx_repo.get_best(video_id)
+    stored = (await asyncio.to_thread(tx_repo.get_best, video_id))
     if not stored:
         raise NotFound("Video ini belum punya transkrip, jadi jedanya tidak bisa diukur.")
     segments = [{"start": s.start, "end": s.end} for s in req.segments if s.end - s.start > 0.2]
@@ -1430,7 +1428,7 @@ async def save_clips(video_id: str, req: SaveClipsRequest):
     # tengah daftar, dan penomoran yang bolong akan ikut ke nama berkas.
     result["clips"] = [{**c, "index": i} for i, c in enumerate(req.clips, 1)]
 
-    stored = tx_repo.get_best(vid)
+    stored = (await asyncio.to_thread(tx_repo.get_best, vid))
     analyses_repo.save(
         video_id=vid, transcript_id=stored["id"] if stored else None,
         engine=result.get("engine", "heuristic"), model=result.get("model"),

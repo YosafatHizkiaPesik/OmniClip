@@ -57,7 +57,8 @@ def run_download(ctx: JobContext) -> dict:
     """
     video_id = ctx.payload["video_id"]
     # Sama seperti auto-clip: yang terbaik, kecuali pemintanya menyebut lain.
-    resolution = ctx.payload.get("resolution") or "Terbaik"
+    from .ytdlp import RESOLUSI_BAWAAN
+    resolution = ctx.payload.get("resolution") or RESOLUSI_BAWAAN
     # Jalur audio pilihan; kosong = suara asli video.
     audio_lang = ctx.payload.get("audio_lang") or None
 
@@ -709,7 +710,8 @@ def run_auto_clip(ctx: JobContext) -> dict:
     # pernah terekam tidak bisa dikembalikan filter apa pun, jadi resolusi
     # sumber adalah plafon kualitas seluruh klip, dan satu-satunya tempat
     # memutuskannya adalah di sini.
-    quality = ctx.payload.get("quality") or "Terbaik"
+    from .ytdlp import RESOLUSI_BAWAAN
+    quality = ctx.payload.get("quality") or RESOLUSI_BAWAAN
     whisper_model = ctx.payload.get("whisper_model", "base")
     # 0 = biarkan sistem yang menentukan dari durasi video.
     requested_clips = int(ctx.payload.get("max_clips") or 0)

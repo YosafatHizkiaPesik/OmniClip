@@ -21,6 +21,7 @@ from ..config import DOWNLOAD_DIR, THUMBS_DIR
 from ..db import get_conn
 from ..repos import cache as cache_repo
 from ..errors import AppError, NotFound
+from ..services.ytdlp import RESOLUSI_BAWAAN
 from ..repos import media as media_repo
 from ..services.media import poster_frame, probe
 from ..services.jobs import queue
@@ -49,10 +50,8 @@ def _as_app_error(exc: YtdlpError) -> AppError:
 
 class DownloadRequest(BaseModel):
     url: str = Field(..., description="ID atau URL YouTube")
-    # Bawaannya yang terbaik: resolusi sumber adalah plafon kualitas seluruh
-    # klip, dan jendela 9:16 yang dipotong darinya jauh lebih sempit daripada
-    # bingkai penuhnya.
-    resolution: str = "Terbaik"
+    # Bawaannya `RESOLUSI_BAWAAN` (1080p). Lihat alasannya di services/ytdlp.
+    resolution: str = RESOLUSI_BAWAAN
     # Jalur audio (sulih suara), mis. "en". Kosong = suara asli video.
     audio_lang: Optional[str] = Field(None, max_length=16, pattern=r"^[A-Za-z0-9-]*$")
 
@@ -562,17 +561,44 @@ async def trending(limit: int = 20, refresh: int = 0):
     return await asyncio.to_thread(_lengkapi_tanggal, hasil[:want])
 
 
+# Info video disimpan satu jam. Judul, kanal, durasi, dan daftar resolusinya
+# tidak berubah dalam hitungan menit, dan mengambilnya dari YouTube memakan ±5
+# detik — terukur, SAMA lamanya pada panggilan kedua. Halaman Tonton sendiri
+# memintanya dua kali.
+INFO_VIDEO_TTL = 3600
+
+
 @router.get("/video-info")
 async def video_info(url: str = Query(...)):
+    """
+    Keterangan satu video YouTube.
+
+    Dikerjakan di UTAS TERPISAH. Sebelumnya `get_video_info` dipanggil langsung
+    di dalam fungsi async ini, dan itu membekukan SELURUH server selama
+    pemanggilannya: terukur, `/api/settings` yang biasanya menjawab dalam 0,00
+    detik menjadi 4,83 detik karena harus menunggu di belakangnya. Membuka satu
+    video membuat semua tab OmniClip lain ikut diam lima detik — dan beberapa
+    video dibuka berbarengan menumpuk sampai peramban kehabisan sambungan.
+    Itulah "terkadang macet dan gagal, harus refresh dulu" yang dilaporkan
+    pemiliknya, bahkan dengan wifi yang kencang.
+    """
     video_id = extract_youtube_id(url)
     if not video_id:
         raise NotFound("ID video YouTube tidak dikenali.")
-    try:
-        info = get_video_info(video_id)
-    except YtdlpError as e:
-        raise _as_app_error(e) from e
-    media_repo.upsert_video(info)
-    local = find_local_video(video_id)
+
+    kunci = f"info-video:{video_id}"
+    info = await asyncio.to_thread(cache_repo.ambil, kunci, ttl=INFO_VIDEO_TTL)
+    if not isinstance(info, dict):
+        try:
+            info = await asyncio.to_thread(get_video_info, video_id)
+        except YtdlpError as e:
+            raise _as_app_error(e) from e
+        await asyncio.to_thread(media_repo.upsert_video, info)
+        await asyncio.to_thread(cache_repo.simpan, kunci, info)
+    info = dict(info)
+    # Ada-tidaknya berkas lokal dihitung SETIAP kali, tidak ikut disimpan:
+    # video yang barusan selesai diunduh harus langsung terlihat terunduh.
+    local = await asyncio.to_thread(find_local_video, video_id)
     info["downloaded"] = local is not None
     info["local_url"] = f"/api/media/local_downloads/{local.name}" if local else None
     return info

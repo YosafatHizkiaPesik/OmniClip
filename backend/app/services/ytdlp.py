@@ -561,6 +561,22 @@ BEST_RESOLUTION = {"Terbaik", "terbaik", "best", "Best"}
 # decode yang jauh lebih murah.
 MAX_BEST_HEIGHT = 2160
 
+# Resolusi unduhan BAWAAN, untuk auto-klip dan unduhan biasa.
+#
+# Turun dari "Terbaik" (sampai 2160p) ke 1080p pada 26 September 2026, sesudah
+# keluhan pengguna: "video yang didownload terlalu besar hingga proses lama".
+# Terukur di folder pemiliknya: 42 video, 37,9 GB, rata-rata 903 MB, terbesar
+# 3,99 GB — dan dekodenya 3,3-4,4x waktu nyata, jadi SATU kali membaca penuh
+# video 1 jam 45 menit memakan 25-30 menit.
+#
+# 1080p cukup untuk klip 9:16: jendelanya 608x1080, sedikit di bawah lebar
+# keluaran 1080 — diperbesar 1,78x, bukan 2,67x seperti dari 720p. Selektor
+# 1080p juga mendahulukan H.264, yang dekodenya paling murah di CPU tanpa GPU,
+# sementara di atas 1080p YouTube hampir hanya menawarkan VP9 atau AV1.
+#
+# "Terbaik" tetap ada sebagai pilihan untuk yang memang membutuhkannya.
+RESOLUSI_BAWAAN = "1080p"
+
 
 def _available_resolutions(info: dict) -> list:
     """
