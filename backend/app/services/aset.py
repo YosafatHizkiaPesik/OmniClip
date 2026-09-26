@@ -37,6 +37,24 @@ EKSTENSI = {
     "audio": {".mp3", ".wav", ".m4a", ".aac", ".ogg", ".opus", ".flac"},
 }
 
+# Rak pustaka. `jenis` menjawab "berkas apa ini", `kategori` menjawab "dipakai
+# untuk apa" — dan kedua pertanyaan itu berbeda justru pada berkas suara: mp3
+# sepanjang tiga menit dan mp3 sepanjang setengah detik sama-sama `audio`, tapi
+# yang satu musik latar dan yang lain efek. Satu rak berisi keduanya membuat
+# musik tenggelam di antara puluhan efek pendek begitu pustakanya bertambah.
+KATEGORI = ("musik", "efek", "media")
+
+# Batas tebakan awalnya. Bukan aturan alam, hanya titik yang membagi dua
+# kebiasaan: efek klip pendek, musik latar panjang. Salah tebak pun bisa
+# dipindahkan sendiri oleh pengguna, jadi batas ini tidak perlu sempurna.
+DETIK_MUSIK = 20.0
+
+
+def kategori_awal(jenis: str, durasi: float) -> str:
+    if jenis != "audio":
+        return "media"
+    return "musik" if float(durasi or 0.0) >= DETIK_MUSIK else "efek"
+
 # Efek bawaan: nama -> (label, catatan, rumus lavfi, durasi).
 #
 # Masing-masing didengar dan disetel satu per satu, bukan asal sinus. Yang
@@ -74,15 +92,17 @@ def _catatan(path: Path) -> Path:
 
 
 def _rekam(path: Path, *, nama: str, jenis: str, bawaan: bool = False,
-           catatan: str = "") -> dict:
+           catatan: str = "", kategori: str = "") -> dict:
     info = _probe(path)
+    durasi = round(float(info.get("duration") or 0.0), 3)
     data = {
         "id": ("efek:" + path.stem) if bawaan else path.stem,
         "nama": nama,
         "jenis": jenis,
         "bawaan": bawaan,
         "catatan": catatan,
-        "durasi": round(float(info.get("duration") or 0.0), 3),
+        "kategori": kategori if kategori in KATEGORI else kategori_awal(jenis, durasi),
+        "durasi": durasi,
         "lebar": int(info.get("width") or 0),
         "tinggi": int(info.get("height") or 0),
         "punya_suara": bool(info.get("acodec")),
@@ -121,7 +141,8 @@ def siapkan_efek() -> list[dict]:
             if r.returncode != 0:
                 log.warning("Efek %s gagal dibuat: %s", kunci, r.stderr[-300:])
                 continue
-        hasil.append(_rekam(tujuan, nama=label, jenis="audio", bawaan=True, catatan=catatan))
+        hasil.append(_rekam(tujuan, nama=label, jenis="audio", bawaan=True,
+                            catatan=catatan, kategori="efek"))
     if len(hasil) == len(EFEK):
         _EFEK_SIAP = [dict(e) for e in hasil]
     return hasil
@@ -139,8 +160,35 @@ def daftar() -> list[dict]:
             except (OSError, json.JSONDecodeError):
                 continue
             if (ASET_DIR / data.get("berkas", "")).is_file():
+                if data.get("kategori") not in KATEGORI:
+                    data["kategori"] = kategori_awal(
+                        data.get("jenis", ""), data.get("durasi", 0.0))
                 milik.append(data)
     return efek + milik
+
+
+def setel_kategori(aset_id: str, kategori: str) -> Optional[dict]:
+    """
+    Memindahkan aset ke rak lain.
+
+    Tebakan awal memakai durasi, dan durasi tidak tahu apa-apa soal maksud:
+    jingle lima detik itu musik, dan rekaman tawa satu menit itu efek. Karena
+    itu raknya bisa dipindahkan, dan pilihan pengguna yang disimpan.
+    """
+    if kategori not in KATEGORI:
+        return None
+    pth = jalur(aset_id)
+    # Aset bawaan tidak punya berkas catatan yang bisa ditulisi; raknya tetap.
+    if pth is None or aset_id.startswith("efek:"):
+        return None
+    cat = _catatan(pth)
+    try:
+        data = json.loads(cat.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    data["kategori"] = kategori
+    cat.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    return data
 
 
 def jalur(aset_id: str) -> Optional[Path]:
@@ -169,7 +217,8 @@ def info(aset_id: str) -> Optional[dict]:
     if aset_id.startswith("efek:"):
         k = aset_id[5:]
         label, catatan, _r, _d = EFEK[k]
-        return _rekam(p, nama=label, jenis="audio", bawaan=True, catatan=catatan)
+        return _rekam(p, nama=label, jenis="audio", bawaan=True,
+                      catatan=catatan, kategori="efek")
     try:
         return json.loads(_catatan(p).read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):

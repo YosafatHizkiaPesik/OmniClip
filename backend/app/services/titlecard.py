@@ -44,11 +44,49 @@ MODES = ("overlay", "freeze", "zoom")
 # yang warnanya diambil dari BackColour. `outline` dan `shadow` ditulis dalam
 # satuan kanvas 1920 lalu diskalakan ke tinggi kanvas sebenarnya, sama seperti
 # ukuran hurufnya.
+# `gerak` adalah tag ASS yang dipasang di depan teksnya, dan itulah yang
+# membedakan kartu yang hidup dari gambar diam. Kosong berarti memakai gerak
+# bawaan: muncul lembut sambil sedikit mengecil.
+#
+# Ditambah 25 September 2026 atas permintaan pemiliknya: "hanya foto diam saja
+# kurang menarik". Empat gaya pertama tetap apa adanya supaya klip lama tidak
+# berubah tampilannya sendiri.
+#
+# Satuan `outline` dan `shadow` adalah kanvas 1920, diskalakan ke tinggi kanvas
+# sebenarnya, sama seperti ukuran hurufnya.
+_MASUK = r"\fad(260,320)\fscx104\fscy104\t(0,220,\fscx100\fscy100)"
+
 VARIANTS: dict[str, dict] = {
     "garis":  {"border": 1, "outline": 9,  "shadow": 4,  "kotak": False},
     "kotak":  {"border": 3, "outline": 14, "shadow": 0,  "kotak": True},
     "bayang": {"border": 1, "outline": 0,  "shadow": 11, "kotak": False},
     "polos":  {"border": 1, "outline": 3,  "shadow": 2,  "kotak": False},
+
+    # --- Yang bergerak ------------------------------------------------------
+    # Naik dari bawah sambil memudar masuk. Gerak paling aman: mata mengikuti
+    # arah yang sama dengan cara orang membaca.
+    "naik": {"border": 1, "outline": 9, "shadow": 4, "kotak": False,
+             "gerak": r"\fad(240,300)\move(%(x)d,%(y2)d,%(x)d,%(y)d,0,300)"},
+    # Menghentak masuk, membesar lalu mengendap. Untuk klip yang temponya cepat.
+    "hentak": {"border": 1, "outline": 11, "shadow": 4, "kotak": False,
+               "gerak": (r"\fad(120,260)\fscx60\fscy60"
+                         r"\t(0,140,\fscx112\fscy112)\t(140,260,\fscx100\fscy100)")},
+    # Pelat yang melebar dari tengah. Berat, jelas terbaca di atas gambar ramai.
+    "pelat": {"border": 3, "outline": 16, "shadow": 0, "kotak": True,
+              "gerak": (r"\fad(160,280)\fscx0\t(0,220,\fscx104)"
+                        r"\t(220,320,\fscx100)")},
+    # Miring sedikit lalu lurus. Terbaca seperti stiker yang dilempar masuk.
+    "lempar": {"border": 1, "outline": 10, "shadow": 6, "kotak": False,
+               "gerak": (r"\fad(140,260)\frz8\fscx86\fscy86"
+                         r"\t(0,260,\frz0\fscx100\fscy100)")},
+    # Bergetar pelan sepanjang kartunya. Untuk horor dan jumpscare.
+    "getar": {"border": 1, "outline": 9, "shadow": 5, "kotak": False,
+              "gerak": (r"\fad(200,300)\frz1.2"
+                        r"\t(0,180,\frz-1.2)\t(180,360,\frz1.2)"
+                        r"\t(360,540,\frz-1.2)\t(540,720,\frz0)")},
+    # Menetap tanpa gerak sama sekali, untuk yang memang menginginkannya.
+    "diam": {"border": 1, "outline": 9, "shadow": 4, "kotak": False,
+             "gerak": r"\fad(120,160)"},
 }
 DEFAULT_VARIANT = "garis"
 
@@ -190,7 +228,15 @@ def card_ass(spec: TitleCardSpec, seconds: float, out_w: int, out_h: int) -> str
     # Muncul dan hilangnya dilembutkan, dan hurufnya sedikit membesar saat
     # masuk — sama seperti sorotan kata di subtitle, supaya keduanya terbaca
     # sebagai satu tangan yang sama.
-    fade_out = 320
+    # Gerak khas varian ini, kalau ada. `%(x)d` dan seterusnya diisi di sini
+    # supaya varian bisa menyebut posisi tanpa tahu angkanya.
+    gerak = v.get("gerak") or _MASUK
+    gerak = gerak % {"x": pos_x, "y": pos_y,
+                     "y2": pos_y + max(24, int(round(60 * factor)))}
+    # `\move` sudah menyebut letaknya sendiri, dari mana ke mana. Menaruh
+    # `\pos` di depannya membuat satu baris menyatakan dua letak sekaligus;
+    # libass memilih salah satunya, dan pilihan itu bukan milik kita.
+    letak = "" if "\\move(" in gerak else f"\\pos({pos_x},{pos_y})"
     return f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {out_w}
@@ -204,7 +250,7 @@ Style: Kartu,{spec.font},{size},{primary},&H000000FF,{outline_c},{back_c},-1,0,0
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
-Dialogue: 0,{_ts(0.0)},{_ts(seconds)},Kartu,,0,0,0,,{{\\an5\\pos({pos_x},{pos_y})\\fad(260,{fade_out})\\fscx104\\fscy104\\t(0,220,\\fscx100\\fscy100)}}{body}
+Dialogue: 0,{_ts(0.0)},{_ts(seconds)},Kartu,,0,0,0,,{{\\an5{letak}{gerak}}}{body}
 """
 
 

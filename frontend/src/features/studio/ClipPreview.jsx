@@ -83,6 +83,11 @@ export default function ClipPreview({
   cerminSiap = 0,          // bidang terbanyak di potongan Susun/game klip ini
   onKeduaStyleChange = null, // menggeser/mengubah ukuran subtitle KEDUA di atas gambar
   onLayoutChange = null,   // menggeser kotak TUJUAN langsung di atas hasil
+  // Mode Main game: menyeret garis pembatas antara bidang wajah dan bidang
+  // permainan. Menyeret salah satu kotaknya sendiri hanya memindahkan kotak
+  // itu dan meninggalkan celah; pembatas ini menggerakkan KEDUANYA, karena
+  // dua bidang yang bertemu di satu garis memang satu angka, bukan dua.
+  onGamingWajah = null,
   frameEditing = false,    // kotak bingkai hanya bisa dipegang di tab Bingkai
   selectedFrameId = null,
   onSelectFrame = null,
@@ -150,6 +155,7 @@ export default function ClipPreview({
   const cardAudioRef = useRef(null);
   const cardTimerRef = useRef(null);
   const [cardDrag, setCardDrag] = useState(null);   // 'move' | 'size' | null
+  const [batasSeret, setBatasSeret] = useState(null);  // tinggi wajah saat diseret
 
   const card = clip?.title_card;
   const cardText = ((card?.text || '').trim() || (clip?.title || '').trim());
@@ -882,8 +888,49 @@ export default function ClipPreview({
     lineHeight: 1.14,
     textTransform: 'uppercase',
     letterSpacing: '0.005em',
+    // Gerak masuknya, kembaran dari tag ASS yang dipakai saat render. Dijalankan
+    // sekali saat kartunya muncul — elemennya memang baru lahir di situ.
+    animation: cardStyleSpec.anim || undefined,
     ...cardStyleSpec.css(card?.shadow || '#000000', boxH / CANVAS_H),
   };
+
+  /**
+   * Menyeret garis pembatas wajah/permainan pada susunan Main game.
+   *
+   * Batasnya SATU angka, `gaming.wajah`, dan dari angka itu kedua bidang
+   * dihitung ulang — termasuk potongan sumber bidang wajah, yang rasionya
+   * ikut berubah begitu bidangnya berubah tinggi. Karena itu menyeretnya di
+   * sini memanggil penyusun yang sama dengan penggeser di panel Bingkai, dan
+   * bukan menulis `dst` kedua kotak sendiri: dua jalur yang menghitung susunan
+   * yang sama adalah persis cara pratinjau mulai berbeda dari hasil render.
+   */
+  const gamingWajah = layout?.gaming?.wajah ?? null;
+  const startBatasDrag = useCallback((e) => {
+    if (!onGamingWajah || !boxH || gamingWajah == null) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+
+    const y0 = e.clientY;
+    const awal = gamingWajah;
+    setBatasSeret(awal);
+
+    const onMove = (ev) => {
+      const dy = ((ev.clientY - y0) / boxH) * 100;
+      // Batas yang sama dengan `susunGaming`: di bawah 15% wajahnya tinggal
+      // sepotong dahi, di atas 75% permainannya yang tinggal sepotong.
+      const nilai = Math.round(Math.max(15, Math.min(75, awal + dy)));
+      setBatasSeret(nilai);
+      onGamingWajah(nilai);
+    };
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      setBatasSeret(null);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  }, [onGamingWajah, boxH, gamingWajah]);
 
   /**
    * Menggeser dan mengubah ukuran judul langsung di atas gambar.
@@ -1130,6 +1177,40 @@ export default function ClipPreview({
                   </div>
                 );
               })}
+
+            {/* Pembatas wajah/permainan pada Main game.
+                Digambar DI ATAS kedua kotak: ia menggerakkan keduanya
+                sekaligus, jadi ia yang harus lebih dulu tertangkap jari di
+                garis tempat keduanya bertemu. */}
+            {useLayout && frameMode === 'gaming' && frameEditing
+              && onGamingWajah && gamingWajah != null && !fullscreen && (
+              <div onPointerDown={startBatasDrag}
+                   title="Seret untuk mengatur besar bidang wajah dan bidang permainan"
+                   style={{
+                     position: 'absolute', left: 0, right: 0,
+                     top: `${gamingWajah}%`, height: '22px',
+                     transform: 'translateY(-11px)', zIndex: 7,
+                     cursor: 'ns-resize', display: 'flex',
+                     alignItems: 'center', justifyContent: 'center',
+                   }}>
+                <div style={{
+                  position: 'absolute', left: 0, right: 0, top: '11px',
+                  height: '2px', background: batasSeret != null
+                    ? 'var(--accent-cyan)' : 'rgba(255,255,255,0.75)',
+                  boxShadow: '0 0 0 1px rgba(0,0,0,0.55)',
+                }} />
+                <span style={{
+                  position: 'relative', padding: '2px 9px', borderRadius: '99px',
+                  fontSize: '0.62rem', fontWeight: 800, fontVariantNumeric: 'tabular-nums',
+                  background: 'rgba(0,0,0,0.78)',
+                  color: batasSeret != null ? 'var(--accent-cyan)' : '#e2e8f0',
+                  whiteSpace: 'nowrap',
+                }}>
+                  wajah {Math.round(batasSeret ?? gamingWajah)}% · game{' '}
+                  {100 - Math.round(batasSeret ?? gamingWajah)}%
+                </span>
+              </div>
+            )}
           </>
         ) : (
           <div style={{
@@ -1199,7 +1280,8 @@ export default function ClipPreview({
               outlineOffset: '5px',
             }}
                  onPointerDown={onCardChange ? startCardDrag('move') : undefined}>
-              <span style={cardTextStyle}>{cardText}</span>
+              <span key={card?.variant || 'garis'} data-kartu-judul
+                    style={cardTextStyle}>{cardText}</span>
               {onCardChange && (
                 <span
                   onPointerDown={startCardDrag('size')}

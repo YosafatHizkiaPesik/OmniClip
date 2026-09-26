@@ -11,6 +11,7 @@ import tempfile
 from pathlib import Path
 
 from fastapi import APIRouter, File, UploadFile
+from pydantic import BaseModel, Field
 from fastapi.responses import FileResponse
 
 from ..errors import AppError, NotFound
@@ -56,6 +57,20 @@ async def berkas_aset(aset_id: str):
     if p is None:
         raise NotFound("Aset tidak ditemukan.")
     return FileResponse(p)
+
+
+class RakModel(BaseModel):
+    kategori: str = Field(..., max_length=16)
+
+
+@router.patch("/{aset_id}/rak")
+async def pindah_rak(aset_id: str, body: RakModel):
+    """Memindahkan aset ke rak Musik, Efek suara, atau Media."""
+    data = await asyncio.to_thread(aset_svc.setel_kategori, aset_id, body.kategori)
+    if data is None:
+        raise NotFound("Aset tidak ditemukan, raknya tidak dikenal, "
+                       "atau ini aset bawaan yang raknya tetap.")
+    return data
 
 
 @router.delete("/{aset_id}")

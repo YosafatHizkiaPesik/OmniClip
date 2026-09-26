@@ -41,6 +41,21 @@ def run_bingkai_awal(ctx) -> dict:
         ctx.progress(1.0, stage="done", message="Tidak ada klip yang perlu dihitung.")
         return {"siap": 0}
 
+    # Video gameplay atau bukan, ditanyakan SEKALI.
+    #
+    # Klip gameplay tidak memakai jejak wajah sama sekali: susunannya datang
+    # dari letak panel facecam. Sampai 26 September 2026 pemanasan tetap
+    # menghitung jejak wajah untuk tiap klip video seperti itu. Terukur pada
+    # video horor 2560x1440 milik pemiliknya: 18,3 detik jejak wajah yang
+    # tidak dipakai, ditambah 11,7 detik pindai facecam yang dipakai — 30
+    # detik per klip, 10 menit untuk 20 klip, 6 menit di antaranya sia-sia.
+    #
+    # Letak panel facecam tidak berpindah sepanjang video, jadi satu klip
+    # sudah cukup untuk menjawab pertanyaannya.
+    gameplay = _ini_gameplay(video_id, daftar)
+    if gameplay:
+        log.info("Video %s gameplay: jejak wajah dilewati, hanya facecam.", video_id)
+
     siap = gagal = 0
     for i, klip in enumerate(daftar):
         ctx.check_cancelled()
@@ -57,16 +72,12 @@ def run_bingkai_awal(ctx) -> dict:
         ctx.progress(i / len(daftar), stage="prepare",
                      message=f"Menyiapkan bingkai klip {i + 1} dari {len(daftar)}…")
         try:
-            hitung_reframe(video_id=video_id, segments=segmen,
-                           aspect_ratio=rasio, turns=turns)
-            # Video gameplay TIDAK memakai jejak wajah di atas: Studio
-            # memintanya lewat `/clip-facecam`, dan sampai 25 September 2026
-            # pemanasan tidak menyentuhnya sama sekali. Jadi pada video game
-            # pemanasan menghitung hal yang tidak pernah dipakai, sementara
-            # yang benar-benar dibutuhkan tetap dihitung satu per satu saat
-            # klipnya dibuka. Terlapor: "sudah menunggu beberapa menit, satu
-            # klip pun bingkainya belum tersusun".
-            _panaskan_facecam(video_id, segmen)
+            if gameplay:
+                # Yang dipakai klip gameplay hanya ini.
+                _panaskan_facecam(video_id, segmen)
+            else:
+                hitung_reframe(video_id=video_id, segments=segmen,
+                               aspect_ratio=rasio, turns=turns)
             siap += 1
         except JobCancelled:
             raise
@@ -79,12 +90,16 @@ def run_bingkai_awal(ctx) -> dict:
     # Warna penutur, dari WAJAH. Dikerjakan di sini karena pelacakan wajahnya
     # memang sudah selesai di atas; di dalam auto-klip ia akan menambah
     # menit-menit pada pekerjaan yang ditunggu orang di depan layar.
+    # Menambatkan suara ke wajah menuntut jejak wajah yang pada video gameplay
+    # sengaja tidak dihitung, dan di sana penuturnya memang satu orang.
     tambat = None
     try:
         ctx.check_cancelled()
-        ctx.progress(0.96, stage="prepare", message="Menambatkan suara ke wajah…")
-        from .pipeline import tambatkan_ke_wajah
-        tambat = tambatkan_ke_wajah(video_id, ctx)
+        if not gameplay:
+            ctx.progress(0.96, stage="prepare", message="Menambatkan suara ke wajah…")
+        if not gameplay:
+            from .pipeline import tambatkan_ke_wajah
+            tambat = tambatkan_ke_wajah(video_id, ctx)
     except JobCancelled:
         raise
     except Exception as e:
@@ -105,14 +120,49 @@ def run_bingkai_awal(ctx) -> dict:
     return {"siap": siap, "gagal": gagal, "tema": tema_siap}
 
 
+def _ini_gameplay(video_id: str, daftar: list[dict]) -> bool:
+    """
+    Apakah video ini gameplay berfacecam, ditanyakan sekali dari satu klip.
+
+    Jawabannya menentukan seluruh sisa pekerjaan: gameplay hanya butuh letak
+    panel facecam, video lain hanya butuh jejak wajah. Menghitung keduanya
+    untuk tiap klip berarti separuh lebih waktu pemanasan terbuang.
+
+    Klip pertama yang punya potongan sah yang dipakai, dan hasilnya tersimpan,
+    jadi pertanyaan ini tidak menambah kerja apa pun: klip itu memang akan
+    dipanaskan sebentar lagi. Gagal berarti "bukan gameplay" — jalur lama,
+    yang bekerja untuk video apa pun.
+    """
+    from ..routers.clips import _facecam_tersimpan
+
+    for klip in daftar:
+        segmen = [{"start": round(float(s["start"]), 3), "end": round(float(s["end"]), 3)}
+                  for s in (klip.get("segments") or [])
+                  if float(s["end"]) - float(s["start"]) > 0.2]
+        if not segmen:
+            continue
+        try:
+            _panaskan_facecam(video_id, segmen)
+            tersimpan = _facecam_tersimpan(video_id, segmen)
+        except Exception as e:                       # noqa: BLE001
+            log.info("Pemeriksaan gameplay dilewati: %s", str(e)[:140])
+            return False
+        return bool((tersimpan or {}).get("posisi"))
+    return False
+
+
 def _panaskan_facecam(video_id: str, segmen: list[dict]) -> None:
     """
-    Menghitung susunan Main game untuk satu klip, lalu menyimpannya.
+    Memindai letak facecam satu klip lebih dulu, lalu menyimpannya.
 
     Memakai simpanan yang SAMA dengan yang dibaca `/clip-facecam`, jadi saat
-    klipnya dibuka Studio menemukannya sudah jadi. Kegagalannya ditelan:
-    pemanasan yang gagal bukan alasan menggagalkan sisanya, dan klip itu akan
-    menghitung sendiri saat dibuka, persis seperti sebelumnya.
+    klipnya dibuka Studio menemukannya sudah jadi. Yang disimpan hanya letak
+    panelnya; susunannya dihitung ulang saat dibaca, supaya aturan susunan yang
+    berubah berlaku juga untuk klip yang sudah pernah dipanaskan.
+
+    Kegagalannya ditelan: pemanasan yang gagal bukan alasan menggagalkan
+    sisanya, dan klip itu akan memindai sendiri saat dibuka, persis seperti
+    sebelumnya.
     """
     try:
         from ..routers.clips import _facecam_tersimpan, _kunci_facecam
@@ -120,9 +170,10 @@ def _panaskan_facecam(video_id: str, segmen: list[dict]) -> None:
         from .media import probe
         from .paths import find_local_video
         from .reframe import deteksi_facecam_waktu
-        from .render import rasio_bidang_wajah, susun_layout_gaming
+        from .render import rasio_bidang_wajah
 
-        if _facecam_tersimpan(video_id, segmen) is not None:
+        tersimpan = _facecam_tersimpan(video_id, segmen)
+        if tersimpan is not None and "posisi" in tersimpan:
             return
         src = find_local_video(video_id)
         if not src:
@@ -132,11 +183,8 @@ def _panaskan_facecam(video_id: str, segmen: list[dict]) -> None:
         h = int(info.get("height") or 1080)
         posisi = deteksi_facecam_waktu(str(src), segmen, w, h,
                                        rasio_potongan=rasio_bidang_wajah(1080, 1920))
-        hasil = ({"ditemukan": False, "layout": None} if not posisi else
-                 {"ditemukan": True, "facecam": posisi[0]["facecam"],
-                  "src_w": w, "src_h": h,
-                  "layout": susun_layout_gaming(posisi, src_w=w, src_h=h)})
-        cache_repo.simpan(_kunci_facecam(video_id, segmen), hasil)
+        cache_repo.simpan(_kunci_facecam(video_id, segmen),
+                          {"posisi": posisi or [], "src_w": w, "src_h": h})
     except Exception as e:                           # noqa: BLE001
         log.info("Pemanasan facecam dilewati: %s", str(e)[:140])
 

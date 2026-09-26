@@ -405,10 +405,23 @@ KEPALA_ATAS = 0.35
 KEPALA_BAWAH = 0.22
 KEPALA_SAMPING = 0.25
 # Batas tinggi bidang wajah otomatis, persen kanvas.
-# Rentang yang boleh dipilih `tinggi_wajah_otomatis`. Batas bawah turun
-# bersama GAMING_WAJAH_TINGGI; batas atas tetap, karena ia yang menyelamatkan
-# facecam yang bentuknya tinggi dan tidak muat di bidang pendek.
-GAMING_WAJAH_MIN, GAMING_WAJAH_MAKS = 30.0, 50.0
+#
+# Batas atas turun dari 50 ke 40 pada 25 September 2026, atas permintaan
+# pemiliknya: "wajahnya terlalu besar, buat saja 30-40% untuk wajah". Pada 50
+# permainan tinggal separuh kanvas, padahal yang jadi isi klip justru
+# permainannya.
+#
+# Diukur pada 49 bentuk panel facecam (lebar 12-44%, tinggi 18-90%): hanya 4
+# yang nilainya berubah, dan 2 di antaranya — panel yang sangat sempit dan
+# sangat tinggi, 12x60 dan 16x90 — kotak reaksinya jadi meluber lebih dari 8%
+# ke luar panel, artinya sedikit layar permainan ikut terlihat di sisi wajah.
+# Bentuk seperti itu jarang, dan pembatas yang bisa diseret di pratinjau
+# membetulkannya dalam satu gerakan.
+#
+# Rata-rata bidang wajah sendiri hampir tidak bergeser, 31,9% -> 31,3%: batas
+# lama memang jarang terpakai. Yang benar-benar menjawab keluhan pemiliknya
+# adalah pembatas yang bisa diseret, bukan angka ini.
+GAMING_WAJAH_MIN, GAMING_WAJAH_MAKS = 30.0, 40.0
 # Porsi kotak reaksi yang boleh berada di luar panel facecam (berisi permainan).
 REAKSI_LUAR_MAKS = 0.08
 # Geser potongan permainan sejauh ini (persen) demi menghindari seluruh panel
@@ -479,7 +492,7 @@ def _porsi_luar(r: dict, panel: dict) -> float:
 
 
 def tinggi_wajah_otomatis(posisi: list, src_aspek: float, out_w: int, out_h: int) -> float:
-    """Tinggi bidang wajah terendah (40-50%) yang kotak reaksinya tetap di panel."""
+    """Tinggi bidang wajah terendah (30-40%) yang kotak reaksinya tetap di panel."""
     terbaik, nilai_terbaik = GAMING_WAJAH_TINGGI, None
     langkah = [GAMING_WAJAH_MIN + 2.5 * i
                for i in range(int((GAMING_WAJAH_MAKS - GAMING_WAJAH_MIN) / 2.5) + 1)]
@@ -964,8 +977,98 @@ def siapkan_sisipan(lapisan: Optional[list], durasi: float) -> list[dict]:
     return keluar
 
 
+# --- Redam musik latar --------------------------------------------------------
+# Seberapa dalam musik turun saat orang bicara, dan seberapa cepat ia turun dan
+# naik lagi. -11 dB adalah jarak yang dipakai pembuat klip: cukup untuk kalimat
+# terdengar utuh, tidak sampai membuat musiknya seperti hilang lalu muncul.
+# Turunnya lebih cepat daripada naiknya, supaya kata pertama tidak tertimpa dan
+# musik tidak melompat kembali di tengah napas.
+REDAM_DALAM = 0.28          # 0,28 linear = -11 dB
+REDAM_TURUN = 0.18          # detik
+REDAM_NAIK = 0.45           # detik
+REDAM_RAPAT = 0.35          # jeda sependek ini dianggap masih satu kalimat
+REDAM_RENTANG_MAKS = 24     # batas panjang rumusnya
+
+
+def rentang_bicara(subtitles: Optional[list[dict]],
+                   rapat: float = REDAM_RAPAT) -> list[tuple[float, float]]:
+    """
+    Kapan saja ada orang bicara di klip ini, dari waktu tiap kata.
+
+    Celah antar suku kata bukan kesunyian. Tanpa dirapatkan, musik akan naik
+    dan turun puluhan kali dalam satu kalimat, dan itu terdengar jauh lebih
+    buruk daripada musik yang tidak mengalah sama sekali.
+    """
+    kata: list[tuple[float, float]] = []
+    for baris in (subtitles or []):
+        for w in (baris.get("words") or []):
+            a, b = float(w.get("s", 0.0)), float(w.get("e", 0.0))
+            if b > a:
+                kata.append((a, b))
+        if not (baris.get("words") or []):
+            a, b = float(baris.get("start", 0.0)), float(baris.get("end", 0.0))
+            if b > a:
+                kata.append((a, b))
+    if not kata:
+        return []
+    kata.sort()
+    gabung: list[list[float]] = [list(kata[0])]
+    for a, b in kata[1:]:
+        if a - gabung[-1][1] <= rapat:
+            gabung[-1][1] = max(gabung[-1][1], b)
+        else:
+            gabung.append([a, b])
+    # Rumus lavfi yang terlalu panjang dievaluasi tiap bingkai audio. Rentang
+    # yang jeda-nya paling pendek digabung lebih dulu sampai jumlahnya masuk.
+    while len(gabung) > REDAM_RENTANG_MAKS:
+        i = min(range(len(gabung) - 1),
+                key=lambda j: gabung[j + 1][0] - gabung[j][1])
+        gabung[i][1] = gabung[i + 1][1]
+        del gabung[i + 1]
+    return [(a, b) for a, b in gabung]
+
+
+def rumus_redam(bicara: list[tuple[float, float]]) -> Optional[str]:
+    """
+    Rumus volume yang mengecilkan musik tepat saat orang bicara.
+
+    Dulu ini dikerjakan `sidechaincompress`, yang menebak dari kerasnya audio
+    utama. Diukur pada satu klip podcast: musiknya turun 2 dB dan turun SAMA
+    RATA, baik saat orang bicara maupun saat jeda — jadi fiturnya menurunkan
+    musik tanpa pernah benar-benar mengalah pada kalimat. Sebabnya audio
+    podcast sudah diratakan `loudnorm` sebelum sampai ke situ, jadi jeda dan
+    kata sama kerasnya dan tidak ada yang bisa dideteksi.
+
+    Waktu tiap kata sudah kita punya dari transkrip. Memakai itu berarti
+    redamannya tidak menebak sama sekali: ia turun di kata yang memang ada.
+    """
+    if not bicara:
+        return None
+    a_, r_ = REDAM_TURUN, REDAM_NAIK
+    # Dua kalimat yang jaraknya lebih pendek daripada waktu naik + turun tidak
+    # sempat mengembalikan musik ke penuh: yang terdengar bukan musik yang
+    # kembali, melainkan musik yang memompa. Digabung dulu, jadi di antara
+    # keduanya musik tetap di bawah.
+    rapat: list[list[float]] = []
+    for a, b in sorted(bicara):
+        if rapat and a - rapat[-1][1] < r_ + a_:
+            rapat[-1][1] = max(rapat[-1][1], b)
+        else:
+            rapat.append([a, b])
+    bagian = [
+        f"clip((t-{max(0.0, a - a_):.3f})/{a_:.3f},0,1)"
+        f"*clip(({b + r_:.3f}-t)/{r_:.3f},0,1)"
+        for a, b in rapat
+    ]
+    puncak = bagian[0]
+    for x in bagian[1:]:
+        puncak = f"max({puncak},{x})"
+    return f"1-{1.0 - REDAM_DALAM:.3f}*({puncak})"
+
+
 def build_sisipan_graph(lapisan: list[dict], vin: str, ain: str, *,
-                        input_awal: int, out_w: int, out_h: int
+                        input_awal: int, out_w: int, out_h: int,
+                        bicara: Optional[list[tuple[float, float]]] = None
                         ) -> tuple[list[str], str, str, str]:
     """
     (input tambahan, graf, label video, label audio).
@@ -1064,15 +1167,25 @@ def build_sisipan_graph(lapisan: list[dict], vin: str, ain: str, *,
             # volumenya selalu salah: cukup keras untuk terdengar di jeda
             # berarti menutupi kalimat, cukup pelan untuk kalimat berarti
             # hilang di jeda.
-            n = len(diredam)
-            bagian.append(f"{utama}asplit={n + 1}[sutama]"
-                          + "".join(f"[ssc{j}]" for j in range(n)))
-            utama = "[sutama]"
-            for j, lab in enumerate(diredam):
-                bagian.append(f"{lab}[ssc{j}]sidechaincompress="
-                              f"threshold=0.02:ratio=9:attack=15:release=450:makeup=1"
-                              f"[sd{j}]")
-                biasa.append(f"[sd{j}]")
+            rumus = rumus_redam(bicara or [])
+            if rumus:
+                # Dituntun transkrip: musik turun di kata yang memang ada.
+                for j, lab in enumerate(diredam):
+                    bagian.append(f"{lab}volume=volume='{rumus}':eval=frame[sd{j}]")
+                    biasa.append(f"[sd{j}]")
+            else:
+                # Tanpa transkrip — klip permainan tanpa kata, misalnya — hanya
+                # kerasnya audio utama yang bisa jadi petunjuk. Lebih lemah, dan
+                # dipakai justru karena tidak ada yang lebih baik.
+                n = len(diredam)
+                bagian.append(f"{utama}asplit={n + 1}[sutama]"
+                              + "".join(f"[ssc{j}]" for j in range(n)))
+                utama = "[sutama]"
+                for j, lab in enumerate(diredam):
+                    bagian.append(f"{lab}[ssc{j}]sidechaincompress="
+                                  f"threshold=0.02:ratio=9:attack=15:release=450:makeup=1"
+                                  f"[sd{j}]")
+                    biasa.append(f"[sd{j}]")
         semua = [utama] + biasa
         bagian.append(
             "".join(semua) + f"amix=inputs={len(semua)}:duration=first:normalize=0,"
@@ -1546,7 +1659,7 @@ def render_clip(
             n_input = len([x for x in inputs if x == "-i"])
             s_inputs, sisipan_graf, vlabel, sisipan_a = build_sisipan_graph(
                 sisipan, vlabel, "[SISIPAN_A]", input_awal=n_input,
-                out_w=out_w, out_h=out_h)
+                out_w=out_w, out_h=out_h, bicara=rentang_bicara(subtitles))
             inputs += s_inputs
             log.info("Sisipan: %s", ", ".join(
                 f"{l['jenis']}@{l['t']:.1f}s" for l in sisipan))

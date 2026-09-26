@@ -1460,7 +1460,7 @@ def _kunci_facecam(video_id: str, segments: list[dict]) -> str:
 
 def _facecam_tersimpan(video_id: str, segments: list[dict]):
     """
-    Susunan game yang sudah pernah dihitung untuk potongan yang sama persis.
+    Hasil PEMINDAIAN facecam untuk potongan yang sama persis.
 
     Sampai 25 September 2026 endpoint ini tidak punya simpanan apa pun, jadi
     SETIAP klip yang dibuka memindai ulang videonya, dan menutup aplikasi
@@ -1470,6 +1470,13 @@ def _facecam_tersimpan(video_id: str, segments: list[dict]):
     bingkainya belum tersusun".
 
     Isi sebuah potongan video tidak pernah basi, jadi tidak ada TTL.
+
+    Yang disimpan hanya letak panel facecam-nya, BUKAN susunan jadinya.
+    Sebelumnya susunan ikut tersimpan, dan begitu aturan susunannya berubah —
+    misalnya batas tinggi bidang wajah turun dari 50% ke 40% — klip yang pernah
+    dibuka tetap memakai susunan lama selamanya. Terlihat saat mengujinya: satu
+    video masih 47,5% padahal batas barunya 40%. Pemindaian itu yang mahal
+    (23,9 detik); menyusun ulang dari kotak yang sudah ada hampir tanpa biaya.
     """
     from ..repos import cache as cache_repo
     try:
@@ -1512,9 +1519,19 @@ async def clip_facecam(req: FacecamRequest):
         raise NotFound("Video sumber belum diunduh.")
     segs = [s.model_dump() for s in req.segments] or [{"start": 0.0, "end": 30.0}]
 
+    def susun(pindai: dict) -> dict:
+        """Kotak facecam -> jawaban lengkap. Selalu dihitung ulang, tidak disimpan."""
+        posisi = pindai.get("posisi") or []
+        if not posisi:
+            return {"ditemukan": False, "layout": None}
+        w, h = int(pindai["src_w"]), int(pindai["src_h"])
+        return {"ditemukan": True, "facecam": posisi[0]["facecam"],
+                "src_w": w, "src_h": h,
+                "layout": susun_layout_gaming(posisi, src_w=w, src_h=h)}
+
     tersimpan = _facecam_tersimpan(req.video_id, segs)
-    if tersimpan is not None:
-        return tersimpan
+    if tersimpan is not None and "posisi" in tersimpan:
+        return susun(tersimpan)
 
     def kerja():
         info = probe(str(src))
@@ -1522,12 +1539,8 @@ async def clip_facecam(req: FacecamRequest):
         h = int(info.get("height") or 1080)
         posisi = deteksi_facecam_waktu(str(src), segs, w, h,
                                        rasio_potongan=rasio_bidang_wajah(1080, 1920))
-        if not posisi:
-            return {"ditemukan": False, "layout": None}
-        return {"ditemukan": True, "facecam": posisi[0]["facecam"],
-                "src_w": w, "src_h": h,
-                "layout": susun_layout_gaming(posisi, src_w=w, src_h=h)}
+        return {"posisi": posisi or [], "src_w": w, "src_h": h}
 
-    hasil = await asyncio.to_thread(kerja)
-    _simpan_facecam(req.video_id, segs, hasil)
-    return hasil
+    pindai = await asyncio.to_thread(kerja)
+    _simpan_facecam(req.video_id, segs, pindai)
+    return susun(pindai)

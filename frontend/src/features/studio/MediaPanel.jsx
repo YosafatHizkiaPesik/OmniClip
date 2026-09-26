@@ -3,8 +3,27 @@ import {
   Film, Image as ImageIcon, Music, Upload, Loader2, Trash2, Wand2, Play, Square,
   Crosshair, Sparkles, X, ChevronUp, ChevronDown,
 } from 'lucide-react';
-import { apiDelete, apiGet, apiPost } from '../../lib/api';
+import { apiDelete, apiGet, apiPatch, apiPost } from '../../lib/api';
 import { formatTime } from '../../utils/timeFormat';
+
+/**
+ * Tiga rak pustaka.
+ *
+ * `jenis` menjawab "berkas apa ini", `kategori` menjawab "dipakai untuk apa".
+ * Keduanya berbeda tepat pada berkas suara: mp3 tiga menit dan mp3 setengah
+ * detik sama-sama audio, tapi yang satu musik latar dan yang lain efek. Satu
+ * daftar berisi keduanya membuat musik tenggelam begitu efeknya berpuluh.
+ *
+ * Pembagiannya sama persis dengan `KATEGORI` di backend/app/services/aset.py.
+ */
+const RAK = [
+  { id: 'musik', label: 'Musik',
+    kosong: 'Belum ada musik latar. Impor berkas mp3 atau wav milik Anda sendiri.' },
+  { id: 'efek', label: 'Efek suara',
+    kosong: 'Belum ada efek suara. Berkas suara pendek masuk ke sini sendiri.' },
+  { id: 'media', label: 'Video & foto',
+    kosong: 'Belum ada. Contohnya cuplikan pertandingan untuk podcast bola, atau logo kanal.' },
+];
 
 const IKON = { video: Film, gambar: ImageIcon, audio: Music };
 
@@ -79,6 +98,7 @@ export default function MediaPanel({
   onLayers, frameKeys = [], onFrameKeys, sorot = null, onSorot = null,
 }) {
   const [aset, setAset] = useState(null);
+  const [rak, setRak] = useState('media');
   const [galat, setGalat] = useState(null);
   const [unggah, setUnggah] = useState(false);
   const [dengar, setDengar] = useState(null);
@@ -167,6 +187,21 @@ export default function MediaPanel({
 
   const efek = (aset ?? []).filter((a) => a.bawaan);
   const milik = (aset ?? []).filter((a) => !a.bawaan);
+  // Rak asetnya sendiri yang menyatakan, bukan ditebak ulang di sini: tebakan
+  // awal memang dari durasi, tapi pengguna boleh memindahkannya, dan pilihan
+  // itulah yang tersimpan.
+  const diRak = milik.filter((a) => (a.kategori || 'media') === rak);
+  const jumlahRak = Object.fromEntries(RAK.map((r) => [
+    r.id, milik.filter((a) => (a.kategori || 'media') === r.id).length]));
+
+  /** Memindahkan aset ke rak lain, lalu memuat ulang pustakanya. */
+  const pindahRak = async (a, tujuan) => {
+    try {
+      await apiPatch(`/aset/${a.id}/rak`, { kategori: tujuan });
+      await muat();
+      setRak(tujuan);
+    } catch (err) { setGalat(err.message); }
+  };
   const urut = [...lapisan].sort((a, b) => (a.t ?? 0) - (b.t ?? 0));
 
   return (
@@ -381,13 +416,25 @@ export default function MediaPanel({
       <input ref={berkasRef} type="file" hidden onChange={kirimBerkas}
              accept="video/*,audio/*,image/png,image/jpeg,image/webp,image/gif" />
       {aset === null && <p style={kecil}><Loader2 size={12} className="animate-spin" /> Memuat…</p>}
-      {aset && !milik.length && (
+
+      {/* Tiga rak. Selalu tergambar, juga saat kosong: rak yang hilang karena
+          belum ada isinya menyembunyikan tempat berkas itu nanti mendarat. */}
+      <div style={{ display: 'flex', gap: '5px', marginBottom: '9px' }}>
+        {RAK.map((r) => (
+          <button key={r.id} onClick={() => setRak(r.id)}
+                  className={`chip${rak === r.id ? ' is-on' : ''}`}
+                  style={{ flex: 1, justifyContent: 'center' }}>
+            {r.label}{jumlahRak[r.id] ? ` (${jumlahRak[r.id]})` : ''}
+          </button>
+        ))}
+      </div>
+
+      {aset && !diRak.length && (
         <p style={{ ...kecil, margin: '0 0 12px' }}>
-          Belum ada. Contohnya cuplikan pertandingan untuk podcast bola, logo kanal,
-          atau musik latar.
+          {RAK.find((r) => r.id === rak)?.kosong}
         </p>
       )}
-      {milik.map((a) => {
+      {diRak.map((a) => {
         const Ikon = IKON[a.jenis] ?? Music;
         return (
           <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: '7px',
@@ -400,6 +447,20 @@ export default function MediaPanel({
               <button className="btn-secondary studio-icon" onClick={() => putar(a)}
                       title="Dengarkan">{dengar === a.id ? <Square size={12} /> : <Play size={12} />}</button>
             )}
+            {/* Berkas suara ditaruh di raknya dengan menebak dari durasi, dan
+                durasi tidak tahu apa-apa soal maksud: jingle lima detik itu
+                musik, rekaman tawa satu menit itu efek. Jadi raknya bisa
+                dipindahkan, dan hanya untuk suara — video dan foto tidak
+                punya rak lain untuk dituju. */}
+            {a.jenis === 'audio' && (
+              <button className="btn-secondary" style={{ fontSize: '0.7rem', padding: '3px 8px' }}
+                      title={rak === 'musik'
+                        ? 'Pindahkan ke rak Efek suara'
+                        : 'Pindahkan ke rak Musik'}
+                      onClick={() => pindahRak(a, rak === 'musik' ? 'efek' : 'musik')}>
+                → {rak === 'musik' ? 'Efek' : 'Musik'}
+              </button>
+            )}
             <button className="btn-secondary" style={{ fontSize: '0.7rem', padding: '3px 8px' }}
                     onClick={() => tambah(a)}>+ Tambah</button>
             <button className="btn-secondary studio-icon" onClick={() => hapusAset(a)}
@@ -407,6 +468,19 @@ export default function MediaPanel({
           </div>
         );
       })}
+
+      {/* Musik latar yang dipakai pembuat klip di TikTok dan YouTube hampir
+          seluruhnya berhak cipta, jadi ia tidak bisa ikut di dalam aplikasi ini.
+          Dikatakan di tempat berkasnya dicari, bukan di halaman bantuan. */}
+      {rak === 'musik' && (
+        <p style={{ ...kecil, margin: '10px 0 0', lineHeight: 1.6 }}>
+          OmniClip tidak membawa lagu apa pun. Lagu yang biasa dipakai pembuat
+          klip hampir semuanya berhak cipta, dan menyalinkannya ke sini berarti
+          menaruh masalah hak cipta di kanal Anda, bukan di aplikasinya. Impor
+          berkas milik Anda sendiri, atau ambil dari pustaka bebas royalti
+          seperti YouTube Audio Library, Pixabay Music, atau Free Music Archive.
+        </p>
+      )}
 
       {/* Bagian ini hanya muncul kalau memang ada isinya. Pustaka efek bawaan
           dikosongkan 25 September 2026 atas keputusan pemiliknya, dan judul

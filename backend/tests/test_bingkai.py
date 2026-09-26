@@ -101,8 +101,13 @@ class GeometriGaming(unittest.TestCase):
         self.assertLess(GAMING_WAJAH_TINGGI, 50.0)
         # Dan bawaannya jelas lebih kecil daripada bagian permainannya.
         self.assertLess(GAMING_WAJAH_TINGGI, 100 - GAMING_WAJAH_TINGGI)
-        # Batas atas tetap ada untuk facecam bentuk tinggi yang tidak muat.
-        self.assertGreaterEqual(GAMING_WAJAH_MAKS, 50.0)
+        # Batas atasnya pun harus menyisakan lebih dari separuh untuk
+        # permainan. Turun dari 50 ke 40 pada 25 September 2026, atas permintaan
+        # pemiliknya: "wajahnya terlalu besar, buat saja 30-40% untuk wajah".
+        # Panel facecam bentuk tinggi yang tidak muat di 40% dibetulkan dengan
+        # menyeret pembatasnya di pratinjau, bukan dengan menaikkan batas ini.
+        self.assertLessEqual(GAMING_WAJAH_MAKS, 40.0)
+        self.assertLess(GAMING_WAJAH_MAKS, 100 - GAMING_WAJAH_MAKS)
 
     def test_kotak_reaksi_tetap_di_dalam_gambar(self):
         r = kotak_reaksi(self.FACECAM, None, 1080 / (1920 * 0.45), 1920 / 1080)

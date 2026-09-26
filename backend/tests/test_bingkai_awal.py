@@ -8,6 +8,7 @@ sesudah tersimpan.
 """
 
 import unittest
+from pathlib import Path
 
 from app.errors import JobCancelled
 from app.services import bingkai_awal as ba
@@ -201,8 +202,64 @@ class FacecamDisimpanDanDipanaskan(unittest.TestCase):
         from pathlib import Path
         sumber = (Path(__file__).resolve().parents[1] / "app" / "routers"
                   / "clips.py").read_text(encoding="utf-8")
-        badan = sumber.split('async def clip_facecam')[1][:1400]
+        # Seluruh badan fungsinya, bukan sekian ratus karakter pertama:
+        # menambahkan satu penolong di atasnya pernah membuat uji ini gagal
+        # tanpa ada yang rusak.
+        badan = sumber.split('async def clip_facecam')[1].split('\n@router')[0]
         self.assertLess(badan.index("_facecam_tersimpan"), badan.index("def kerja"))
+
+    def test_video_gameplay_tidak_menghitung_jejak_wajah(self):
+        """
+        Separuh lebih waktu pemanasan dulu terbuang di video gameplay.
+
+        Klip gameplay disusun dari letak panel facecam; jejak wajah tidak
+        pernah dibacanya. Terukur pada video horor 2560x1440 milik pemiliknya:
+        18,3 detik jejak wajah yang tidak dipakai ditambah 11,7 detik pindai
+        facecam yang dipakai, 30 detik per klip, 10 menit untuk 20 klip.
+        Sesudah dipisah: 4,6 menit.
+        """
+        from unittest import mock
+        from app.services import bingkai_awal as B
+
+        klip = [{"segments": [{"start": 0.0, "end": 30.0}], "subtitles": []}
+                for _ in range(3)]
+
+        class Ctx:
+            payload = {"video_id": "vid", "aspect_ratio": "9:16", "klip": klip}
+            def check_cancelled(self): pass
+            def progress(self, *a, **k): pass
+
+        for gameplay in (True, False):
+            with self.subTest(gameplay=gameplay), \
+                 mock.patch.object(B, "_ini_gameplay", return_value=gameplay), \
+                 mock.patch.object(B, "_panaskan_facecam") as panas, \
+                 mock.patch.object(B, "_tema_untuk_semua", return_value=0), \
+                 mock.patch("app.routers.clips.hitung_reframe") as jejak, \
+                 mock.patch("app.services.pipeline.tambatkan_ke_wajah",
+                            return_value=None) as tambat:
+                B.run_bingkai_awal(Ctx())
+                if gameplay:
+                    self.assertEqual(jejak.call_count, 0, "jejak wajah tidak dipakai")
+                    self.assertEqual(panas.call_count, 3)
+                    self.assertEqual(tambat.call_count, 0,
+                                     "menambat suara ke wajah butuh jejak yang tidak ada")
+                else:
+                    self.assertEqual(jejak.call_count, 3)
+                    self.assertEqual(panas.call_count, 0,
+                                     "video biasa tidak punya panel facecam untuk dipindai")
+
+    def test_jenis_video_ditanyakan_sekali(self):
+        """
+        Letak panel facecam tidak berpindah sepanjang video, jadi satu klip
+        cukup. Menanyakannya per klip akan mengembalikan biaya yang baru saja
+        dihemat.
+        """
+        sumber = (Path(__file__).resolve().parents[1] / "app" / "services"
+                  / "bingkai_awal.py").read_text(encoding="utf-8")
+        badan = sumber.split("def run_bingkai_awal")[1].split("\ndef ")[0]
+        self.assertEqual(badan.count("_ini_gameplay("), 1)
+        # Dan di LUAR perulangan klipnya.
+        self.assertLess(badan.index("_ini_gameplay("), badan.index("for i, klip in"))
 
     def test_pemanasan_ikut_menghitung_facecam(self):
         from pathlib import Path

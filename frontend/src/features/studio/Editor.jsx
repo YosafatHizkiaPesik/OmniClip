@@ -1804,6 +1804,7 @@ export default function Editor({ project, onBack }) {
                            reframe={reframe} reframeLoading={reframeLoading}
                            onStyleChange={patchStyle} onCardChange={patchCard}
                            layout={susunanTampil} onLayoutChange={setSusunanEfektif}
+                           onGamingWajah={(wajah) => setelGaming({ wajah })}
                            frameEditing={tab === 'frame'}
                            selectedFrameId={selectedFrameId}
                            onSelectFrame={setSelectedFrameId}

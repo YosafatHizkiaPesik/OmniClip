@@ -535,7 +535,13 @@ function GamingSetelan({ layout, sibuk, onGaming, onUlang }) {
           </label>
 
           <p style={{ fontSize: '.72rem', color: 'var(--ink-3)', lineHeight: 1.55, margin: '2px 0 0' }}>
-            Kedua bingkai bebas diatur seperti <b>Susun sendiri</b>: seret dan
+            Angka yang sama bisa diseret langsung di <b>pratinjau</b>: ada garis
+            di batas antara wajah dan permainan, dan menyeretnya ke atas
+            memperbesar permainan. Kedua bidang bergerak bersama, karena batas
+            itu memang satu angka.
+          </p>
+          <p style={{ fontSize: '.72rem', color: 'var(--ink-3)', lineHeight: 1.55, margin: '2px 0 0' }}>
+            Kedua bingkai juga bebas diatur seperti <b>Susun sendiri</b>: seret dan
             tarik sudut kotak di <b>video sumber</b> untuk memilih bagian yang
             diambil, dan di <b>layar hasil</b> untuk menentukan letak dan
             ukurannya. Garis putus-putus di dalam kotak menandai bagian yang

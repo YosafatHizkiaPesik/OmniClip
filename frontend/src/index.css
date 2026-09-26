@@ -1295,3 +1295,45 @@ body.is-studio .app-viewport,
 }
 @keyframes bilah-jalan { from { background-position: 0 0; } to { background-position: 22px 0; } }
 @media (prefers-reduced-motion: reduce) { .bilah-menunggu { animation: none; } }
+
+/* ── Gerak kartu judul ──────────────────────────────────────────────────────
+   Kembaran CSS dari medan `gerak` di backend/app/services/titlecard.py, dengan
+   nama dan lama waktu yang sama. Dipakai hanya di pratinjau; yang terbakar ke
+   MP4 adalah tag ASS-nya. Keduanya sengaja ditulis berdampingan supaya
+   perbedaan di antara keduanya terlihat saat dibaca, bukan saat dirender. */
+@keyframes kartu-masuk {
+  from { opacity: 0; transform: scale(1.04); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes kartu-naik {
+  from { opacity: 0; transform: translateY(3.2%); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes kartu-hentak {
+  0%   { opacity: 0; transform: scale(.6); }
+  54%  { opacity: 1; transform: scale(1.12); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes kartu-pelat {
+  0%   { opacity: 0; transform: scaleX(0); }
+  69%  { opacity: 1; transform: scaleX(1.04); }
+  100% { opacity: 1; transform: scaleX(1); }
+}
+@keyframes kartu-lempar {
+  from { opacity: 0; transform: rotate(-8deg) scale(.86); }
+  to   { opacity: 1; transform: rotate(0deg) scale(1); }
+}
+@keyframes kartu-getar {
+  0%   { opacity: 0; transform: rotate(-1.2deg); }
+  25%  { opacity: 1; transform: rotate(1.2deg); }
+  50%  { transform: rotate(-1.2deg); }
+  75%  { transform: rotate(1.2deg); }
+  100% { transform: rotate(0deg); }
+}
+
+/* Orang yang menyetel sistemnya untuk mengurangi gerakan tidak ingin judul
+   melompat-lompat di pratinjau juga. Hasil rendernya tetap bergerak: itu milik
+   penontonnya, bukan milik yang menyuntingnya. */
+@media (prefers-reduced-motion: reduce) {
+  [data-kartu-judul] { animation: none !important; }
+}
