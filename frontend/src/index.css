@@ -1388,22 +1388,29 @@ body.is-studio .app-viewport,
 }
 
 /* Tombol hapus pada baris daftar klip.
-   Muncul saat barisnya disentuh tetikus atau sedang dipilih: selalu terlihat
-   berarti sebelas tombol merah berjajar di sisi layar untuk sesuatu yang jarang
-   dipakai, tapi tidak pernah terlihat berarti orang tidak tahu ia ada.
 
-   Ia MENGAMBIL RUANG di baris, tidak melayang di atasnya. Versi pertama
-   memakai `position: absolute` dan menutupi judul klipnya sendiri — terlapor
-   pemiliknya dengan tangkapan layar. Lebarnya dipesan sejak awal lewat kolom
-   kosong, jadi baris tidak melompat saat tombolnya muncul. */
-.reh-row { align-items: start; }
-.reh-row .studio-row-x {
-  flex: none; margin-left: auto; align-self: start;
-  opacity: 0; transition: opacity .12s;
+   Ikon kecil di pojok kanan atas, tanpa kotak tombol. Ia punya KOLOM SENDIRI
+   selebar 22 piksel di grid baris: baris ini grid tiga kolom (centang, huruf,
+   judul), dan versi sebelumnya menjadi anak keempat tanpa kolom, sehingga ia
+   turun ke baris baru di bawah judul, dengan kotak tombol penuh — setiap klip
+   jadi lebih tinggi dan daftarnya penuh kotak abu-abu. Terlapor pemiliknya:
+   "tampilannya saat ini memakan tempat dan membuat jelek ui".
+
+   Kolomnya dipesan walau ikonnya tersembunyi, jadi judul tidak melompat saat
+   tetikus lewat. Ikonnya muncul saat baris disentuh atau sedang dipilih. */
+.reh-row { grid-template-columns: 16px 26px minmax(0, 1fr) 22px; align-items: start; }
+.studio-row-x {
+  width: 22px; height: 22px; padding: 0; margin: -2px -4px 0 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: none; border: 0; border-radius: 5px; cursor: pointer;
+  color: var(--ink-3); opacity: 0; transition: opacity .12s, color .12s, background .12s;
 }
 .reh-row:hover .studio-row-x,
 .reh-row.is-on .studio-row-x,
-.reh-row .studio-row-x:focus-visible { opacity: 1; }
+.studio-row-x:focus-visible { opacity: 1; }
+.studio-row-x:hover { color: var(--danger); background: rgba(220, 38, 38, .1); }
+/* Layar sentuh tidak punya "tetikus lewat", jadi ikonnya selalu tampil tipis. */
+@media (hover: none) { .studio-row-x { opacity: .55; } }
 
 /* ── Galeri gaya judul ───────────────────────────────────────────────────────
    Dua kolom kotak contoh. Latarnya gelap dan bergradasi seperti bingkai video,

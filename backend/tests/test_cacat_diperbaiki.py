@@ -491,13 +491,22 @@ class HapusKlipAdaDiDaftar(unittest.TestCase):
         for jejak in ("pasanganTumpuk", "gabungTumpuk", "yang menumpuk"):
             self.assertNotIn(jejak, jsx)
 
-    def test_tombolnya_tidak_melayang_di_atas_judul(self):
-        """Versi pertama memakai `position: absolute` dan menutupi judul klip."""
+    def test_tombolnya_punya_kolom_sendiri(self):
+        """
+        Baris klip adalah grid tiga kolom. Tombol tanpa kolom turun ke baris
+        baru di bawah judul, dengan kotak tombol penuh, dan setiap klip jadi
+        lebih tinggi — terlapor: "memakan tempat dan membuat jelek ui". Versi
+        sebelumnya lagi memakai `position: absolute` dan menutupi judul.
+        """
         css = (Path(__file__).resolve().parents[2] / "frontend" / "src"
                / "index.css").read_text(encoding="utf-8")
-        blok = css.split(".reh-row .studio-row-x {")[1].split("}")[0]
+        self.assertIn("grid-template-columns: 16px 26px minmax(0, 1fr) 22px", css)
+        blok = css.split(".studio-row-x {")[1].split("}")[0]
         self.assertNotIn("position: absolute", blok)
-        self.assertIn("margin-left: auto", blok)
+        jsx = self.ED.read_text(encoding="utf-8")
+        # Ikon polos, bukan kotak tombol.
+        self.assertIn('className="studio-row-x"', jsx)
+        self.assertNotIn("btn-secondary studio-icon studio-row-x", jsx)
 
 
 class BerandaBervariasi(unittest.TestCase):

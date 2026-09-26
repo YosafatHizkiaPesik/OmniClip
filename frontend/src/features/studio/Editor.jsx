@@ -1681,11 +1681,12 @@ export default function Editor({ project, onBack }) {
                         tapi daftar klip inilah tempat orang melihat bahwa ada
                         klip yang tidak diinginkannya — dan di sini ia tidak
                         ada sama sekali. Diminta pemiliknya. */}
-                    <button className="btn-secondary studio-icon studio-row-x"
+                    <button type="button" className="studio-row-x"
+                            aria-label={`Hapus klip ${rehearsalLetter(i)}`}
                             title={`Hapus klip ${rehearsalLetter(i)}`}
                             onClick={(e) => { e.stopPropagation();
                                               hapusKlip(clip.clip_id, rehearsalLetter(i)); }}>
-                      <Trash2 size={12} />
+                      <Trash2 size={13} />
                     </button>
                   </div>
                 );
