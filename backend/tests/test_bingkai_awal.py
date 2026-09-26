@@ -231,7 +231,7 @@ class FacecamDisimpanDanDipanaskan(unittest.TestCase):
 
         for gameplay in (True, False):
             with self.subTest(gameplay=gameplay), \
-                 mock.patch.object(B, "_ini_gameplay", return_value=gameplay), \
+                 mock.patch.object(B, "_jenis_gameplay", return_value=gameplay), \
                  mock.patch.object(B, "_panaskan_facecam") as panas, \
                  mock.patch.object(B, "_tema_untuk_semua", return_value=0), \
                  mock.patch("app.routers.clips.hitung_reframe") as jejak, \
@@ -248,18 +248,39 @@ class FacecamDisimpanDanDipanaskan(unittest.TestCase):
                     self.assertEqual(panas.call_count, 0,
                                      "video biasa tidak punya panel facecam untuk dipindai")
 
-    def test_jenis_video_ditanyakan_sekali(self):
+    def test_jenis_video_tidak_punya_pemindaian_sendiri(self):
         """
-        Letak panel facecam tidak berpindah sepanjang video, jadi satu klip
-        cukup. Menanyakannya per klip akan mengembalikan biaya yang baru saja
-        dihemat.
+        Jawabannya datang dari kerja klip pertama, bukan dari pemeriksaan
+        terpisah.
+
+        Versi sebelumnya memindai satu klip khusus untuk bertanya; pada klip
+        podcast 159 detik itu 21 detik penuh di 0% sebelum satu bingkai pun
+        dikerjakan, dan orang yang menunggu tidak melihat apa-apa bergerak.
         """
         sumber = (Path(__file__).resolve().parents[1] / "app" / "services"
                   / "bingkai_awal.py").read_text(encoding="utf-8")
         badan = sumber.split("def run_bingkai_awal")[1].split("\ndef ")[0]
-        self.assertEqual(badan.count("_ini_gameplay("), 1)
-        # Dan di LUAR perulangan klipnya.
-        self.assertLess(badan.index("_ini_gameplay("), badan.index("for i, klip in"))
+        self.assertNotIn("_ini_gameplay", sumber)
+        # Dan jawabannya datang dari penggolong yang sama dengan yang dipakai
+        # Studio, bukan dari pemindai panel facecam sendirian: pemindai itu
+        # mengira wajah orang di podcast sebagai panel, 32% x 49% dengan
+        # kehadiran 100%.
+        self.assertIn("jenis_klip_tersimpan", sumber)
+        # Jawabannya belum ada sebelum perulangan klipnya dimulai.
+        self.assertIn("gameplay = None", badan)
+        self.assertLess(badan.index("gameplay = None"), badan.index("for i, klip in"))
+
+    def test_kemajuan_menyebut_klip_ke_berapa_dari_berapa(self):
+        """
+        "Sedang memproses" tanpa nomor tidak bisa dibedakan dari macet, dan
+        pekerjaan inilah yang paling lama tanpa ada yang menunggunya di layar.
+        Terlapor dua kali: "tampilan yang memproses semua klip tidak ada".
+        """
+        sumber = (Path(__file__).resolve().parents[1] / "app" / "services"
+                  / "bingkai_awal.py").read_text(encoding="utf-8")
+        self.assertIn('f"Bingkai klip {i + 1} dari {len(daftar)}{sisa}"', sumber)
+        # Dan judul klipnya ikut, supaya terbaca sebagai pekerjaan nyata.
+        self.assertIn('judul = (klip.get("title") or "").strip()', sumber)
 
     def test_pemanasan_ikut_menghitung_facecam(self):
         from pathlib import Path

@@ -12,6 +12,7 @@ import ClipPreview from './ClipPreview';
 import StaveSystem, { rehearsalLetter } from './StaveSystem';
 import { TrimPanel, SubtitlePanel, StylePanel } from './EditorPanels';
 import FrameStage from './FrameStage';
+import BilahBingkaiAwal from './BilahBingkaiAwal';
 import ClipTimeline from './ClipTimeline';
 import FramePanel from './FramePanel';
 import TitlePanel from './TitlePanel';
@@ -1781,6 +1782,13 @@ export default function Editor({ project, onBack }) {
               ))}
             </div>
           )}
+
+          {/* Penyiapan bingkai semua klip berjalan di latar belakang sesudah
+              auto-klip. Sampai sekarang tidak ada satu pun tempat di layar yang
+              menunjukkannya, dan pemiliknya dua kali melaporkan hal yang sama:
+              bukan bahwa ia lama, melainkan bahwa ia tidak bisa dibedakan dari
+              macet. */}
+          <BilahBingkaiAwal videoId={videoId} />
 
           <div className="stage-row">
             <FrameStage src={srcPutar} videoRef={videoRef}

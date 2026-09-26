@@ -15,6 +15,7 @@ bernama, bukan ekspresi `if()` bersarang: klip 45 detik pada 10 Hz berarti 450
 cabang bersarang di parser rekursif ffmpeg — rapuh dan lambat.
 """
 
+import itertools
 import logging
 import math
 import statistics
@@ -3086,7 +3087,23 @@ def build_reframe_filter(plan: ReframePlan, cmd_path: Path,
 FACECAM_LEBAR_MAKS = 0.20
 # Wajah harus muncul di setidaknya sekian bagian sampel. Wajah yang hanya
 # lewat — penonton di layar permainan, tokoh dalam game — tidak lolos.
-FACECAM_KEHADIRAN_MIN = 0.30
+#
+# Naik dari 0,30 ke 0,45 pada 26 September 2026. Pada video Minecraft milik
+# pemiliknya, jendela di menit ke-300 — bagian video yang facecam-nya BELUM
+# menyala — tetap menghasilkan kotak dengan kehadiran 31%, dibangun dari wajah
+# penduduk dan hewan dalam permainan. Kotak itu lalu jadi bidang reaksi yang
+# isinya bukan siapa-siapa.
+#
+# Aman dinaikkan karena diukur, bukan ditebak: 60 jendela dari lima video (tiga
+# gameplay berfacecam jelas, satu Minecraft yang facecam-nya muncul belakangan,
+# satu podcast) TIDAK ADA satu pun yang jatuh di antara 30% dan 45%. Yang nyata
+# berada di 100%, facecam Minecraft di 50-64%, dan sisanya tidak menghasilkan
+# kotak sama sekali.
+#
+# Jendela yang ditolak pun tidak kehilangan apa-apa: `deteksi_facecam_waktu`
+# mewarisi letak dari jendela tetangga, yang memang jawaban yang benar saat
+# pemain menutup mukanya atau keluar sebentar dari kamera.
+FACECAM_KEHADIRAN_MIN = 0.45
 # Ukuran maksimum AWAN deteksi: kotak yang memuat semua wajah sepanjang klip.
 #
 # Ini menggantikan pengukuran "semua wajah berbagi satu titik tengah" yang saya
@@ -3250,14 +3267,30 @@ def deteksi_facecam(src, start: float, duration: float,
     """
     if not MODEL_PATH.is_file():
         return None
+    sw = SAMPLE_WIDTH
+    sh = _even(SAMPLE_WIDTH * source_h / source_w)
+    return _facecam_dari_bingkai(_sample_frames(src, start, duration, sw, sh),
+                                 sw, sh, rasio_potongan)
+
+
+def _facecam_dari_bingkai(bingkai, sw: int, sh: int,
+                          rasio_potongan: float = 1080 / 691) -> Optional[dict]:
+    """
+    Inti pencarian facecam, dari bingkai yang SUDAH dibaca orang lain.
+
+    Dipisahkan dari pembacaannya supaya satu proses ffmpeg bisa memberi makan
+    banyak jendela sekaligus. Menjalankan ffmpeg untuk tiap jendela 8 detik
+    memakan ongkos tetap ±0,9 detik per jendela hanya untuk hidup dan melompat
+    ke detiknya; terukur pada klip 32 detik, empat jendela: 7,8 detik dengan
+    empat proses melawan 5,2 detik dengan satu. Yang dihitungnya sama persis,
+    jadi kotak yang keluar pun sama persis.
+    """
     try:
         import cv2
         import numpy as np
     except Exception:
         return None
 
-    sw = SAMPLE_WIDTH
-    sh = _even(SAMPLE_WIDTH * source_h / source_w)
     try:
         detector = cv2.FaceDetectorYN.create(
             str(MODEL_PATH), "", (sw, sh), DETECT_SCORE, DETECT_NMS, 5000)
@@ -3276,7 +3309,7 @@ def deteksi_facecam(src, start: float, duration: float,
     gx_jumlah = None
     gy_jumlah = None
     n_grad = 0
-    for buf in _sample_frames(src, start, duration, sw, sh):
+    for buf in bingkai:
         total += 1
         frame = np.frombuffer(buf, dtype=np.uint8).reshape((sh, sw, 3))
         if total % 2 == 1:
@@ -3410,11 +3443,34 @@ def deteksi_facecam_waktu(src, segments: list[dict], source_w: int, source_h: in
             pos += panjang
         t_klip += b - a
 
+    # Satu proses ffmpeg untuk tiap POTONGAN KLIP, bukan tiap jendela.
+    #
+    # Ongkos tetap menjalankan ffmpeg dan melompat ke detiknya ±0,9 detik, dan
+    # dulu dibayar sekali per jendela 8 detik. Terukur pada klip 32 detik: 7,8
+    # detik untuk empat proses melawan 5,2 detik untuk satu. Bingkainya dibagi
+    # per jendela di sini, jadi jendelanya tetap ada — dan jendela itulah yang
+    # menangkap facecam yang PINDAH TEMPAT di tengah klip, hal yang memang
+    # terjadi: pada satu klip 30 detik video horor pemiliknya, panelnya pindah
+    # dari tengah ke pojok pada detik ke-24.
+    sw = SAMPLE_WIDTH
+    sh = _even(SAMPLE_WIDTH * source_h / source_w)
     hasil: list[dict] = []
-    for t, mulai, panjang in potongan:
-        fc = deteksi_facecam(src, mulai, panjang, source_w, source_h,
-                             rasio_potongan=rasio_potongan)
-        hasil.append({"t": round(t, 2), "facecam": fc})
+    for sg in segments or []:
+        a, b = float(sg["start"]), float(sg["end"])
+        milik = [q for q in potongan if a - 1e-6 <= q[1] < b]
+        if not milik:
+            continue
+        aliran = _sample_frames(src, a, b - a, sw, sh)
+        for t, mulai, panjang in milik:
+            # Bingkai jendela ini saja. `fps` tetap, jadi jumlahnya bisa
+            # dihitung, bukan ditebak.
+            n = max(1, int(round(panjang * SAMPLE_FPS)))
+            potong_bingkai = list(itertools.islice(aliran, n))
+            fc = _facecam_dari_bingkai(iter(potong_bingkai), sw, sh,
+                                       rasio_potongan=rasio_potongan)
+            hasil.append({"t": round(t, 2), "facecam": fc})
+        # Sisa bingkai potongan ini dibuang bersama alirannya.
+        aliran.close()
 
     # Isi potongan kosong dari tetangga terdekat (yang sebelumnya dulu).
     ada = [h for h in hasil if h["facecam"]]
