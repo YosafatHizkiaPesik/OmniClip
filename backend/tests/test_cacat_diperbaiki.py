@@ -298,13 +298,16 @@ class PemanasanTidakDiulang(unittest.TestCase):
         sidik = _sidik_klip(self.KLIP)
         riwayat = [{"type": "bingkai_awal", "video_id": "vid", "status": "done",
                     "result": {"sidik": sidik}}]
-        with mock.patch("app.repos.jobs.recent", return_value=riwayat):
+        # Hasilnya ikut diperiksa sekarang, jadi ia ikut ditiru.
+        with mock.patch("app.repos.jobs.recent", return_value=riwayat), \
+             mock.patch("app.routers.clips.rencana_tersimpan", return_value=True):
             self.assertTrue(_sudah_dipanaskan("vid", self.KLIP))
             # Video lain, sidik lain, dan yang gagal: semuanya bukan.
             self.assertFalse(_sudah_dipanaskan("lain", self.KLIP))
         for ubah in ({"status": "failed"}, {"result": {"sidik": "beda"}}):
             with mock.patch("app.repos.jobs.recent",
-                            return_value=[{**riwayat[0], **ubah}]):
+                            return_value=[{**riwayat[0], **ubah}]), \
+                 mock.patch("app.routers.clips.rencana_tersimpan", return_value=True):
                 self.assertFalse(_sudah_dipanaskan("vid", self.KLIP))
 
 
@@ -587,3 +590,88 @@ class BerandaBervariasi(unittest.TestCase):
                   / "videos.py").read_text(encoding="utf-8")
         badan = sumber.split("async def trending")[1].split("\n@router")[0]
         self.assertIn("asyncio.gather(", badan)
+
+
+class PemanasanMemeriksaHasilnya(unittest.TestCase):
+    """
+    Pemanasan tidak berjalan lagi untuk video yang hasilnya sudah hilang.
+
+    Pemeriksaan "sudah pernah dipanaskan" hanya melihat riwayat pekerjaan.
+    Simpanan rencana bingkai bisa hilang SESUDAH pekerjaannya selesai, dan
+    ketika itu terjadi pemanasan tidak pernah dijalankan lagi. Terjadi
+    sungguhan 26 September 2026: dua video punya pekerjaan "selesai" sementara
+    seluruh basis data menyisakan 13 rencana bingkai, dan membuka proyeknya
+    tidak memicu apa pun. Terlapor pemiliknya: "satu video bingkainya tidak
+    tersusun semua tapi saat membuka video tersebut auto bingkai tidak
+    diproses".
+    """
+
+    KLIP = [{"segments": [{"start": 1.0, "end": 5.0}],
+             "subtitles": [{"start": 1.0, "end": 2.0, "speaker": 0}]}]
+
+    def _riwayat(self, sidik):
+        return [{"type": "bingkai_awal", "video_id": "vid", "status": "done",
+                 "result": {"sidik": sidik}}]
+
+    def test_riwayat_selesai_saja_tidak_cukup(self):
+        from app.services.pipeline import _sidik_klip, _sudah_dipanaskan
+        sidik = _sidik_klip(self.KLIP)
+        with mock.patch("app.repos.jobs.recent", return_value=self._riwayat(sidik)), \
+             mock.patch("app.routers.clips.rencana_tersimpan", return_value=False), \
+             mock.patch("app.routers.clips._facecam_tersimpan", return_value=None):
+            self.assertFalse(_sudah_dipanaskan("vid", self.KLIP),
+                             "hasilnya hilang, jadi harus dipanaskan lagi")
+
+    def test_selesai_dan_hasilnya_ada_dilewati(self):
+        from app.services.pipeline import _sidik_klip, _sudah_dipanaskan
+        sidik = _sidik_klip(self.KLIP)
+        with mock.patch("app.repos.jobs.recent", return_value=self._riwayat(sidik)), \
+             mock.patch("app.routers.clips.rencana_tersimpan", return_value=True):
+            self.assertTrue(_sudah_dipanaskan("vid", self.KLIP))
+
+    def test_klip_gameplay_dinilai_dari_facecam(self):
+        """Klip gameplay tidak punya rencana bingkai, dan itu bukan tanda hilang."""
+        from app.services.pipeline import _sidik_klip, _sudah_dipanaskan
+        sidik = _sidik_klip(self.KLIP)
+        with mock.patch("app.repos.jobs.recent", return_value=self._riwayat(sidik)), \
+             mock.patch("app.routers.clips.rencana_tersimpan", return_value=False), \
+             mock.patch("app.routers.clips._facecam_tersimpan",
+                        return_value={"posisi": [], "src_w": 1920, "src_h": 1080}):
+            self.assertTrue(_sudah_dipanaskan("vid", self.KLIP))
+
+
+class HapusProyekBisaIkutVideonya(unittest.TestCase):
+    """
+    Menghapus kartu Partitur membuang analisis, riwayat pekerjaan, dan salinan
+    impor — tapi video mentahnya tetap, dan tidak ada tempat di layar yang
+    menyebutkannya. Terukur pada penyimpanan pemiliknya: 42 video sumber
+    menumpuk sampai 37,9 GB, terbesar 3,99 GB.
+    """
+
+    def test_bawaannya_tidak_menghapus_video(self):
+        sumber = (Path(__file__).resolve().parents[1] / "app" / "routers"
+                  / "projects.py").read_text(encoding="utf-8")
+        self.assertIn("async def delete_project(video_id: str, hapus_video: bool = False)",
+                      sumber)
+
+    def test_berkas_di_luar_folder_omniclip_tidak_disentuh(self):
+        """Video impor menunjuk berkas milik pengguna sendiri."""
+        from app.routers import projects as P
+        with mock.patch("app.services.paths.find_local_video",
+                        return_value=Path("/home/orang/Video/punya-saya.mp4")), \
+             mock.patch("pathlib.Path.is_file", return_value=True), \
+             mock.patch("pathlib.Path.unlink") as buang:
+            n, bita = P._buang_berkas_sumber("vid")
+        self.assertEqual(n, 0)
+        buang.assert_not_called()
+
+    def test_tanpa_berkas_bukan_kegagalan(self):
+        from app.routers import projects as P
+        with mock.patch("app.services.paths.find_local_video", return_value=None):
+            self.assertEqual(P._buang_berkas_sumber("vid"), (0, 0))
+
+    def test_layar_menawarkan_pilihan(self):
+        jsx = (Path(__file__).resolve().parents[2] / "frontend" / "src" / "features"
+               / "studio" / "StudioHome.jsx").read_text(encoding="utf-8")
+        self.assertIn("hapus_video=true", jsx)
+        self.assertIn("bita_dibebaskan", jsx)

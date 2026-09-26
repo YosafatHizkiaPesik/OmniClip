@@ -7,6 +7,8 @@ antrean, dan kartunya menunjukkan kemajuan masing-masing.
 """
 
 import asyncio
+import logging
+from pathlib import Path
 
 from fastapi import APIRouter, Query
 
@@ -16,6 +18,8 @@ from ..repos import jobs as jobs_repo
 from ..repos import projects as projects_repo
 from ..services.jobs import queue
 from ..services.paths import extract_youtube_id, find_local_video, url_sumber
+
+log = logging.getLogger("omniclip.projects")
 
 router = APIRouter(prefix="/api", tags=["projects"])
 
@@ -150,9 +154,16 @@ async def get_project(video_id: str):
 
 
 @router.delete("/projects/{video_id}")
-async def delete_project(video_id: str):
+async def delete_project(video_id: str, hapus_video: bool = False):
     """
     Hapus satu kartu Partitur sampai benar-benar hilang.
+
+    `hapus_video` ikut membuang berkas video mentahnya. Bawaannya TIDAK:
+    unduhan itu 900 MB rata-rata dan sampai 4 GB, dan mengunduhnya lagi
+    memakan menit-menit — membuangnya diam-diam bersama kartu adalah kerugian
+    yang tidak diminta. Tapi membiarkannya selamanya juga salah: terukur pada
+    penyimpanan pemiliknya, 42 video sumber menumpuk sampai 37,9 GB. Karena
+    itu pilihannya diberikan, bukan diputuskan.
 
     Kartunya disusun dari dua sumber — `analyses` dan `jobs` — jadi membuang
     analisisnya saja tidak cukup: baris job yang tertinggal membangun kembali
@@ -185,7 +196,53 @@ async def delete_project(video_id: str):
     # mana pun dan hanya memakan ruang. Berkas asli pengguna tidak disentuh.
     from ..services.paths import buang_salinan_impor
     await asyncio.to_thread(buang_salinan_impor, vid)
-    return {"success": True, "video_id": vid, "jobs_dihapus": jobs_dihapus}
+
+    video_dibuang, bita = 0, 0
+    if hapus_video:
+        video_dibuang, bita = await asyncio.to_thread(_buang_berkas_sumber, vid)
+    return {"success": True, "video_id": vid, "jobs_dihapus": jobs_dihapus,
+            "video_dihapus": video_dibuang, "bita_dibebaskan": bita}
+
+
+def _buang_berkas_sumber(vid: str) -> tuple[int, int]:
+    """
+    Membuang video mentah dan salinan analisisnya. (jumlah berkas, bita).
+
+    Berkas di LUAR folder OmniClip tidak disentuh: video impor menunjuk ke
+    berkas milik pengguna sendiri, dan menghapus kartu di aplikasi ini tidak
+    boleh berarti menghapus berkas di folder mereka.
+    """
+    from ..config import DOWNLOAD_DIR
+    from ..services.paths import find_local_video
+    from ..services.proksi import _nama as nama_proksi
+
+    n = bita = 0
+    src = find_local_video(vid)
+    if src is None:
+        return 0, 0
+    calon = [src]
+    try:
+        calon.append(nama_proksi(src))
+    except OSError:
+        pass
+    for f in calon:
+        try:
+            if not f.is_file():
+                continue
+            # Hanya yang memang milik OmniClip.
+            f.resolve().relative_to(Path(DOWNLOAD_DIR).resolve().parent)
+        except (OSError, ValueError):
+            continue
+        try:
+            ukuran = f.stat().st_size
+            f.unlink()
+            n += 1
+            bita += ukuran
+        except OSError as e:
+            log.warning("Berkas %s tidak bisa dihapus: %s", f.name, e)
+    if n:
+        log.info("Video sumber %s dibuang: %d berkas, %.0f MB", vid, n, bita / 1e6)
+    return n, bita
 
 
 # Hitungan gelombang yang sedang berjalan, per (video, bins). Permintaan kedua

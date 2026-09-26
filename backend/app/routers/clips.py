@@ -635,6 +635,22 @@ def _kunci_reframe(key: tuple) -> str:
     return "bingkai:" + hashlib.sha1(repr(key).encode()).hexdigest()
 
 
+def rencana_tersimpan(*, video_id: str, segments: list[dict], aspect_ratio: str = "9:16",
+                      turns: tuple = (), subjek: str = "wajah") -> bool:
+    """
+    Apakah rencana bingkai klip ini BENAR-BENAR ada di simpanan.
+
+    Dipakai penjadwal pemanasan untuk memastikan "sudah pernah selesai" berarti
+    hasilnya masih ada. Kuncinya dibangun dengan cara yang sama persis dengan
+    `hitung_reframe`, karena kunci yang sedikit berbeda akan menjawab "tidak
+    ada" untuk rencana yang sebenarnya ada.
+    """
+    key = (video_id, aspect_ratio,
+           tuple((s["start"], s["end"]) for s in segments),
+           tuple(turns), None, (), "smooth", subjek)
+    return _reframe_tersimpan(key) is not None
+
+
 def _reframe_tersimpan(key: tuple):
     """Rencana yang sudah pernah dihitung, dari memori lalu dari basis data."""
     if key in _REFRAME_CACHE:

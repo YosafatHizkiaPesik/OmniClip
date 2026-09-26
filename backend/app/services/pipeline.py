@@ -470,18 +470,65 @@ def _sidik_klip(ringkas: list[dict]) -> str:
 
 
 def _sudah_dipanaskan(video_id: str, ringkas: list[dict]) -> bool:
-    """Apakah pekerjaan yang SELESAI untuk daftar klip ini sudah ada."""
+    """
+    Apakah pemanasan daftar klip ini sudah selesai DAN hasilnya masih ada.
+
+    Riwayat pekerjaan saja tidak cukup. Simpanan rencana bingkai bisa hilang
+    sesudah pekerjaannya selesai — dibersihkan, dipindahkan, atau dihapus —
+    dan bila yang diperiksa hanya riwayatnya, pemanasan tidak pernah berjalan
+    lagi untuk video yang hasilnya sudah tidak ada. Terjadi sungguhan pada
+    26 September 2026: dua video punya pekerjaan "selesai" sementara seluruh
+    basis data hanya menyisakan 13 rencana bingkai, dan membuka proyeknya tidak
+    memicu apa pun. Terlapor pemiliknya: "satu video bingkainya tidak tersusun
+    semua tapi saat membuka video tersebut auto bingkai tidak diproses".
+
+    Karena itu hasilnya ikut diperiksa. Tiga klip yang diambil merata sudah
+    cukup: pemanasan mengerjakan seluruh daftar dalam satu pekerjaan, jadi
+    hilangnya sebagian hampir selalu berarti hilangnya semua.
+    """
     try:
         from ..repos import jobs as jobs_repo
         sidik = _sidik_klip(ringkas)
-        for j in jobs_repo.recent(60):
-            if (j.get("type") == "bingkai_awal" and j.get("video_id") == video_id
-                    and j.get("status") == "done"
-                    and (j.get("result") or {}).get("sidik") == sidik):
-                return True
+        selesai = any(
+            j.get("type") == "bingkai_awal" and j.get("video_id") == video_id
+            and j.get("status") == "done"
+            and (j.get("result") or {}).get("sidik") == sidik
+            for j in jobs_repo.recent(60))
+        if not selesai:
+            return False
+        return _hasilnya_masih_ada(video_id, ringkas)
     except Exception as e:                           # noqa: BLE001
         log.info("Riwayat pemanasan tidak terbaca: %s", str(e)[:140])
     return False
+
+
+def _hasilnya_masih_ada(video_id: str, ringkas: list[dict]) -> bool:
+    """Contoh tiga klip: rencana bingkainya masih tersimpan atau tidak."""
+    from ..routers.clips import rencana_tersimpan
+
+    dapat = [c for c in ringkas if c.get("segments")]
+    if not dapat:
+        return True
+    contoh = [dapat[0], dapat[len(dapat) // 2], dapat[-1]]
+    for c in contoh:
+        segmen = [{"start": round(float(s["start"]), 3),
+                   "end": round(float(s["end"]), 3)} for s in c["segments"]]
+        turns = tuple((float(l["start"]), float(l["end"]), int(l["speaker"]))
+                      for l in (c.get("subtitles") or [])
+                      if l.get("speaker") is not None and l.get("end") is not None)
+        # Salah satu dari ketiga jejak yang mungkin diminta klip ini cukup:
+        # klip gameplay tidak punya rencana bingkai sama sekali, dan itu bukan
+        # tanda hasilnya hilang.
+        if not any(rencana_tersimpan(video_id=video_id, segments=segmen,
+                                     turns=turns, subjek=sj)
+                   for sj in ("wajah", "gerak")):
+            from ..routers.clips import _facecam_tersimpan
+            simpanan = _facecam_tersimpan(video_id, segmen)
+            if simpanan is None or "posisi" not in simpanan:
+                log.info("Pemanasan %s dijalankan lagi: hasilnya sudah tidak ada",
+                         video_id)
+                return False
+    return True
 
 
 def _jadwalkan_jejak_sekarang(video_id: str, clips: list[dict],

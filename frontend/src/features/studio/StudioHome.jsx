@@ -43,6 +43,8 @@ function sebentarLagi(waktu) {
 export default function StudioHome({ onOpen, onFindVideos }) {
   const [projects, setProjects] = useState(null);
   const [error, setError] = useState(null);
+  // Kabar sesaat sesudah menghapus, misalnya ruang yang dibebaskan.
+  const [pesan, setPesan] = useState(null);
   const timerRef = useRef(null);
   const [putaran, setPutaran] = useState(0);
   const [melanjutkan, setMelanjutkan] = useState(null);
@@ -92,11 +94,39 @@ export default function StudioHome({ onOpen, onFindVideos }) {
     }
   };
 
+  /**
+   * Menghapus kartu Partitur, dengan pilihan ikut membuang video mentahnya.
+   *
+   * Dulu video mentahnya SELALU tertinggal, dan tidak ada satu pun tempat di
+   * layar yang menyebutkannya. Terukur pada penyimpanan pemiliknya: 42 video
+   * sumber menumpuk sampai 37,9 GB, terbesar 3,99 GB. Tapi membuangnya
+   * diam-diam juga salah — mengunduhnya lagi memakan menit-menit — jadi yang
+   * benar adalah menanyakannya.
+   */
   const handleDelete = async (videoId, e) => {
     e.stopPropagation();
+    const p = (projects ?? []).find((x) => x.video_id === videoId);
+    const nama = (p?.title || videoId).slice(0, 60);
+    // eslint-disable-next-line no-alert
+    const ikutVideo = window.confirm(
+      `Hapus "${nama}" dari Partitur.\n\n`
+      + 'TEKAN OK untuk menghapus kartunya BESERTA berkas video mentahnya '
+      + '(membebaskan ruang, dan video itu harus diunduh lagi bila dipakai lagi).\n\n'
+      + 'TEKAN Batal untuk pilihan berikutnya.');
+    let hapusVideo = ikutVideo;
+    if (!ikutVideo) {
+      // eslint-disable-next-line no-alert
+      if (!window.confirm(`Hapus kartunya saja, berkas videonya DIBIARKAN?\n\n"${nama}"`)) return;
+      hapusVideo = false;
+    }
     try {
-      await apiDelete(`/projects/${videoId}`);
-      setProjects((prev) => prev.filter((p) => p.video_id !== videoId));
+      const r = await apiDelete(
+        `/projects/${videoId}${hapusVideo ? '?hapus_video=true' : ''}`);
+      setProjects((prev) => prev.filter((x) => x.video_id !== videoId));
+      if (r?.bita_dibebaskan > 0) {
+        setPesan(`Ruang yang dibebaskan: ${(r.bita_dibebaskan / 1e9).toFixed(2)} GB`);
+        setTimeout(() => setPesan(null), 6000);
+      }
     } catch (err) {
       setError(err);
     }
@@ -113,6 +143,11 @@ export default function StudioHome({ onOpen, onFindVideos }) {
 
   return (
     <div style={{ paddingBottom: '40px' }}>
+      {pesan && (
+        <div className="plate studio-note" style={{ marginBottom: '12px', fontSize: '.82rem' }}>
+          {pesan}
+        </div>
+      )}
       <header style={{
         display: 'flex', alignItems: 'center', gap: '12px',
         flexWrap: 'wrap', marginBottom: '18px',
