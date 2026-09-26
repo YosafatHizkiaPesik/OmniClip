@@ -53,30 +53,24 @@ def run_bingkai_awal(ctx) -> dict:
         ctx.progress(1.0, stage="done", message="Tidak ada klip yang perlu dihitung.")
         return {"siap": 0}
 
-    # Gameplay atau bukan, ditanyakan SEKALI dari klip pertama.
+    # Gameplay atau bukan, ditanyakan sekali dari klip pertama — dan hanya
+    # untuk memutuskan apakah suara perlu ditambatkan ke wajah.
     #
-    # Klip gameplay tidak memakai jejak wajah sama sekali: susunannya datang
-    # dari letak panel facecam. Sampai 26 September 2026 pemanasan tetap
-    # menghitung jejak wajah untuk tiap klip video seperti itu. Terukur pada
-    # video horor 2560x1440 milik pemiliknya: 18,3 detik jejak wajah yang tidak
-    # dipakai ditambah 11,7 detik pindai facecam yang dipakai, 30 detik per
-    # klip, 10 menit untuk 20 klip, 6 menit di antaranya sia-sia.
+    # Sampai 26 September 2026 jawaban ini juga dipakai untuk MELEWATI jejak
+    # wajah pada seluruh video gameplay, dengan alasan klip gameplay tidak
+    # memakainya. Alasan itu salah, dan ini koreksinya: `jenis_klip` — yang
+    # Studio panggil untuk SETIAP klip yang dibuka — dihitung dari jejak wajah
+    # itu juga. Melewatinya tidak menghemat apa pun, ia hanya memindahkan
+    # tunggunya ke depan layar. Terukur sesudah "pemanasan selesai" pada video
+    # Minecraft pemiliknya: keempat klip yang dibuka menunggu 9 sampai 27 detik
+    # untuk penggolongan yang sama.
     #
-    # Yang menjawabnya BUKAN pemindai panel facecam sendirian.
-    #
-    # Pemindai panel itu terlalu mudah setuju: pada satu klip podcast pemiliknya
-    # ia mengembalikan "panel" 32% x 49% di tengah bingkai dengan kehadiran
-    # 100% — wajah orang yang sedang bicara, bukan kamera pojok. Memakai itu
-    # sebagai jawaban berarti podcast diperlakukan sebagai video game.
-    #
-    # `jenis_klip` adalah penggolong yang memang dibuat untuk pertanyaan ini,
-    # dan Studio memakainya juga untuk memilih bingkai bawaan tiap klip. Memakai
-    # sumber yang sama berarti pemanasan menyiapkan persis apa yang nanti
-    # diminta Studio, bukan tebakannya sendiri.
+    # Sekarang tiap klip digolongkan di sini, dan yang disiapkan adalah persis
+    # jejak yang akan diminta klip itu: facecam untuk gaming, jejak gerakan
+    # untuk klip tanpa wajah, jejak wajah untuk sisanya.
     gameplay = _jenis_video(video_id, daftar)
     log.info("Video %s %s.", video_id,
-             "gameplay: jejak wajah dilewati" if gameplay
-             else "bukan gameplay: jejak wajah dipakai")
+             "gameplay" if gameplay else "bukan gameplay")
 
     # Menambatkan suara ke wajah DIKERJAKAN LEBIH DULU, bukan di akhir.
     #
@@ -139,9 +133,22 @@ def run_bingkai_awal(ctx) -> dict:
         ctx.progress(0.32 + 0.62 * (i / len(daftar)), stage="prepare",
                      message=f"Bingkai klip {i + 1} dari {len(daftar)}{sisa}")
         try:
-            if gameplay:
-                # Yang dipakai klip gameplay hanya ini.
+            # Jenis klip ini, dan jejak yang memang akan diminta Studio.
+            #
+            # Penggolongan didahulukan karena Studio MEMINTANYA untuk setiap
+            # klip yang dibuka, dan karena ia sendiri menghitung jejak wajah
+            # klip itu — jadi memanggilnya di sini bukan kerja tambahan.
+            mode = _mode_klip(video_id, segmen)
+            if mode == "gaming":
                 _panaskan_facecam(video_id, segmen)
+            elif mode == "motion":
+                # Klip tanpa wajah dibingkai dengan MENGIKUTI GERAKAN, dan
+                # Studio memintanya sebagai jejak yang berbeda. Sampai
+                # 26 September 2026 pemanasan tidak pernah menghitungnya, jadi
+                # klip seperti itu tetap membuat orangnya menunggu 5 detik
+                # walaupun pemanasan melaporkan dirinya selesai.
+                hitung_reframe(video_id=video_id, segments=segmen,
+                               aspect_ratio=rasio, turns=turns, subjek="gerak")
             else:
                 hitung_reframe(video_id=video_id, segments=segmen,
                                aspect_ratio=rasio, turns=turns)
@@ -220,6 +227,28 @@ def _daftar_terbaru(video_id: str, lama: list[dict]) -> list[dict]:
     except Exception as e:                           # noqa: BLE001
         log.info("Daftar klip terbaru tidak terbaca: %s", str(e)[:140])
         return lama
+
+
+def _mode_klip(video_id: str, segmen: list[dict]) -> str:
+    """
+    Bingkai bawaan klip ini menurut penggolong yang sama dengan yang dipakai
+    Studio: "gaming", "motion", atau "smart".
+
+    Hasilnya tersimpan, dan menghitungnya juga memanaskan jejak wajah klip ini
+    — jadi memanggilnya di sini bukan kerja tambahan, melainkan kerja yang
+    sama yang dikerjakan lebih awal.
+    """
+    try:
+        from .paths import find_local_video
+        from .sutradara_ai import jenis_klip_tersimpan
+
+        src = find_local_video(video_id)
+        if not src:
+            return "smart"
+        return (jenis_klip_tersimpan(video_id, src, segmen) or {}).get("mode") or "smart"
+    except Exception as e:                           # noqa: BLE001
+        log.info("Penggolongan klip dilewati: %s", str(e)[:140])
+        return "smart"
 
 
 def _jenis_gameplay(video_id: str, segmen: list[dict]) -> bool:

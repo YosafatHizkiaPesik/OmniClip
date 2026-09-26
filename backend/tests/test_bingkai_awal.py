@@ -208,46 +208,65 @@ class FacecamDisimpanDanDipanaskan(unittest.TestCase):
         badan = sumber.split('async def clip_facecam')[1].split('\n@router')[0]
         self.assertLess(badan.index("_facecam_tersimpan"), badan.index("def kerja"))
 
-    def test_video_gameplay_tidak_menghitung_jejak_wajah(self):
+    def test_yang_disiapkan_mengikuti_jenis_tiap_klip(self):
         """
-        Separuh lebih waktu pemanasan dulu terbuang di video gameplay.
+        Yang dipanaskan harus PERSIS yang diminta Studio untuk klip itu.
 
-        Klip gameplay disusun dari letak panel facecam; jejak wajah tidak
-        pernah dibacanya. Terukur pada video horor 2560x1440 milik pemiliknya:
-        18,3 detik jejak wajah yang tidak dipakai ditambah 11,7 detik pindai
-        facecam yang dipakai, 30 detik per klip, 10 menit untuk 20 klip.
-        Sesudah dipisah: 4,6 menit.
+        Sampai 26 September 2026 seluruh video gameplay melewati jejak wajah,
+        dengan alasan klip gameplay tidak memakainya. Alasan itu salah:
+        `jenis_klip` — yang Studio panggil untuk setiap klip yang dibuka —
+        dihitung dari jejak wajah itu juga. Melewatinya tidak menghemat apa
+        pun, ia memindahkan tunggunya ke depan layar. Terukur sesudah
+        "pemanasan selesai" pada video Minecraft pemiliknya: keempat klip yang
+        dibuka menunggu 9 sampai 27 detik.
+
+        Sesudah tiap klip digolongkan di pemanasan, diukur dari singgahan yang
+        benar-benar kosong: 10 klip podcast dibuka dalam 0,01 detik total, dan
+        5 klip gameplay di bawah satu milidetik masing-masing. Nol menunggu.
         """
         from unittest import mock
         from app.services import bingkai_awal as B
 
-        klip = [{"segments": [{"start": 0.0, "end": 30.0}], "subtitles": []}
-                for _ in range(3)]
+        klip = [{"segments": [{"start": 0.0, "end": 30.0}], "subtitles": [],
+                 "title": f"K{i}"} for i in range(3)]
 
         class Ctx:
             payload = {"video_id": "vid", "aspect_ratio": "9:16", "klip": klip}
             def check_cancelled(self): pass
             def progress(self, *a, **k): pass
 
-        for gameplay in (True, False):
-            with self.subTest(gameplay=gameplay), \
-                 mock.patch.object(B, "_jenis_video", return_value=gameplay), \
+        for mode, n_facecam, n_wajah, n_gerak in (("gaming", 3, 0, 0),
+                                                  ("motion", 0, 0, 3),
+                                                  ("smart", 0, 3, 0)):
+            with self.subTest(mode=mode), \
+                 mock.patch.object(B, "_jenis_video", return_value=(mode == "gaming")), \
+                 mock.patch.object(B, "_mode_klip", return_value=mode), \
                  mock.patch.object(B, "_daftar_terbaru", side_effect=lambda v, d: d), \
                  mock.patch.object(B, "_panaskan_facecam") as panas, \
                  mock.patch.object(B, "_tema_untuk_semua", return_value=0), \
                  mock.patch("app.routers.clips.hitung_reframe") as jejak, \
                  mock.patch("app.services.pipeline.tambatkan_ke_wajah",
-                            return_value=None) as tambat:
+                            return_value=None):
                 B.run_bingkai_awal(Ctx())
-                if gameplay:
-                    self.assertEqual(jejak.call_count, 0, "jejak wajah tidak dipakai")
-                    self.assertEqual(panas.call_count, 3)
-                    self.assertEqual(tambat.call_count, 0,
-                                     "menambat suara ke wajah butuh jejak yang tidak ada")
-                else:
-                    self.assertEqual(jejak.call_count, 3)
-                    self.assertEqual(panas.call_count, 0,
-                                     "video biasa tidak punya panel facecam untuk dipindai")
+            self.assertEqual(panas.call_count, n_facecam, f"{mode}: facecam")
+            gerak = [c for c in jejak.call_args_list
+                     if c.kwargs.get("subjek") == "gerak"]
+            wajah = [c for c in jejak.call_args_list
+                     if c.kwargs.get("subjek") != "gerak"]
+            self.assertEqual(len(gerak), n_gerak, f"{mode}: jejak gerakan")
+            self.assertEqual(len(wajah), n_wajah, f"{mode}: jejak wajah")
+
+    def test_penggolongan_didahulukan_atas_jejaknya(self):
+        """
+        Penggolongan menghitung jejak wajah klip itu sebagai efek samping, jadi
+        memanggilnya lebih dulu membuat jejaknya gratis — dan Studio meminta
+        penggolongan itu untuk setiap klip yang dibuka.
+        """
+        sumber = (Path(__file__).resolve().parents[1] / "app" / "services"
+                  / "bingkai_awal.py").read_text(encoding="utf-8")
+        badan = sumber.split("def run_bingkai_awal")[1].split("\ndef ")[0]
+        self.assertLess(badan.index("_mode_klip(video_id, segmen)"),
+                        badan.index("hitung_reframe(video_id=video_id"))
 
     def test_jenis_video_tidak_punya_pemindaian_sendiri(self):
         """
