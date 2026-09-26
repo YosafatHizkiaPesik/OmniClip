@@ -95,7 +95,8 @@ def run_bingkai_awal(ctx) -> dict:
             ctx.check_cancelled()
             ctx.progress(0.02, stage="prepare", message="Menambatkan suara ke wajah…")
             from .pipeline import tambatkan_ke_wajah
-            tambat = tambatkan_ke_wajah(video_id, _Ekor(ctx, 0.02, 0.30))
+            # 0,20..0,42 adalah rentang yang dipakai langkah itu sendiri.
+            tambat = tambatkan_ke_wajah(video_id, _Ekor(ctx, 0.02, 0.30, 0.20, 0.42))
         except JobCancelled:
             raise
         except Exception as e:
@@ -249,19 +250,32 @@ class _Ekor:
     rentangnya sendiri. Yang benar bukan mengubah langkah itu — ia juga dipakai
     di tempat lain dengan rentang yang berbeda — melainkan memetakan angkanya
     di tempat ia dipinjam.
+
+    Rentang ASALNYA harus disebut, bukan dianggap 0..1. Versi pertama tidak
+    menyebutnya: `tambatkan_ke_wajah` melapor 0,20 sampai 0,42 karena di dalam
+    auto-klip ia memang berada di situ, dan angka itu diperlakukan seolah 0
+    sampai 1. Akibatnya bilah kemajuan hanya merayap dari 7,6% ke 13,8% selama
+    SELURUH langkah — dan pada video pemiliknya langkah itu berjalan 22 menit.
+    Yang terlihat di layar: "Memindai wajah klip 5 dari 5… 13%", diam di angka
+    yang sama menit demi menit. Terlapor: "loading tidak jalan jalan".
     """
 
-    def __init__(self, ctx, mulai: float, akhir: float):
+    def __init__(self, ctx, mulai: float, akhir: float,
+                 dari: float = 0.0, sampai: float = 1.0):
         self._ctx = ctx
         self._a = mulai
         self._b = akhir
+        self._dari = dari
+        self._lebar = max(1e-6, sampai - dari)
 
     def check_cancelled(self):
         self._ctx.check_cancelled()
 
     def progress(self, p, **kw):
-        p = max(0.0, min(1.0, float(p or 0.0)))
-        self._ctx.progress(self._a + (self._b - self._a) * p, **kw)
+        # Dari rentang asalnya ke 0..1 dulu, baru ke rentang tujuan.
+        bagian = (float(p or 0.0) - self._dari) / self._lebar
+        bagian = max(0.0, min(1.0, bagian))
+        self._ctx.progress(self._a + (self._b - self._a) * bagian, **kw)
 
     def __getattr__(self, nama):
         return getattr(self._ctx, nama)

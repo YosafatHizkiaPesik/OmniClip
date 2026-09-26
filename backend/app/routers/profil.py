@@ -75,11 +75,43 @@ def _lengkap(p: dict) -> dict:
     }
 
 
+# Kunci setelan tempat profil terakhir diingat.
+TERAKHIR = "profil.terakhir"
+
+
+def _terakhir() -> int:
+    from ..repos import settings as settings_repo
+    try:
+        n = int((settings_repo.get(TERAKHIR) or "").strip() or 0)
+    except ValueError:
+        return layanan.UTAMA
+    return n if n > 0 and repo.ambil(n) else layanan.UTAMA
+
+
 @router.get("")
 async def daftar():
     ps = await asyncio.to_thread(repo.semua)
     return {"profil": [await asyncio.to_thread(_lengkap, p) for p in ps],
-            "aktif": layanan.kini()}
+            "aktif": layanan.kini(),
+            # Profil yang terakhir dipakai, diingat DI SERVER.
+            #
+            # Peramban mengingatnya juga, tapi `localStorage` terikat pada
+            # origin — dan origin itu memuat NOMOR PORT. Aplikasi memilih port
+            # pertama yang kosong mulai 8000, jadi begitu 8000 dipakai program
+            # lain ia pindah ke 8001, dan seluruh ingatan peramban ikut hilang.
+            # Terlapor pemiliknya: membuka aplikasi selalu masuk ke "Utama",
+            # bukan akun yang terakhir dipakai.
+            "terakhir": await asyncio.to_thread(_terakhir)}
+
+
+@router.post("/terakhir/{pid}")
+async def ingat_terakhir(pid: int):
+    """Mengingat profil yang barusan dipilih, supaya sesi berikutnya memakainya."""
+    from ..repos import settings as settings_repo
+    if not await asyncio.to_thread(repo.ambil, pid):
+        raise NotFound("Profil tidak ditemukan.")
+    await asyncio.to_thread(settings_repo.set_value, TERAKHIR, str(pid))
+    return {"status": "ok", "terakhir": pid}
 
 
 @router.post("")

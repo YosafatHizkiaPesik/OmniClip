@@ -361,3 +361,131 @@ class BilahMemakaiWaktuPekerjaanSendiri(unittest.TestCase):
                   / "jobs.py").read_text(encoding="utf-8")
         badan = sumber.split("def snapshot")[1].split("\n    def ")[0]
         self.assertIn('"created_at": job.get("created_at")', badan)
+
+
+class KemajuanLangkahPinjaman(unittest.TestCase):
+    """
+    Bilah kemajuan diam di 13% selama dua puluh dua menit.
+
+    `_Ekor` memetakan angka langkah pinjaman ke rentangnya, tapi versi
+    pertamanya menganggap angka itu 0..1. `tambatkan_ke_wajah` melapor
+    0,20..0,42 — rentangnya sendiri di dalam auto-klip — jadi bilahnya hanya
+    merayap dari 7,6% ke 13,8% selama SELURUH langkah. Terlapor pemiliknya dari
+    aplikasi live dengan tangkapan layar: "Memindai wajah klip 5 dari 5… 13%",
+    berjalan 22 menit 29 detik.
+    """
+
+    def _jalankan(self, **kw):
+        from app.services.bingkai_awal import _Ekor
+        dicatat = []
+
+        class Ctx:
+            def check_cancelled(self): pass
+            def progress(self, p, **k): dicatat.append(round(p, 4))
+
+        ekor = _Ekor(Ctx(), 0.02, 0.30, **kw)
+        for i in range(5):
+            ekor.progress(0.20 + 0.22 * i / 5)
+        ekor.progress(0.42)
+        return dicatat
+
+    def test_rentang_asal_dipakai_seluruhnya(self):
+        hasil = self._jalankan(dari=0.20, sampai=0.42)
+        self.assertAlmostEqual(hasil[0], 0.02, places=3)
+        self.assertAlmostEqual(hasil[-1], 0.30, places=3)
+        # Dan benar-benar bergerak di antaranya, bukan merayap di satu sudut.
+        self.assertGreater(hasil[-1] - hasil[0], 0.25)
+
+    def test_tanpa_rentang_asal_bilahnya_nyaris_diam(self):
+        """Cacatnya sendiri, ditulis sebagai uji supaya tidak kembali diam-diam."""
+        hasil = self._jalankan()
+        self.assertLess(hasil[-1] - hasil[0], 0.07)
+
+    def test_di_luar_batas_dijepit(self):
+        from app.services.bingkai_awal import _Ekor
+        dicatat = []
+
+        class Ctx:
+            def check_cancelled(self): pass
+            def progress(self, p, **k): dicatat.append(p)
+
+        ekor = _Ekor(Ctx(), 0.02, 0.30, 0.20, 0.42)
+        ekor.progress(0.0)
+        ekor.progress(9.9)
+        self.assertEqual([round(x, 4) for x in dicatat], [0.02, 0.30])
+
+    def test_dipakai_dengan_rentang_yang_benar(self):
+        sumber = (Path(__file__).resolve().parents[1] / "app" / "services"
+                  / "bingkai_awal.py").read_text(encoding="utf-8")
+        self.assertIn("_Ekor(ctx, 0.02, 0.30, 0.20, 0.42)", sumber)
+
+
+class ProfilTerakhirDiingat(unittest.TestCase):
+    """
+    Membuka aplikasi selalu masuk ke "Utama", bukan akun terakhir.
+
+    Profil disimpan di `localStorage`, dan itu terikat pada origin — yang
+    memuat NOMOR PORT. Aplikasi memilih port pertama yang kosong mulai 8000,
+    jadi begitu 8000 dipakai program lain ia pindah ke 8001 dan seluruh ingatan
+    peramban ikut hilang. Terjadi sungguhan saat pemiliknya menguji: aplikasi
+    live berjalan di 8001 karena 8000 sedang dipakai.
+    """
+
+    API = (Path(__file__).resolve().parents[2] / "frontend" / "src" / "lib" / "api.js")
+
+    def test_server_menyimpan_dan_mengembalikannya(self):
+        from app.routers import profil as P
+        with mock.patch("app.repos.settings.get", return_value="3"), \
+             mock.patch("app.repos.profil.ambil", return_value={"id": 3}):
+            self.assertEqual(P._terakhir(), 3)
+        # Profil yang sudah dihapus jatuh kembali ke Utama.
+        with mock.patch("app.repos.settings.get", return_value="9"), \
+             mock.patch("app.repos.profil.ambil", return_value=None):
+            self.assertEqual(P._terakhir(), 1)
+        # Begitu juga isi yang tidak masuk akal.
+        with mock.patch("app.repos.settings.get", return_value="bukan angka"):
+            self.assertEqual(P._terakhir(), 1)
+
+    def test_klien_mengabarkan_dan_menyelaraskan(self):
+        js = self.API.read_text(encoding="utf-8")
+        self.assertIn("/api/profil/terakhir/", js)
+        self.assertIn("export async function selaraskanProfil", js)
+        # Pilihan yang ADA di peramban ini menang: dua tab boleh berbeda profil.
+        badan = js.split("export async function selaraskanProfil")[1].split("\n}")[0]
+        self.assertIn("if (localStorage.getItem(PROFIL_KEY)) return;", badan)
+
+    def test_diselaraskan_sebelum_halaman_digambar(self):
+        """
+        Setiap permintaan membawa nomor profil di headernya. Menggambar dulu
+        lalu membetulkan kemudian berarti permintaan pertama berangkat atas
+        nama profil yang salah.
+        """
+        main = (Path(__file__).resolve().parents[2] / "frontend" / "src"
+                / "main.jsx").read_text(encoding="utf-8")
+        self.assertLess(main.index("selaraskanProfil()"), main.index("createRoot("))
+
+
+class KlipMenumpukBisaDigabung(unittest.TestCase):
+    """
+    Klip 1 detik 5-30 dan klip 2 detik 25-50 adalah satu momen yang terpotong
+    dua oleh pemilih otomatis. Merender keduanya menerbitkan potongan yang
+    isinya separuh sama.
+    """
+
+    ED = (Path(__file__).resolve().parents[2] / "frontend" / "src" / "features"
+          / "studio" / "Editor.jsx")
+
+    def test_penggabung_ada_dan_memakai_rentang_gabungan(self):
+        jsx = self.ED.read_text(encoding="utf-8")
+        self.assertIn("const pasanganTumpuk", jsx)
+        badan = jsx.split("const gabungTumpuk")[1].split("}, [")[0]
+        self.assertIn("Math.min(a.segments[0].start, b.segments[0].start)", badan)
+        self.assertIn("editor.setSegmentBounds(a.clip_id, 0, mulai, akhir)", badan)
+        # Yang kedua dibuang, bukan yang pertama: judul dan setelan bingkai
+        # klip pertama sudah ada.
+        self.assertIn("dibuang.add(b.clip_id)", badan)
+
+    def test_tombol_hapus_ada_di_daftar_klip(self):
+        jsx = self.ED.read_text(encoding="utf-8")
+        self.assertIn("studio-row-x", jsx)
+        self.assertIn("hapusKlip(clip.clip_id", jsx)

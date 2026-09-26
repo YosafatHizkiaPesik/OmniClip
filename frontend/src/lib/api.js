@@ -68,6 +68,35 @@ export function profilAktif() {
  */
 export function setProfilAktif(id) {
   try { localStorage.setItem(PROFIL_KEY, String(id)); } catch { /* mode privat */ }
+  // Diingat juga DI SERVER. `localStorage` terikat pada origin, dan origin itu
+  // memuat nomor port — aplikasi memilih port pertama yang kosong mulai 8000,
+  // jadi begitu 8000 dipakai program lain ia pindah ke 8001 dan seluruh
+  // ingatan peramban ikut hilang. Terlapor pemiliknya: membuka aplikasi selalu
+  // masuk ke "Utama", bukan akun yang terakhir dipakai.
+  fetch(`/api/profil/terakhir/${encodeURIComponent(id)}`, { method: 'POST' })
+    .catch(() => { /* gagal mengingat bukan alasan menggagalkan perpindahan */ });
+}
+
+/**
+ * Menyelaraskan profil aktif dengan yang diingat server, saat peramban lupa.
+ *
+ * Dipanggil sekali sebelum halaman digambar. Hanya bertindak bila peramban
+ * memang tidak punya pilihan tersimpan: pilihan yang ADA di peramban ini
+ * menang, karena dua tab boleh bekerja di profil yang berbeda.
+ */
+export async function selaraskanProfil() {
+  try {
+    if (localStorage.getItem(PROFIL_KEY)) return;
+  } catch {
+    return;                             // mode privat: tidak ada yang bisa diingat
+  }
+  try {
+    const r = await fetch('/api/profil').then((x) => x.json());
+    const id = Number(r?.terakhir);
+    if (Number.isFinite(id) && id > 0) {
+      localStorage.setItem(PROFIL_KEY, String(id));
+    }
+  } catch { /* server belum siap: biarkan bawaan */ }
 }
 
 /** Pindah profil: seluruh halaman dimuat ulang supaya tidak ada data profil lama yang tertinggal di layar. */

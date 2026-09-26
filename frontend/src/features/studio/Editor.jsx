@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft, Menu, X, Scissors, Type, Palette, Download, Loader2, CheckCircle2,
-  AlertTriangle, Crop, Plus, Trash2, Play, Save, Tag, Undo2, Redo2, Clapperboard, RefreshCw, Wand2,
+  AlertTriangle, Crop, Plus, Trash2, Play, Save, Tag, Undo2, Redo2, Clapperboard, RefreshCw, Wand2, Merge,
   FolderOpen,
 } from 'lucide-react';
 import { apiGet, apiPost, dijalankanDiKomputerIni, downloadToDisk, kategoriKlip } from '../../lib/api';
@@ -593,6 +593,58 @@ export default function Editor({ project, onBack }) {
     }
     editor.removeClip(clipId);
   }, [clips, editor]);
+
+  /**
+   * Pasangan klip yang rentangnya SALING MENUMPUK.
+   *
+   * Contoh pemiliknya: klip 1 detik 5-30, klip 2 detik 25-50. Yang seperti itu
+   * hampir selalu satu momen yang terpotong dua oleh pemilih otomatis, dan
+   * merender keduanya berarti menerbitkan potongan yang isinya separuh sama.
+   *
+   * Hanya pasangan BERURUTAN yang dilihat: tiga klip yang saling menumpuk
+   * beruntun digabung satu langkah pada satu penekanan, lalu sisanya pada
+   * penekanan berikutnya — lebih mudah diurungkan daripada satu gabungan besar
+   * yang menelan empat klip sekaligus.
+   */
+  const pasanganTumpuk = useMemo(() => {
+    const urut = [...clips]
+      .filter((c) => c.segments?.length)
+      .sort((a, b) => a.segments[0].start - b.segments[0].start);
+    const out = [];
+    for (let i = 0; i + 1 < urut.length; i += 1) {
+      const a = urut[i];
+      const b = urut[i + 1];
+      const akhirA = a.segments[a.segments.length - 1].end;
+      if (b.segments[0].start < akhirA - 0.2) out.push([a, b]);
+    }
+    return out;
+  }, [clips]);
+
+  /** Menggabungkan tiap pasangan menumpuk jadi satu klip berentang gabungan. */
+  const gabungTumpuk = useCallback(() => {
+    if (!pasanganTumpuk.length) return;
+    // eslint-disable-next-line no-alert
+    if (!window.confirm(
+      `Gabungkan ${pasanganTumpuk.length} pasang klip yang menumpuk?\n\n`
+      + pasanganTumpuk.map(([a, b]) =>
+        `${formatTime(a.segments[0].start)}–${formatTime(a.segments[a.segments.length - 1].end)}`
+        + `  +  ${formatTime(b.segments[0].start)}–${formatTime(b.segments[b.segments.length - 1].end)}`)
+        .join('\n'))) {
+      return;
+    }
+    const dibuang = new Set();
+    pasanganTumpuk.forEach(([a, b]) => {
+      if (dibuang.has(a.clip_id) || dibuang.has(b.clip_id)) return;
+      const mulai = Math.min(a.segments[0].start, b.segments[0].start);
+      const akhir = Math.max(a.segments[a.segments.length - 1].end,
+                             b.segments[b.segments.length - 1].end);
+      // Rentang gabungan masuk ke klip PERTAMA: judul, tagar, dan setelan
+      // bingkainya sudah ada, dan membuat klip baru akan membuang semuanya.
+      editor.setSegmentBounds(a.clip_id, 0, mulai, akhir);
+      dibuang.add(b.clip_id);
+    });
+    dibuang.forEach((id) => editor.removeClip(id));
+  }, [pasanganTumpuk, editor]);
 
   useEffect(() => { loadFonts(); }, []);
 
@@ -1677,6 +1729,16 @@ export default function Editor({ project, onBack }) {
                         WebkitBoxOrient: 'vertical', overflow: 'hidden',
                       }}>{clip.hook_text}</div>
                     </div>
+                    {/* Hapus, DI SINI. Tombolnya sudah lama ada di Partitur,
+                        tapi daftar klip inilah tempat orang melihat bahwa ada
+                        klip yang tidak diinginkannya — dan di sini ia tidak
+                        ada sama sekali. Diminta pemiliknya. */}
+                    <button className="btn-secondary studio-icon studio-row-x"
+                            title={`Hapus klip ${rehearsalLetter(i)}`}
+                            onClick={(e) => { e.stopPropagation();
+                                              hapusKlip(clip.clip_id, rehearsalLetter(i)); }}>
+                      <Trash2 size={12} />
+                    </button>
                   </div>
                 );
               })}
@@ -1685,6 +1747,17 @@ export default function Editor({ project, onBack }) {
                 dan kosakata, bukan dari apa yang lucu. Pintu untuk menambah
                 sendiri harus ada DI SINI, di daftar klip, karena di sinilah
                 orang melihat bahwa yang dicarinya tidak ada. */}
+            {/* Klip yang saling menumpuk — klip 1 detik 5-30, klip 2 detik
+                25-50 — hampir selalu satu momen yang terpotong dua. Digabung
+                jadi satu rentang, bukan dihapus salah satunya, supaya bagian
+                yang hanya ada di klip kedua tidak ikut hilang. */}
+            {pasanganTumpuk.length > 0 && (
+              <button className="btn-secondary studio-rail-add" onClick={gabungTumpuk}
+                      disabled={editor.busy} style={{ borderColor: 'var(--warn)' }}>
+                <Merge size={13} />
+                Gabungkan {pasanganTumpuk.length} klip yang menumpuk
+              </button>
+            )}
             <button className="btn-secondary studio-rail-add" onClick={createFromMarks}
                     disabled={editor.busy}>
               {editor.busy ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}

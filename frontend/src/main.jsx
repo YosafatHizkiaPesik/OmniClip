@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import './index.css';
 import App from './App.jsx';
+import { selaraskanProfil } from './lib/api';
 import AuthGate from './components/AuthGate.jsx';
 import Home from './routes/Home.jsx';
 import Watch from './routes/Watch.jsx';
@@ -13,6 +14,11 @@ import ClipsTab from './components/ClipsTab.jsx';
 import DownloadsTab from './components/DownloadsTab.jsx';
 import ProfileTab from './components/ProfileTab.jsx';
 
+// Profil terakhir diambil dari server SEBELUM apa pun digambar. Setiap
+// permintaan membawa nomor profil di headernya, jadi menggambar dulu lalu
+// membetulkan kemudian berarti permintaan pertama berangkat atas nama profil
+// yang salah — dan yang terlihat pengguna adalah daftar video akun lain.
+selaraskanProfil().finally(() => {
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <BrowserRouter>
@@ -36,3 +42,4 @@ createRoot(document.getElementById('root')).render(
     </BrowserRouter>
   </StrictMode>,
 );
+});

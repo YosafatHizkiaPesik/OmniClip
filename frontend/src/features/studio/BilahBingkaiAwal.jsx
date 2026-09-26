@@ -96,6 +96,15 @@ export default function BilahBingkaiAwal({ videoId }) {
     };
   }, [videoId]);
 
+  // Sesudah selesai, bilahnya bertahan sebentar lalu hilang — cukup lama untuk
+  // terbaca, tidak cukup lama untuk jadi perabot.
+  const [hilang, setHilang] = useState(false);
+  useEffect(() => {
+    if (!job || !SELESAI.has(job.status)) { setHilang(false); return undefined; }
+    const t = setTimeout(() => setHilang(true), 6000);
+    return () => clearTimeout(t);
+  }, [job?.status, job?.job_id]);       // eslint-disable-line react-hooks/exhaustive-deps
+
   // Angka "sudah berjalan" hanya hidup kalau digambar ulang.
   useEffect(() => {
     if (!job || SELESAI.has(job.status)) return undefined;
@@ -105,6 +114,11 @@ export default function BilahBingkaiAwal({ videoId }) {
 
   if (!job) return null;
   if (job.status === 'failed' || job.status === 'cancelled') return null;
+  // Selesai berarti tidak ada lagi yang perlu dilihat. Bilah "100% selesai"
+  // yang menetap di atas layar menempati ruang untuk mengabarkan bahwa tidak
+  // ada yang sedang terjadi. Diminta pemiliknya: "saat sudah selesai maka
+  // hilangkan proses tersebut".
+  if (SELESAI.has(job.status) && hilang) return null;
 
   const jalan = !SELESAI.has(job.status);
   const antre = job.status === 'queued';

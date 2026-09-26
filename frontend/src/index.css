@@ -1337,3 +1337,16 @@ body.is-studio .app-viewport,
 @media (prefers-reduced-motion: reduce) {
   [data-kartu-judul] { animation: none !important; }
 }
+
+/* Tombol hapus pada baris daftar klip. Muncul saat barisnya disentuh tetikus
+   atau sedang dipilih: selalu terlihat berarti sebelas tombol merah berjajar
+   di sisi layar untuk sesuatu yang jarang dipakai, tapi tidak pernah terlihat
+   berarti orang tidak tahu ia ada — dan itu yang terjadi sebelum ini. */
+.reh-row { position: relative; }
+.reh-row .studio-row-x {
+  position: absolute; right: 6px; top: 6px;
+  opacity: 0; transition: opacity .12s;
+}
+.reh-row:hover .studio-row-x,
+.reh-row.is-on .studio-row-x,
+.reh-row .studio-row-x:focus-visible { opacity: 1; }
