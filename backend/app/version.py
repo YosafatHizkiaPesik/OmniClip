@@ -15,9 +15,25 @@ Menaikkan versi: ubah di SINI saja, lalu beri tag git yang sama persis
 (v1.0.1). Alur build menolak tag yang tidak cocok dengan berkas ini — rilis
 yang isinya mengaku versi lama akan membuat setiap aplikasi menawarkan
 pembaruan yang sama berulang-ulang, selamanya.
+
+ANGKA MANA YANG DINAIKKAN:
+
+  - angka TENGAH bila ada yang baru bisa dilakukan pengguna — gaya judul baru,
+    rak pustaka baru, pembatas bingkai yang bisa diseret;
+  - angka TERAKHIR bila hanya memperbaiki yang sudah ada.
+
+Aturan ini ditulis 26 September 2026 sesudah pemiliknya bertanya kenapa versi
+sesudah 1.0.9 adalah 1.0.10 dan bukan 1.1. Pertanyaannya tepat: rilis itu
+membawa sepuluh gaya judul bergerak, tiga rak pustaka, dan pembatas bingkai
+game yang bisa diseret — semuanya hal baru, bukan perbaikan. Menaikkan angka
+terakhir saja mengecilkan isinya, dan orang yang melihat "1.0.8 -> 1.0.10"
+mengira ada dua perbaikan kecil.
+
+Pembandingnya numerik (lihat `sebagai_tuple`), jadi 1.0.10 memang lebih besar
+daripada 1.0.9 dan tidak ada yang rusak. Yang salah hanya penamaannya.
 """
 
-__version__ = "1.0.10"
+__version__ = "1.1.0"
 
 
 def sebagai_tuple(v: str) -> tuple[int, ...]:
