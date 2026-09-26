@@ -1401,6 +1401,20 @@ def tambatkan_ke_wajah(video_id: str, ctx) -> Optional[dict]:
     if not bukti:
         return None
 
+    # TIDAK SATU PUN wajah manusia di seluruh klip yang dipindai.
+    #
+    # Itu jawaban, bukan kegagalan: video kartun, animasi penjelas, rekaman
+    # layar, gameplay tanpa facecam. Pemisahan suara di sana memisahkan hal
+    # yang bukan orang — efek suara, musik, dan suara karakter yang diisi satu
+    # pengisi suara terdengar berbeda satu sama lain. Terukur pada video
+    # animasi "Kok Bisa?" milik pemiliknya: satu narator, dilaporkan 2
+    # narasumber dengan keyakinan penuh.
+    #
+    # Jumlahnya dikembalikan ke satu, dan penanda `tambat_wajah` ikut ditulis
+    # supaya pemeriksaan ini tidak berulang tiap kali.
+    if not bukti.get("orang"):
+        return _tanpa_wajah_satu_penutur(video_id, cached, stored, hasil, words)
+
     # WAV 16 kHz, bukan berkas videonya: `label_from_evidence` membaca sampel
     # mentah lewat modul `wave`, dan mp4 yang diberikan kepadanya gagal dengan
     # "file does not start with RIFF id" — sebuah pesan yang tidak menyebut
@@ -1440,6 +1454,36 @@ def tambatkan_ke_wajah(video_id: str, ctx) -> Optional[dict]:
     log.info("Suara ditambatkan ke wajah untuk %s: %d penutur",
              video_id, dia.speaker_count)
     return {"speaker_count": dia.speaker_count, "confident": dia.confident}
+
+
+def _tanpa_wajah_satu_penutur(video_id, cached, stored, hasil, words):
+    """
+    Video tanpa wajah manusia: jumlah penuturnya dikembalikan ke satu.
+
+    Label per kata dibuang sekalian. Warna penutur yang menyala akan mewarnai
+    kalimat narator yang sama dengan dua warna berbeda, dan itu terbaca sebagai
+    dua orang yang sedang berbalas — persis kebalikan dari isi videonya.
+    """
+    from ..repos import analyses as analyses_repo
+    from .clipmodel import rebuild_subtitles_for_segments
+
+    for w in words:
+        w.pop("sp", None)
+    baru = dict(hasil)
+    baru["clips"] = [
+        {**klip, "subtitles": rebuild_subtitles_for_segments(klip["segments"], words)[0]}
+        for klip in (hasil.get("clips") or [])
+    ]
+    baru["speaker_count"] = 1
+    baru["label_kalimat"] = None
+    baru["speaker_confident"] = False
+    baru["tambat_wajah"] = True
+    analyses_repo.save(video_id=video_id, transcript_id=stored["id"],
+                       engine=hasil.get("engine", "heuristic"), model=hasil.get("model"),
+                       params={"tambat_wajah": True}, result=baru)
+    log.info("Video %s tidak punya wajah manusia: %s penutur dikembalikan ke 1",
+             video_id, hasil.get("speaker_count"))
+    return {"speaker_count": 1, "confident": False, "tanpa_wajah": True}
 
 
 def run_diarize(ctx: JobContext) -> dict:

@@ -25,9 +25,20 @@ from ..errors import JobCancelled
 
 log = logging.getLogger("omniclip.bingkai")
 
-# Lebih banyak dari ini jarang dibuka orang dalam satu sesi, dan tiap klip
-# memakan beberapa detik cpu yang tidak ditunggu siapa pun.
-MAKS_KLIP = 20
+# Batas jumlah klip yang dipanaskan.
+#
+# Dulu 20, dengan alasan "lebih dari ini jarang dibuka orang dalam satu sesi".
+# Alasan itu sudah tidak berlaku sejak biayanya turun: klip gameplay 9,1 detik
+# dan klip podcast memakai jejak wajah yang toh dibutuhkan penambatan suara.
+# Yang tersisa dari alasan lama hanyalah kerugiannya — klip ke-21 dan
+# seterusnya membuat orangnya menunggu lagi, satu per satu, persis keadaan
+# yang fitur ini ada untuk menghilangkannya.
+#
+# 60 dipilih karena di atas itu videonya bukan lagi satu sesi penyuntingan, dan
+# pekerjaan ini berjalan dengan prioritas paling rendah: ia mengalah pada apa
+# pun yang ditunggu orang di depan layar, jadi batas yang longgar tidak
+# memperlambat apa pun yang dilihat.
+MAKS_KLIP = 60
 
 
 def run_bingkai_awal(ctx) -> dict:

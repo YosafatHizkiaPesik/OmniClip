@@ -1454,8 +1454,12 @@ async def clip_jenis(req: FacecamRequest):
     if not src:
         raise NotFound("Video sumber belum diunduh.")
     hasil = await asyncio.to_thread(jenis_klip_tersimpan, video_id, src, segments)
+    # Yang paling lama masuk dibuang SATU, bukan semuanya. Mengosongkan 200
+    # entri sekaligus berarti tiap klip sesudah yang ke-200 menghitung ulang
+    # penggolongan yang memakan 10-60 detik, padahal 199 jawaban di antaranya
+    # masih sah.
     if len(_JENIS_CACHE) >= 200:
-        _JENIS_CACHE.clear()
+        _JENIS_CACHE.pop(next(iter(_JENIS_CACHE)), None)
     _JENIS_CACHE[key] = hasil
     return hasil
 

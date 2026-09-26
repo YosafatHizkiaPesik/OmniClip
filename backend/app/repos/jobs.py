@@ -227,3 +227,30 @@ def delete_for_video(video_id: str, *, type_: str = "auto_clip") -> int:
         cur = conn.execute("DELETE FROM jobs WHERE type = ? AND video_id = ?",
                            (type_, video_id))
         return cur.rowcount
+
+
+# Berapa lama riwayat pekerjaan disimpan. Halaman Partitur hanya menampilkan
+# yang terbaru, dan pekerjaan berumur sebulan tidak pernah dibuka lagi.
+SIMPAN_HARI = 30
+
+
+def buang_yang_lama(hari: int = SIMPAN_HARI) -> int:
+    """
+    Membuang riwayat pekerjaan yang sudah SELESAI dan lebih tua dari `hari`.
+
+    Tabel ini tidak pernah dibersihkan menurut umur, hanya per video saat
+    videonya dihapus. Tiap pekerjaan membawa muatannya sendiri — daftar klip
+    satu video utuh, terukur 60 KB per baris sesudah dirampingkan, sebelumnya
+    378 KB — jadi basis data pengguna tumbuh selamanya tanpa ada yang
+    memperhatikan.
+
+    Yang masih antre atau berjalan tidak disentuh, berapa pun umurnya:
+    pekerjaan yang tertahan lama justru yang paling perlu dilihat orang.
+    """
+    import time
+    batas = time.time() - max(1, int(hari)) * 86400
+    with tx() as conn:
+        cur = conn.execute(
+            "DELETE FROM jobs WHERE status NOT IN ('queued', 'running') "
+            "AND COALESCE(finished_at, created_at) < ?", (batas,))
+        return cur.rowcount

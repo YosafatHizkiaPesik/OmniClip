@@ -96,6 +96,16 @@ async def lifespan(app: FastAPI):
     from .services import suara
     await asyncio.to_thread(suara.bersihkan_yatim)
 
+    # Riwayat pekerjaan yang sudah lama selesai. Tiap barisnya membawa daftar
+    # klip satu video, jadi tabel yang tidak pernah dibersihkan tumbuh terus.
+    from .repos import jobs as _jobs_repo
+    try:
+        dibuang = await asyncio.to_thread(_jobs_repo.buang_yang_lama)
+        if dibuang:
+            log.info("Riwayat pekerjaan lama dibuang: %d baris", dibuang)
+    except Exception as e:                           # noqa: BLE001
+        log.warning("Riwayat pekerjaan lama tidak bisa dibuang: %s", str(e)[:140])
+
     broker.bind_loop(asyncio.get_running_loop())
     queue.register("demo", _demo_job, lane="cpu")
     queue.register("download", run_download, lane="net")

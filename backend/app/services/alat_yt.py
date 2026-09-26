@@ -160,13 +160,55 @@ def _pastikan_plugin() -> Optional[Path]:
     return d
 
 
+def _sudah_terdaftar() -> bool:
+    """Apakah penyedia PO Token BgUtil sudah ada di daftar yt-dlp."""
+    try:
+        from yt_dlp.extractor.youtube.pot._registry import _pot_providers
+        daftar = getattr(_pot_providers, "value", _pot_providers) or {}
+        return any("bgutil" in str(k).lower() for k in daftar)
+    except Exception:                                # noqa: BLE001
+        return False
+
+
 def _muat_plugin(d: Path) -> bool:
-    """Mendaftarkan penyedia PO Token ke yt-dlp (terdaftar saat modulnya diimpor)."""
+    """
+    Mendaftarkan penyedia PO Token ke yt-dlp.
+
+    Cukup menaruh foldernya di `sys.path`: pemindai plugin yt-dlp sendiri yang
+    menemukan dan mendaftarkannya. Terbukti pada versi yang kita pakai —
+    `load_all_plugins()` mengisi daftar dengan `BgUtilHTTP` tanpa satu pun
+    impor dari kita.
+
+    Dulu kita mengimpornya sendiri JUGA, dan itu pendaftaran kedua. Yang kedua
+    ditolak dengan `AssertionError: PoTokenProvider BgUtilHTTP already
+    registered`, dan pemindai yt-dlp mencetaknya sebagai Traceback penuh tiap
+    aplikasi menyala. Tidak ada yang rusak — penyedianya tetap terdaftar sekali
+    dan bekerja — tapi Traceback yang bukan galat membuat Traceback yang
+    sungguhan lebih sulit terlihat.
+
+    Impor sendiri hanya dipakai sebagai cadangan, bila sesudah pemindaian
+    penyedianya ternyata tidak terdaftar.
+    """
+    if _sudah_terdaftar():
+        return True                     # sudah, dan memindai lagi mencetak Traceback
     if str(d) not in sys.path:
         sys.path.append(str(d))
     try:
+        from yt_dlp.plugins import load_all_plugins
+        load_all_plugins()
+    except Exception as e:                           # noqa: BLE001
+        log.info("Pemindaian plugin yt-dlp dilewati: %s", str(e)[:120])
+    if _sudah_terdaftar():
+        return True
+    try:
         import yt_dlp_plugins.extractor.getpot_bgutil_http  # noqa: F401
         return True
+    except AssertionError as e:
+        # "already registered" berarti tujuan kita sudah tercapai.
+        if "already registered" in str(e):
+            return True
+        log.warning("Plugin PO Token gagal dimuat: %s", str(e)[:160])
+        return False
     except Exception as e:
         log.warning("Plugin PO Token gagal dimuat: %s", str(e)[:160])
         return False

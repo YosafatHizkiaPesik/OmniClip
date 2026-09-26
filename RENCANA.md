@@ -129,6 +129,26 @@ sudah disetel tangan bukan hal yang pantas terjadi diam-diam.
 
 ## C. Saran perbaikan yang belum dikerjakan
 
+**C8. SELESAI.** Empat cacat kebersihan yang ditemukan 26 September 2026 saat
+memeriksa sistemnya berjalan, dan semuanya sudah ditutup:
+
+- Riwayat pekerjaan tidak pernah dibersihkan menurut umur, hanya per video saat
+  videonya dihapus. Tiap baris membawa daftar klip satu video utuh — 378 KB
+  sebelum dirampingkan, 60 KB sesudahnya — jadi basis data pengguna tumbuh
+  selamanya. Sekarang yang sudah selesai dan lebih tua dari 30 hari dibuang
+  saat aplikasi menyala; yang antre atau berjalan tidak disentuh.
+- `AssertionError: PoTokenProvider BgUtilHTTP already registered` tercetak
+  sebagai Traceback penuh tiap aplikasi menyala. Penyebabnya pendaftaran ganda:
+  pemindai plugin yt-dlp menemukannya sendiri begitu foldernya ada di
+  `sys.path`, dan kita mengimpornya lagi. Impor sendiri kini hanya cadangan.
+  Terukur sesudahnya: 0 Traceback di log.
+- Penyiapan bingkai berhenti di 20 klip, jadi klip ke-21 dan seterusnya membuat
+  orangnya menunggu lagi satu per satu. Batasnya 60 sekarang; biayanya sudah
+  turun jauh dan pekerjaan ini berjalan dengan prioritas paling rendah.
+- Simpanan jenis klip dikosongkan SELURUHNYA saat penuh, jadi 199 jawaban yang
+  masih sah ikut hilang dan penggolongan 10-60 detik dihitung ulang. Sekarang
+  yang paling lama masuk dibuang satu.
+
 **C7. Menghapusnya tetap keputusan orang.** Ruang cakram sekarang MENGUSULKAN
 video sumber yang layak dibuang (sudah ada klipnya, diunduh lebih dari 14 hari
 lalu, lebih besar dari 300 MB) beserta alasannya, dan menandainya sekaligus.
@@ -168,12 +188,23 @@ masing-masing, supaya terlihat jenis klip mana yang berhasil.
 
 ## D. Kelemahan yang masih ada
 
-**D1. Ikut wajah salah sorot ±27% waktu** pada bidikan berisi beberapa orang
-(turun dari 46%). Bidikan lebar dengan wajah kecil sengaja belum ditangani:
-gerak mulut di sana tidak bisa dipercaya.
+**D1. SELESAI.** Ikut wajah salah sorot turun dari 35,5% ke 11,7%, diukur pada
+1.672 sampel bidikan banyak orang dari 6 klip podcast. Sebab terbesarnya bukan
+pilihan per sampel melainkan PEMETAAN penutur ke wajah: pada satu klip ada tiga
+penutur dan tiga wajah, dua terpasang, dan yang tidak terpasang justru penutur
+yang bicara 104 dari 158 detik — 831 sampel menebak. `_lengkapi_peta_dengan_
+penyisihan` memasangkannya bila benar-benar tinggal satu di kedua sisi. Dari
+sisa 11,7%, 88% hanya ketinggalan kurang dari 0,8 detik saat giliran berganti,
+yang memang disengaja supaya kamera tidak menyentak; salah sorot yang bertahan
+1,4%. `subject` sekarang dikeluarkan `ReframePlan` supaya angka ini bisa diukur
+dari luar, bukan hanya dirasakan.
 
-**D2. Kartun berwajah jelas** masih dianggap "ada orang", jadi jumlah penuturnya
-ditebak dari suara dan efek suara bisa terhitung sebagai orang.
+**D2. SELESAI.** Video tanpa satu pun wajah manusia di klip yang dipindai
+dikembalikan ke satu penutur, dan label per kata dibuang. Pemisahan suara di
+video kartun memisahkan hal yang bukan orang: efek suara, musik, dan suara
+karakter yang diisi satu pengisi suara. Terukur pada video animasi "Kok Bisa?":
+satu narator, dilaporkan 2 narasumber dengan keyakinan penuh. Memakai bukti
+wajah yang memang sudah dihitung penambatan suara, jadi tanpa pemindaian baru.
 
 **D4. SELESAI.** Teks yang sudah terbakar di gambar sumber (anime fansub,
 potongan berita) dideteksi dari keramaian tepi di seperempat bawah gambar, dan

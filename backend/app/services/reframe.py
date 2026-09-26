@@ -486,6 +486,11 @@ class ReframePlan:
     # penghalusan; dibawa keluar karena momen — jumpscare, pergantian bidikan
     # ke reaksi — sering jatuh tepat di situ.
     cut_times: list[float] = field(default_factory=list)
+    # Siapa yang sedang dibingkai pada tiap sampel, sejajar dengan `people`.
+    # None berarti "tidak menunjuk siapa-siapa" — bingkai memakai titik tengah
+    # semua wajah. Dikeluarkan supaya keputusan yang paling sering salah di
+    # seluruh sistem ini bisa DIUKUR dari luar, bukan hanya dirasakan.
+    subject: list[Optional[int]] = field(default_factory=list)
 
     def kotak_orang(self, person: int, t0: float, t1: float,
                     aspek: float = 9 / 16, tinggi_wajah: float = 3.6,
@@ -2532,6 +2537,44 @@ def _lengkapi_peta_dari_mulut(mapping, people, motion, seen, speaker_turns, n,
     return hasil
 
 
+# Lama bicara minimum (detik) sebelum seorang penutur boleh dipasangkan lewat
+# penyisihan. Penutur yang cuma menyela dua patah kata tidak cukup jadi dasar
+# untuk mengunci sebuah wajah sepanjang klip.
+SISIH_DETIK_MIN = 6.0
+
+
+def _lengkapi_peta_dengan_penyisihan(mapping, people, speaker_turns, seen=None):
+    """
+    Satu penutur tersisa, satu wajah tersisa: pasangkan.
+
+    Bukti mulut sengaja ketat, dan akibatnya penutur yang paling banyak bicara
+    pun bisa gagal lolos. Terukur pada klip "Sistem Poin Pernikahan" milik
+    pemiliknya: tiga penutur, tiga wajah, dua terpasang — dan yang tidak
+    terpasang adalah penutur yang bicara 104 dari 158 detik. Selama 831 sampel
+    bingkai tidak menunjuk siapa-siapa atau menunjuk orang yang salah, padahal
+    jawabannya tinggal satu-satunya yang tersisa.
+
+    Penyisihan hanya sah kalau benar-benar tinggal SATU di kedua sisi. Dua
+    penutur dan dua wajah tersisa berarti ada dua kemungkinan pasangan, dan
+    menebak salah satunya persis selemah lempar koin — itu yang membuat
+    pemetaan berbahaya, bukan yang membuatnya berguna.
+    """
+    sisa_penutur = sorted({sp for _, _, sp in speaker_turns if sp not in mapping})
+    sisa_orang = [i for i in range(len(people)) if i not in set(mapping.values())]
+    if len(sisa_penutur) != 1 or len(sisa_orang) != 1:
+        return mapping
+    sp, orang = sisa_penutur[0], sisa_orang[0]
+    lama = sum(b - a for a, b, s in speaker_turns if s == sp)
+    if lama < SISIH_DETIK_MIN:
+        return mapping
+    # Wajah yang tidak pernah terlihat bukan jawaban, ia hanya sisa daftar.
+    if seen is not None and orang < len(seen) and not any(seen[orang]):
+        return mapping
+    log.info("Penutur %d dipasangkan ke orang %d lewat penyisihan "
+             "(satu-satunya yang tersisa, bicara %.1f dtk)", sp, orang + 1, lama)
+    return {**mapping, sp: orang}
+
+
 MULUT_JENDELA = 0.75        # detik ke kiri dan kanan untuk pemungutan suara
 MULUT_SUARA_MIN = 4         # sampel berbukti minimum di jendela
 MULUT_PORSI_MIN = 0.6       # porsi suara untuk satu orang agar dianggap bicara
@@ -2895,6 +2938,8 @@ def plan_reframe(source_video_path: str, segments: list[dict], *,
                                            len(centers), seen=seen)
         mapping = _lengkapi_peta_dari_mulut(mapping, people, motion, seen,
                                             speaker_turns, len(centers), boxes, source_w)
+        # Terakhir, dan hanya kalau tinggal satu di kedua sisi.
+        mapping = _lengkapi_peta_dengan_penyisihan(mapping, people, speaker_turns, seen)
 
     # Siapa yang sedang dibidik, per sampel. Inilah yang membedakan "orang ini
     # bergerak" dari "sekarang giliran orang lain" — dua hal yang terlihat sama
@@ -2932,7 +2977,8 @@ def plan_reframe(source_video_path: str, segments: list[dict], *,
                        subject=subject, motion=frame_motion)
 
     plan = ReframePlan(crop_w=crop_w, crop_h=crop_h, source_w=source_w,
-                       source_h=source_h, face_coverage=round(coverage, 3))
+                       source_h=source_h, face_coverage=round(coverage, 3),
+                       subject=list(subject))
     if coverage < MIN_FACE_COVERAGE:
         log.info("Wajah hanya terlihat di %.0f%% frame, memakai blur-pad", coverage * 100)
         return plan  # usable == False; pemanggil membaca face_coverage untuk log
