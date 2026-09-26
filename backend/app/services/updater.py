@@ -424,26 +424,148 @@ def pasang(ctx) -> dict:
     return _jalankan_penolong(ctx, info, temp, penolong)
 
 
+# Berapa kali unduhan dicoba sebelum menyerah, dan jedanya.
+#
+# Arsip rilis 260-320 MB. Pada koneksi rumah yang tidak stabil, peluang satu
+# unduhan sepanjang itu selesai tanpa satu kali pun terputus tidak besar —
+# dan sebelum ini satu putusan berarti mulai dari nol, lalu orangnya menekan
+# tombol lagi. Terukur di GitHub pada rilis 1.1.0: masing-masing arsip baru
+# SATU kali berhasil diunduh, sementara keluhan "update gagal" sudah masuk.
+UNDUH_PERCOBAAN = 5
+UNDUH_JEDA = (2, 5, 10, 20)
+# Batas satu operasi soket, bukan seluruh unduhan. Dulu 900 detik: sambungan
+# yang macet ditunggu lima belas menit sebelum dianggap gagal. Dengan lanjut-
+# unduh, gagal cepat lalu melanjutkan jauh lebih baik daripada menunggu lama.
+UNDUH_SOKET_TIMEOUT = 60
+
+
+def _unduh_berlanjut(ctx, url: str, arsip: Path, total: int) -> None:
+    """
+    Mengunduh `url` ke `arsip`, MELANJUTKAN dari yang sudah ada bila terputus.
+
+    GitHub melayani `Range` (dijawab 206 Partial Content), jadi putusan di
+    megabita ke-250 tidak lagi berarti mengulang dari megabita ke-0.
+    """
+    import http.client
+    import urllib.error
+
+    for percobaan in range(1, UNDUH_PERCOBAAN + 1):
+        ctx.check_cancelled()
+        sudah = arsip.stat().st_size if arsip.exists() else 0
+        if total and sudah >= total:
+            return
+        kepala = {"User-Agent": f"OmniClip/{__version__}"}
+        if sudah:
+            kepala["Range"] = f"bytes={sudah}-"
+        try:
+            req = urllib.request.Request(url, headers=kepala)
+            with urllib.request.urlopen(req, timeout=UNDUH_SOKET_TIMEOUT) as r:
+                if sudah and r.status != 206:
+                    # Server mengabaikan Range dan mengirim dari awal: menulis
+                    # di ujung berkas akan menyambung dua salinan jadi satu
+                    # arsip rusak.
+                    log.info("Server tidak melanjutkan unduhan; mulai dari awal")
+                    sudah = 0
+                with open(arsip, "ab" if sudah else "wb") as f:
+                    terunduh = sudah
+                    while potong := r.read(1 << 20):
+                        ctx.check_cancelled()
+                        f.write(potong)
+                        terunduh += len(potong)
+                        if total:
+                            ctx.progress(
+                                0.02 + 0.76 * min(1.0, terunduh / total), stage="unduh",
+                                message=(f"Mengunduh… {terunduh / 1e6:.0f} dari "
+                                         f"{total / 1e6:.0f} MB"
+                                         + (f" (percobaan ke-{percobaan})"
+                                            if percobaan > 1 else "")))
+            if not total or arsip.stat().st_size >= total:
+                return
+            raise http.client.IncompleteRead(b"", total - arsip.stat().st_size)
+        except (urllib.error.URLError, TimeoutError, ConnectionError, OSError,
+                http.client.HTTPException) as e:
+            if isinstance(e, urllib.error.HTTPError) and e.code in (401, 403, 404):
+                # Berkasnya tidak ada lagi, atau ditolak. Mencoba lagi tidak
+                # mengubah jawaban itu.
+                raise RuntimeError(
+                    f"Berkas pembaruan tidak bisa diambil (GitHub menjawab {e.code}). "
+                    "Rilisnya mungkin sudah ditarik; buka lagi Pengaturan untuk "
+                    "memeriksa versi terbaru.") from e
+            if percobaan >= UNDUH_PERCOBAAN:
+                raise RuntimeError(
+                    f"Unduhan terputus {UNDUH_PERCOBAAN} kali. Periksa koneksi "
+                    "internet lalu coba lagi; yang sudah terunduh tidak disimpan.") from e
+            jeda = UNDUH_JEDA[min(percobaan - 1, len(UNDUH_JEDA) - 1)]
+            ada = arsip.stat().st_size if arsip.exists() else 0
+            log.warning("Unduhan pembaruan terputus di %.0f MB (%s); dilanjutkan "
+                        "dalam %d detik", ada / 1e6, str(e)[:120], jeda)
+            ctx.progress(0.02 + 0.76 * (min(1.0, ada / total) if total else 0),
+                         stage="unduh",
+                         message=f"Koneksi terputus di {ada / 1e6:.0f} MB. "
+                                 f"Melanjutkan dalam {jeda} detik…")
+            for _ in range(jeda):
+                ctx.check_cancelled()
+                time.sleep(1)
+
+
+def _sha256_resmi(url: str) -> str | None:
+    """
+    Sidik sha256 yang diterbitkan bersama arsipnya, atau None bila tidak ada.
+
+    Berkasnya berformat `sha256sum`: "<64 heksa>  <nama berkas>". Rilis lama
+    belum punya berkas ini, dan ketiadaannya bukan alasan menolak pemasangan.
+    """
+    try:
+        req = urllib.request.Request(url + ".sha256",
+                                     headers={"User-Agent": f"OmniClip/{__version__}"})
+        with urllib.request.urlopen(req, timeout=20) as r:
+            teks = r.read(4096).decode("utf-8", "replace").strip()
+    except Exception as e:                           # noqa: BLE001
+        log.info("Sidik sha256 tidak tersedia: %s", str(e)[:120])
+        return None
+    kata = teks.split()
+    if kata and len(kata[0]) == 64 and all(c in "0123456789abcdefABCDEF" for c in kata[0]):
+        return kata[0].lower()
+    return None
+
+
+def _sha256_berkas(berkas: Path) -> str:
+    import hashlib
+    h = hashlib.sha256()
+    with open(berkas, "rb") as f:
+        for blok in iter(lambda: f.read(1 << 20), b""):
+            h.update(blok)
+    return h.hexdigest()
+
+
 def _unduh_dan_bongkar(ctx, info: dict, arsip: Path, panggung: Path,
                        total: int) -> Path:
     """Mengunduh arsip rilis lalu membongkarnya; mengembalikan folder baru."""
-    req = urllib.request.Request(
-        info["url_unduh"], headers={"User-Agent": f"OmniClip/{__version__}"})
-    with urllib.request.urlopen(req, timeout=UNDUH_TIMEOUT) as r, open(arsip, "wb") as f:
-        terunduh = 0
-        while potong := r.read(1 << 20):
-            ctx.check_cancelled()
-            f.write(potong)
-            terunduh += len(potong)
-            if total:
-                ctx.progress(0.02 + 0.78 * min(1.0, terunduh / total), stage="unduh",
-                             message=f"Mengunduh… {terunduh / 1e6:.0f} dari "
-                                     f"{total / 1e6:.0f} MB")
+    _unduh_berlanjut(ctx, info["url_unduh"], arsip, total)
 
     if total and abs(arsip.stat().st_size - total) > 4096:
         raise RuntimeError("Unduhan tidak lengkap. Coba lagi.")
 
-    ctx.progress(0.82, stage="periksa", message="Memeriksa berkas…")
+    # Sidik jari, bukan hanya ukurannya.
+    #
+    # Berkas `.sha256` sudah diterbitkan bersama setiap arsip sejak 1.0.8, tapi
+    # tidak pernah dibaca: yang diperiksa hanya ukuran, dengan kelonggaran 4 KB.
+    # Arsip yang ukurannya pas tapi isinya rusak lolos, dan kerusakannya baru
+    # ketahuan saat aplikasi baru gagal dibuka — sesudah versi lama sudah
+    # ditukar. Lanjut-unduh membuat pemeriksaan ini lebih perlu lagi: dua
+    # potongan yang disambung salah tetap bisa berukuran benar.
+    ctx.progress(0.79, stage="periksa", message="Memeriksa keaslian berkas…")
+    resmi = _sha256_resmi(info["url_unduh"])
+    if resmi:
+        nyata = _sha256_berkas(arsip)
+        if nyata != resmi:
+            arsip.unlink(missing_ok=True)
+            raise RuntimeError(
+                "Berkas pembaruan rusak di perjalanan (sidik sha256 tidak cocok). "
+                "Tidak ada yang dipasang; coba lagi.")
+        log.info("Sidik sha256 arsip pembaruan cocok: %s…", nyata[:16])
+
+    ctx.progress(0.82, stage="periksa", message="Membongkar berkas…")
     baru = _bongkar(arsip, panggung / "isi")
     arsip.unlink(missing_ok=True)      # 245 MB yang tidak dibutuhkan lagi
     return baru
