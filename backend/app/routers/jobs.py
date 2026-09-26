@@ -76,6 +76,33 @@ async def stream_all_jobs(request: Request):
                              headers=SSE_HEADERS)
 
 
+# Kolom yang cukup untuk menggambar sebuah bilah kemajuan. `payload` dan
+# `result` sengaja TIDAK ikut: keduanya memuat seluruh daftar klip beserta
+# subtitle-nya, dan pada penyimpanan pemiliknya satu baris saja mencapai 378 KB.
+# Terukur: `/api/jobs?limit=40` mengembalikan 2,4 MB dalam 0,48 detik, sementara
+# yang dibutuhkan penanya hanya status dan sebuah kalimat.
+RINGKAS = ("id", "type", "status", "progress", "stage", "message",
+           "video_id", "eta_seconds", "started_at", "error")
+
+
+@router.get("/aktif")
+async def list_active_jobs(video_id: str | None = None, type: str | None = None):
+    """
+    Pekerjaan yang sedang antre atau berjalan, tanpa muatannya.
+
+    Ada supaya pemantau kemajuan di layar tidak perlu menarik seluruh isi
+    tabel job hanya untuk tahu apakah ada yang sedang berjalan.
+    """
+    hasil = []
+    for j in repo.active():
+        if video_id and j.get("video_id") != video_id:
+            continue
+        if type and j.get("type") != type:
+            continue
+        hasil.append({k: j.get(k) for k in RINGKAS})
+    return {"jobs": hasil}
+
+
 @router.get("/{job_id}/events")
 async def stream_job(request: Request, job_id: str):
     return StreamingResponse(_stream(request, job_id), media_type="text/event-stream",

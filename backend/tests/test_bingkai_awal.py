@@ -231,7 +231,8 @@ class FacecamDisimpanDanDipanaskan(unittest.TestCase):
 
         for gameplay in (True, False):
             with self.subTest(gameplay=gameplay), \
-                 mock.patch.object(B, "_jenis_gameplay", return_value=gameplay), \
+                 mock.patch.object(B, "_jenis_video", return_value=gameplay), \
+                 mock.patch.object(B, "_daftar_terbaru", side_effect=lambda v, d: d), \
                  mock.patch.object(B, "_panaskan_facecam") as panas, \
                  mock.patch.object(B, "_tema_untuk_semua", return_value=0), \
                  mock.patch("app.routers.clips.hitung_reframe") as jejak, \
@@ -261,14 +262,18 @@ class FacecamDisimpanDanDipanaskan(unittest.TestCase):
                   / "bingkai_awal.py").read_text(encoding="utf-8")
         badan = sumber.split("def run_bingkai_awal")[1].split("\ndef ")[0]
         self.assertNotIn("_ini_gameplay", sumber)
+        # Jawabannya diambil sekali, di luar perulangan klip.
+        self.assertEqual(badan.count("_jenis_video("), 1)
+        self.assertLess(badan.index("_jenis_video("), badan.index("for i, klip in"))
         # Dan jawabannya datang dari penggolong yang sama dengan yang dipakai
         # Studio, bukan dari pemindai panel facecam sendirian: pemindai itu
         # mengira wajah orang di podcast sebagai panel, 32% x 49% dengan
         # kehadiran 100%.
         self.assertIn("jenis_klip_tersimpan", sumber)
-        # Jawabannya belum ada sebelum perulangan klipnya dimulai.
-        self.assertIn("gameplay = None", badan)
-        self.assertLess(badan.index("gameplay = None"), badan.index("for i, klip in"))
+        # Dan penambatan suara — yang menulis ulang label penutur, dan label
+        # itu ikut jadi kunci simpanan bingkai — dikerjakan SEBELUM bingkainya
+        # dihitung. Terbalik, seluruh hasil pemanasan terbuang.
+        self.assertLess(badan.index("tambatkan_ke_wajah"), badan.index("for i, klip in"))
 
     def test_kemajuan_menyebut_klip_ke_berapa_dari_berapa(self):
         """
@@ -305,12 +310,15 @@ class FacecamDisimpanDanDipanaskan(unittest.TestCase):
 
         panggil = {"n": 0}
 
+        # Sekali dibaca sebelum menambatkan suara, lalu sekali per klip. Mati
+        # sesudah dua klip.
         def sakelar():
             panggil["n"] += 1
-            return panggil["n"] <= 2        # mati sesudah dua klip
+            return panggil["n"] <= 3
 
         with mock.patch("app.services.pipeline.pemanasan_bingkai", side_effect=sakelar), \
-             mock.patch.object(B, "_jenis_gameplay", return_value=False), \
+             mock.patch.object(B, "_jenis_video", return_value=False), \
+             mock.patch.object(B, "_daftar_terbaru", side_effect=lambda v, d: d), \
              mock.patch.object(B, "_panaskan_facecam"), \
              mock.patch.object(B, "_tema_untuk_semua", return_value=0) as tema, \
              mock.patch("app.routers.clips.hitung_reframe") as jejak, \
@@ -321,10 +329,12 @@ class FacecamDisimpanDanDipanaskan(unittest.TestCase):
         self.assertTrue(hasil.get("dihentikan"))
         self.assertEqual(hasil["siap"], 2)
         self.assertEqual(jejak.call_count, 2, "klip sesudahnya tidak dikerjakan")
-        # Dua langkah SESUDAH perulangan masing-masing memakan puluhan detik.
-        # Keduanya juga sudah tidak diinginkan, jadi keduanya harus dilewati.
-        self.assertEqual(tambat.call_count, 0, "penambatan suara ikut berhenti")
+        # Menambatkan suara ke wajah kini dikerjakan DI DEPAN, karena ia
+        # menulis ulang label penutur yang ikut jadi kunci simpanan bingkai.
+        # Jadi ia sudah selesai saat sakelarnya dimatikan; yang harus berhenti
+        # adalah langkah yang belum dimulai.
         self.assertEqual(tema.call_count, 0, "pemilihan tema ikut berhenti")
+        self.assertEqual(tambat.call_count, 1)
         # Dan pesannya mengatakan berapa yang sudah siap, supaya menyalakannya
         # lagi terbaca sebagai melanjutkan, bukan mengulang.
         self.assertIn("Dihentikan", ctx.pesan[-1][1])
@@ -436,3 +446,48 @@ class SakelarDiServer(unittest.TestCase):
         from app.routers import settings as S
         with mock.patch("app.repos.analyses.latest_for_video", return_value=None):
             self.assertEqual(S._lanjutkan_pemanasan("vid"), 0)
+
+
+class JalurPekerjaanRingan(unittest.TestCase):
+    """
+    Pemantau kemajuan tidak boleh menarik seluruh isi tabel job.
+
+    Bilah penyiapan bingkai versi pertama menjajaki `/api/jobs?limit=40` tiap
+    enam detik. Terukur pada penyimpanan pemiliknya: 2,4 MB per jawaban dalam
+    0,48 detik, karena tiap baris membawa seluruh daftar klip beserta
+    subtitle-nya. Yang ditanyakan hanya "apakah ada yang berjalan".
+    """
+
+    def test_ringkasan_tidak_membawa_muatan(self):
+        from app.routers.jobs import RINGKAS
+        self.assertNotIn("payload", RINGKAS)
+        self.assertNotIn("result", RINGKAS)
+        # Dan tetap membawa yang dibutuhkan sebuah bilah kemajuan.
+        for k in ("id", "type", "status", "progress", "message", "video_id"):
+            self.assertIn(k, RINGKAS)
+
+    def test_jalur_aktif_menyaring_video_dan_jenis(self):
+        import asyncio
+        from unittest import mock
+        from app.routers import jobs as J
+
+        semua = [
+            {"id": "a", "type": "bingkai_awal", "video_id": "v1", "status": "running",
+             "progress": 0.5, "message": "x", "payload": {"besar": "x" * 1000}},
+            {"id": "b", "type": "bingkai_awal", "video_id": "v2", "status": "running"},
+            {"id": "c", "type": "render", "video_id": "v1", "status": "running"},
+        ]
+        with mock.patch("app.repos.jobs.active", return_value=semua):
+            r = asyncio.run(J.list_active_jobs(video_id="v1", type="bingkai_awal"))
+        self.assertEqual([j["id"] for j in r["jobs"]], ["a"])
+        self.assertNotIn("payload", r["jobs"][0])
+
+    def test_bilah_memakai_jalur_ringan_dan_aliran(self):
+        """Dibaca sebagai teks; proyek ini tidak punya penjalan uji JavaScript."""
+        jsx = (Path(__file__).resolve().parents[2] / "frontend" / "src" / "features"
+               / "studio" / "BilahBingkaiAwal.jsx").read_text(encoding="utf-8")
+        self.assertIn("/jobs/aktif?video_id=", jsx)
+        self.assertIn("/api/jobs/events", jsx)
+        # Tidak boleh ada penjajakan berkala ke daftar job yang penuh.
+        self.assertNotIn("apiGet('/jobs?limit", jsx)
+        self.assertNotIn("setTimeout(cari", jsx)

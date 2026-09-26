@@ -471,9 +471,18 @@ def _jadwalkan_jejak_sekarang(video_id: str, clips: list[dict],
                 "jenis": c.get("jenis") or "",
                 "duration": sum(max(0.0, float(s["end"]) - float(s["start"]))
                                 for s in (c.get("segments") or [])),
+                # Hanya tiga medan, dan TANPA batas jumlah baris.
+                #
+                # `text` dibuang karena pemanasan tidak membacanya sama sekali;
+                # ia yang membuat muatan pekerjaan membengkak sampai ratusan
+                # kilobita. Batas 80 baris dibuang karena giliran penutur ikut
+                # masuk KUNCI SIMPANAN rencana bingkai: klip berisi 91 baris
+                # dipanaskan dengan 80 giliran, lalu Studio memintanya dengan 91
+                # dan menghitungnya lagi dari nol. Dua klip podcast pemiliknya
+                # persis melewati batas itu.
                 "subtitles": [{"start": l.get("start"), "end": l.get("end"),
-                               "text": l.get("text"), "speaker": l.get("speaker")}
-                              for l in (c.get("subtitles") or [])][:80]}
+                               "speaker": l.get("speaker")}
+                              for l in (c.get("subtitles") or [])]}
                for c in clips if c.get("segments")]
     if not ringkas:
         return ""

@@ -32,53 +32,68 @@ export default function BilahBingkaiAwal({ videoId }) {
   const [, paksaGambar] = useState(0);
   const esRef = useRef(null);
 
-  // Mencari pekerjaannya, lalu mengikutinya lewat SSE. Dicari berkala selama
-  // belum ketemu: pekerjaan ini diantrekan sesudah auto-klip, jadi ia bisa
-  // baru muncul beberapa saat setelah Studio dibuka.
+  // Satu tanyaan ringan saat dibuka, lalu ikut aliran kabar semua pekerjaan.
+  //
+  // Versi pertama menjajaki `/api/jobs?limit=40` tiap enam detik selama belum
+  // menemukan apa-apa. Terukur pada penyimpanan pemiliknya: jawaban itu 2,4 MB
+  // dan makan 0,48 detik, karena tiap baris membawa seluruh daftar klip
+  // beserta subtitle-nya. Menariknya berulang kali hanya untuk tahu "apakah
+  // ada yang berjalan" adalah beban yang jauh lebih besar daripada
+  // pertanyaannya. Aliran SSE-nya sudah ada dan mengabarkan pekerjaan yang
+  // baru diantrekan juga, jadi tidak ada yang perlu dijajaki.
   useEffect(() => {
     if (!videoId) return undefined;
     let batal = false;
-    let timer = null;
 
-    const ikuti = (id) => {
-      esRef.current?.close();
-      const es = new EventSource(`/api/jobs/${id}/events`);
-      esRef.current = es;
-      es.onmessage = (evt) => {
-        if (batal) return;
-        let d;
-        try { d = JSON.parse(evt.data); } catch { return; }
-        setJob(d);
-        if (SELESAI.has(d.status)) { es.close(); esRef.current = null; }
-      };
-      es.onerror = () => {
-        if (es.readyState === EventSource.CLOSED) { esRef.current = null; }
-      };
-    };
-
-    const cari = async () => {
-      if (batal) return;
-      try {
-        const r = await apiGet('/jobs?limit=40');
-        const daftar = r?.jobs ?? (Array.isArray(r) ? r : []);
-        const milik = daftar.find((j) => j.type === 'bingkai_awal'
-          && j.video_id === videoId
-          && !SELESAI.has(j.status));
-        if (milik && !batal) {
-          setJob(milik);
+    // Kabar bisa datang TIDAK BERURUTAN. Terlihat saat mengujinya: untuk satu
+    // pekerjaan yang sama, "running 95%" tiba lebih dulu daripada "queued 0%".
+    // Dipakai apa adanya, bilahnya melompat mundur ke nol dan terbaca seperti
+    // mengulang dari awal. Jadi: satu pekerjaan diikuti sampai selesai, dan di
+    // dalamnya kemajuan tidak pernah turun.
+    const pakai = (d) => {
+      setJob((lama) => {
+        if (!lama) { setSejak(Date.now()); return d; }
+        const sama = (lama.job_id ?? lama.id) === (d.job_id ?? d.id);
+        if (!sama) {
+          // Pekerjaan lain hanya diambil alih kalau yang lama sudah selesai.
+          if (!SELESAI.has(lama.status)) return lama;
           setSejak(Date.now());
-          ikuti(milik.job_id ?? milik.id);
-          return;
+          return d;
         }
-      } catch { /* daftar pekerjaan yang gagal dibaca bukan alasan menampilkan galat */ }
-      if (!batal) timer = setTimeout(cari, 6000);
+        if (SELESAI.has(d.status)) return d;
+        if ((d.progress ?? 0) < (lama.progress ?? 0)) {
+          // Kabar yang tertinggal: pesannya pun sudah usang, jadi keduanya
+          // dibuang bersama.
+          return lama;
+        }
+        return d;
+      });
     };
-    cari();
+
+    apiGet(`/jobs/aktif?video_id=${encodeURIComponent(videoId)}&type=bingkai_awal`)
+      .then((r) => {
+        const ada = (r?.jobs || [])[0];
+        if (ada && !batal) pakai({ ...ada, job_id: ada.id });
+      })
+      .catch(() => { /* gagal dibaca bukan alasan menampilkan galat */ });
+
+    const es = new EventSource('/api/jobs/events');
+    esRef.current = es;
+    es.onmessage = (evt) => {
+      if (batal) return;
+      let d;
+      try { d = JSON.parse(evt.data); } catch { return; }
+      if (d.type !== 'bingkai_awal' || d.video_id !== videoId) return;
+      pakai(d);
+    };
+    es.onerror = () => {
+      // EventSource menyambung ulang sendiri; hanya penutupan yang final.
+      if (es.readyState === EventSource.CLOSED) esRef.current = null;
+    };
 
     return () => {
       batal = true;
-      if (timer) clearTimeout(timer);
-      esRef.current?.close();
+      es.close();
       esRef.current = null;
     };
   }, [videoId]);

@@ -42,19 +42,16 @@ def run_bingkai_awal(ctx) -> dict:
         ctx.progress(1.0, stage="done", message="Tidak ada klip yang perlu dihitung.")
         return {"siap": 0}
 
-    # Video gameplay atau bukan, ditanyakan SEKALI.
+    # Gameplay atau bukan, ditanyakan SEKALI dari klip pertama.
     #
     # Klip gameplay tidak memakai jejak wajah sama sekali: susunannya datang
     # dari letak panel facecam. Sampai 26 September 2026 pemanasan tetap
     # menghitung jejak wajah untuk tiap klip video seperti itu. Terukur pada
-    # video horor 2560x1440 milik pemiliknya: 18,3 detik jejak wajah yang
-    # tidak dipakai, ditambah 11,7 detik pindai facecam yang dipakai — 30
-    # detik per klip, 10 menit untuk 20 klip, 6 menit di antaranya sia-sia.
+    # video horor 2560x1440 milik pemiliknya: 18,3 detik jejak wajah yang tidak
+    # dipakai ditambah 11,7 detik pindai facecam yang dipakai, 30 detik per
+    # klip, 10 menit untuk 20 klip, 6 menit di antaranya sia-sia.
     #
-    # Letak panel facecam tidak berpindah sepanjang video, jadi satu klip
-    # sudah cukup untuk menjawab pertanyaannya.
-    # Gameplay atau bukan, dijawab oleh KLIP PERTAMA — bukan oleh pemeriksaan
-    # tersendiri, dan tidak oleh pemindai panel facecam sendirian.
+    # Yang menjawabnya BUKAN pemindai panel facecam sendirian.
     #
     # Pemindai panel itu terlalu mudah setuju: pada satu klip podcast pemiliknya
     # ia mengembalikan "panel" 32% x 49% di tengah bingkai dengan kehadiran
@@ -65,7 +62,37 @@ def run_bingkai_awal(ctx) -> dict:
     # dan Studio memakainya juga untuk memilih bingkai bawaan tiap klip. Memakai
     # sumber yang sama berarti pemanasan menyiapkan persis apa yang nanti
     # diminta Studio, bukan tebakannya sendiri.
-    gameplay = None
+    gameplay = _jenis_video(video_id, daftar)
+    log.info("Video %s %s.", video_id,
+             "gameplay: jejak wajah dilewati" if gameplay
+             else "bukan gameplay: jejak wajah dipakai")
+
+    # Menambatkan suara ke wajah DIKERJAKAN LEBIH DULU, bukan di akhir.
+    #
+    # Langkah ini menulis ulang label penutur tiap kalimat, dan label itu masuk
+    # ke KUNCI simpanan rencana bingkai. Dikerjakan belakangan, seluruh rencana
+    # yang baru saja dihitung memakai label lama, lalu Studio memintanya dengan
+    # label baru dan menghitung semuanya lagi. Terukur pada podcast pemiliknya:
+    # 3 dari 14 klip kehilangan seluruh hasil pemanasannya, 12-15 detik
+    # menunggu untuk masing-masing.
+    #
+    # Pindah ke depan tidak menambah kerja: pemindaian wajah yang dipakainya
+    # tersimpan dan dipakai ulang oleh perhitungan bingkai di bawah.
+    tambat = None
+    if not gameplay and pemanasan_bingkai():
+        try:
+            ctx.check_cancelled()
+            ctx.progress(0.02, stage="prepare", message="Menambatkan suara ke wajah…")
+            from .pipeline import tambatkan_ke_wajah
+            tambat = tambatkan_ke_wajah(video_id, _Ekor(ctx, 0.02, 0.30))
+        except JobCancelled:
+            raise
+        except Exception as e:
+            log.warning("Penambatan suara ke wajah dilewati: %s", str(e)[:160])
+        if tambat:
+            # Labelnya berubah, jadi daftar klip dibaca ulang. Tanpa ini,
+            # giliran penutur yang dipakai di bawah adalah yang lama lagi.
+            daftar = _daftar_terbaru(video_id, daftar)
 
     siap = gagal = 0
     berhenti = False
@@ -97,24 +124,10 @@ def run_bingkai_awal(ctx) -> dict:
         # lama tanpa ada yang menunggunya di layar mana pun.
         judul = (klip.get("title") or "").strip()
         sisa = f" · {judul[:44]}" if judul else ""
-        ctx.progress(0.02 + 0.92 * (i / len(daftar)), stage="prepare",
+        ctx.progress(0.32 + 0.62 * (i / len(daftar)), stage="prepare",
                      message=f"Bingkai klip {i + 1} dari {len(daftar)}{sisa}")
         try:
-            if gameplay is None:
-                # Klip pertama menjawabnya. `jenis_klip` sendiri menghitung
-                # jejak wajah dan menyimpannya, jadi untuk video biasa
-                # pertanyaan ini tidak menambah kerja apa pun: jejak yang
-                # dipakainya itulah yang memang dibutuhkan klip pertama.
-                gameplay = _jenis_gameplay(video_id, segmen)
-                if gameplay:
-                    _panaskan_facecam(video_id, segmen)
-                else:
-                    hitung_reframe(video_id=video_id, segments=segmen,
-                                   aspect_ratio=rasio, turns=turns)
-                log.info("Video %s %s.", video_id,
-                         "gameplay: jejak wajah dilewati" if gameplay
-                         else "bukan gameplay: jejak wajah dipakai")
-            elif gameplay:
+            if gameplay:
                 # Yang dipakai klip gameplay hanya ini.
                 _panaskan_facecam(video_id, segmen)
             else:
@@ -129,9 +142,6 @@ def run_bingkai_awal(ctx) -> dict:
             gagal += 1
             log.warning("Bingkai awal klip %d gagal: %s", i + 1, str(e)[:160])
 
-    # Warna penutur, dari WAJAH. Dikerjakan di sini karena pelacakan wajahnya
-    # memang sudah selesai di atas; di dalam auto-klip ia akan menambah
-    # menit-menit pada pekerjaan yang ditunggu orang di depan layar.
     if berhenti:
         # Berhenti atas permintaan bukan kegagalan, dan bukan pula "selesai".
         # Yang sudah terhitung tetap tersimpan, jadi menyalakannya lagi
@@ -141,29 +151,6 @@ def run_bingkai_awal(ctx) -> dict:
         ctx.progress(1.0, stage="done", message=pesan)
         log.info("Bingkai awal video %s dihentikan: %d siap", video_id, siap)
         return {"siap": siap, "gagal": gagal, "dihentikan": True}
-
-    # Menambatkan suara ke wajah menuntut jejak wajah yang pada video gameplay
-    # sengaja tidak dihitung, dan di sana penuturnya memang satu orang.
-    tambat = None
-    try:
-        ctx.check_cancelled()
-        if not gameplay:
-            # Angka yang SAMA dengan awal rentang pemetanya di bawah. Beda
-            # sedikit pun membuat bilahnya mundur satu persen, dan bilah yang
-            # mundur adalah hal yang sedang kita hilangkan.
-            ctx.progress(0.94, stage="prepare", message="Menambatkan suara ke wajah…")
-        if not gameplay:
-            from .pipeline import tambatkan_ke_wajah
-            # Lewat pemeta: langkah ini melapor 0,20-0,42 karena di dalam
-            # auto-klip ia memang berada di situ. Diteruskan apa adanya, bilah
-            # kemajuan MELOMPAT MUNDUR dari 96% ke 20% di akhir pekerjaan —
-            # terukur pada satu video podcast — dan bilah yang mundur terbaca
-            # persis seperti macet, yang justru sedang kita hilangkan.
-            tambat = tambatkan_ke_wajah(video_id, _Ekor(ctx, 0.94, 0.99))
-    except JobCancelled:
-        raise
-    except Exception as e:
-        log.warning("Penambatan suara ke wajah dilewati: %s", str(e)[:160])
 
     tema_siap = _tema_untuk_semua(ctx, daftar, video_id)
 
@@ -179,6 +166,45 @@ def run_bingkai_awal(ctx) -> dict:
     log.info("Bingkai awal video %s: %d siap, %d gagal, %d tema",
              video_id, siap, gagal, tema_siap)
     return {"siap": siap, "gagal": gagal, "tema": tema_siap}
+
+
+def _jenis_video(video_id: str, daftar: list[dict]) -> bool:
+    """Gameplay atau bukan, dari klip pertama yang punya potongan sah."""
+    for klip in daftar:
+        segmen = [{"start": round(float(x["start"]), 3), "end": round(float(x["end"]), 3)}
+                  for x in (klip.get("segments") or [])
+                  if float(x["end"]) - float(x["start"]) > 0.2]
+        if segmen:
+            return _jenis_gameplay(video_id, segmen)
+    return False
+
+
+def _daftar_terbaru(video_id: str, lama: list[dict]) -> list[dict]:
+    """
+    Daftar klip dengan label penutur yang SUDAH diperbarui penambatan.
+
+    Dicocokkan lewat potongan waktunya, bukan urutannya: penambatan tidak
+    menambah atau membuang klip, tapi mengandalkan urutan berarti satu
+    perubahan di tempat lain diam-diam menukar subtitle antar klip.
+    """
+    try:
+        from ..repos import analyses as analyses_repo
+        cached = analyses_repo.latest_for_video(video_id)
+        baru = ((cached or {}).get("result") or {}).get("clips") or []
+        if not baru:
+            return lama
+        def kunci(c):
+            return tuple((round(float(s["start"]), 2), round(float(s["end"]), 2))
+                         for s in (c.get("segments") or []))
+        peta = {kunci(c): c for c in baru}
+        hasil = []
+        for c in lama:
+            cocok = peta.get(kunci(c))
+            hasil.append({**c, "subtitles": cocok.get("subtitles") or []} if cocok else c)
+        return hasil
+    except Exception as e:                           # noqa: BLE001
+        log.info("Daftar klip terbaru tidak terbaca: %s", str(e)[:140])
+        return lama
 
 
 def _jenis_gameplay(video_id: str, segmen: list[dict]) -> bool:

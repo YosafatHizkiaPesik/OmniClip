@@ -667,7 +667,7 @@ def _simpan_reframe(key: tuple, payload: dict) -> None:
 
 def hitung_reframe(*, video_id: str, segments: list[dict], aspect_ratio: str = "9:16",
                    turns: tuple = (), lock_person=None, person_keys=(),
-                   frame_motion: bool = False, subjek: str = "wajah") -> dict:
+                   frame_motion: str = "smooth", subjek: str = "wajah") -> dict:
     """
     Rencana crop yang mengikuti wajah, untuk digambar di pratinjau editor.
 
@@ -682,6 +682,17 @@ def hitung_reframe(*, video_id: str, segments: list[dict], aspect_ratio: str = "
     """
     turns = tuple(turns)
     person_keys = list(person_keys)
+    # Bawaan `frame_motion` dulu `False`, sebuah BOOL, sementara endpoint di
+    # bawah meneruskan `"smooth"` atau `"cut"` dari Studio. `plan_reframe` hanya
+    # memeriksa `== "cut"`, jadi hasilnya sama-sama benar — tapi keduanya masuk
+    # ke KUNCI SIMPANAN, dan `False` bukan `"smooth"`.
+    #
+    # Akibatnya pemanasan bingkai menghitung rencana yang benar untuk semua
+    # klip, menyimpannya, lalu Studio memintanya dengan kunci yang lain dan
+    # menghitungnya lagi dari nol. Pemanasan itu tidak pernah sekalipun
+    # menolong, dan itulah "sudah menunggu beberapa menit, satu klip pun
+    # bingkainya belum tersusun" yang dilaporkan pemiliknya. Terukur sesudah
+    # bawaannya disamakan: 26,6 detik jadi milidetik.
     key = (video_id, aspect_ratio,
            tuple((s["start"], s["end"]) for s in segments),
            turns, lock_person,
