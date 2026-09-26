@@ -185,6 +185,10 @@ def _folder_pilihan(nama: str, bawaan: Path) -> Path:
 # cakram lain, dan dibersihkan saat penyimpanan penuh — tanpa menebak-nebak di
 # mana aplikasi menyembunyikannya.
 DOWNLOAD_DIR = _folder_pilihan("unduhan", STORAGE_DIR / "local_downloads")
+# Folder unduhan bawaan, tetap dicari walau pengguna sudah memilih folder lain:
+# video yang diunduh SEBELUM folder diganti masih tinggal di sini, dan tanpa
+# ini proyeknya mengaku "video sumber belum diunduh" padahal berkasnya ada.
+DOWNLOAD_DIR_BAWAAN = STORAGE_DIR / "local_downloads"
 CLIPS_DIR = _folder_pilihan("klip", STORAGE_DIR / "edited_clips")
 THUMBS_DIR = STORAGE_DIR / "thumbnails"
 LOGS_DIR = STORAGE_DIR / "logs"

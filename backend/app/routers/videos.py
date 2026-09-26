@@ -25,7 +25,7 @@ from ..services.ytdlp import RESOLUSI_BAWAAN
 from ..repos import media as media_repo
 from ..services.media import poster_frame, probe
 from ..services.jobs import queue
-from ..services.paths import extract_youtube_id, find_local_video, safe_media_path
+from ..services.paths import extract_youtube_id, find_local_video, safe_media_path, url_sumber
 from ..services.ytdlp import (
     SEARCH_SORTS,
     YtdlpError,
@@ -610,7 +610,7 @@ async def video_info(url: str = Query(...)):
     # video yang barusan selesai diunduh harus langsung terlihat terunduh.
     local = await asyncio.to_thread(find_local_video, video_id)
     info["downloaded"] = local is not None
-    info["local_url"] = f"/api/media/local_downloads/{local.name}" if local else None
+    info["local_url"] = url_sumber(video_id, local) if local else None
     return info
 
 
@@ -800,9 +800,13 @@ async def impor_jalur(req: ImporJalurRequest):
 
 @router.get("/impor/{video_id}/berkas")
 async def berkas_impor(video_id: str):
-    """Memutar video impor yang ada di luar folder OmniClip (mendukung Range)."""
-    from ..services.paths import jalur_luar
-    path = jalur_luar(video_id)
+    """
+    Memutar video sumber yang ada di luar folder media yang dilayani (mendukung
+    Range): impor dari folder lain, dan unduhan lama yang tertinggal di folder
+    bawaan sesudah pengguna memilih folder unduhan baru.
+    """
+    from ..services.paths import find_local_video
+    path = find_local_video(video_id)
     if path is None:
         raise NotFound("Berkas impor tidak ditemukan.")
     import mimetypes

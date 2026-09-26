@@ -137,7 +137,19 @@ def find_local_video(video_id: str) -> Path | None:
         return None
     from ..config import IMPOR_DIR
     return (_cari_di(DOWNLOAD_DIR, video_id) or _cari_di(IMPOR_DIR, video_id)
+            or _cari_di_folder_lama(video_id)
             or (jalur_luar(video_id) if video_id.startswith("L") else None))
+
+
+def _cari_di_folder_lama(video_id: str) -> Path | None:
+    """Unduhan yang tertinggal di folder bawaan sesudah folder unduhan diganti."""
+    from ..config import DOWNLOAD_DIR_BAWAAN
+    try:
+        if DOWNLOAD_DIR_BAWAAN.resolve() == Path(DOWNLOAD_DIR).resolve():
+            return None
+    except OSError:
+        return None
+    return _cari_di(DOWNLOAD_DIR_BAWAAN, video_id)
 
 
 def url_sumber(video_id: str, path: Path) -> str:
