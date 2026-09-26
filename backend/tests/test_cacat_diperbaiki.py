@@ -465,27 +465,125 @@ class ProfilTerakhirDiingat(unittest.TestCase):
         self.assertLess(main.index("selaraskanProfil()"), main.index("createRoot("))
 
 
-class KlipMenumpukBisaDigabung(unittest.TestCase):
+class HapusKlipAdaDiDaftar(unittest.TestCase):
     """
-    Klip 1 detik 5-30 dan klip 2 detik 25-50 adalah satu momen yang terpotong
-    dua oleh pemilih otomatis. Merender keduanya menerbitkan potongan yang
-    isinya separuh sama.
+    Tombol hapus sudah lama ada di Partitur, tapi daftar klip Studio-lah tempat
+    orang melihat bahwa ada klip yang tidak diinginkannya.
+
+    Penggabung klip menumpuk sempat dibuat lalu DIBUANG atas permintaan
+    pemiliknya: ia lebih suka menghapus salah satunya sendiri lalu memanjangkan
+    durasi klip yang tersisa, karena keputusan mana yang dibuang miliknya.
     """
 
     ED = (Path(__file__).resolve().parents[2] / "frontend" / "src" / "features"
           / "studio" / "Editor.jsx")
 
-    def test_penggabung_ada_dan_memakai_rentang_gabungan(self):
-        jsx = self.ED.read_text(encoding="utf-8")
-        self.assertIn("const pasanganTumpuk", jsx)
-        badan = jsx.split("const gabungTumpuk")[1].split("}, [")[0]
-        self.assertIn("Math.min(a.segments[0].start, b.segments[0].start)", badan)
-        self.assertIn("editor.setSegmentBounds(a.clip_id, 0, mulai, akhir)", badan)
-        # Yang kedua dibuang, bukan yang pertama: judul dan setelan bingkai
-        # klip pertama sudah ada.
-        self.assertIn("dibuang.add(b.clip_id)", badan)
-
     def test_tombol_hapus_ada_di_daftar_klip(self):
         jsx = self.ED.read_text(encoding="utf-8")
         self.assertIn("studio-row-x", jsx)
         self.assertIn("hapusKlip(clip.clip_id", jsx)
+
+    def test_penggabung_otomatis_tidak_ada_lagi(self):
+        jsx = self.ED.read_text(encoding="utf-8")
+        for jejak in ("pasanganTumpuk", "gabungTumpuk", "yang menumpuk"):
+            self.assertNotIn(jejak, jsx)
+
+    def test_tombolnya_tidak_melayang_di_atas_judul(self):
+        """Versi pertama memakai `position: absolute` dan menutupi judul klip."""
+        css = (Path(__file__).resolve().parents[2] / "frontend" / "src"
+               / "index.css").read_text(encoding="utf-8")
+        blok = css.split(".reh-row .studio-row-x {")[1].split("}")[0]
+        self.assertNotIn("position: absolute", blok)
+        self.assertIn("margin-left: auto", blok)
+
+
+class BerandaBervariasi(unittest.TestCase):
+    """
+    Beranda hanya menampilkan satu video, dan isinya seragam.
+
+    Sebabnya satu: seluruh beranda berasal dari SATU kueri pencarian yang
+    dipilih dari kolam. Dua akibatnya sama-sama dilaporkan pemiliknya — isinya
+    seragam ("saya melihat video raditya dika maka beranda menyarankan raditya
+    dika semua"), dan bila kueri itu kebetulan sempit hasilnya cuma segelintir.
+    Terukur pada aplikasinya: `limit=20` mengembalikan EMPAT video.
+
+    Kolamnya sendiri ikut rusak: riwayat pencarian merekam JUDUL VIDEO yang
+    dibuka, dan mencari judul utuh hanya mengembalikan video itu sendiri.
+
+    Sesudah diperbaiki, diukur lewat HTTP: 24 video dari 17-18 kanal berbeda,
+    paling banyak 3 dari satu kanal, dalam 6-10 detik.
+    """
+
+    def test_judul_utuh_tidak_dipakai_sebagai_kueri(self):
+        from app.routers.videos import _layak_beranda
+        for buruk in ("Raditya Dika Kenapa Mereka Bersatu Sih?!!!!!!!",
+                      "TAULANY TV PODCAST PALING PENDEK SEDUNIA",
+                      "a", ""):
+            self.assertFalse(_layak_beranda(buruk), buruk)
+        for baik in ("raditya dika", "windah basudara", "podcast indonesia"):
+            self.assertTrue(_layak_beranda(baik), baik)
+
+    def test_kolam_selalu_dicampur_kueri_umum(self):
+        """Beranda yang hanya mengulang masa lalu tidak memperkenalkan apa pun."""
+        from app.routers.videos import TRENDING_QUERIES, _kolam_beranda
+        with mock.patch("app.repos.profil.ambil", return_value={"minat": ["horor"]}), \
+             mock.patch("app.repos.profil.kueri_sering", return_value=[]), \
+             mock.patch("app.repos.profil.riwayat_cari", return_value=[]), \
+             mock.patch("app.services.profil.kini", return_value=1):
+            kolam = _kolam_beranda()
+        self.assertIn("horor", kolam)
+        self.assertTrue(any(q in TRENDING_QUERIES for q in kolam),
+                        "harus ada kueri umum yang ikut tercampur")
+
+    def test_beberapa_kueri_dipilih_tanpa_pengulangan(self):
+        import random
+        from app.routers.videos import KUERI_BERANDA, _kueri_beranda
+        kolam = ["a", "a", "a", "b", "b", "c", "d", "e"]
+        k = _kueri_beranda(kolam, random.Random(7))
+        self.assertLessEqual(len(k), KUERI_BERANDA)
+        self.assertEqual(len(k), len(set(k)), "kueri tidak boleh berulang")
+
+    def test_selang_seling_membatasi_satu_kanal(self):
+        import random
+        from app.routers.videos import MAKS_PER_KANAL, _selang_seling
+        a = [{"url": f"a{i}", "channel": "Raditya Dika"} for i in range(20)]
+        b = [{"url": f"b{i}", "channel": "Lain"} for i in range(20)]
+        h = _selang_seling([a, b], random.Random(1))
+        jumlah = {}
+        for v in h:
+            jumlah[v["channel"]] = jumlah.get(v["channel"], 0) + 1
+        self.assertTrue(all(n <= MAKS_PER_KANAL for n in jumlah.values()), jumlah)
+        # Dan hasilnya benar-benar berselang, bukan satu kueri dulu baru lainnya.
+        self.assertNotEqual(h[0]["channel"], h[1]["channel"])
+
+    def test_video_yang_sama_tidak_muncul_dua_kali(self):
+        import random
+        from app.routers.videos import _selang_seling
+        sama = {"url": "x", "channel": "A"}
+        h = _selang_seling([[sama], [sama], [{"url": "y", "channel": "B"}]],
+                           random.Random(1))
+        self.assertEqual([v["url"] for v in h], ["x", "y"])
+
+    def test_pelengkap_latar_memakai_ulang_batas_kanal(self):
+        """
+        Gabungan di latar menulis ke singgahan yang sama. Tanpa batas, seratus
+        video tambahan masuk apa adanya dan permintaan berikutnya mengembalikan
+        dua puluh empat video dari satu kanal.
+        """
+        from app.routers.videos import MAKS_PER_KANAL, _batasi_kanal
+        banyak = [{"url": f"a{i}", "channel": "Satu"} for i in range(30)]
+        self.assertEqual(len(_batasi_kanal(banyak)), MAKS_PER_KANAL)
+        sumber = (Path(__file__).resolve().parents[1] / "app" / "routers"
+                  / "videos.py").read_text(encoding="utf-8")
+        self.assertIn("gabung=lambda d: _batasi_kanal(d)", sumber)
+
+    def test_kueri_dijalankan_berbarengan(self):
+        """
+        Berurutan, empat kueri berarti empat kali lama menunggu — dan panggilan
+        pertama saja sudah terukur 38 detik, lewat dari batas 30 detik di sisi
+        layar yang tampil sebagai "Pencarian gagal".
+        """
+        sumber = (Path(__file__).resolve().parents[1] / "app" / "routers"
+                  / "videos.py").read_text(encoding="utf-8")
+        badan = sumber.split("async def trending")[1].split("\n@router")[0]
+        self.assertIn("asyncio.gather(", badan)

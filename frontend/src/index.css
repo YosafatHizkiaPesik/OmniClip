@@ -1338,13 +1338,18 @@ body.is-studio .app-viewport,
   [data-kartu-judul] { animation: none !important; }
 }
 
-/* Tombol hapus pada baris daftar klip. Muncul saat barisnya disentuh tetikus
-   atau sedang dipilih: selalu terlihat berarti sebelas tombol merah berjajar
-   di sisi layar untuk sesuatu yang jarang dipakai, tapi tidak pernah terlihat
-   berarti orang tidak tahu ia ada — dan itu yang terjadi sebelum ini. */
-.reh-row { position: relative; }
+/* Tombol hapus pada baris daftar klip.
+   Muncul saat barisnya disentuh tetikus atau sedang dipilih: selalu terlihat
+   berarti sebelas tombol merah berjajar di sisi layar untuk sesuatu yang jarang
+   dipakai, tapi tidak pernah terlihat berarti orang tidak tahu ia ada.
+
+   Ia MENGAMBIL RUANG di baris, tidak melayang di atasnya. Versi pertama
+   memakai `position: absolute` dan menutupi judul klipnya sendiri — terlapor
+   pemiliknya dengan tangkapan layar. Lebarnya dipesan sejak awal lewat kolom
+   kosong, jadi baris tidak melompat saat tombolnya muncul. */
+.reh-row { align-items: start; }
 .reh-row .studio-row-x {
-  position: absolute; right: 6px; top: 6px;
+  flex: none; margin-left: auto; align-self: start;
   opacity: 0; transition: opacity .12s;
 }
 .reh-row:hover .studio-row-x,

@@ -102,7 +102,7 @@ _PELENGKAP_KUNCI = threading.Lock()
 
 
 def _lengkapi_di_latar(kunci: str, ambil: Callable[[], list], penuh: int,
-                       awal: list) -> None:
+                       awal: list, gabung: Optional[Callable[[list], list]] = None) -> None:
     """
     `awal` adalah daftar yang SUDAH terkirim ke pengguna, dan ia dipertahankan
     apa adanya di kepala hasil.
@@ -125,6 +125,18 @@ def _lengkapi_di_latar(kunci: str, ambil: Callable[[], list], penuh: int,
                 sudah = {v.get("id") for v in awal if v.get("id")}
                 hasil = list(awal) + [v for v in tambahan
                                       if v.get("id") and v["id"] not in sudah]
+                # Kesempatan terakhir merapikan gabungannya.
+                #
+                # Beranda membatasi berapa video boleh datang dari satu kanal,
+                # dan batas itu dipasang saat daftar pendeknya dibuat. Gabungan
+                # di sini TIDAK memakainya ulang, jadi seratus video tambahan
+                # masuk apa adanya lalu ditulis ke singgahan — dan permintaan
+                # berikutnya mengembalikan dua puluh empat video dari satu
+                # kanal yang sama. Terlihat saat mengujinya: hasil yang sama
+                # kadang beragam kadang seragam, tergantung pelengkap ini sudah
+                # selesai atau belum.
+                if gabung is not None:
+                    hasil = gabung(hasil)
                 cache_repo.simpan(kunci, {"items": hasil, "diminta": penuh})
                 _catat_hasil(hasil)
         except Exception as e:
@@ -283,6 +295,90 @@ TRENDING_QUERIES = [
 ]
 
 
+# Berapa kueri yang menyusun satu beranda, dan berapa video paling banyak dari
+# satu kanal. Empat kueri cukup untuk membuat layar terasa beragam tanpa
+# membuat isinya kehilangan hubungan dengan yang dicari pemiliknya; batas per
+# kanal yang menjaga satu kanal produktif tidak memakan seluruh layar sendirian.
+KUERI_BERANDA = 4
+MAKS_PER_KANAL = 3
+
+
+def _kueri_beranda(kolam: list[str], acak: random.Random) -> list[str]:
+    """
+    Beberapa kueri berbeda dari kolam, tanpa pengulangan.
+
+    Kolamnya sendiri sudah berbobot — minat ditulis tiga kali, kueri yang
+    sering diketik dua kali — jadi mengambil acak dari sana membuat yang paling
+    dicari lebih mungkin terpilih, tanpa memastikannya memenuhi layar.
+    """
+    unik: list[str] = []
+    for q in acak.sample(kolam, k=min(len(kolam), KUERI_BERANDA * 3)):
+        if q not in unik:
+            unik.append(q)
+        if len(unik) >= KUERI_BERANDA:
+            break
+    # Kolam yang isinya sedikit dan berulang bisa menghasilkan satu saja.
+    return unik or list(kolam[:1])
+
+
+def _batasi_kanal(videos: list, maks: int = MAKS_PER_KANAL) -> list:
+    """Paling banyak `maks` video dari satu kanal, urutannya dipertahankan."""
+    out: list = []
+    per_kanal: dict = {}
+    dipakai: set = set()
+    for v in videos:
+        vid = v.get("url") or v.get("id")
+        if vid in dipakai:
+            continue
+        kanal = (v.get("channel") or "").strip().lower()
+        if kanal and per_kanal.get(kanal, 0) >= maks:
+            continue
+        dipakai.add(vid)
+        per_kanal[kanal] = per_kanal.get(kanal, 0) + 1
+        out.append(v)
+    return out
+
+
+def _selang_seling(daftar: list[list], acak: random.Random) -> list:
+    """
+    Menyelang-nyeling hasil beberapa kueri, dengan batas per kanal.
+
+    Diambil bergiliran satu per satu dari tiap kueri, bukan disambung ujung ke
+    ujung: disambung, dua puluh kartu pertama tetap milik satu kueri saja dan
+    tidak ada yang berubah dari sisi orang yang melihatnya.
+
+    Video yang sama bisa muncul dari dua kueri sekaligus; yang kedua dibuang.
+    """
+    kepala: list = []
+    for d in daftar:
+        # Sepuluh teratas tiap kueri ditahan urutannya — itu yang paling
+        # relevan — dan ekornya diacak supaya menyegarkan benar-benar berganti.
+        head, tail = d[:10], d[10:]
+        acak.shuffle(tail)
+        kepala.append(head + tail)
+
+    hasil: list = []
+    dipakai: set = set()
+    per_kanal: dict = {}
+    i = 0
+    while any(i < len(d) for d in kepala):
+        for d in kepala:
+            if i >= len(d):
+                continue
+            v = d[i]
+            vid = v.get("url") or v.get("id")
+            kanal = (v.get("channel") or "").strip().lower()
+            if vid in dipakai:
+                continue
+            if kanal and per_kanal.get(kanal, 0) >= MAKS_PER_KANAL:
+                continue
+            dipakai.add(vid)
+            per_kanal[kanal] = per_kanal.get(kanal, 0) + 1
+            hasil.append(v)
+        i += 1
+    return hasil
+
+
 def _kolam_beranda() -> list[str]:
     """
     Kueri beranda untuk profil aktif: minat yang ditulis pemiliknya, lalu
@@ -307,8 +403,49 @@ def _kolam_beranda() -> list[str]:
     #
     # Lapis "sering" yang menjawab keluhannya: beranda yang isinya sesuai apa
     # yang memang dicari, supaya tidak perlu mengetik kata yang sama tiap hari.
-    kolam = minat * 3 + sering * 2 + riwayat
-    return kolam or TRENDING_QUERIES
+    kolam = minat * 3 + [q for q in sering if _layak_beranda(q)] * 2 \
+        + [q for q in riwayat if _layak_beranda(q)]
+    if not kolam:
+        return TRENDING_QUERIES
+    # SELALU dicampur kueri umum, berapa pun banyaknya riwayat.
+    #
+    # Tanpa ini beranda hanya berisi apa yang sudah pernah dicari, dan itu
+    # persis keluhan pemiliknya: "saya melihat video raditya dika maka beranda
+    # menyarankan raditya dika semua". Beranda yang hanya mengulang masa lalu
+    # tidak pernah memperkenalkan apa pun yang baru.
+    return kolam + random.sample(TRENDING_QUERIES,
+                                 k=min(len(TRENDING_QUERIES), max(2, len(kolam) // 3)))
+
+
+# Kueri beranda paling panjang, dalam kata. Di atas ini yang tersimpan hampir
+# selalu JUDUL VIDEO UTUH, bukan kata kunci.
+KATA_MAKS_BERANDA = 4
+
+
+def _layak_beranda(q: str) -> bool:
+    """
+    Apakah kueri ini pantas jadi bahan beranda.
+
+    Riwayat pencarian ikut merekam judul video yang dibuka, dan judul utuh
+    adalah kueri yang buruk: mencarinya mengembalikan video itu sendiri plus
+    sedikit sisa. Terukur pada aplikasi pemiliknya — kolamnya berisi "Raditya
+    Dika Kenapa Mereka Bersatu Sih?!!!!!!!" dan sejenisnya, dan `limit=20`
+    mengembalikan EMPAT video.
+
+    Ketikan setengah jadi juga dibuang: "podcast pende" tersimpan karena
+    pencarian dikirim sebelum orangnya selesai mengetik.
+    """
+    q = (q or "").strip()
+    if len(q) < 3 or len(q) > 48:
+        return False
+    kata = q.split()
+    if len(kata) > KATA_MAKS_BERANDA:
+        return False
+    # Tanda seru beruntun dan tanda tanya bertumpuk adalah ciri judul, bukan
+    # ciri orang yang sedang mencari sesuatu.
+    if re.search(r"[!?]{2,}", q):
+        return False
+    return True
 
 
 @router.get("/riwayat-cari")
@@ -355,10 +492,22 @@ async def trending(limit: int = 20, refresh: int = 0):
     # tempat isi beranda memang seharusnya berganti.
     acak = random.Random(refresh)
     kolam = await asyncio.to_thread(_kolam_beranda)
-    query = acak.choice(kolam)
+    # BEBERAPA kueri, bukan satu.
+    #
+    # Sebelum ini beranda seluruhnya berasal dari satu kueri yang dipilih dari
+    # kolam. Dua akibatnya sama-sama dilaporkan pemiliknya: isinya seragam —
+    # "saya melihat video raditya dika maka beranda menyarankan raditya dika
+    # semua" — dan bila kueri itu kebetulan sempit, hasilnya cuma segelintir.
+    # Terukur pada aplikasinya: `limit=20` mengembalikan EMPAT video, semuanya
+    # dari satu jenis kanal.
+    #
+    # Sekarang beberapa kueri dijalankan berbarengan lalu hasilnya diselang-
+    # seling. Yang dicari tetap terwakili, tapi tidak memenuhi seluruh layar.
+    acak.choice(kolam)          # menggerakkan benihnya, seperti sebelumnya
+    kueri = _kueri_beranda(kolam, acak)
 
     from ..services import profil
-    kunci = f"trending:{profil.kini()}:{refresh}:{query}"
+    kunci = f"trending:{profil.kini()}:{refresh}:{'|'.join(kueri)}"
     simpanan = await asyncio.to_thread(cache_repo.ambil, kunci)
     simpanan = simpanan if isinstance(simpanan, dict) else {}
     if simpanan.get("diminta", 0) >= want:
@@ -366,34 +515,50 @@ async def trending(limit: int = 20, refresh: int = 0):
             _lengkapi_tanggal, (simpanan.get("items") or [])[:want])
 
     ambil = want if want <= 20 else 100
+    per_kueri = max(8, min(60, (ambil * 2) // max(1, len(kueri)) + 4))
     try:
-        pool = await asyncio.to_thread(search_youtube_videos, query, min(ambil * 2, 120))
+        # Berbarengan: dijalankan berurutan, empat kueri berarti empat kali
+        # lama menunggu, dan panggilan pertama saja sudah terukur 38 detik —
+        # lewat dari batas 30 detik di sisi layar, yang tampil sebagai
+        # "Pencarian gagal".
+        kolam_hasil = await asyncio.gather(*[
+            asyncio.to_thread(search_youtube_videos, q, per_kueri) for q in kueri
+        ], return_exceptions=True)
     except YtdlpError as e:
         raise _as_app_error(e) from e
+    galat = [x for x in kolam_hasil if isinstance(x, Exception)]
+    daftar = [x for x in kolam_hasil if isinstance(x, list)]
+    if not daftar:
+        if galat and isinstance(galat[0], YtdlpError):
+            raise _as_app_error(galat[0]) from galat[0]
+        raise AppError("Pencarian tidak menghasilkan apa pun.", status_code=502)
 
-    # Sepuluh teratas ditahan di urutannya karena itulah yang paling relevan
-    # dengan kuerinya; pengacakan hanya berlaku pada ekor daftar.
-    head, tail = pool[:10], pool[10:]
-    acak.shuffle(tail)
-    hasil = head + tail
+    hasil = _selang_seling(daftar, acak)
+    log.info("Beranda: %d kueri, %d hasil mentah, %d sesudah diselang-seling",
+             len(kueri), sum(len(d) for d in daftar), len(hasil))
     if hasil:
         await asyncio.to_thread(cache_repo.simpan, kunci,
                                 {"items": hasil, "diminta": ambil})
         await asyncio.to_thread(_catat_hasil, hasil)
         if ambil < 100:
             def penuh() -> list:
-                # Benihnya dipakai ulang PERSIS seperti di atas — termasuk satu
-                # panggilan `choice` yang ikut menggerakkan keadaannya — supaya
-                # daftar panjangnya benar-benar kelanjutan dari yang pendek dan
-                # bukan susunan lain yang kebetulan berisi video yang sama.
+                # Benihnya dipakai ulang PERSIS seperti di atas — termasuk
+                # panggilan yang ikut menggerakkan keadaannya — supaya daftar
+                # panjangnya benar-benar kelanjutan dari yang pendek dan bukan
+                # susunan lain yang kebetulan berisi video yang sama.
                 r = random.Random(refresh)
-                r.choice(TRENDING_QUERIES)
-                kolam = search_youtube_videos(query, 120)
-                kepala, ekor = kolam[:10], kolam[10:]
-                r.shuffle(ekor)
-                return kepala + ekor
+                r.choice(kolam)
+                _kueri_beranda(kolam, r)
+                lebih = []
+                for q in kueri:
+                    try:
+                        lebih.append(search_youtube_videos(q, 60))
+                    except Exception:               # noqa: BLE001
+                        continue
+                return _selang_seling(lebih, r) if lebih else []
 
-            _lengkapi_di_latar(kunci, penuh, 100, hasil)
+            _lengkapi_di_latar(kunci, penuh, 100, hasil,
+                               gabung=lambda d: _batasi_kanal(d))
     return await asyncio.to_thread(_lengkapi_tanggal, hasil[:want])
 
 
