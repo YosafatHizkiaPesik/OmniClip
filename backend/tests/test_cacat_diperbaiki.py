@@ -6,6 +6,7 @@ diam-diam.
 
 import time
 import unittest
+from pathlib import Path
 from unittest import mock
 
 from app.services.reframe import (
@@ -209,3 +210,154 @@ class D5D6BatasYangTerlaluKetat(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BingkaiTidakMembingkaiCelah(unittest.TestCase):
+    """
+    Bingkai menyorot ruang kosong di antara dua orang.
+
+    Terlapor pemiliknya dari aplikasi live dengan tangkapan layar: klip vlog di
+    dalam mobil, bingkai duduk di celah antara pengemudi dan penumpang. Terukur
+    pada klip itu: subjeknya kosong di 18% sampel — jeda antar giliran, tawa,
+    dan saat keduanya bicara bersamaan — dan saat subjek kosong bingkai memakai
+    titik tengah SEMUA wajah, yang untuk dua orang berdampingan adalah celah di
+    antara mereka.
+
+    Sesudah diperbaiki, diukur pada 7 klip video yang sama: 3,8% sampel
+    membingkai celah menjadi 0,0%.
+    """
+
+    def test_menahan_orang_terakhir_saat_subjek_kosong(self):
+        from app.services.reframe import _tahan_saat_sepi
+        people = [[100.0] * 6, [300.0] * 6]
+        seen = [[True] * 6, [True] * 6]
+        centers = [200.0] * 6                       # titik tengah = celahnya
+        subject = [0, 0, None, None, 1, 1]
+        out, subj = _tahan_saat_sepi(centers, subject, people, seen)
+        self.assertEqual(subj, [0, 0, 0, 0, 1, 1])
+        self.assertEqual(out[2], 100.0)             # bukan 200.0 lagi
+        self.assertEqual(out[3], 100.0)
+
+    def test_memilih_wajah_terdekat_bila_yang_ditahan_tak_terlihat(self):
+        """
+        Orang yang ditahan bisa keluar layar. Titik tengah tetap bukan jawaban;
+        wajah terdekat selalu mendarat di wajah dan geserannya paling pendek.
+        """
+        from app.services.reframe import _tahan_saat_sepi
+        # Tiga orang: yang ditahan (0) keluar layar, dua lainnya tinggal.
+        people = [[100.0, 100.0, None], [300.0, 300.0, 300.0], [900.0, 900.0, 900.0]]
+        seen = [[True, True, False], [True, True, True], [True, True, True]]
+        out, subj = _tahan_saat_sepi([200.0] * 3, [0, None, None], people, seen)
+        # Yang dipilih wajah TERDEKAT dengan tempat bingkai berada, bukan
+        # titik tengah ketiganya dan bukan yang pertama di daftar.
+        self.assertEqual(subj[2], 1)
+        self.assertEqual(out[2], 300.0)
+
+    def test_satu_wajah_tidak_disentuh(self):
+        """Dengan satu wajah, titik tengahnya memang wajah itu sendiri."""
+        from app.services.reframe import _tahan_saat_sepi
+        people = [[100.0] * 4, [300.0] * 4]
+        seen = [[True] * 4, [False] * 4]
+        out, subj = _tahan_saat_sepi([100.0] * 4, [0, None, None, 0], people, seen)
+        self.assertEqual(subj, [0, None, None, 0])
+
+    def test_bukti_yang_ada_tidak_ditimpa(self):
+        from app.services.reframe import _tahan_saat_sepi
+        people = [[100.0] * 4, [300.0] * 4]
+        seen = [[True] * 4, [True] * 4]
+        _, subj = _tahan_saat_sepi([200.0] * 4, [0, 1, 0, 1], people, seen)
+        self.assertEqual(subj, [0, 1, 0, 1])
+
+
+class PemanasanTidakDiulang(unittest.TestCase):
+    """
+    Membuka proyek yang sama lagi mengantrekan pemanasan dari awal.
+
+    `dedupe_key` hanya menahan pekerjaan yang masih antre atau berjalan, jadi
+    begitu satu selesai, membuka proyeknya lagi — atau berganti akun, atau
+    menyalakan ulang aplikasi — mengantrekan yang sama. Terlihat di aplikasi
+    live pemiliknya: satu video punya LIMA pekerjaan "selesai" berisi hal yang
+    sama, dan satu lagi antre di belakangnya selama 15 menit.
+    """
+
+    KLIP = [{"segments": [{"start": 1.0, "end": 5.0}],
+             "subtitles": [{"start": 1.0, "end": 2.0, "speaker": 0}]}]
+
+    def test_sidik_mengabaikan_judul_tapi_menangkap_potongan(self):
+        from app.services.pipeline import _sidik_klip
+        lain_judul = [{**self.KLIP[0], "title": "judul lain"}]
+        lain_potong = [{**self.KLIP[0], "segments": [{"start": 1.0, "end": 6.0}]}]
+        lain_penutur = [{**self.KLIP[0],
+                         "subtitles": [{"start": 1.0, "end": 2.0, "speaker": 1}]}]
+        self.assertEqual(_sidik_klip(self.KLIP), _sidik_klip(lain_judul))
+        self.assertNotEqual(_sidik_klip(self.KLIP), _sidik_klip(lain_potong))
+        self.assertNotEqual(_sidik_klip(self.KLIP), _sidik_klip(lain_penutur))
+
+    def test_yang_sudah_selesai_dikenali(self):
+        from app.services.pipeline import _sidik_klip, _sudah_dipanaskan
+        sidik = _sidik_klip(self.KLIP)
+        riwayat = [{"type": "bingkai_awal", "video_id": "vid", "status": "done",
+                    "result": {"sidik": sidik}}]
+        with mock.patch("app.repos.jobs.recent", return_value=riwayat):
+            self.assertTrue(_sudah_dipanaskan("vid", self.KLIP))
+            # Video lain, sidik lain, dan yang gagal: semuanya bukan.
+            self.assertFalse(_sudah_dipanaskan("lain", self.KLIP))
+        for ubah in ({"status": "failed"}, {"result": {"sidik": "beda"}}):
+            with mock.patch("app.repos.jobs.recent",
+                            return_value=[{**riwayat[0], **ubah}]):
+                self.assertFalse(_sudah_dipanaskan("vid", self.KLIP))
+
+
+class HitunganKlipTidakNgawur(unittest.TestCase):
+    """
+    Penghitung di kepala halaman menulis "8/7" sesudah klip baru ditambahkan
+    lalu diurungkan: klipnya hilang dari daftar, centangnya tidak. Urung dan
+    ulang menulis daftar langsung tanpa lewat `setClips`, jadi membereskannya
+    di `removeClip` saja tidak menutup jalurnya.
+    """
+
+    HOOK = (Path(__file__).resolve().parents[2] / "frontend" / "src" / "features"
+            / "studio" / "useClipEditor.js")
+
+    def test_urung_dan_ulang_merapikan_centang(self):
+        js = self.HOOK.read_text(encoding="utf-8")
+        for fn in ("const undo =", "const redo ="):
+            badan = js.split(fn)[1].split("}, [")[0]
+            self.assertIn("_rapikanCentang(daftar)", badan, fn)
+
+    def test_setiap_perubahan_daftar_ikut_merapikan(self):
+        js = self.HOOK.read_text(encoding="utf-8")
+        badan = js.split("const setClips =")[1].split("}, [")[0]
+        self.assertIn("_rapikanCentang(next)", badan)
+
+
+class BilahMemakaiWaktuPekerjaanSendiri(unittest.TestCase):
+    """
+    "berjalan 5 menit 27 detik" dihitung dari saat layar dibuka, bukan dari
+    waktu pekerjaannya. Menutup lalu membuka Studio membuatnya mulai dari nol
+    untuk pekerjaan yang sudah lama menunggu — dan pekerjaan yang ANTRE
+    disebut "berjalan", padahal ia belum mulai sama sekali.
+    """
+
+    BILAH = (Path(__file__).resolve().parents[2] / "frontend" / "src" / "features"
+             / "studio" / "BilahBingkaiAwal.jsx")
+
+    def test_waktu_dari_pekerjaan_bukan_dari_layar(self):
+        js = self.BILAH.read_text(encoding="utf-8")
+        self.assertIn("job.created_at", js)
+        self.assertIn("job.started_at", js)
+        self.assertNotIn("setSejak", js)
+
+    def test_antre_dibedakan_dari_berjalan(self):
+        js = self.BILAH.read_text(encoding="utf-8")
+        self.assertIn("'queued'", js)
+        self.assertIn("menunggu", js)
+
+    def test_kedua_waktu_dikirim_server(self):
+        from app.routers.jobs import RINGKAS
+        self.assertIn("created_at", RINGKAS)
+        self.assertIn("started_at", RINGKAS)
+        sumber = (Path(__file__).resolve().parents[1] / "app" / "services"
+                  / "jobs.py").read_text(encoding="utf-8")
+        badan = sumber.split("def snapshot")[1].split("\n    def ")[0]
+        self.assertIn('"created_at": job.get("created_at")', badan)

@@ -28,7 +28,6 @@ function lamanya(detik) {
 
 export default function BilahBingkaiAwal({ videoId }) {
   const [job, setJob] = useState(null);
-  const [sejak, setSejak] = useState(null);
   const [, paksaGambar] = useState(0);
   const esRef = useRef(null);
 
@@ -52,12 +51,11 @@ export default function BilahBingkaiAwal({ videoId }) {
     // dalamnya kemajuan tidak pernah turun.
     const pakai = (d) => {
       setJob((lama) => {
-        if (!lama) { setSejak(Date.now()); return d; }
+        if (!lama) return d;
         const sama = (lama.job_id ?? lama.id) === (d.job_id ?? d.id);
         if (!sama) {
           // Pekerjaan lain hanya diambil alih kalau yang lama sudah selesai.
           if (!SELESAI.has(lama.status)) return lama;
-          setSejak(Date.now());
           return d;
         }
         if (SELESAI.has(d.status)) return d;
@@ -109,8 +107,16 @@ export default function BilahBingkaiAwal({ videoId }) {
   if (job.status === 'failed' || job.status === 'cancelled') return null;
 
   const jalan = !SELESAI.has(job.status);
+  const antre = job.status === 'queued';
   const persen = Math.round((job.progress ?? 0) * 100);
-  const berjalan = sejak ? (Date.now() - sejak) / 1000 : 0;
+  // Lama dihitung dari waktu pekerjaannya SENDIRI, bukan dari saat bilah ini
+  // pertama melihatnya. Versi pertama memakai `Date.now()` saat komponen
+  // pertama kali menerima kabar, jadi menutup lalu membuka Studio membuat
+  // angkanya mulai dari nol lagi untuk pekerjaan yang sudah lama berjalan —
+  // dilaporkan pemiliknya: "detik menghitungnya mulai dari 0 tapi tetap
+  // seperti itu terus".
+  const mulai = antre ? job.created_at : (job.started_at || job.created_at);
+  const berjalan = mulai ? Math.max(0, Date.now() / 1000 - mulai) : 0;
 
   return (
     <div style={{
@@ -128,11 +134,12 @@ export default function BilahBingkaiAwal({ videoId }) {
         {jalan && (
           <span style={{ color: 'var(--ink-2)', fontVariantNumeric: 'tabular-nums',
                          flex: 'none' }}>
-            {persen}%{berjalan > 3 ? ` · berjalan ${lamanya(berjalan)}` : ''}
+            {antre ? 'antre' : `${persen}%`}
+            {berjalan > 3 ? ` · ${antre ? 'menunggu' : 'berjalan'} ${lamanya(berjalan)}` : ''}
           </span>
         )}
       </div>
-      {jalan && (
+      {jalan && !antre && (
         <div style={{ height: '5px', marginTop: '6px', borderRadius: '99px',
                       background: 'var(--bg-glass)', overflow: 'hidden',
                       border: '1px solid var(--border-color)' }}>

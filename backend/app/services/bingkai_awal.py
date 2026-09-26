@@ -176,7 +176,10 @@ def run_bingkai_awal(ctx) -> dict:
     ctx.progress(1.0, stage="done", message=pesan + ".")
     log.info("Bingkai awal video %s: %d siap, %d gagal, %d tema",
              video_id, siap, gagal, tema_siap)
-    return {"siap": siap, "gagal": gagal, "tema": tema_siap}
+    return {"siap": siap, "gagal": gagal, "tema": tema_siap,
+            # Sidik daftar klipnya, dibaca `_sudah_dipanaskan` supaya membuka
+            # proyek yang sama lagi tidak mengantrekan pekerjaan yang sama.
+            "sidik": ctx.payload.get("sidik") or ""}
 
 
 def _jenis_video(video_id: str, daftar: list[dict]) -> bool:

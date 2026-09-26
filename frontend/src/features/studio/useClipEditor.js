@@ -79,31 +79,59 @@ export function useClipEditor() {
   const [historyTick, setHistoryTick] = useState(0);
   const HISTORY_LIMIT = 80;
 
+  /**
+   * Membuang tanda centang milik klip yang sudah tidak ada.
+   *
+   * Tanpa ini, menambahkan klip lalu mengurungnya meninggalkan tandanya:
+   * klipnya hilang dari daftar, centangnya tidak, dan penghitung di kepala
+   * halaman menulis "8/7". Terlapor pemiliknya dengan tangkapan layarnya.
+   * Urung dan ulang tidak lewat `removeClip`, jadi membereskannya di sana saja
+   * tidak cukup — yang benar adalah membereskannya di setiap perubahan daftar.
+   */
+  const _rapikanCentang = useCallback((daftar) => {
+    const ada = new Set(daftar.map((c) => c.clip_id));
+    setChecked((prev) => {
+      if ([...prev].every((id) => ada.has(id))) return prev;
+      return new Set([...prev].filter((id) => ada.has(id)));
+    });
+  }, []);
+
   const setClips = useCallback((updater) => {
     past.current.push(clipsRef.current);
     if (past.current.length > HISTORY_LIMIT) past.current.shift();
     future.current = [];
     setHistoryTick((n) => n + 1);
-    setClipsRaw(updater);
-  }, []);
+    setClipsRaw((prev) => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      _rapikanCentang(next);
+      return next;
+    });
+  }, [_rapikanCentang]);
 
+  // Urung dan ulang menulis daftar langsung, tanpa lewat `setClips`. Keduanya
+  // ikut merapikan centang: justru DI SINI cacat "8/7" lahir — klip baru
+  // ditambahkan lalu diurungkan, klipnya hilang, centangnya tinggal.
   const undo = useCallback(() => {
     if (!past.current.length) return false;
     future.current.push(clipsRef.current);
-    setClipsRaw(past.current.pop());
+    const daftar = past.current.pop();
+    setClipsRaw(daftar);
+    _rapikanCentang(daftar);
     setDirty(true);
     setHistoryTick((n) => n + 1);
     return true;
-  }, []);
+  }, [_rapikanCentang]);
 
   const redo = useCallback(() => {
     if (!future.current.length) return false;
     past.current.push(clipsRef.current);
-    setClipsRaw(future.current.pop());
+    const daftar = future.current.pop();
+    setClipsRaw(daftar);
+    _rapikanCentang(daftar);
     setDirty(true);
     setHistoryTick((n) => n + 1);
     return true;
-  }, []);
+  }, [_rapikanCentang]);
 
   const canUndo = past.current.length > 0;
   const canRedo = future.current.length > 0;

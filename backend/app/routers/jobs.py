@@ -82,7 +82,7 @@ async def stream_all_jobs(request: Request):
 # Terukur: `/api/jobs?limit=40` mengembalikan 2,4 MB dalam 0,48 detik, sementara
 # yang dibutuhkan penanya hanya status dan sebuah kalimat.
 RINGKAS = ("id", "type", "status", "progress", "stage", "message",
-           "video_id", "eta_seconds", "started_at", "error")
+           "video_id", "eta_seconds", "started_at", "created_at", "error")
 
 
 @router.get("/aktif")

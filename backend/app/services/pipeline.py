@@ -448,6 +448,42 @@ def _jadwalkan_jejak(video_id: str, clips: list[dict], aspect_ratio: str | None)
     _jadwalkan_jejak_sekarang(video_id, clips, aspect_ratio)
 
 
+def _sidik_klip(ringkas: list[dict]) -> str:
+    """
+    Sidik jari daftar klip: potongan waktunya plus giliran penuturnya.
+
+    Keduanya yang menentukan hasil pemanasan. Judul dan jenis klip boleh
+    berubah tanpa membuat bingkai yang sudah dihitung jadi salah, jadi keduanya
+    tidak ikut — kalau ikut, mengganti judul satu klip akan memanaskan ulang
+    seluruh video.
+    """
+    import hashlib
+    bagian = []
+    for c in ringkas:
+        seg = ";".join(f"{float(x['start']):.3f}-{float(x['end']):.3f}"
+                       for x in (c.get("segments") or []))
+        pen = ";".join(f"{float(l['start']):.3f}-{float(l['end']):.3f}-{l['speaker']}"
+                       for l in (c.get("subtitles") or [])
+                       if l.get("speaker") is not None and l.get("end") is not None)
+        bagian.append(seg + "|" + pen)
+    return hashlib.sha1("\n".join(bagian).encode()).hexdigest()[:24]
+
+
+def _sudah_dipanaskan(video_id: str, ringkas: list[dict]) -> bool:
+    """Apakah pekerjaan yang SELESAI untuk daftar klip ini sudah ada."""
+    try:
+        from ..repos import jobs as jobs_repo
+        sidik = _sidik_klip(ringkas)
+        for j in jobs_repo.recent(60):
+            if (j.get("type") == "bingkai_awal" and j.get("video_id") == video_id
+                    and j.get("status") == "done"
+                    and (j.get("result") or {}).get("sidik") == sidik):
+                return True
+    except Exception as e:                           # noqa: BLE001
+        log.info("Riwayat pemanasan tidak terbaca: %s", str(e)[:140])
+    return False
+
+
 def _jadwalkan_jejak_sekarang(video_id: str, clips: list[dict],
                               aspect_ratio: str | None) -> str:
     """
@@ -486,13 +522,28 @@ def _jadwalkan_jejak_sekarang(video_id: str, clips: list[dict],
                for c in clips if c.get("segments")]
     if not ringkas:
         return ""
+
+    # Sudah pernah SELESAI untuk daftar klip yang sama? Jangan diulang.
+    #
+    # `dedupe_key` hanya menahan pekerjaan yang masih antre atau berjalan, jadi
+    # begitu satu selesai, membuka proyeknya lagi — atau berganti akun, atau
+    # menyalakan ulang aplikasi — mengantrekan pekerjaan yang sama dari awal.
+    # Terlihat di aplikasi live pemiliknya: satu video punya LIMA pekerjaan
+    # "selesai" berisi hal yang sama persis, dan satu lagi antre di belakangnya.
+    # Yang dilihat orangnya: "Menunggu giliran" selama 15 menit untuk bingkai
+    # yang sebenarnya sudah jadi sejak setengah jam lalu.
+    if _sudah_dipanaskan(video_id, ringkas):
+        log.info("Bingkai awal %s dilewati: daftar klip yang sama sudah pernah selesai",
+                 video_id)
+        return ""
+
     try:
         # `enqueue` mengembalikan (id, baru). `baru` False berarti sudah ada
         # pekerjaan yang sama sedang antre atau berjalan, dan id yang diberikan
         # adalah miliknya; pemanggil tetap dapat sesuatu untuk dipantau.
         job_id, _baru = queue.enqueue(
             "bingkai_awal",
-            {"video_id": video_id, "klip": ringkas,
+            {"video_id": video_id, "klip": ringkas, "sidik": _sidik_klip(ringkas),
              "aspect_ratio": aspect_ratio or "9:16"},
             video_id=video_id, priority=950,
             dedupe_key=f"bingkai-awal:{video_id}")

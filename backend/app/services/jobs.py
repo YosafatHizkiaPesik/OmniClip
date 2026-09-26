@@ -242,6 +242,12 @@ class JobQueue:
             # Kapan mulai berjalan (detik epoch) — antarmuka menghitung lama
             # berjalan dari sini, supaya menunggu yang tidak terukur pun jujur.
             "started_at": job.get("started_at"),
+            # Dan kapan ia diantrekan. Pekerjaan yang masih ANTRE belum punya
+            # `started_at`, jadi tanpa ini antarmuka tidak punya apa pun untuk
+            # menghitung sudah berapa lama ia menunggu, dan versi pertama
+            # menghitungnya dari saat layar dibuka — yang mulai dari nol lagi
+            # tiap kali layarnya dibuka ulang.
+            "created_at": job.get("created_at"),
             "error": job["error"],
             "error_code": job["error_code"],
             "video_id": job["video_id"],

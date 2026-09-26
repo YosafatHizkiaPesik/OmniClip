@@ -1890,6 +1890,60 @@ def _apply_deadzone(values: list[float], deadzone: float) -> list[float]:
     return out
 
 
+def _tahan_saat_sepi(centers, subject, people, seen):
+    """
+    Saat tidak ada yang teridentifikasi bicara, bingkai MENAHAN orang terakhir
+    — bukan melayang ke titik tengah semua wajah.
+
+    Titik tengah dua orang yang duduk berdampingan adalah celah di antara
+    mereka. Terlapor oleh pemiliknya pada klip vlog di dalam mobil: "bingkai
+    menyorot ke ruang kosong tidak ke wajah". Terukur pada klip itu, subjeknya
+    kosong di 18% sampel — jeda antar giliran, tawa, dan saat keduanya bicara
+    bersamaan — dan di setiap sampel itu bingkainya membingkai celahnya.
+
+    Menahan adalah yang dilakukan penyunting: saat tidak jelas siapa yang
+    bicara, kamera tetap pada orang terakhir, bukan mundur ke tengah. Hanya
+    berlaku bila ada DUA wajah atau lebih terlihat; dengan satu wajah, titik
+    tengahnya memang wajah itu sendiri.
+    """
+    n = len(subject)
+    out, subj = list(centers), list(subject)
+    terakhir: Optional[int] = None
+    # Subjek pertama yang diketahui, untuk mengisi kekosongan di awal klip.
+    pertama = next((x for x in subject if x is not None), None)
+    ditahan = 0
+    for i in range(n):
+        if subj[i] is not None:
+            terakhir = subj[i]
+            continue
+        siapa = terakhir if terakhir is not None else pertama
+        if siapa is None or siapa >= len(people):
+            continue
+        terlihat = sum(1 for q in range(len(people))
+                       if q < len(seen) and i < len(seen[q]) and seen[q][i])
+        if terlihat < 2:
+            continue                     # satu wajah: titik tengahnya wajah itu
+        if i >= len(seen[siapa]) or not seen[siapa][i] or people[siapa][i] is None:
+            # Orang yang ditahan sedang tidak di layar. Titik tengah semua
+            # wajah tetap bukan jawaban — ia tetap celah. Yang dipilih adalah
+            # wajah TERDEKAT dengan tempat bingkai berada sekarang: selalu
+            # mendarat di sebuah wajah, dan geserannya paling pendek.
+            acuan = out[i - 1] if i > 0 else centers[i]
+            calon = [(abs(people[q][i] - acuan), q) for q in range(len(people))
+                     if q < len(seen) and i < len(seen[q]) and seen[q][i]
+                     and people[q][i] is not None]
+            if not calon:
+                continue
+            siapa = min(calon)[1]
+        out[i] = people[siapa][i]
+        subj[i] = siapa
+        ditahan += 1
+    if ditahan:
+        log.info("Bingkai menahan orang terakhir selama %.1f dtk sepi, "
+                 "bukan melayang ke celah antar wajah", ditahan / SAMPLE_FPS)
+    return out, subj
+
+
 def _settle_subject(subject: list[Optional[int]]) -> list[Optional[int]]:
     """
     Membuang pergantian subjek yang terlalu pendek untuk dipercaya.
@@ -2972,6 +3026,12 @@ def plan_reframe(source_video_path: str, segments: list[dict], *,
     # mengambil alih seluruh klip dengan tangan.
     if person_keys and people:
         centers, subject = _apply_person_keys(centers, people, person_keys, subject)
+
+    # Terakhir, sesudah semua sumber bukti habis: kekosongan yang tersisa diisi
+    # dengan menahan orang terakhir. Dijalankan paling akhir supaya ia tidak
+    # menutupi bukti apa pun, hanya mengisi yang memang tidak terjawab.
+    if people and lock_person is None:
+        centers, subject = _tahan_saat_sepi(centers, subject, people, seen)
 
     smoothed = _smooth(centers, cuts, source_w=source_w, crop_w=crop_w,
                        subject=subject, motion=frame_motion)
