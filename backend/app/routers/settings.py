@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 
 from fastapi import APIRouter, File, Query, Request, UploadFile
-from typing import List
+from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -212,18 +212,77 @@ def _pemanasan_bingkai() -> bool:
         return True
 
 
+class PemanasanRequest(SakelarRequest):
+    # Video yang sedang dibuka orangnya, kalau ada. Dipakai untuk melanjutkan
+    # penyiapan begitu sakelarnya dinyalakan lagi.
+    video_id: Optional[str] = None
+
+
 @router.post("/pemanasan-bingkai")
-async def set_pemanasan_bingkai(req: SakelarRequest):
+async def set_pemanasan_bingkai(req: PemanasanRequest):
     """
     Bingkai semua klip dihitung lebih dulu sesudah auto-klip, atau tidak.
 
     Menyala secara bawaan. Yang mematikannya membayar dengan menunggu beberapa
     detik tiap kali membuka klip baru, dan mendapat CPU yang tidak dipakai di
     latar sebagai gantinya. Pertukaran itu milik pemiliknya, bukan milik kode.
+
+    Sakelarnya BERLAKU SEKARANG, bukan mulai video berikutnya. Dimatikan saat
+    penyiapan sedang berjalan berarti penyiapan itu berhenti; kalau tidak,
+    sakelar "matikan pemakaian CPU di latar" justru tidak mematikan pemakaian
+    CPU yang sedang berlangsung, dan itu satu-satunya saat orang menekannya.
+
+    Dinyalakan lagi berarti melanjutkan. Melanjutkan hampir gratis: klip yang
+    sudah terhitung ada di simpanan, jadi yang dikerjakan ulang hanya sisanya.
     """
     from ..services.pipeline import setel_pemanasan_bingkai
     setel_pemanasan_bingkai(req.aktif)
-    return {"status": "ok", "aktif": req.aktif}
+
+    dibatalkan, dilanjutkan = 0, 0
+    if not req.aktif:
+        dibatalkan = _hentikan_pemanasan()
+    elif req.video_id:
+        dilanjutkan = _lanjutkan_pemanasan(req.video_id)
+    return {"status": "ok", "aktif": req.aktif,
+            "dihentikan": dibatalkan, "dilanjutkan": dilanjutkan}
+
+
+def _hentikan_pemanasan() -> int:
+    """Membatalkan semua penyiapan bingkai yang sedang antre atau berjalan."""
+    from ..repos import jobs as jobs_repo
+    from ..services.jobs import queue
+    n = 0
+    try:
+        for j in jobs_repo.active():
+            if j.get("type") == "bingkai_awal" and queue.cancel(j["id"]):
+                n += 1
+    except Exception as e:                           # noqa: BLE001
+        log.warning("Penyiapan bingkai tidak bisa dihentikan: %s", str(e)[:160])
+    return n
+
+
+def _lanjutkan_pemanasan(video_id: str) -> int:
+    """
+    Mengantrekan lagi penyiapan bingkai video ini. 0 = tidak ada yang perlu.
+
+    Jalur yang SAMA dengan tombol "Siapkan bingkai video ini sekarang", jadi
+    melanjutkan dan memulai dari tombol tidak bisa berbeda perilakunya. Klip
+    yang sudah terhitung ada di simpanan, jadi yang benar-benar dikerjakan
+    ulang hanya sisanya — itulah yang membuat "lanjut" terasa seperti lanjut.
+    """
+    try:
+        from ..repos import analyses as analyses_repo
+        from ..services.pipeline import _jadwalkan_jejak_sekarang
+        cached = analyses_repo.latest_for_video(video_id)
+        hasil = (cached or {}).get("result") or {}
+        klip = hasil.get("clips") or []
+        if not klip:
+            return 0
+        return 1 if _jadwalkan_jejak_sekarang(
+            video_id, klip, hasil.get("aspect_ratio")) else 0
+    except Exception as e:                           # noqa: BLE001
+        log.warning("Penyiapan bingkai tidak bisa dilanjutkan: %s", str(e)[:160])
+        return 0
 
 
 @router.post("/warna-penutur")

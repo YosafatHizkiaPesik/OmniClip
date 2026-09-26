@@ -282,6 +282,81 @@ class FacecamDisimpanDanDipanaskan(unittest.TestCase):
         # Dan judul klipnya ikut, supaya terbaca sebagai pekerjaan nyata.
         self.assertIn('judul = (klip.get("title") or "").strip()', sumber)
 
+    def test_sakelar_mati_menghentikan_di_tengah_jalan(self):
+        """
+        Sakelarnya berlaku SEKARANG, bukan mulai video berikutnya.
+
+        Orang menekan "matikan pemakaian CPU di latar" justru saat CPU-nya
+        sedang dipakai. Sakelar yang hanya berlaku untuk video berikutnya tidak
+        melakukan apa pun pada satu-satunya saat ia ditekan.
+        """
+        from unittest import mock
+        from app.services import bingkai_awal as B
+
+        klip = [{"segments": [{"start": 0.0, "end": 30.0}], "subtitles": [],
+                 "title": f"K{i}"} for i in range(8)]
+
+        class Ctx:
+            payload = {"video_id": "vid", "aspect_ratio": "9:16", "klip": klip}
+            def __init__(self): self.pesan = []
+            def check_cancelled(self): pass
+            def progress(self, p, stage=None, message=None):
+                self.pesan.append((p, message))
+
+        panggil = {"n": 0}
+
+        def sakelar():
+            panggil["n"] += 1
+            return panggil["n"] <= 2        # mati sesudah dua klip
+
+        with mock.patch("app.services.pipeline.pemanasan_bingkai", side_effect=sakelar), \
+             mock.patch.object(B, "_jenis_gameplay", return_value=False), \
+             mock.patch.object(B, "_panaskan_facecam"), \
+             mock.patch.object(B, "_tema_untuk_semua", return_value=0) as tema, \
+             mock.patch("app.routers.clips.hitung_reframe") as jejak, \
+             mock.patch("app.services.pipeline.tambatkan_ke_wajah") as tambat:
+            ctx = Ctx()
+            hasil = B.run_bingkai_awal(ctx)
+
+        self.assertTrue(hasil.get("dihentikan"))
+        self.assertEqual(hasil["siap"], 2)
+        self.assertEqual(jejak.call_count, 2, "klip sesudahnya tidak dikerjakan")
+        # Dua langkah SESUDAH perulangan masing-masing memakan puluhan detik.
+        # Keduanya juga sudah tidak diinginkan, jadi keduanya harus dilewati.
+        self.assertEqual(tambat.call_count, 0, "penambatan suara ikut berhenti")
+        self.assertEqual(tema.call_count, 0, "pemilihan tema ikut berhenti")
+        # Dan pesannya mengatakan berapa yang sudah siap, supaya menyalakannya
+        # lagi terbaca sebagai melanjutkan, bukan mengulang.
+        self.assertIn("Dihentikan", ctx.pesan[-1][1])
+        self.assertIn("2 dari 8", ctx.pesan[-1][1])
+
+    def test_kemajuan_langkah_pinjaman_dipetakan(self):
+        """
+        Langkah yang dipakai bersama melapor dalam rentangnya SENDIRI.
+
+        `tambatkan_ke_wajah` melapor 0,20-0,42 karena di dalam auto-klip ia
+        memang di situ. Diteruskan apa adanya, bilah kemajuan melompat dari 96%
+        ke 20% di akhir pekerjaan — dan bilah yang mundur terbaca persis seperti
+        macet, yang justru sedang kita hilangkan.
+        """
+        from app.services.bingkai_awal import _Ekor
+
+        dicatat = []
+
+        class Ctx:
+            def check_cancelled(self): pass
+            def progress(self, p, **kw): dicatat.append(p)
+
+        ekor = _Ekor(Ctx(), 0.94, 0.99)
+        for p in (0.0, 0.20, 0.42, 1.0):
+            ekor.progress(p)
+        self.assertEqual([round(x, 4) for x in dicatat], [0.94, 0.95, 0.961, 0.99])
+        # Di luar batas pun tidak boleh keluar dari rentangnya.
+        dicatat.clear()
+        ekor.progress(-1.0)
+        ekor.progress(9.0)
+        self.assertEqual(dicatat, [0.94, 0.99])
+
     def test_pemanasan_ikut_menghitung_facecam(self):
         from pathlib import Path
         sumber = (Path(__file__).resolve().parents[1] / "app" / "services"
@@ -289,3 +364,75 @@ class FacecamDisimpanDanDipanaskan(unittest.TestCase):
         self.assertIn("_panaskan_facecam(video_id, segmen)", sumber)
         # Dan memakai simpanan yang SAMA dengan yang dibaca endpointnya.
         self.assertIn("_kunci_facecam", sumber)
+
+
+class SakelarDiPanelBingkai(unittest.TestCase):
+    """
+    Letak dan perilaku sakelarnya di layar.
+
+    Dibaca sebagai teks; proyek ini tidak punya penjalan uji JavaScript.
+    """
+
+    PANEL = (Path(__file__).resolve().parents[2] / "frontend" / "src" / "features"
+             / "studio" / "FramePanel.jsx")
+
+    def test_sakelar_ada_di_paling_atas_panel(self):
+        """
+        Sebelumnya ia terselip di antara setelan yang hanya muncul untuk
+        sebagian cara membingkai, jadi letaknya berpindah-pindah tergantung
+        mode yang sedang dipilih — dan sering tidak terlihat sama sekali.
+        """
+        jsx = self.PANEL.read_text(encoding="utf-8")
+        badan = jsx[jsx.index("export default function FramePanel"):]
+        self.assertLess(badan.index("<PemanasanBingkai"),
+                        badan.index("Cara membingkai"),
+                        "sakelarnya harus berdiri sebelum daftar cara membingkai")
+        self.assertEqual(badan.count("<PemanasanBingkai"), 1)
+
+    def test_menyalakan_kembali_menyebut_videonya(self):
+        """
+        Tanpa `video_id`, menyalakannya hanya menyalakan sakelar: video yang
+        sedang dibuka tidak dilanjutkan, dan orangnya menunggu sesuatu yang
+        tidak pernah dimulai.
+        """
+        jsx = self.PANEL.read_text(encoding="utf-8")
+        self.assertIn("'/settings/pemanasan-bingkai'", jsx)
+        self.assertIn("video_id: videoId || null", jsx)
+
+
+class SakelarDiServer(unittest.TestCase):
+    def test_dimatikan_membatalkan_yang_sedang_berjalan(self):
+        from unittest import mock
+        from app.routers import settings as S
+
+        aktif = [{"id": "a", "type": "bingkai_awal"},
+                 {"id": "b", "type": "auto_clip"},
+                 {"id": "c", "type": "bingkai_awal"}]
+        with mock.patch("app.repos.jobs.active", return_value=aktif), \
+             mock.patch("app.services.jobs.queue.cancel", return_value=True) as batal:
+            n = S._hentikan_pemanasan()
+        self.assertEqual(n, 2)
+        # Pekerjaan lain tidak boleh ikut dibatalkan.
+        self.assertEqual([c.args[0] for c in batal.call_args_list], ["a", "c"])
+
+    def test_dinyalakan_memakai_jalur_yang_sama_dengan_tombolnya(self):
+        """
+        Melanjutkan dan memulai dari tombol tidak boleh berbeda perilakunya;
+        dua jalur yang menjadwalkan pekerjaan yang sama akan bergeser sendiri.
+        """
+        from unittest import mock
+        from app.routers import settings as S
+
+        cached = {"result": {"clips": [{"segments": [{"start": 0, "end": 5}]}],
+                             "aspect_ratio": "9:16"}}
+        with mock.patch("app.repos.analyses.latest_for_video", return_value=cached), \
+             mock.patch("app.services.pipeline._jadwalkan_jejak_sekarang",
+                        return_value="job-1") as jadwal:
+            self.assertEqual(S._lanjutkan_pemanasan("vid"), 1)
+        jadwal.assert_called_once()
+
+    def test_tanpa_klip_tidak_menjadwalkan_apa_apa(self):
+        from unittest import mock
+        from app.routers import settings as S
+        with mock.patch("app.repos.analyses.latest_for_video", return_value=None):
+            self.assertEqual(S._lanjutkan_pemanasan("vid"), 0)

@@ -7,14 +7,24 @@ import {
 } from './frames';
 
 /**
- * Sakelar pemanasan bingkai, plus tombol untuk video yang sudah terlanjur.
+ * Sakelar penyiapan bingkai semua klip, plus tombol untuk video yang terlanjur.
  *
  * Diminta 25 September 2026. Bingkai tiap klip dulu baru dihitung saat klipnya
  * dibuka, jadi menelusuri dua puluh klip berarti menunggu dua puluh kali.
- * Pemanasan otomatis sesudah auto-klip menghapus penungguan itu, tapi ia
+ * Penyiapan otomatis sesudah auto-klip menghapus penungguan itu, tapi ia
  * memakai CPU di latar, dan pada mesin yang pas-pasan itu terasa. Jadi
  * sakelarnya ada di sini, di tempat orang memikirkan bingkai, bukan terkubur
  * di Pengaturan.
+ *
+ * Dipindah ke PALING ATAS panel dan diberi kotaknya sendiri pada 26 September
+ * 2026, atas permintaan pemiliknya: sebelumnya ia terselip di antara setelan
+ * lain yang hanya muncul untuk sebagian cara membingkai, jadi letaknya
+ * berpindah-pindah tergantung mode yang sedang dipilih.
+ *
+ * Sakelarnya berlaku SEKARANG. Dimatikan saat penyiapan sedang berjalan berarti
+ * penyiapan itu berhenti di klip berikutnya; dinyalakan lagi berarti
+ * melanjutkan, dan melanjutkan hampir gratis karena klip yang sudah terhitung
+ * ada di simpanan.
  */
 function PemanasanBingkai({ videoId }) {
   const [aktif, setAktif] = useState(null);
@@ -30,8 +40,21 @@ function PemanasanBingkai({ videoId }) {
   const ubah = async (nilai) => {
     const sebelum = aktif;
     setAktif(nilai);
+    setKabar(null);
     try {
-      await apiPost('/settings/pemanasan-bingkai', { aktif: nilai });
+      // `video_id` ikut supaya menyalakannya kembali MELANJUTKAN video yang
+      // sedang dibuka, bukan sekadar menyalakan sakelar untuk video berikutnya.
+      const r = await apiPost('/settings/pemanasan-bingkai',
+                              { aktif: nilai, video_id: videoId || null });
+      if (!nilai) {
+        setKabar(r?.dihentikan
+          ? 'Dihentikan. Yang sudah terhitung tetap tersimpan.'
+          : 'Dimatikan. Bingkai dihitung saat klipnya dibuka.');
+      } else {
+        setKabar(r?.dilanjutkan
+          ? 'Dilanjutkan dari klip yang belum terhitung.'
+          : 'Dinyalakan.');
+      }
     } catch (e) {
       setAktif(sebelum);
       setKabar(e.message);
@@ -43,7 +66,7 @@ function PemanasanBingkai({ videoId }) {
     setKabar(null);
     try {
       const r = await apiPost(`/projects/${videoId}/siapkan-bingkai`, {});
-      setKabar(`Bingkai ${r.klip} klip sedang disiapkan. Kemajuannya di halaman Partitur.`);
+      setKabar(`Bingkai ${r.klip} klip sedang disiapkan.`);
     } catch (e) {
       setKabar(e.message);
     } finally {
@@ -51,36 +74,53 @@ function PemanasanBingkai({ videoId }) {
     }
   };
 
+  const menyala = aktif === true;
   return (
-    <>
-      <div style={{ height: '1px', background: 'var(--rule-2)', margin: '4px 0' }} />
-      <label style={{ display: 'flex', alignItems: 'flex-start', gap: '9px',
+    <div style={{
+      border: `1px solid ${menyala ? 'var(--accent-cyan)' : 'var(--rule-2)'}`,
+      borderRadius: 'var(--r-sm)', padding: '10px 11px',
+      background: 'var(--plate-3)', display: 'flex',
+      flexDirection: 'column', gap: '8px',
+    }}>
+      <label style={{ display: 'flex', alignItems: 'center', gap: '9px',
                       cursor: aktif === null ? 'default' : 'pointer' }}>
-        <input type="checkbox" checked={aktif === true} disabled={aktif === null}
+        <input type="checkbox" checked={menyala} disabled={aktif === null}
                onChange={(e) => ubah(e.target.checked)}
-               style={{ marginTop: '3px', width: '15px', height: '15px',
+               style={{ width: '16px', height: '16px',
                         accentColor: 'var(--accent-cyan)', flex: 'none' }} />
-        <span style={{ fontSize: '0.75rem', lineHeight: 1.5 }}>
-          <b>Siapkan bingkai semua klip di awal.</b>{' '}
-          <span style={{ color: 'var(--text-muted)' }}>
-            Sesudah mengklip, bingkai dua puluh klip pertama dihitung lebih dulu di
-            latar, jadi tiap klip yang dibuka langsung terbingkai. Dimatikan berarti
-            bingkainya dihitung saat klipnya dibuka, beberapa detik tiap kali, dan
-            CPU-nya bebas untuk hal lain.
-          </span>
+        <b style={{ fontSize: '0.82rem', flex: 1 }}>Siapkan bingkai semua klip di awal</b>
+        <span style={{
+          fontSize: '0.64rem', fontWeight: 800, padding: '2px 8px',
+          borderRadius: '99px', flex: 'none',
+          background: menyala ? 'var(--accent-cyan)' : 'var(--bg-glass)',
+          color: menyala ? '#0B1220' : 'var(--text-muted)',
+        }}>
+          {aktif === null ? '…' : menyala ? 'NYALA' : 'MATI'}
         </span>
       </label>
-      <button className="btn-secondary" onClick={siapkanSekarang} disabled={sibuk}
-              style={{ fontSize: '0.72rem', padding: '5px 9px', alignSelf: 'flex-start',
-                       display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-        {sibuk ? <Loader2 size={12} className="animate-spin" /> : <Zap size={12} />}
-        Siapkan bingkai video ini sekarang
-      </button>
+      <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: 0,
+                  lineHeight: 1.55 }}>
+        {menyala
+          ? 'Bingkai dua puluh klip pertama dihitung lebih dulu di latar, jadi tiap '
+            + 'klip yang dibuka langsung terbingkai. Mematikannya menghentikan yang '
+            + 'sedang berjalan sekarang juga.'
+          : 'Bingkai dihitung saat klipnya dibuka, beberapa detik tiap kali, dan CPU '
+            + 'di latar bebas untuk hal lain. Menyalakannya melanjutkan dari klip '
+            + 'yang belum terhitung, bukan mengulang dari nol.'}
+      </p>
+      {videoId && menyala && (
+        <button className="btn-secondary" onClick={siapkanSekarang} disabled={sibuk}
+                style={{ fontSize: '0.72rem', padding: '5px 9px', alignSelf: 'flex-start',
+                         display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+          {sibuk ? <Loader2 size={12} className="animate-spin" /> : <Zap size={12} />}
+          Siapkan bingkai video ini sekarang
+        </button>
+      )}
       {kabar && (
-        <p style={{ fontSize: '0.68rem', color: 'var(--text-muted)', margin: 0,
+        <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', margin: 0,
                     lineHeight: 1.5 }}>{kabar}</p>
       )}
-    </>
+    </div>
   );
 }
 
@@ -158,6 +198,11 @@ export default function FramePanel({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '9px' }}>
+      {/* Paling atas, dan dengan kotaknya sendiri. Sebelumnya ia terselip di
+          antara setelan yang hanya muncul untuk sebagian cara membingkai, jadi
+          letaknya berpindah-pindah dan sering tidak terlihat sama sekali. */}
+      <PemanasanBingkai videoId={videoId} />
+
       <div className="mark" style={{ color: 'var(--ink)' }}>Cara membingkai</div>
       {jenisKlip === 'memuat' && !pilihanSendiri && (
         <div className="choice-h" style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
@@ -243,8 +288,6 @@ export default function FramePanel({
           </div>
         </>
       )}
-
-      {videoId && <PemanasanBingkai videoId={videoId} />}
 
       {frameMode === 'smart' && peopleCount > 1 && onAimPerson && (
         <>

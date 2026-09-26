@@ -33,6 +33,7 @@ MAKS_KLIP = 20
 def run_bingkai_awal(ctx) -> dict:
     """payload: {video_id, klip: [{segments, subtitles}], aspect_ratio}"""
     from ..routers.clips import hitung_reframe
+    from .pipeline import pemanasan_bingkai
 
     video_id = ctx.payload["video_id"]
     daftar = (ctx.payload.get("klip") or [])[:MAKS_KLIP]
@@ -67,8 +68,20 @@ def run_bingkai_awal(ctx) -> dict:
     gameplay = None
 
     siap = gagal = 0
+    berhenti = False
     for i, klip in enumerate(daftar):
         ctx.check_cancelled()
+        # Sakelarnya dibaca tiap klip, bukan sekali di awal.
+        #
+        # Pembatalan dari luar sudah menutup jalur biasanya, tapi pekerjaan ini
+        # bisa juga sedang ANTRE saat sakelarnya dimatikan lalu baru berjalan
+        # sesudahnya. Membaca sakelarnya di sini berarti ia tidak pernah
+        # mengerjakan apa pun yang sudah tidak diinginkan, dari jalur mana pun
+        # ia sampai ke sini.
+        if not pemanasan_bingkai():
+            berhenti = True
+            log.info("Penyiapan bingkai %s dihentikan: sakelarnya dimatikan.", video_id)
+            break
         segmen = [{"start": round(float(s["start"]), 3), "end": round(float(s["end"]), 3)}
                   for s in (klip.get("segments") or [])
                   if float(s["end"]) - float(s["start"]) > 0.2]
@@ -119,6 +132,16 @@ def run_bingkai_awal(ctx) -> dict:
     # Warna penutur, dari WAJAH. Dikerjakan di sini karena pelacakan wajahnya
     # memang sudah selesai di atas; di dalam auto-klip ia akan menambah
     # menit-menit pada pekerjaan yang ditunggu orang di depan layar.
+    if berhenti:
+        # Berhenti atas permintaan bukan kegagalan, dan bukan pula "selesai".
+        # Yang sudah terhitung tetap tersimpan, jadi menyalakannya lagi
+        # melanjutkan dari sini, bukan mengulang dari nol.
+        pesan = (f"Dihentikan. Bingkai {siap} dari {len(daftar)} klip sudah siap; "
+                 "nyalakan lagi untuk melanjutkan.")
+        ctx.progress(1.0, stage="done", message=pesan)
+        log.info("Bingkai awal video %s dihentikan: %d siap", video_id, siap)
+        return {"siap": siap, "gagal": gagal, "dihentikan": True}
+
     # Menambatkan suara ke wajah menuntut jejak wajah yang pada video gameplay
     # sengaja tidak dihitung, dan di sana penuturnya memang satu orang.
     tambat = None
