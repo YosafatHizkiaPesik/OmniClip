@@ -136,6 +136,43 @@ class ProfilSementaraDisapu(unittest.TestCase):
         self.assertIsNotNone(repo.ambil(layanan.UTAMA))
 
 
+class HalamanTidakMenggantung(unittest.TestCase):
+    """
+    Sesudah izin Google selesai, halaman yang menunggu harus pulang sendiri.
+
+    Dilaporkan pemiliknya 27 September 2026 dengan buktinya di layar: "akun
+    sudah tersambung youtube tapi masih saja loading". Tab izin dibuka dengan
+    `noopener`, yang menjamin `window.opener` kosong, jadi kabar dari halaman
+    balik tidak pernah terkirim dan penantiannya tidak pernah berakhir.
+    """
+
+    def _baca(self, nama: str) -> str:
+        return (AKAR / "frontend" / "src" / nama).read_text(encoding="utf-8")
+
+    def test_tab_izin_dibuka_tanpa_noopener(self):
+        pembuka = self._baca("lib/izinGoogle.js")
+        self.assertNotIn("noopener", pembuka.split("export function")[1],
+                         "noopener memutus window.opener, kabarnya tidak akan sampai")
+        for nama in ("components/TambahAkun.jsx", "components/GoogleAccountCard.jsx"):
+            with self.subTest(berkas=nama):
+                teks = self._baca(nama)
+                self.assertIn("bukaIzinGoogle(", teks)
+                self.assertNotIn("'noopener'", teks)
+
+    def test_penantiannya_bertanya_sendiri(self):
+        """Pesan antar-tab tidak boleh jadi satu-satunya jalan pulang."""
+        for nama in ("components/TambahAkun.jsx", "components/GoogleAccountCard.jsx"):
+            with self.subTest(berkas=nama):
+                teks = self._baca(nama)
+                self.assertIn("setInterval", teks)
+                self.assertIn("/uploads/google/status", teks)
+
+    def test_penantiannya_punya_batas_dan_jalan_keluar(self):
+        teks = self._baca("components/TambahAkun.jsx")
+        self.assertIn("setTimeout", teks)
+        self.assertIn("Batalkan", teks)
+
+
 class StudioMenandaiAkunWadah(unittest.TestCase):
     def test_tombol_masuk_menandai_dan_membersihkan(self):
         teks = (AKAR / "frontend" / "src" / "components" / "TambahAkun.jsx").read_text(

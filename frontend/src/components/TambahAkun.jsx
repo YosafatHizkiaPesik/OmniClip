@@ -3,6 +3,7 @@ import {
   AlertTriangle, Check, ChevronRight, Copy, ExternalLink, Loader2, Plus, UserPlus,
 } from 'lucide-react';
 import { apiDelete, apiGet, apiPost, profilAktif, setProfilAktif } from '../lib/api';
+import { bukaIzinGoogle } from '../lib/izinGoogle';
 
 /**
  * Menambah akun: masuk dengan Google, sekali jalan.
@@ -52,6 +53,40 @@ export default function TambahAkun({ card, sectionTitle, helpText, onSelesai }) 
     window.addEventListener('message', dengar);
     return () => window.removeEventListener('message', dengar);
   }, [onSelesai]);
+
+  // Kabar dari tab sebelah TIDAK BOLEH jadi satu-satunya jalan pulang.
+  //
+  // Tab izinnya dibuka dengan `noopener`, dan itu memang membuat
+  // `window.opener` selalu kosong di sana, jadi pesannya tidak pernah
+  // terkirim. Akibatnya terlihat persis seperti yang dilaporkan pemiliknya:
+  // izinnya sudah selesai di tab Google, tapi halaman ini menggantung di
+  // "Menunggu izin dari Google" tanpa batas.
+  //
+  // Jadi halaman ini bertanya sendiri. Bertanya juga menyelamatkan keadaan
+  // lain yang tidak bisa dijangkau pesan antar-tab: tab izin ditutup sebelum
+  // sempat mengabarkan, atau izinnya diselesaikan di jendela lain.
+  useEffect(() => {
+    if (!menunggu) return undefined;
+    let batal = false;
+    const id = setInterval(async () => {
+      try {
+        const r = await apiGet('/uploads/google/status');
+        if (batal || !r?.connected) return;
+        clearInterval(id);
+        if (onSelesai) onSelesai(); else window.location.reload();
+      } catch {
+        // Selama menunggu, satu tanyaan yang gagal bukan kabar buruk.
+      }
+    }, 2000);
+    // Berhenti menunggu sesudah lima menit. Halaman izin Google sendiri sudah
+    // kedaluwarsa jauh sebelum itu, jadi menunggu lebih lama hanya menahan
+    // layar tanpa harapan. Akun wadahnya ikut disapu saat daftar dimuat ulang.
+    const henti = setTimeout(() => {
+      setMenunggu(false);
+      setGalat('Izin dari Google tidak selesai. Coba "Masuk dengan Google" lagi.');
+    }, 5 * 60 * 1000);
+    return () => { batal = true; clearInterval(id); clearTimeout(henti); };
+  }, [menunggu, onSelesai]);
   const [salin, setSalin] = useState(false);
   const [salinS, setSalinS] = useState(false);
   const berkasRef = useRef(null);
@@ -91,7 +126,7 @@ export default function TambahAkun({ card, sectionTitle, helpText, onSelesai }) 
       setProfilAktif(p.id);
       try {
         const r = await apiPost('/uploads/google/connect', {});
-        window.open(r.authorization_url, '_blank', 'noopener');
+        bukaIzinGoogle(r.authorization_url);
       } catch (err) {
         // Halaman izinnya belum sempat terbuka, jadi akun wadahnya dibuang
         // sekarang juga dan akun sebelumnya dipakai lagi. Menunggu penyapu
@@ -146,10 +181,17 @@ export default function TambahAkun({ card, sectionTitle, helpText, onSelesai }) 
             langkah. Tab izin bisa saja dibuka di jendela lain atau ditutup
             sebelum sempat mengabarkan, dan dalam keadaan itu satu-satunya cara
             maju adalah menekan sesuatu. */}
-        <button className="btn-secondary" style={{ marginTop: '12px' }}
-                onClick={() => (onSelesai ? onSelesai() : window.location.reload())}>
-          Tidak berpindah sendiri? Segarkan sekarang
-        </button>
+        <div style={{ display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap' }}>
+          <button className="btn-secondary"
+                  onClick={() => (onSelesai ? onSelesai() : window.location.reload())}>
+            Tidak berpindah sendiri? Segarkan sekarang
+          </button>
+          {/* Jalan keluar. Tanpa ini, menutup tab izin di tengah jalan berarti
+              panel ini menahan halaman Akun sampai halamannya dimuat ulang. */}
+          <button className="btn-secondary" onClick={() => setMenunggu(false)}>
+            Batalkan
+          </button>
+        </div>
       </div>
     );
   }

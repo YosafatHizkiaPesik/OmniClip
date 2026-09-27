@@ -3,6 +3,7 @@ import {
   UploadCloud, CheckCircle2, Loader2, AlertTriangle, Info, LogOut, ExternalLink,
 } from 'lucide-react';
 import { apiGet, apiPost } from '../lib/api';
+import { bukaIzinGoogle } from '../lib/izinGoogle';
 
 /**
  * Menyambungkan akun Google untuk mengunggah klip.
@@ -83,12 +84,38 @@ export default function GoogleAccountCard({ card, sectionTitle, helpText }) {
     return () => window.removeEventListener('message', dengar);
   }, [refresh]);
 
+  // Jaring pengaman: selama izinnya ditunggu, statusnya ditanyakan sendiri.
+  // Tab izin bisa ditutup sebelum sempat mengabarkan, atau diselesaikan di
+  // jendela lain, dan dalam keadaan itu tidak ada pesan yang akan datang.
+  const [menunggu, setMenunggu] = useState(null);
+  useEffect(() => {
+    if (!menunggu) return undefined;
+    let batal = false;
+    const id = setInterval(async () => {
+      try {
+        const r = await apiGet('/uploads/google/status');
+        if (batal || !r?.layanan?.[menunggu]?.connected) return;
+        clearInterval(id);
+        setMenunggu(null);
+        setNote(null);
+        refresh();
+      } catch {
+        // Satu tanyaan yang gagal selama menunggu bukan kabar buruk.
+      }
+    }, 2000);
+    // Berhenti bertanya sesudah lima menit: halaman izin Google sendiri sudah
+    // kedaluwarsa jauh sebelum itu.
+    const henti = setTimeout(() => setMenunggu(null), 5 * 60 * 1000);
+    return () => { batal = true; clearInterval(id); clearTimeout(henti); };
+  }, [menunggu, refresh]);
+
   const connect = async (layanan) => {
     setBusy(true); setError(null); setNote(null);
     try {
       const { authorization_url: url } = await apiPost('/uploads/google/connect',
         { layanan });
-      window.open(url, '_blank', 'noopener');
+      bukaIzinGoogle(url);
+      setMenunggu(layanan);
       setNote(`Halaman izin ${LABEL[layanan]} terbuka di tab baru. Selesaikan di `
         + 'sana, lalu kembali ke sini. Status di bawah akan ikut berubah.');
     } catch (err) {
