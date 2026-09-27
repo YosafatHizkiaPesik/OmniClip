@@ -330,6 +330,25 @@ MIGRATIONS: list[str] = [
     ALTER TABLE analyses_baru RENAME TO analyses;
     CREATE INDEX idx_analyses_video ON analyses(video_id, created_at DESC);
     """,
+    # 7 - profil yang belum jadi.
+    #
+    # "Masuk dengan Google" membuat profilnya LEBIH DULU, lalu membuka halaman
+    # izin. Urutannya memang harus begitu: halaman balik dari Google tidak
+    # membawa tanda profil, jadi tokennya hanya bisa mendarat di akun yang
+    # benar kalau akun itu sudah ada saat izinnya diminta.
+    #
+    # Yang hilang adalah pembersihnya. Izin yang tidak pernah selesai (jaringan
+    # putus, tab ditutup, pengguna membatalkan di halaman Google) meninggalkan
+    # akun kosong bernama "Akun baru" yang bahkan menjadi akun aktif. Terlihat
+    # pada pemiliknya 27 September 2026: penukaran kode gagal karena DNS, dan
+    # akun kosong itu tetap berdiri.
+    #
+    # Kolom ini menandai akun yang masih menunggu izin. Akun yang dibuat
+    # sengaja tanpa Google ("Buat ruang kerja tanpa akun Google") tidak
+    # ditandai, jadi ia tidak pernah ikut tersapu.
+    """
+    ALTER TABLE profil ADD COLUMN sementara INTEGER NOT NULL DEFAULT 0;
+    """,
 ]
 
 

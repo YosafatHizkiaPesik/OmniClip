@@ -55,6 +55,9 @@ class ProfilBaru(BaseModel):
     nama: str = Field(..., min_length=1, max_length=40)
     warna: str = "#E0473A"
     minat: List[str] = Field(default_factory=list)
+    # Dibuat untuk menampung izin Google yang sedang diminta. Bila izinnya tidak
+    # pernah selesai, profil ini disapu kembali; lihat profil.sapu_sementara.
+    sementara: bool = False
 
 
 class ProfilUbah(BaseModel):
@@ -90,6 +93,11 @@ def _terakhir() -> int:
 
 @router.get("")
 async def daftar():
+    # Akun yang izin Google-nya tidak pernah selesai dibuang di sini, bukan di
+    # latar belakang: daftar inilah satu-satunya tempat ia akan terlihat, dan
+    # membuangnya tepat sebelum daftar disusun berarti ia tidak pernah sempat
+    # muncul sebagai "Akun baru" yang kosong.
+    await asyncio.to_thread(layanan.sapu_sementara)
     ps = await asyncio.to_thread(repo.semua)
     return {"profil": [await asyncio.to_thread(_lengkap, p) for p in ps],
             "aktif": layanan.kini(),
@@ -119,7 +127,8 @@ async def buat(req: ProfilBaru):
     if not _WARNA.match(req.warna):
         raise InvalidInput("Warna harus berbentuk #RRGGBB.")
     pid = await asyncio.to_thread(repo.buat, req.nama.strip(), warna=req.warna,
-                                  minat=_rapikan_minat(req.minat))
+                                  minat=_rapikan_minat(req.minat),
+                                  sementara=req.sementara)
     # Foldernya SENGAJA belum dipatok di sini.
     #
     # Dulu dipatok, dengan alasan yang masuk akal waktu itu: mengganti nama

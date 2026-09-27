@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   AlertTriangle, Check, ChevronRight, Copy, ExternalLink, Loader2, Plus, UserPlus,
 } from 'lucide-react';
-import { apiGet, apiPost, setProfilAktif } from '../lib/api';
+import { apiDelete, apiGet, apiPost, profilAktif, setProfilAktif } from '../lib/api';
 
 /**
  * Menambah akun: masuk dengan Google, sekali jalan.
@@ -79,14 +79,27 @@ export default function TambahAkun({ card, sectionTitle, helpText, onSelesai }) 
   const masuk = async () => {
     setSibuk(true);
     setGalat(null);
+    const sebelumnya = profilAktif();
     try {
-      const p = await apiPost('/profil', { nama: 'Akun baru', minat: [] });
-      // Sejak baris ini, semua permintaan berjalan atas nama akun yang baru —
+      // `sementara` menandai bahwa akun ini baru sebuah wadah untuk izin yang
+      // sedang diminta. Izin yang tidak pernah selesai membuatnya disapu
+      // kembali, jadi kegagalan tidak meninggalkan "Akun baru" yang kosong.
+      const p = await apiPost('/profil', { nama: 'Akun baru', minat: [], sementara: true });
+      // Sejak baris ini, semua permintaan berjalan atas nama akun yang baru,
       // termasuk permintaan izin di bawahnya, yang membuat tokennya tersimpan
       // ke akun yang benar.
       setProfilAktif(p.id);
-      const r = await apiPost('/uploads/google/connect', {});
-      window.open(r.authorization_url, '_blank', 'noopener');
+      try {
+        const r = await apiPost('/uploads/google/connect', {});
+        window.open(r.authorization_url, '_blank', 'noopener');
+      } catch (err) {
+        // Halaman izinnya belum sempat terbuka, jadi akun wadahnya dibuang
+        // sekarang juga dan akun sebelumnya dipakai lagi. Menunggu penyapu
+        // berarti membiarkan akun kosong berdiri sebagai akun aktif.
+        setProfilAktif(sebelumnya);
+        await apiDelete(`/profil/${p.id}`).catch(() => {});
+        throw err;
+      }
       setMenunggu(true);
     } catch (err) {
       setGalat(err.message);

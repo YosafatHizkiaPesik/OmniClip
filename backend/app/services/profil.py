@@ -23,6 +23,7 @@ import contextvars
 import logging
 import re
 import shutil
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -144,6 +145,43 @@ def folder_untuk_akun(pid: int, email: str) -> Optional[str]:
     repo.ubah(pid, folder_klip=str(tujuan))
     log.info("Folder klip akun %s mengikuti surelnya: %s", pid, tujuan.name)
     return str(tujuan)
+
+
+# Profil sementara yang lebih tua dari ini sudah pasti ditinggalkan: halaman
+# izin Google sendiri kedaluwarsa jauh sebelumnya.
+SEMENTARA_KEDALUWARSA = 15 * 60
+
+
+def sapu_sementara() -> int:
+    """
+    Membuang profil yang dibuat untuk "Masuk dengan Google" tapi izinnya tidak
+    pernah selesai.
+
+    Dibuang hanya bila SEMUA syarat terpenuhi: ia bertanda sementara, tidak
+    punya akun Google satu pun, belum menyentuh video apa pun, dan sudah lewat
+    batas waktunya. Profil yang sengaja dibuat tanpa Google tidak pernah
+    bertanda sementara, jadi ia tidak ikut tersapu; begitu pula profil yang
+    izinnya masih ditunggu di tab sebelah.
+    """
+    from ..repos import profil as repo
+    from . import google_upload
+
+    dibuang = 0
+    for pr in repo.semua():
+        if not pr.get("sementara") or pr["id"] == UTAMA:
+            continue
+        if time.time() - float(pr.get("created_at") or 0) < SEMENTARA_KEDALUWARSA:
+            continue
+        if any(google_upload.tersambung(pr["id"], n) for n in google_upload.LAYANAN):
+            repo.sahkan(pr["id"])
+            continue
+        if repo.video_milik(pr["id"]):
+            repo.sahkan(pr["id"])
+            continue
+        repo.hapus(pr["id"])
+        dibuang += 1
+        log.info("Profil %s dibuang: izin Google tidak pernah selesai", pr["id"])
+    return dibuang
 
 
 def kini() -> int:

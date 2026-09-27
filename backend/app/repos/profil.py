@@ -25,11 +25,26 @@ def ambil(pid: int) -> Optional[dict]:
     return _baris(r) if r else None
 
 
-def buat(nama: str, *, warna: str = "#E0473A", minat: Optional[list] = None) -> int:
+def buat(nama: str, *, warna: str = "#E0473A", minat: Optional[list] = None,
+         sementara: bool = False) -> int:
+    """
+    Membuat profil. `sementara` menandai profil yang masih menunggu izin Google.
+
+    Profil sementara disapu kembali bila izinnya tidak pernah selesai; lihat
+    `sapu_sementara`.
+    """
     with tx() as c:
-        cur = c.execute("INSERT INTO profil (nama, warna, minat_json, created_at) VALUES (?,?,?,?)",
-                        (nama, warna, json.dumps(minat or [], ensure_ascii=False), now()))
+        cur = c.execute("INSERT INTO profil (nama, warna, minat_json, created_at, sementara) "
+                        "VALUES (?,?,?,?,?)",
+                        (nama, warna, json.dumps(minat or [], ensure_ascii=False), now(),
+                         1 if sementara else 0))
         return int(cur.lastrowid)
+
+
+def sahkan(pid: int) -> None:
+    """Profil ini sudah punya akun Google; ia bukan lagi profil yang menunggu."""
+    with tx() as c:
+        c.execute("UPDATE profil SET sementara = 0 WHERE id = ?", (pid,))
 
 
 def ubah(pid: int, **kolom) -> None:

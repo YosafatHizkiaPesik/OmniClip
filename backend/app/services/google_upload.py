@@ -291,6 +291,11 @@ def _stored_email(pid: Optional[int] = None, layanan: str = "youtube") -> str:
         return ""
 
 
+def tersambung(pid: Optional[int] = None, layanan: str = "youtube") -> bool:
+    """Apakah profil ini sudah punya token untuk layanan itu."""
+    return _token_path(pid, layanan).is_file()
+
+
 def status(pid: Optional[int] = None) -> dict:
     """
     Keadaan tiap layanan, plus ringkasannya.
@@ -388,6 +393,42 @@ def begin_authorization(layanan: str = "youtube") -> str:
     return url
 
 
+# Penanda galat jaringan yang wajar dicoba lagi: nama domain belum bisa
+# diterjemahkan, atau sambungannya putus. Semuanya sesaat.
+_JARINGAN_SESAAT = ("nameresolutionerror", "failed to resolve",
+                    "temporary failure in name resolution",
+                    "name or service not known", "max retries exceeded",
+                    "connection aborted", "connection reset",
+                    "connection refused", "timed out")
+
+
+def _sesaat(exc: Exception) -> bool:
+    low = str(exc).lower()
+    return any(t in low for t in _JARINGAN_SESAAT)
+
+
+# Dicoba tiga kali dengan jeda pendek. Penukaran kode ini berlangsung sementara
+# pemiliknya menunggu di depan tab yang terbuka, jadi jedanya tidak boleh
+# panjang; kegagalan DNS sendiri menjawab cepat, biasanya di bawah sedetik.
+_TUKAR_PERCOBAAN = 3
+_TUKAR_JEDA = (1.0, 3.0)
+
+
+def _tukar_kode(flow, full_url: str) -> None:
+    """Menukar kode izin jadi token, tahan terhadap kedipan jaringan."""
+    for percobaan in range(_TUKAR_PERCOBAAN):
+        try:
+            flow.fetch_token(authorization_response=full_url)
+            return
+        except Exception as e:                       # noqa: BLE001
+            if percobaan >= _TUKAR_PERCOBAAN - 1 or not _sesaat(e):
+                raise
+            jeda = _TUKAR_JEDA[min(percobaan, len(_TUKAR_JEDA) - 1)]
+            log.info("Penukaran kode Google gagal (%s); mencoba lagi dalam %.0f detik",
+                     type(e).__name__, jeda)
+            time.sleep(jeda)
+
+
 def finish_authorization(full_url: str, state: str) -> tuple[str, int]:
     """
     Menukar kode izin jadi token. Mengembalikan (alamat surel, id profil).
@@ -402,8 +443,19 @@ def finish_authorization(full_url: str, state: str) -> tuple[str, int]:
         raise _fail("Sesi izin sudah kedaluwarsa. Mulai lagi dari Pengaturan.")
     flow, pid, _, layanan = tunggu
 
-    with _izinkan_loopback(redirect_uri()):
-        flow.fetch_token(authorization_response=full_url)
+    try:
+        with _izinkan_loopback(redirect_uri()):
+            _tukar_kode(flow, full_url)
+    except Exception:
+        # Kodenya BELUM terpakai bila penukaran gagal di jaringan, dan Google
+        # masih menerimanya beberapa menit lagi. Karena itu sesinya
+        # dikembalikan: memuat ulang halaman yang sama sudah cukup untuk
+        # mencoba lagi. Tanpa ini, satu kedipan DNS berarti seluruh izin harus
+        # diulang dari Pengaturan, dan pesan yang muncul justru "sesi izin
+        # sudah kedaluwarsa" yang menyesatkan.
+        with _lock:
+            _pending.setdefault(state, tunggu)
+        raise
     creds = flow.credentials
 
     email = _email_akun(creds)
@@ -565,6 +617,19 @@ def explain_error(exc: Exception) -> str:
     if "invalid_grant" in low:
         return ("Izin akun sudah dicabut atau kedaluwarsa. Sambungkan ulang "
                 "akun Google di Pengaturan.")
+    # Galat jaringan datang sebagai jejak urllib3 selengkapnya
+    # ("HTTPSConnectionPool(host=... NameResolutionError ..."), yang tidak
+    # memberi tahu satu pun langkah yang bisa diambil. Terlihat pada pemiliknya
+    # 27 September 2026 saat menyambungkan akun: yang tampil di layar adalah
+    # jejak itu, dan tidak ada yang menyebut bahwa masalahnya cuma sambungan.
+    if _sesaat(exc):
+        if "resolve" in low or "name or service" in low or "nameresolution" in low:
+            return ("Komputer ini sedang tidak bisa menerjemahkan alamat server "
+                    "Google. Biasanya karena internet putus sebentar, atau VPN "
+                    "yang baru dinyalakan atau dimatikan. Periksa sambungannya, "
+                    "lalu muat ulang halaman ini untuk mencoba lagi.")
+        return ("Sambungan ke server Google terputus. Periksa internetnya, lalu "
+                "muat ulang halaman ini untuk mencoba lagi.")
     if "youtubesignuprequired" in low.replace(" ", ""):
         return ("Akun Google ini belum punya kanal YouTube. Buat kanalnya dulu "
                 "di youtube.com, lalu coba lagi.")

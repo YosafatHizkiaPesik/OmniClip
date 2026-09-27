@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 from ..config import UPLOAD_GAP_SECONDS
 from ..errors import AppError
 from ..repos import uploads as uploads_repo
+from ..repos import profil as profil_repo
 from ..services import google_upload as google
 from ..services.jobs import queue
 from ..services.paths import safe_media_path
@@ -65,6 +66,8 @@ async def callback(request: Request, state: str = "", error: str = ""):
     try:
         email, pid = google.finish_authorization(str(request.url), state)
         from ..services import profil as profil_svc
+        # Akunnya sudah punya Google; ia bukan lagi akun yang menunggu izin.
+        profil_repo.sahkan(pid)
         nama = profil_svc.namai_dari_akun(pid, email)
         if nama:
             log.info("Akun %s dinamai dari surelnya: %s", pid, nama)
