@@ -340,6 +340,11 @@ def plan_card(spec: TitleCardSpec, workdir: Path, out_w: int, out_h: int) -> Opt
                     voice_seconds=round(voice_seconds, 3), notes=notes)
 
 
+# Kegelapan latar kartu yang menahan layar. Pratinjau memakai angka yang sama
+# (`rgba(0,0,0,0.45)` di ClipPreview.jsx); keduanya harus berubah bersama.
+LATAR_REDUP = 0.45
+
+
 def video_filters(plan: CardPlan, in_label: str, card_label: str, main_label: str,
                   out_w: int, out_h: int, fps: int = 30,
                   fontsdir: Optional[str] = None) -> str:
@@ -366,9 +371,16 @@ def video_filters(plan: CardPlan, in_label: str, card_label: str, main_label: st
             f"loop=loop=-1:size=1:start=0,trim=duration={plan.seconds:.3f},"
             f"setpts=PTS-STARTPTS,fps={fps}"
         )
+    # Latarnya digelapkan seperti di pratinjau Studio (hitam 45%), supaya
+    # judulnya yang menonjol, bukan gambar dan subtitle yang ikut membeku di
+    # belakangnya. Sebelumnya hanya pratinjau yang menggelapkannya, jadi kartu
+    # hasil render tampak lebih terang dan ramai daripada yang dipilih
+    # pengguna. Terlihat saat membandingkan bingkai render 1.2.0 dengan
+    # tangkapan pratinjaunya.
     return (
         f"{in_label}split[{card_label}_src][{main_label}];"
-        f"[{card_label}_src]{still},setsar=1,{ass}[{card_label}]"
+        f"[{card_label}_src]{still},setsar=1,"
+        f"drawbox=x=0:y=0:w=iw:h=ih:color=black@{LATAR_REDUP}:t=fill,{ass}[{card_label}]"
     )
 
 

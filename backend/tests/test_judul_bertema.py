@@ -50,6 +50,16 @@ class TemaMenghasilkanASS(unittest.TestCase):
         self.assertGreaterEqual(ass.count("Dialogue:"), 2)
 
 
+class KartuSamaDenganPratinjau(unittest.TestCase):
+    def test_latar_kartu_digelapkan_seperti_pratinjau(self):
+        from app.services import titlecard as tc
+        plan = tc.CardPlan(mode="freeze", seconds=3.0, text="Judul", ass_path=Path("k.ass"))
+        graf = tc.video_filters(plan, "[v]", "kartu", "utama", 1080, 1920)
+        self.assertIn(f"color=black@{tc.LATAR_REDUP}", graf)
+        pratinjau = (STUDIO / "ClipPreview.jsx").read_text(encoding="utf-8")
+        self.assertIn(f"rgba(0,0,0,{tc.LATAR_REDUP})", pratinjau)
+
+
 class JudulDiDalamVideo(unittest.TestCase):
     def test_mati_atau_kosong_tidak_menambah_apa_pun(self):
         self.assertEqual(_baris_judul_video(None, 30, 1080, 1920), [])
