@@ -43,12 +43,32 @@ MAKS_KLIP = 60
 
 def run_bingkai_awal(ctx) -> dict:
     """payload: {video_id, klip: [{segments, subtitles}], aspect_ratio}"""
+    from . import reframe
+    with reframe.di_latar():
+        return _jalankan(ctx)
+
+
+def _jalankan(ctx) -> dict:
+    """
+    Isi sebenarnya, dipisah supaya seluruhnya berjalan sebagai pekerjaan latar.
+
+    Tidak ada yang menunggu pekerjaan ini di depan layar, jadi di dalam
+    `di_latar()` ia memakai separuh utas analisis dan prioritas proses
+    terendah. Itu yang membedakan "berjalan di latar" dari "menguasai mesin".
+    """
     from ..routers.clips import hitung_reframe
     from .pipeline import pemanasan_bingkai
 
     video_id = ctx.payload["video_id"]
     daftar = (ctx.payload.get("klip") or [])[:MAKS_KLIP]
     rasio = ctx.payload.get("aspect_ratio") or "9:16"
+    # Diminta langsung lewat tombol "Siapkan bingkai video ini sekarang".
+    #
+    # Sejak sakelarnya bawaannya MATI, pekerjaan ini tidak boleh lagi membaca
+    # sakelar itu sebagai izin: yang menekan tombolnya sudah menyatakan maunya
+    # untuk video ini, dan tanpa `paksa` pekerjaannya berhenti di klip pertama
+    # lalu melaporkan dirinya "dihentikan" tanpa mengerjakan apa pun.
+    paksa = bool(ctx.payload.get("paksa"))
     if not daftar:
         ctx.progress(1.0, stage="done", message="Tidak ada klip yang perlu dihitung.")
         return {"siap": 0}
@@ -84,7 +104,7 @@ def run_bingkai_awal(ctx) -> dict:
     # Pindah ke depan tidak menambah kerja: pemindaian wajah yang dipakainya
     # tersimpan dan dipakai ulang oleh perhitungan bingkai di bawah.
     tambat = None
-    if not gameplay and pemanasan_bingkai():
+    if not gameplay and (paksa or pemanasan_bingkai()):
         try:
             ctx.check_cancelled()
             ctx.progress(0.02, stage="prepare", message="Menambatkan suara ke wajah…")
@@ -104,6 +124,20 @@ def run_bingkai_awal(ctx) -> dict:
     berhenti = False
     for i, klip in enumerate(daftar):
         ctx.check_cancelled()
+        # Minggir dulu bila ada yang menunggu gerbang CPU.
+        #
+        # "Prioritas paling rendah" pada antrean hanya memutuskan siapa yang
+        # MASUK lebih dulu. Begitu pekerjaan ini masuk, ia memegang gerbang CPU
+        # sampai seluruh 60 klipnya selesai, dan analisis video lain menunggu
+        # di belakangnya belasan menit. Terlapor pemiliknya 27 September 2026:
+        # empat video diklip bersamaan, dua di antaranya berhenti di "menunggu
+        # giliran analisis" sementara satu video memanaskan bingkainya.
+        #
+        # Di sela dua klip tidak ada yang tergantung di memori, jadi ini titik
+        # paling murah untuk minggir.
+        ctx.mengalah_cpu(lambda: ctx.progress(
+            0.32 + 0.62 * (i / len(daftar)), stage="prepare", paksa=True,
+            message="Memberi jalan dulu, ada video lain yang sedang dianalisis…"))
         # Sakelarnya dibaca tiap klip, bukan sekali di awal.
         #
         # Pembatalan dari luar sudah menutup jalur biasanya, tapi pekerjaan ini
@@ -111,7 +145,7 @@ def run_bingkai_awal(ctx) -> dict:
         # sesudahnya. Membaca sakelarnya di sini berarti ia tidak pernah
         # mengerjakan apa pun yang sudah tidak diinginkan, dari jalur mana pun
         # ia sampai ke sini.
-        if not pemanasan_bingkai():
+        if not (paksa or pemanasan_bingkai()):
             berhenti = True
             log.info("Penyiapan bingkai %s dihentikan: sakelarnya dimatikan.", video_id)
             break

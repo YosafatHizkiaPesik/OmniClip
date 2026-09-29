@@ -459,6 +459,32 @@ export default function Editor({ project, onBack }) {
           srcAspek, outAspek: rasioKeluaran(aspectRatio),
         });
         setCacheGaming((c) => ({ ...c, [idKlip]: jadi || null }));
+
+        // Klip game jarang permainan dari awal sampai akhir. Bagian pembuka
+        // dan penutup sering wajah SATU LAYAR PENUH, orangnya bicara ke
+        // kamera, dan susunan dua bidang di situ salah: bidang wajah menyorot
+        // dinding di belakangnya. Server memecah klipnya menurut isinya, dan
+        // potongan itu dipasang sebagai kunci bingkai supaya PRATINJAU dan
+        // RENDER membaca sumber yang sama — bukan dua perhitungan yang bisa
+        // berbeda diam-diam.
+        //
+        // Hanya bila lajur Bingkai masih kosong: kunci buatan pengguna tidak
+        // pernah ditimpa.
+        const potongan = r?.potongan ?? [];
+        if (potongan.length > 1 && !(selected.frame_keys ?? []).length) {
+          setFrameKeys(potongan.map((q) => {
+            const dasar = { id: newFrameId(), t: q.t, mode: q.mode,
+                            asal: 'otomatis', alasan: q.alasan };
+            if (q.mode !== 'gaming' || !q.layout) return dasar;
+            const ll = susunanDariServer(q.layout);
+            return { ...dasar,
+                     layout: ll && susunGaming(ll, {
+                       wajah: ll.gaming?.wajah ?? GAMING_WAJAH_BAWAAN,
+                       permainan: ll.gaming?.permainan ?? 'isi',
+                       srcAspek, outAspek: rasioKeluaran(aspectRatio),
+                     }) };
+          }));
+        }
       })
       .catch(() => { /* tanpa susunan: render mencari facecam sendiri */ })
       .finally(() => { if (!batal) setGamingSibuk(false); });
@@ -703,7 +729,10 @@ export default function Editor({ project, onBack }) {
     let batal = false;
     apiGet('/settings')
       .then((r) => {
-        if (batal || r?.pemanasan_bingkai === false) return null;
+        // Hanya bila sakelarnya BENAR-BENAR menyala. Bawaannya mati sejak
+        // 27 September 2026, dan membuka proyek tidak boleh diam-diam
+        // menyalakan pekerjaan terberat yang ada di aplikasi ini.
+        if (batal || r?.pemanasan_bingkai !== true) return null;
         return apiPost(`/projects/${videoId}/siapkan-bingkai`, {});
       })
       .catch(() => { /* pemanasan yang gagal diantre bukan kegagalan halaman */ });

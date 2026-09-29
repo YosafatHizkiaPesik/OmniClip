@@ -28,11 +28,71 @@ from .events import broker
 
 log = logging.getLogger("omniclip.jobs")
 
+class _GerbangCPU:
+    """
+    Gerbang pekerjaan berat, yang tahu berapa banyak yang sedang mengantre.
+
+    Dulu sebuah BoundedSemaphore biasa. Semaphore tidak punya ingatan tentang
+    penunggunya, jadi pekerjaan panjang yang sudah masuk akan memegangnya
+    sampai selesai, betapapun rendah prioritasnya. Pemanasan bingkai 60 klip
+    karena itu menahan analisis video lain belasan menit, dan di layar yang
+    terlihat cuma "menunggu giliran analisis". Prioritas antrean tidak
+    menolong: ia memutuskan siapa yang MASUK lebih dulu, bukan siapa yang
+    keluar.
+
+    Dengan hitungan penunggu, pekerjaan yang mengalah bisa bertanya "ada yang
+    menunggu?" di sela-sela pekerjaannya, lalu minggir.
+    """
+
+    def __init__(self, n: int) -> None:
+        self._sem = threading.BoundedSemaphore(n)
+        self._penunggu = 0
+        self._dipakai = 0
+        self._muat = n
+        self._kunci = threading.Lock()
+
+    def acquire(self, blocking: bool = True, timeout: float | None = None) -> bool:
+        if not blocking:
+            dapat = self._sem.acquire(blocking=False)
+            if dapat:
+                with self._kunci:
+                    self._dipakai += 1
+            return dapat
+        with self._kunci:
+            self._penunggu += 1
+        try:
+            dapat = (self._sem.acquire(timeout=timeout) if timeout is not None
+                     else self._sem.acquire())
+        finally:
+            with self._kunci:
+                self._penunggu -= 1
+        if dapat:
+            with self._kunci:
+                self._dipakai += 1
+        return dapat
+
+    def release(self) -> None:
+        with self._kunci:
+            self._dipakai = max(0, self._dipakai - 1)
+        self._sem.release()
+
+    @property
+    def ada_penunggu(self) -> bool:
+        with self._kunci:
+            return self._penunggu > 0
+
+    @property
+    def sedang_dipakai(self) -> bool:
+        """Ada pekerjaan berat yang sedang memegang gerbang ini."""
+        with self._kunci:
+            return self._dipakai > 0
+
+
 # Gerbang untuk pekerjaan berat: Whisper, analisis wajah, encode. Job lane `cpu`
 # melewatinya seluruhnya; auto-klip baru masuk SESUDAH unduhannya selesai
 # (`JobContext.giliran_cpu`). Jadi unduhan beberapa video bisa berjalan
 # bersamaan tanpa dua model Whisper pernah hidup bersamaan.
-gerbang_cpu = threading.BoundedSemaphore(LANE_LIMITS["cpu"])
+gerbang_cpu = _GerbangCPU(LANE_LIMITS["cpu"])
 
 # Gerbang jalur pita: berapa unduhan boleh berjalan bersamaan, lintas jenis
 # pekerjaan. Dipegang hanya selama mengunduh, lalu dilepas — pekerjaan yang
@@ -97,6 +157,32 @@ class JobContext:
             while not gerbang_cpu.acquire(timeout=0.5):
                 self.check_cancelled()
         self._pegang_cpu = True
+
+    def mengalah_cpu(self, kabar: Optional[Callable[[], None]] = None) -> bool:
+        """
+        Memberi jalan pada pekerjaan lain yang sedang menunggu gerbang CPU.
+
+        Dipanggil oleh pekerjaan panjang berprioritas rendah di sela-sela
+        kerjanya, misalnya pemanasan bingkai di antara dua klip. Bila tidak ada
+        yang menunggu, ia tidak melakukan apa-apa dan tidak melepaskan apa pun,
+        jadi memanggilnya sering-sering tidak berbiaya.
+
+        Mengembalikan True bila sempat minggir. Jedanya bukan basa-basi:
+        `release` membangunkan penunggu, tapi utas ini masih berjalan, dan
+        tanpa jeda ia bisa merebut kembali gerbangnya sebelum yang dibangunkan
+        sempat bergerak.
+        """
+        if not self._pegang_cpu or not gerbang_cpu.ada_penunggu:
+            return False
+        if kabar is not None:
+            kabar()
+        self._pegang_cpu = False
+        gerbang_cpu.release()
+        time.sleep(0.05)
+        while not gerbang_cpu.acquire(timeout=0.5):
+            self.check_cancelled()
+        self._pegang_cpu = True
+        return True
 
     @contextmanager
     def giliran_unduh(self, kabar: Optional[Callable[[], None]] = None):

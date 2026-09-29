@@ -6,6 +6,7 @@ import { CARD_VARIANTS } from './cardStyles';
 import { CANVAS_ASPECT, coverPercent, followX, frameInk } from './frames';
 import { beginRectDrag } from './rectDrag';
 import MediaOverlay from './MediaOverlay';
+import { sensorTeks } from '../../lib/sensor';
 import { LapisJudul, iniTema, useDaftarTema } from './JudulTema';
 
 // `r` adalah rasio yang sama dengan `aspect`, dalam bentuk angka. Batas tinggi
@@ -251,9 +252,31 @@ export default function ClipPreview({
   // adalah yang terlihat.
   const useBox = frameMode === 'box' && boxRect && !useLayout;
   const useBlur = !useReframe && !useCenter && !useOriginal && !useLayout && !useBox;
-  // Susunan bingkai jarang menutupi seluruh kanvas — celah di antaranya diisi
+  // Susunan bingkai jarang menutupi seluruh kanvas, celah di antaranya diisi
   // versi kabur dari sumbernya, kecuali bila pengguna memilih hitam pekat.
-  const showBlurBg = useBlur || (useLayout && layout?.background !== 'black');
+  //
+  // Tapi susunan "Main game" MENUTUPI kanvas seluruhnya: bidang wajah di atas
+  // dan bidang permainan mengisi sisanya. Latar kaburnya tidak pernah terlihat
+  // satu piksel pun, dan ia sebuah pemutar video Full HD yang mendekode terus.
+  // Pada laptop 15 watt milik pemiliknya itu bukan kemewahan yang bisa
+  // diabaikan: lima pemutar serentak membuat pratinjaunya tinggal hitam saat
+  // berpindah klip.
+  const bidangMenutupKanvas = useLayout && frames.length > 0 && frames.some(
+    (f) => f.dst.x <= 0.01 && f.dst.y <= 0.01
+           && f.dst.w >= 99.99 && f.dst.h >= 99.99,
+  );
+  const petakTertutup = useLayout && frames.length > 1 && (() => {
+    // Dua bidang yang bertumpuk vertikal dan bersama-sama setinggi kanvas.
+    const urut = [...frames].sort((a, b) => a.dst.y - b.dst.y);
+    let y = 0;
+    for (const f of urut) {
+      if (f.dst.x > 0.01 || f.dst.w < 99.99 || f.dst.y > y + 0.01) return false;
+      y = Math.max(y, f.dst.y + f.dst.h);
+    }
+    return y >= 99.99;
+  })();
+  const showBlurBg = useBlur || (useLayout && layout?.background !== 'black'
+                                 && !bidangMenutupKanvas && !petakTertutup);
   const canvasAspect = CANVAS_ASPECT[aspectRatio] ?? 9 / 16;
 
   const secondaries = useCallback(
@@ -322,7 +345,22 @@ export default function ClipPreview({
   // Bingkai). Cermin yang menunggu tetap dirender transparan supaya siap
   // pakai — tapi itu berbiaya: terukur 111 lawan 61 bingkai terbuang per 6
   // dtk di Firefox. Klip tanpa potongan susunan tidak menanggungnya sama sekali.
-  const jumlahCermin = Math.max(useLayout ? frames.length : 0, cerminSiap);
+  // Cermin SIAGA dibatasi satu.
+  //
+  // Cermin yang menunggu memang membuat potongan "Susun" tampil tanpa jeda
+  // hitam, dan penulisnya sudah mengukur harganya sendiri: 111 lawan 61 bingkai
+  // terbuang per 6 detik di Firefox. Pada laptop 15 watt harga itu terlalu
+  // mahal. Terukur pada mesin pemiliknya, satu klip gaming membuka LIMA pemutar
+  // 1920x1080 sekaligus dari berkas yang sama, dan berpindah klip memaksa
+  // kelimanya memuat ulang serentak — sebagian gagal mendekode dan pratinjaunya
+  // tinggal hitam. Terekam olehnya 29 September 2026: dua klip terakhir yang
+  // dibuka hitam total dan tidak pernah mulai.
+  //
+  // Satu cermin siaga menutup kasus yang paling sering (satu potongan berikutnya
+  // sudah hangat) tanpa membuka pemutar ketiga dan keempat yang menganggur.
+  const CERMIN_SIAGA_MAKS = 1;
+  const jumlahCermin = Math.max(useLayout ? frames.length : 0,
+                                Math.min(cerminSiap, CERMIN_SIAGA_MAKS));
 
   /**
    * Posisi crop pada waktu klip tertentu.
@@ -392,6 +430,32 @@ export default function ClipPreview({
   // Loop rAF: menggerakkan crop lewat ref (tanpa state) dan menyegarkan waktu
   // klip pada ~20 Hz. `timeupdate` hanya menyala 4 Hz — terlalu kasar untuk
   // sorotan karaoke per kata, dan jauh terlalu kasar untuk gerakan kamera.
+  /**
+   * Memaksa sebuah pemutar yang BERHENTI menggambar ulang bingkainya.
+   *
+   * Menyetel `currentTime` pada video yang sedang berhenti memindahkan
+   * posisinya, tapi tidak dijamin menampilkan bingkai baru: Firefox menyimpan
+   * bingkai terakhir yang sudah didekode dan baru menggantinya saat ada yang
+   * memaksa. Akibatnya jam pratinjau berjalan benar sementara GAMBARNYA
+   * tertinggal di tempat lain, dan gambar basi itu ikut terbawa saat berpindah
+   * klip. Dilaporkan pemiliknya 29 September 2026: "video preview tidak sama
+   * dengan video asli... bahkan di klip klip lain juga tampilan preview sama".
+   *
+   * Memutar sekejap lalu berhenti lagi memaksa dekoder menyajikan bingkai di
+   * posisi yang baru. Cerminnya bisu, jadi tidak ada suara yang bocor.
+   */
+  const segarkan = useCallback((el) => {
+    if (!el || !el.paused) return;
+    try {
+      const p = el.play();
+      if (p && typeof p.then === 'function') {
+        p.then(() => { if (!el.paused) el.pause(); }).catch(() => {});
+      } else if (!el.paused) {
+        el.pause();
+      }
+    } catch { /* pemutar yang belum siap bukan kegagalan */ }
+  }, []);
+
   useEffect(() => {
     let raf;
     let lastPushed = -1;
@@ -433,15 +497,48 @@ export default function ClipPreview({
         // dibetulkan hanya saat sudah menyimpang. Menyetel `currentTime` tiap
         // frame membuat dekoder mencari terus dan gambarnya tersendat.
         for (const m of secondaries()) {
-          if (Math.abs(m.currentTime - v.currentTime) > 0.25) m.currentTime = v.currentTime;
-          if (v.paused && !m.paused) m.pause();
-          else if (!v.paused && m.paused) m.play().catch(() => { /* diabaikan */ });
+          const beda = m.currentTime - v.currentTime;
+          if (v.paused) {
+            // Berhenti: satu-satunya cara menyamakan gambar adalah melompat.
+            if (Math.abs(beda) > 0.25) {
+              m.currentTime = v.currentTime;
+              segarkan(m);
+            }
+            if (!m.paused) m.pause();
+            continue;
+          }
+          if (m.paused) m.play().catch(() => { /* diabaikan */ });
+          // Sedang berjalan: DIKEJAR dengan kecepatan, bukan dengan lompatan.
+          //
+          // Melompat tiap kali selisihnya lewat 0,25 detik adalah lingkaran
+          // yang tidak pernah tertutup pada mesin yang pas-pasan: cermin yang
+          // tertinggal dilompatkan, lompatan itu sendiri memaksa dekoder
+          // mencari bingkai kunci dan membuatnya tertinggal lagi, lalu
+          // dilompatkan lagi. Yang terlihat pemiliknya persis seperti
+          // laporannya: "video tidak jalan dan hanya looping maju mundur".
+          //
+          // Mengubah kecepatan 4% tidak terlihat mata dan tidak memaksa
+          // pencarian sama sekali. Lompatan disimpan untuk selisih yang memang
+          // tidak bisa dikejar (pengguna menggeser garis main).
+          if (Math.abs(beda) > 1.5) {
+            m.currentTime = v.currentTime;
+            m.playbackRate = 1;
+          } else if (beda < -0.08) {
+            m.playbackRate = 1.04;
+          } else if (beda > 0.08) {
+            m.playbackRate = 0.96;
+          } else if (m.playbackRate !== 1) {
+            m.playbackRate = 1;
+          }
         }
         // Cermin yang sedang tidak tampil: diam, tapi detiknya dijaga dekat
         // pemutar utama. Begitu potongan "Susun" tiba, gambarnya sudah ada.
         for (const m of cerminTersembunyi()) {
           if (!m.paused) m.pause();
-          if (Math.abs(m.currentTime - v.currentTime) > 1.0) m.currentTime = v.currentTime;
+          if (Math.abs(m.currentTime - v.currentTime) > 1.0) {
+            m.currentTime = v.currentTime;
+            segarkan(m);
+          }
         }
         if (Math.abs(t - lastPushed) > 0.05) {
           lastPushed = t;
@@ -457,7 +554,7 @@ export default function ClipPreview({
     // penggeser di panel Bingkai mengubah angkanya sementara gambar di
     // pratinjau tetap diam pada nilai lama.
   }, [videoRef, segments, segIndex, offsets, constrained, useReframe, cropXAt,
-      reframe, secondaries, cerminTersembunyi, useLayout, frames, zGeserPct]);
+      reframe, secondaries, cerminTersembunyi, useLayout, frames, zGeserPct, segarkan]);
 
   const handleTimeUpdate = () => {
     const v = videoRef.current;
@@ -1578,10 +1675,15 @@ export function CaptionOverlay({
   // antar kata: yang satu potong memakai spasi bawaan font (Poppins 0,19 em),
   // sedangkan hasil render melebarkannya sampai JARAK_KATA. Dipecah, keduanya
   // memakai jarak yang sama persis.
+  // Kata kasar ditutup di sini juga, dengan daftar dan aturan yang SAMA dengan
+  // penggambar subtitle di server (lihat lib/sensor.js). Pratinjau yang
+  // menampilkan kata utuh sementara hasil rendernya menyensor adalah kebohongan
+  // yang baru ketahuan sesudah merender sepuluh menit.
   const words = React.useMemo(() => (
     line.words?.length
-      ? line.words
-      : String(line.text ?? '').split(/\s+/).filter(Boolean).map((w) => ({ w }))
+      ? line.words.map((w) => (
+        w?.w && sensorTeks(w.w) !== w.w ? { ...w, w: sensorTeks(w.w) } : w))
+      : sensorTeks(String(line.text ?? '')).split(/\s+/).filter(Boolean).map((w) => ({ w }))
   ), [line.words, line.text]);
   const anim = style?.animation ?? 'karaoke_pop';
   const uppercase = style?.uppercase !== false

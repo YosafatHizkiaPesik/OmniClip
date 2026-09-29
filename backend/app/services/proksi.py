@@ -27,6 +27,7 @@ import logging
 import os
 import queue
 import threading
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -66,6 +67,11 @@ INTI_DITUNGGU = 4
 #
 # Jenuh di empat, jadi empat. Mengambil seluruh inti tidak membuatnya lebih
 # cepat dan hanya membuat sisa aplikasi tersendat.
+
+# Selama pemindaian berat berjalan, pembuatan salinan menunggu — tapi tidak
+# lebih lama dari ini, supaya ia tidak tertahan selamanya oleh pekerjaan berat
+# yang tidak ada hubungannya dengan video ini (render panjang, misalnya).
+TUNGGU_ANALISIS_MAKS = 15 * 60
 
 _antrean: "queue.Queue[Path]" = queue.Queue()
 _diantre: set[str] = set()
@@ -247,10 +253,50 @@ def _ambil_berikut() -> Path:
         _antrean.put(src)
 
 
+def _tunggu_analisis_reda(src: Path) -> None:
+    """
+    Menahan pembuatan salinan selama pemindaian berat sedang membaca video.
+
+    Keduanya MENDEKODE video yang sama, dan sampai sekarang keduanya berjalan
+    bersamaan: pemindai membaca sumber 4K sepotong demi sepotong, sementara
+    pembuat salinan mendekode seluruh videonya di sebelahnya. Terukur pada
+    podcast 4K pemiliknya, satu klip 30 detik: 6,5 detik sendirian, 13,0 detik
+    saat salinan sedang dibuat. Prioritas rendah tidak menolong sebanyak yang
+    diharapkan, karena yang direbut bukan hanya giliran CPU melainkan jalur
+    memorinya.
+
+    Jadi yang dikerjakan lebih dulu adalah yang ditunggu orang. Salinan yang
+    ditunggu Studio (`_diburu`) tidak pernah ditahan: di situ justru salinan
+    itulah yang ditunggu.
+    """
+    from .jobs import gerbang_cpu
+
+    with _kunci:
+        if str(src) in _diburu:
+            return
+    menunggu_sejak = time.time()
+    dicatat = False
+    while gerbang_cpu.sedang_dipakai:
+        with _kunci:
+            if str(src) in _diburu:
+                return
+        if not dicatat:
+            log.info("Salinan analisis %s menunggu: pemindaian sedang berjalan.",
+                     Path(src).name)
+            dicatat = True
+        # Batas atas supaya ia tidak tertahan selamanya kalau ada pekerjaan
+        # berat yang memang berjalan berjam-jam tanpa membaca video ini.
+        if time.time() - menunggu_sejak > TUNGGU_ANALISIS_MAKS:
+            log.info("Salinan analisis %s tidak menunggu lebih lama.", Path(src).name)
+            return
+        time.sleep(2.0)
+
+
 def _kerja() -> None:
     while True:
         src = _ambil_berikut()
         try:
+            _tunggu_analisis_reda(src)
             _buat(src, _nama(src))
         except Exception as e:                       # jangan pernah mematikan pekerja
             log.warning("Salinan analisis gagal: %s", e)

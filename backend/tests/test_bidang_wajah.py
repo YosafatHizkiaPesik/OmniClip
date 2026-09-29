@@ -116,8 +116,16 @@ class SinggahanFacecam(unittest.TestCase):
         rute = (AKAR / "backend" / "app" / "routers" / "clips.py").read_text(encoding="utf-8")
         badan = rute[rute.index("async def clip_facecam"):]
         badan = badan[:badan.index("\n@router")] if "\n@router" in badan else badan
-        # Yang ditulis ke simpanan tidak boleh memuat susunannya.
-        self.assertIn('{"posisi": posisi or [], "src_w": w, "src_h": h}', badan)
+        # Yang ditulis ke simpanan tidak boleh memuat susunan jadinya.
+        #
+        # `potongan` boleh: ia hasil PEMINDAIAN juga (bagian mana klip ini
+        # permainan, bagian mana wajah satu layar penuh), bukan susunan yang
+        # diturunkan dari aturan yang bisa berubah. Susunan di dalamnya tetap
+        # disusun ulang tiap kali oleh `susun()`.
+        self.assertIn('"posisi": posisi or [], "src_w": w, "src_h": h', badan)
+        simpanan = badan[badan.index("def kerja():"):badan.index("pindai = await")]
+        self.assertNotIn("susun_layout_gaming", simpanan,
+                         "susunan jadinya ikut tersimpan")
         # Dan susunannya dihitung ulang, juga saat simpanannya kena.
         self.assertIn('if tersimpan is not None and "posisi" in tersimpan:', badan)
         self.assertIn("return susun(tersimpan)", badan)

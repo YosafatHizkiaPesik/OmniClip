@@ -539,6 +539,22 @@ FACECAM_WAJAH_MAKS = 0.14      # lebar wajah maksimum, pecahan lebar bingkai
 FACECAM_TEPI_X = 0.25          # pusat wajah di luar 25-75% lebar
 FACECAM_ATAS_Y = 0.30          # ... dan di atas 30% atau
 FACECAM_BAWAH_Y = 0.55         # ... di bawah 55% tinggi
+# Facecam yang menempel di TEPI KIRI/KANAN, pada ketinggian berapa pun.
+#
+# Aturan di atas menuntut wajahnya dekat tepi mendatar DAN dekat tepi tegak.
+# Itu benar untuk facecam pojok, dan salah untuk yang ditaruh di tengah tepi.
+# Terukur pada video LaperGang pemiliknya (Minecraft, banyak POV YouTuber lain,
+# tiap orang menaruh facecam-nya sendiri): facecam kiri ada di x 11,5% tapi
+# y 50,2%, tepat di dalam celah 30-55% yang ditolak aturan lama. Akibatnya 87%
+# sampel dilabeli "wajah", klipnya digolongkan podcast, dan bingkainya
+# mengikuti wajah alih-alih permainannya.
+#
+# Dua angka ini lebih ketat daripada aturan pojok, justru karena ia melepas
+# syarat tegaknya: wajah selebar 9% bingkai yang menempel 18% dari tepi bukan
+# orang yang sedang diwawancara, ia panel kamera. Pengaman lama tetap berlaku
+# di `_label_per_sampel`: "game" hanya bila wajah itu SATU-SATUNYA wajah.
+FACECAM_KECIL = 0.09           # lebar wajah maksimum untuk jalur tepi ini
+FACECAM_TEPI_KERAS = 0.18      # ... dan pusatnya di luar 18-82% lebar
 # Potongan lebih pendek dari ini disatukan ke tetangganya. Dulu 1,5 detik, dan
 # itu terlalu longgar: pada wawancara Bocor Alus, tiga potongan "game" selama
 # 2-3 detik lolos dan bingkai dasarnya berganti enam kali dalam tiga puluh
@@ -548,10 +564,16 @@ POTONGAN_DASAR_MIN = 4.0
 
 
 def _wajah_pojok(x: float, cy: float, w: float, sw: int, sh: int) -> bool:
-    fx, fy = x / max(1, sw), cy / max(1, sh)
-    return (w / max(1, sw) <= FACECAM_WAJAH_MAKS
-            and (fx < FACECAM_TEPI_X or fx > 1 - FACECAM_TEPI_X)
-            and (fy < FACECAM_ATAS_Y or fy > FACECAM_BAWAH_Y))
+    """Apakah wajah ini berbentuk kamera pemain, bukan orang yang direkam?"""
+    fx, fy, fw = x / max(1, sw), cy / max(1, sh), w / max(1, sw)
+    if fw > FACECAM_WAJAH_MAKS:
+        return False
+    if ((fx < FACECAM_TEPI_X or fx > 1 - FACECAM_TEPI_X)
+            and (fy < FACECAM_ATAS_Y or fy > FACECAM_BAWAH_Y)):
+        return True
+    # Menempel di tepi kiri/kanan, seberapa pun tingginya. Lihat FACECAM_KECIL.
+    return fw <= FACECAM_KECIL and (fx < FACECAM_TEPI_KERAS
+                                    or fx > 1 - FACECAM_TEPI_KERAS)
 
 
 def _label_per_sampel(plan) -> list[str]:
@@ -584,13 +606,77 @@ def _label_per_sampel(plan) -> list[str]:
     return label
 
 
-def _rapikan_potongan(runs: list[list]) -> list[list]:
+# Potongan yang KEDUA batasnya jatuh pada potongan adegan boleh lebih pendek.
+#
+# Batas empat detik ada untuk menahan kedipan: bingkai dasar yang berganti tiap
+# dua detik terbaca sebagai kerusakan, bukan sebagai keputusan. Tapi alasan itu
+# hilang bila pergantiannya jatuh tepat pada POTONGAN ADEGAN video aslinya:
+# di situ gambarnya memang berubah total, dan bingkai yang ikut berubah justru
+# terbaca benar.
+#
+# Terlihat pada rekaman pemiliknya 29 September 2026: momen dua detik yang
+# hanya menampilkan permainan dilebur ke potongan tetangganya, jadi bidang
+# wajah berisi salju selama momen itu.
+POTONGAN_DI_ADEGAN_MIN = 1.2
+# Seberapa dekat sebuah batas boleh digeser supaya jatuh pada potongan adegan.
+SNAP_ADEGAN = 0.6
+
+
+def _snap_ke_adegan(runs: list[list], potongan_adegan: list[float]) -> list[list]:
+    """
+    Menggeser batas potongan ke potongan adegan terdekat.
+
+    Label dihitung per sampel 8 Hz lalu dikelompokkan, jadi batasnya jatuh di
+    mana saja dalam rentang seperdelapan detik dari pergantian yang sebenarnya,
+    dan kadang meleset lebih jauh karena satu-dua sampel salah baca. Yang
+    terlihat pemiliknya: "terkadang bingkai pindah lebih awal atau lebih
+    lambat". Potongan adegan adalah titik yang benar-benar ada di videonya,
+    jadi ke situlah batasnya ditarik.
+    """
+    if not potongan_adegan or len(runs) < 2:
+        return runs
+    runs = [r[:] for r in runs]
+    for i in range(1, len(runs)):
+        batas = runs[i][1]
+        dekat = min(potongan_adegan, key=lambda c: abs(c - batas))
+        if abs(dekat - batas) > SNAP_ADEGAN:
+            continue
+        # Tidak boleh menelan potongan tetangga seluruhnya.
+        if dekat <= runs[i - 1][1] + 0.2 or dekat >= runs[i][2] - 0.2:
+            continue
+        runs[i - 1][2] = dekat
+        runs[i][1] = dekat
+    return runs
+
+
+def _rapikan_potongan(runs: list[list], potongan_adegan: Optional[list] = None
+                      ) -> list[list]:
     """Potongan [label, a, b] yang terlalu pendek disatukan ke tetangga terpanjang."""
     runs = [r[:] for r in runs]
+    adegan = list(potongan_adegan or [])
+
+    def di_adegan(t: float) -> bool:
+        return any(abs(c - t) <= 0.2 for c in adegan)
+
     while len(runs) > 1:
         pendek = min(range(len(runs)), key=lambda i: runs[i][2] - runs[i][1])
-        if runs[pendek][2] - runs[pendek][1] >= POTONGAN_DASAR_MIN:
+        panjang = runs[pendek][2] - runs[pendek][1]
+        if panjang >= POTONGAN_DASAR_MIN:
             break
+        # Potongan pendek yang berdiri di antara dua potongan adegan adalah
+        # bidikan tersendiri, bukan kedipan.
+        if (panjang >= POTONGAN_DI_ADEGAN_MIN
+                and di_adegan(runs[pendek][1]) and di_adegan(runs[pendek][2])):
+            sisa = [i for i in range(len(runs)) if i != pendek]
+            if not sisa:
+                break
+            kedua = min(sisa, key=lambda i: runs[i][2] - runs[i][1])
+            if runs[kedua][2] - runs[kedua][1] >= POTONGAN_DASAR_MIN:
+                break
+            pendek = kedua
+            panjang = runs[pendek][2] - runs[pendek][1]
+            if panjang >= POTONGAN_DASAR_MIN:
+                break
         kiri = runs[pendek - 1] if pendek > 0 else None
         kanan = runs[pendek + 1] if pendek + 1 < len(runs) else None
         tuju = max((r for r in (kiri, kanan) if r is not None), key=lambda r: r[2] - r[1])
@@ -642,7 +728,13 @@ def _buang_game_sekilas(runs: list[list], durasi: float) -> list[list]:
 
 
 def _dasar_per_waktu(plan, src: Path, segments: list[dict], durasi: float,
-                     out_w: int, out_h: int) -> Optional[list[tuple[float, float, dict]]]:
+                     out_w: int, out_h: int,
+                     # Linimasa facecam yang sudah dipindai pemanggil. Tanpa ini
+                     # fungsi ini memindainya lagi, pemindaian yang sama persis,
+                     # dan pada klip 40 detik itu sepuluh detik terbuang
+                     # sementara orangnya menunggu klipnya terbuka.
+                     facecam_waktu: Optional[list] = None,
+                     ) -> Optional[list[tuple[float, float, dict]]]:
     """
     Bingkai dasar per potongan waktu: [(mulai, akhir, kunci)], atau None bila
     tidak ada data wajah untuk menilainya.
@@ -663,17 +755,28 @@ def _dasar_per_waktu(plan, src: Path, segments: list[dict], durasi: float,
         else:
             runs.append([l, t, t + 1 / SAMPLE_FPS])
     runs[-1][2] = durasi
-    runs = _rapikan_potongan(runs)
+    # Batas ditarik ke potongan adegan SEBELUM yang pendek dilebur: batas yang
+    # sudah benar membuat potongan pendek yang sah jadi terlihat sah.
+    adegan = [float(c) for c in (getattr(plan, "cut_times", None) or [])]
+    runs = _snap_ke_adegan(runs, adegan)
+    runs = _rapikan_potongan(runs, adegan)
     runs = _buang_game_sekilas(runs, durasi)
 
     sw, sh = plan.source_w, plan.source_h
+    # Klip ini memang klip permainan bila ada potongan yang dilabeli "game".
+    # Dipakai untuk memutuskan apa yang benar bagi potongan TANPA wajah:
+    # di klip permainan itu berarti permainannya sendiri, di klip lain itu
+    # berarti sebuah bidikan tanpa orang.
+    ada_game = any(l == "game" for l, _a, _b in runs)
     keluar: list[tuple[float, float, dict]] = []
     # Letak panel sepanjang klip, dihitung sekali dan hanya bila dibutuhkan:
     # potongan game yang pendek (±2 dtk) terlalu singkat untuk menemukan tepi
     # panelnya sendiri, dan kotak tebakan dari ukuran wajah ikut memuat tepi
     # panel. Panel yang sama hampir selalu terlihat di bagian lain klip.
-    klip_penuh: list = []
-    sudah_dicari = False
+    # Diberikan pemanggil bila ia sudah memindainya sendiri; lihat parameter
+    # `klip_penuh` di tanda tangan fungsi ini.
+    klip_penuh: list = list(facecam_waktu or [])
+    sudah_dicari = bool(klip_penuh)
 
     def panel_di(t: float) -> Optional[dict]:
         nonlocal klip_penuh, sudah_dicari
@@ -696,11 +799,20 @@ def _dasar_per_waktu(plan, src: Path, segments: list[dict], durasi: float,
             # Panel facecam untuk potongan INI: dicari dari potongan itu saja,
             # karena letaknya bisa berbeda dari potongan game sebelumnya.
             fc = None
-            try:
-                fc = deteksi_facecam(src, _ke_sumber(segments, a), max(0.5, b - a), sw, sh,
-                                     rasio_potongan=rasio_bidang_wajah(out_w, out_h))
-            except Exception as e:
-                log.info("Facecam potongan %.1f-%.1f tidak terbaca: %s", a, b, str(e)[:120])
+            # Pemindaian per potongan DILEWATI bila linimasa sepanjang klip
+            # sudah diberikan pemanggil.
+            #
+            # Keduanya menjawab pertanyaan yang sama, dan linimasa itu justru
+            # lebih halus: ia dipindai per dua detik, sementara pemindaian per
+            # potongan menghasilkan satu kotak untuk seluruh potongan. Terukur
+            # pada klip 78 detik milik pemiliknya, tiga potongan berarti tiga
+            # pemindaian ffmpeg tambahan untuk jawaban yang sudah ada.
+            if not facecam_waktu:
+                try:
+                    fc = deteksi_facecam(src, _ke_sumber(segments, a), max(0.5, b - a), sw, sh,
+                                         rasio_potongan=rasio_bidang_wajah(out_w, out_h))
+                except Exception as e:
+                    log.info("Facecam potongan %.1f-%.1f tidak terbaca: %s", a, b, str(e)[:120])
             if fc is None:
                 fc = panel_di(a)
             if fc is None:
@@ -708,16 +820,81 @@ def _dasar_per_waktu(plan, src: Path, segments: list[dict], durasi: float,
             if fc is None:
                 keluar.append((a, b, {"mode": "motion", "alasan": "Permainan, kamera mengikuti gerakan"}))
                 continue
-            tata = susun_layout_gaming(fc, src_w=sw, src_h=sh, out_w=out_w, out_h=out_h)
+            # Letak facecam DI DALAM potongan ini, bukan satu kotak untuk
+            # seluruh potongan.
+            #
+            # Sebelumnya potongan game memakai satu kotak saja, jadi bingkai
+            # reaksinya diam sepanjang potongan itu. Pada video multi-POV
+            # (LaperGang: banyak POV YouTuber lain, masing-masing menaruh
+            # facecam-nya sendiri) POV berganti tiap dua detik, dan bingkai yang
+            # diam berarti separuh waktunya menyorot tempat kosong. Dilaporkan
+            # pemiliknya berulang kali: "bingkai game masih tidak bisa berpindah
+            # mengikuti facecam".
+            #
+            # `panel_di` sudah memanggil pemindai sepanjang klip dan menyimpan
+            # hasilnya, jadi ini tidak menambah satu pun pemindaian.
+            panel_di(a)
+            dalam = [{"t": max(0.0, float(q["t"]) - a), "facecam": q["facecam"]}
+                     for q in klip_penuh if a - 1e-6 <= float(q["t"]) < b - 1e-6]
+            if not dalam or dalam[0]["t"] > 1e-6:
+                # Potongan selalu dimulai dengan letak yang berlaku saat itu.
+                dalam.insert(0, {"t": 0.0, "facecam": fc})
+            tata = susun_layout_gaming(dalam, src_w=sw, src_h=sh,
+                                       out_w=out_w, out_h=out_h)
             keluar.append((a, b, {"mode": "gaming", "layout": tata,
                                   "alasan": "Permainan dan wajah pemain, bingkai game"}))
         elif l == "wajah":
             keluar.append((a, b, {"mode": "smart", "alasan": "Hanya wajah, mengikuti wajah"}))
+        elif ada_game:
+            # Klip permainan yang sedang TIDAK memperlihatkan wajah pemainnya.
+            #
+            # Dulu potongan seperti ini diserahkan ke "ikut gerakan", dan itu
+            # keliru untuk permainan: kamera yang mengejar ledakan dan ayunan
+            # pedang membuat gambarnya bergoyang, sementara yang ingin dilihat
+            # penonton adalah permainannya sendiri. Diminta pemiliknya:
+            # "jika hanya menampilkan game maka bingkai facecam dihilangkan dan
+            # susunan bingkai dibuat untuk bermain game".
+            #
+            # Satu bidang, seluruh layar permainan, tanpa bidang wajah sama
+            # sekali. Bidangnya memakai `susun_layout_gaming` dengan tinggi
+            # wajah nol supaya bentuknya dihitung penyusun yang sama.
+            keluar.append((a, b, {
+                "mode": "layout", "alasan": "Hanya permainan, satu bingkai penuh",
+                "layout": _layout_permainan_penuh(sw, sh, out_w, out_h)}))
         else:
             keluar.append((a, b, {"mode": "motion",
                                   "alasan": "Tanpa wajah, kamera mengikuti gerakan"}))
     return keluar
 
+
+def _layout_permainan_penuh(sw: int, sh: int, out_w: int, out_h: int) -> dict:
+    """
+    Satu bidang berisi permainannya saja, memenuhi kanvas.
+
+    Potongan tengah dari gambar sumbernya: itulah yang dilakukan orang saat
+    memotong gameplay lebar jadi tegak, dan tidak ada wajah yang perlu
+    dihindari karena memang tidak ada yang terlihat.
+    """
+    rasio_sumber = sw / max(1, sh)
+    rasio_tujuan = out_w / max(1, out_h)
+    if rasio_sumber >= rasio_tujuan:
+        lebar = 100.0 * rasio_tujuan / rasio_sumber
+        src = {"x": round((100.0 - lebar) / 2, 2), "y": 0.0,
+               "w": round(lebar, 2), "h": 100.0}
+    else:
+        tinggi = 100.0 * rasio_sumber / rasio_tujuan
+        src = {"x": 0.0, "y": round((100.0 - tinggi) / 2, 2),
+               "w": 100.0, "h": round(tinggi, 2)}
+    return {"background": "black",
+            "frames": [{"label": "Permainan", "src": src,
+                        "dst": {"x": 0, "y": 0, "w": 100, "h": 100}, "fit": "cover"}]}
+
+
+# Dinaikkan setiap kali ATURAN penggolongan berubah. Simpanannya tanpa batas
+# umur, jadi tanpa nomor ini video yang sudah pernah digolongkan akan tetap
+# memakai keputusan lama selamanya. v2: facecam di tepi kiri/kanan pada
+# ketinggian berapa pun ikut terbaca (27 September 2026).
+JENIS_VERSI = 2
 
 JENIS_GAME_MIN = 0.30          # porsi sampel "wajah di pojok" untuk disebut klip game
 JENIS_GAME_YAKIN = 0.70        # ... tanpa perlu memeriksa panel facecam
@@ -782,7 +959,7 @@ def jenis_klip_tersimpan(video_id: str, src: Path, segments: list[dict]) -> dict
     """`jenis_klip` yang diingat: menghitungnya memakan 10-60 detik per klip."""
     from ..repos import cache as cache_repo
 
-    kunci = "jenis:" + video_id + ":" + ",".join(
+    kunci = f"jenis:v{JENIS_VERSI}:" + video_id + ":" + ",".join(
         f"{float(s['start']):.2f}-{float(s['end']):.2f}" for s in segments)
     try:
         lama = cache_repo.ambil(kunci, ttl=float("inf"))

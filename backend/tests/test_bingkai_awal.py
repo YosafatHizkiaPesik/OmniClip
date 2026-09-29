@@ -29,6 +29,10 @@ class Ctx:
     def progress(self, *a, **kv):
         self.pesan.append(kv.get("message") or (a[2] if len(a) > 2 else ""))
 
+    def mengalah_cpu(self, kabar=None):
+        """Pemanasan minggir di antara dua klip; di sini tidak ada yang menunggu."""
+        return False
+
 
 class Pemanasan(unittest.TestCase):
     def setUp(self):
@@ -50,7 +54,7 @@ class Pemanasan(unittest.TestCase):
                 for i in range(n)]
 
     def test_semua_klip_dihitung(self):
-        ctx = Ctx({"video_id": "v", "klip": self.klip(3)})
+        ctx = Ctx({"paksa": True, "video_id": "v", "klip": self.klip(3)})
         hasil = self.jalankan(ctx, lambda **kv: self.dipanggil.append(kv) or {})
         self.assertEqual(hasil["siap"], 3)
         self.assertEqual(len(self.dipanggil), 3)
@@ -61,12 +65,12 @@ class Pemanasan(unittest.TestCase):
             if kv["segments"][0]["start"] == 10.0:
                 raise OSError("berkas rusak")
             return {}
-        ctx = Ctx({"video_id": "v", "klip": self.klip(3)})
+        ctx = Ctx({"paksa": True, "video_id": "v", "klip": self.klip(3)})
         hasil = self.jalankan(ctx, kadang_gagal)
         self.assertEqual((hasil["siap"], hasil["gagal"]), (2, 1))
 
     def test_pembatalan_dihormati(self):
-        ctx = Ctx({"video_id": "v", "klip": self.klip(5)}, batal_pada=2)
+        ctx = Ctx({"paksa": True, "video_id": "v", "klip": self.klip(5)}, batal_pada=2)
         with self.assertRaises(JobCancelled):
             self.jalankan(ctx, lambda **kv: {})
 
@@ -78,7 +82,7 @@ class Pemanasan(unittest.TestCase):
         self.assertEqual(self.dipanggil, [])
 
     def test_jumlahnya_dibatasi(self):
-        ctx = Ctx({"video_id": "v", "klip": self.klip(ba.MAKS_KLIP + 6)})
+        ctx = Ctx({"paksa": True, "video_id": "v", "klip": self.klip(ba.MAKS_KLIP + 6)})
         hasil = self.jalankan(ctx, lambda **kv: {})
         self.assertEqual(hasil["siap"], ba.MAKS_KLIP)
 
@@ -134,10 +138,17 @@ class SakelarPemanasanBingkai(unittest.TestCase):
     def tearDown(self):
         self.repo.get, self.repo.set_value = self.asli
 
-    def test_bawaannya_menyala(self):
-        """Perilaku yang sudah ada tidak boleh berubah sendiri saat sakelar ada."""
+    def test_bawaannya_mati(self):
+        """
+        Bawaannya MATI sejak 27 September 2026.
+
+        Diminta pemiliknya sesudah memakainya di laptopnya sendiri: menghitung
+        bingkai semua klip berarti membaca hampir seluruh video, dan sebagian
+        besar klip itu tidak pernah dibuka. Yang menginginkannya tetap bisa
+        menyalakannya di panel Bingkai.
+        """
         from app.services.pipeline import pemanasan_bingkai
-        self.assertTrue(pemanasan_bingkai())
+        self.assertFalse(pemanasan_bingkai())
 
     def test_bisa_dimatikan_dan_dinyalakan_lagi(self):
         from app.services.pipeline import pemanasan_bingkai, setel_pemanasan_bingkai
@@ -231,8 +242,11 @@ class FacecamDisimpanDanDipanaskan(unittest.TestCase):
                  "title": f"K{i}"} for i in range(3)]
 
         class Ctx:
-            payload = {"video_id": "vid", "aspect_ratio": "9:16", "klip": klip}
+            payload = {"video_id": "vid", "aspect_ratio": "9:16", "klip": klip,
+                       # Sakelar pemanasan bawaannya mati; ini jalur "siapkan sekarang".
+                       "paksa": True}
             def check_cancelled(self): pass
+            def mengalah_cpu(self, kabar=None): return False
             def progress(self, *a, **k): pass
 
         for mode, n_facecam, n_wajah, n_gerak in (("gaming", 3, 0, 0),
@@ -264,7 +278,9 @@ class FacecamDisimpanDanDipanaskan(unittest.TestCase):
         """
         sumber = (Path(__file__).resolve().parents[1] / "app" / "services"
                   / "bingkai_awal.py").read_text(encoding="utf-8")
-        badan = sumber.split("def run_bingkai_awal")[1].split("\ndef ")[0]
+        # Isi pekerjaannya ada di `_jalankan`; `run_bingkai_awal` tinggal
+        # pembungkus yang menandainya sebagai pekerjaan latar.
+        badan = sumber.split("def _jalankan")[1].split("\ndef ")[0]
         self.assertLess(badan.index("_mode_klip(video_id, segmen)"),
                         badan.index("hitung_reframe(video_id=video_id"))
 
@@ -279,7 +295,9 @@ class FacecamDisimpanDanDipanaskan(unittest.TestCase):
         """
         sumber = (Path(__file__).resolve().parents[1] / "app" / "services"
                   / "bingkai_awal.py").read_text(encoding="utf-8")
-        badan = sumber.split("def run_bingkai_awal")[1].split("\ndef ")[0]
+        # Isi pekerjaannya ada di `_jalankan`; `run_bingkai_awal` tinggal
+        # pembungkus yang menandainya sebagai pekerjaan latar.
+        badan = sumber.split("def _jalankan")[1].split("\ndef ")[0]
         self.assertNotIn("_ini_gameplay", sumber)
         # Jawabannya diambil sekali, di luar perulangan klip.
         self.assertEqual(badan.count("_jenis_video("), 1)
@@ -321,9 +339,14 @@ class FacecamDisimpanDanDipanaskan(unittest.TestCase):
                  "title": f"K{i}"} for i in range(8)]
 
         class Ctx:
+            # TANPA `paksa`: uji ini justru tentang sakelarnya, dan permintaan
+            # langsung memang sengaja mengabaikannya. Remnya tetap ada lewat
+            # jalur lain, karena mematikan sakelar juga MEMBATALKAN pekerjaan
+            # yang sedang berjalan (lihat routers/settings._hentikan_pemanasan).
             payload = {"video_id": "vid", "aspect_ratio": "9:16", "klip": klip}
             def __init__(self): self.pesan = []
             def check_cancelled(self): pass
+            def mengalah_cpu(self, kabar=None): return False
             def progress(self, p, stage=None, message=None):
                 self.pesan.append((p, message))
 
@@ -374,6 +397,7 @@ class FacecamDisimpanDanDipanaskan(unittest.TestCase):
 
         class Ctx:
             def check_cancelled(self): pass
+            def mengalah_cpu(self, kabar=None): return False
             def progress(self, p, **kw): dicatat.append(p)
 
         ekor = _Ekor(Ctx(), 0.94, 0.99)

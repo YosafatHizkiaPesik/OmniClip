@@ -711,6 +711,10 @@ def build_ass(
     # Baris Dialogue siap pakai dari luar: judul bertema di dalam video.
     # Membawa semua gayanya sebagai tag sebaris, jadi tidak butuh baris Style.
     tambahan: Optional[list[str]] = None,
+    # Kata kasar ditutup satu huruf di tengahnya ("anjing" -> "anj*ng").
+    # Menyala secara bawaan: klip yang teksnya memuat umpatan utuh diturunkan
+    # jangkauannya oleh YouTube, TikTok, dan Instagram.
+    sensor: bool = True,
 ) -> str:
     """
     Menyusun file ASS lengkap.
@@ -800,6 +804,25 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
 
     events: list[str] = []
+
+    # --- Sensor kata kasar -----------------------------------------------------
+    #
+    # Dikerjakan SEKALI di sini, bukan di tiap tempat teks digambar. Subtitle
+    # keluar dari tiga jalur berbeda (kata per kata untuk sorotan karaoke,
+    # kalimat utuh, dan subtitle kedua), dan menyensornya tiga kali adalah tiga
+    # kesempatan untuk berbeda. Diminta pemiliknya 29 September 2026: "jika ada
+    # kata kasar maka disensor... seperti contoh anjing menjadi anj*ng".
+    if sensor:
+        from .sensor import sensor_kata_kata, sensor_teks
+        lines = [{**l,
+                  **({"text": sensor_teks(str(l["text"]))} if l.get("text") else {}),
+                  **({"words": sensor_kata_kata(l["words"])} if l.get("words") else {})}
+                 for l in (lines or [])]
+        if kedua_lines:
+            kedua_lines = [{**l, "text": sensor_teks(str(l.get("text") or ""))}
+                           for l in kedua_lines]
+        if hook and hook.text.strip():
+            hook = replace(hook, text=sensor_teks(hook.text))
 
     # --- Hook: sekarang benar-benar ter-render ---------------------------------
     # Versi lama menerima hook_text, menyimpannya ke JSON, lalu tidak pernah

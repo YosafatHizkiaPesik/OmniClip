@@ -60,11 +60,16 @@ def bersihkan(maks_umur: float = 24 * 3600) -> int:
     - `bingkai:` (jejak wajah per klip). Beberapa detik per klip pada video
       yang isinya tidak akan pernah berubah, dan yang menunggunya adalah orang
       yang sedang membuka editor.
+    - `facecam:` (letak kamera pemain sepanjang klip). Sama alasannya, dan
+      sampai 27 September 2026 ia satu-satunya dari keempatnya yang masih ikut
+      terbuang tiap hari — jadi klip game yang dibuka lagi besoknya memindai
+      ulang dari nol. Versinya dijaga terpisah (`FACECAM_VERSI`), jadi hasil
+      lama tetap terbuang saat cara memindainya berubah.
     """
     cur = get_conn().execute(
         "DELETE FROM search_cache WHERE created_at < ? AND cache_key NOT LIKE 'jenis:%' "
         "AND cache_key NOT LIKE 'sutradara:%' AND cache_key NOT LIKE 'bingkai:%' "
-        "AND cache_key NOT LIKE 'tema:%'",
+        "AND cache_key NOT LIKE 'facecam:%' AND cache_key NOT LIKE 'tema:%'",
         (time.time() - maks_umur,),
     )
     return cur.rowcount

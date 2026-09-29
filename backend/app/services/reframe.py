@@ -15,6 +15,8 @@ bernama, bukan ekspresi `if()` bersarang: klip 45 detik pada 10 Hz berarti 450
 cabang bersarang di parser rekursif ffmpeg — rapuh dan lambat.
 """
 
+import contextlib
+import contextvars
 import itertools
 import logging
 import math
@@ -145,6 +147,41 @@ SAMPLE_WIDTH = 560
 # bingkai 4K adalah 25 MB) tanpa menambah apa pun — wajah dalam bidikan meja
 # sudah lebih dari cukup tajam pada 1280.
 FULL_WIDTH_CAP = 1280
+
+# Berapa utas boleh dipakai analisis, dan seberapa mengalah ia berjalan.
+#
+# Sampai 27 September 2026 tidak ada batas sama sekali: ffmpeg mengambil semua
+# utas untuk mendekode, OpenCV mengambil semua utas lagi untuk mendeteksi, dan
+# di sebelahnya masih ada pembuat salinan dan Whisper. Pada laptop pemiliknya,
+# Core i5-8250U (4 inti, 8 utas, 15 watt) dengan RAM 7,6 GB, beban rata-ratanya
+# terukur 14 dari 8 — dan yang kehilangan giliran adalah peramban dan desktop,
+# bukan analisisnya. Dilaporkan sebagai "sangat sangat berat bahkan bisa
+# membuat laptop saya freeze".
+#
+# Menyisakan dua utas bukan pengorbanan kecepatan yang berarti: pada CPU 4 inti
+# dua utas terakhir adalah hyperthread, yang menambah sedikit sekali pada beban
+# dekode video, sementara dua utas yang tersisa itulah yang membuat mesin tetap
+# bisa dipakai.
+INTI_ANALISIS = max(2, (os.cpu_count() or 4) - 2)
+
+# Analisis di latar (pemanasan bingkai) berjalan lebih mengalah lagi: tidak ada
+# yang menunggunya di depan layar.
+_latar = contextvars.ContextVar("reframe_latar", default=False)
+
+
+@contextlib.contextmanager
+def di_latar():
+    """Menandai bahwa analisis di blok ini tidak ditunggu siapa pun."""
+    token = _latar.set(True)
+    try:
+        yield
+    finally:
+        _latar.reset(token)
+
+
+def inti_analisis() -> int:
+    """Utas untuk analisis sekarang: lebih sedikit lagi bila di latar."""
+    return max(1, INTI_ANALISIS // 2) if _latar.get() else INTI_ANALISIS
 
 # Laju perintah yang ditulis ke sendcmd. 25 Hz melampaui laju frame video,
 # sehingga crop tidak pernah "menunggu" perintah berikutnya. Pada 10 Hz,
@@ -625,11 +662,15 @@ def _sample_frames(src: Path, start: float, duration: float,
     from .proksi import untuk_analisis
     dibaca = untuk_analisis(src)
     cmd = ["ffmpeg", "-hide_banner", "-nostdin", "-loglevel", "error",
+           # Dibatasi supaya mesin tetap bisa dipakai selama memindai; lihat
+           # INTI_ANALISIS.
+           "-threads", str(inti_analisis()),
            "-ss", f"{start:.3f}", "-t", f"{duration:.3f}", "-i", str(dibaca),
            "-vf", f"fps={SAMPLE_FPS},scale={width}:{height}",
            "-f", "rawvideo", "-pix_fmt", "bgr24", "-"]
     frame_bytes = width * height * 3
-    proc = popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    proc = popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                 rendah=_latar.get())
     try:
         while True:
             buf = proc.stdout.read(frame_bytes)
@@ -1003,6 +1044,13 @@ def _detect_centers(src: Path, segments: list[dict], source_w: int, source_h: in
     fw = min(int(source_w), FULL_WIDTH_CAP)
     fh = _even(fw * source_h / source_w)
     to_detect = (fw != sw or fh != sh)
+
+    # OpenCV pun dibatasi. Tanpa ini ia mengambil seluruh utas untuk dirinya
+    # sendiri, di atas utas yang sudah dipakai ffmpeg untuk mendekode.
+    try:
+        cv2.setNumThreads(inti_analisis())
+    except Exception:                                # noqa: BLE001
+        pass
 
     detector = cv2.FaceDetectorYN.create(
         str(MODEL_PATH), "", (sw, sh), DETECT_SCORE, DETECT_NMS, 5000
@@ -1928,13 +1976,28 @@ def _tahan_saat_sepi(centers, subject, people, seen):
             # wajah tetap bukan jawaban — ia tetap celah. Yang dipilih adalah
             # wajah TERDEKAT dengan tempat bingkai berada sekarang: selalu
             # mendarat di sebuah wajah, dan geserannya paling pendek.
-            acuan = out[i - 1] if i > 0 else centers[i]
-            calon = [(abs(people[q][i] - acuan), q) for q in range(len(people))
+            # Acuannya boleh saja BELUM ADA.
+            #
+            # `centers` berisi None untuk sampel tanpa wajah, dan klip yang
+            # dibuka pada sepi panjang membuat `out[i-1]` ikut None. Dulu
+            # nilai itu dipakai apa adanya, dan `float - None` melempar
+            # TypeError yang ditangkap jauh di atas sebagai "rencana bingkai
+            # tidak tersedia" — yang terlihat pemiliknya sebagai klip yang
+            # jatuh ke bilah kabur padahal wajahnya jelas sepanjang klip.
+            # Terjadi sungguhan pada klip podcast 171 detik, 27 September 2026.
+            acuan = next((out[j] for j in range(i - 1, -1, -1)
+                          if out[j] is not None), None)
+            if acuan is None:
+                acuan = next((c for c in centers if c is not None), None)
+            calon = [(q, people[q][i]) for q in range(len(people))
                      if q < len(seen) and i < len(seen[q]) and seen[q][i]
                      and people[q][i] is not None]
             if not calon:
                 continue
-            siapa = min(calon)[1]
+            # Tanpa acuan sama sekali: wajah paling kiri, supaya hasilnya sama
+            # tiap kali dihitung ulang, bukan bergantung urutan deteksi.
+            siapa = (min(calon, key=lambda t: t[1])[0] if acuan is None
+                     else min(calon, key=lambda t: abs(t[1] - acuan))[0])
         out[i] = people[siapa][i]
         subj[i] = siapa
         ditahan += 1
@@ -3224,6 +3287,15 @@ FACECAM_AWAN_TINGGI_MAKS = 0.38
 # Pergeseran petak itu antara sepertiga awal dan sepertiga akhir klip. Panel
 # facecam terpasang mati; orang yang berjalan di bidikan tidak.
 FACECAM_HANYUT_MAKS = 0.12
+# Jarak maksimum antara dua wajah untuk dianggap panel yang sama, pecahan
+# bingkai. Panel facecam diam di tempatnya; dua panel yang berbeda pada video
+# multi-POV terpisah jauh lebih dari ini.
+FACECAM_GUGUS = 0.16
+# Kehadiran minimum supaya satu jendela boleh memindahkan facecam tanpa
+# dibenarkan jendela berikutnya. Sejak wajah dikelompokkan (lihat `gugus`),
+# kotak yang keluar jauh lebih bisa dipercaya daripada saat semua wajah
+# dilempar ke satu awan, jadi syarat saksi ini boleh dilonggarkan.
+FACECAM_SENDIRI_MIN = 0.7
 # Kelonggaran di sekeliling awan wajah: ruang untuk rambut di atas dan bahu di
 # bawah, tanpa ikut menarik masuk permainan di sebelahnya.
 FACECAM_KELONGGARAN = 1.85
@@ -3404,12 +3476,9 @@ def _facecam_dari_bingkai(bingkai, sw: int, sh: int,
         log.warning("Detektor facecam tidak bisa dibuat: %s", e)
         return None
 
-    kiri: list[float] = []
-    kanan: list[float] = []
-    atas: list[float] = []
-    bawah: list[float] = []
-    # Pusat mendatar per sampel, dipakai memeriksa apakah petaknya hanyut.
-    pusat_per_sampel: list[Optional[float]] = []
+    # Tiap deteksi wajah: (nomor sampel, kiri, kanan, atas, bawah) dalam pecahan
+    # bingkai. Dikelompokkan sesudah semua bingkai dibaca, lihat `gugus`.
+    deteksi: list[tuple] = []
     total = 0
     # Gradien rata-rata lintas waktu, untuk menemukan tepi panel (`_tepi_panel`).
     gx_jumlah = None
@@ -3430,21 +3499,57 @@ def _facecam_dari_bingkai(bingkai, sw: int, sh: int,
         except Exception:
             faces = None
         if faces is None:
-            pusat_per_sampel.append(None)
             continue
-        px: list[float] = []
         for f in faces:
             x, y, w, h = float(f[0]), float(f[1]), float(f[2]), float(f[3])
             if w <= 0 or h <= 0 or w / sw > FACECAM_LEBAR_MAKS:
                 continue
-            kiri.append(x / sw)
-            kanan.append((x + w) / sw)
-            atas.append(y / sh)
-            bawah.append((y + h) / sh)
-            px.append((x + w / 2) / sw)
-        pusat_per_sampel.append(sum(px) / len(px) if px else None)
+            deteksi.append((total - 1, x / sw, (x + w) / sw, y / sh, (y + h) / sh))
 
-    if total == 0 or len(kiri) < max(3, total * FACECAM_KEHADIRAN_MIN):
+    if total == 0 or not deteksi:
+        return None
+
+    # Wajah DIKELOMPOKKAN menurut tempatnya, lalu kelompok terbanyak yang dipakai.
+    #
+    # Dulu semua wajah dilempar ke satu awan. Itu benar selama hanya ada satu
+    # panel, dan runtuh begitu ada dua: pada video LaperGang pemiliknya (banyak
+    # POV YouTuber lain, masing-masing menaruh facecam-nya sendiri) facecam
+    # kiri-tengah dan kanan-bawah sering terlihat dalam jendela yang sama,
+    # awannya jadi selebar layar, dan seluruh jendela ditolak sebagai "bidikan
+    # kamera biasa". Terukur: 8 dari 11 jendela tidak terbaca sama sekali, dan
+    # kotak yang dipakai tetap milik jendela pertama — persis kotak "Reaksi"
+    # yang berdiri di atas permainan pada tangkapan layar pemiliknya.
+    gugus: list[list[tuple]] = []
+    for d in deteksi:
+        cx, cy = (d[1] + d[2]) / 2, (d[3] + d[4]) / 2
+        for g in gugus:
+            gx = sum((q[1] + q[2]) / 2 for q in g) / len(g)
+            gy = sum((q[3] + q[4]) / 2 for q in g) / len(g)
+            if abs(cx - gx) < FACECAM_GUGUS and abs(cy - gy) < FACECAM_GUGUS:
+                g.append(d)
+                break
+        else:
+            gugus.append([d])
+    # Yang paling sering hadir; seri dimenangkan yang paling dekat tepi, karena
+    # panel kamera menempel di tepi dan wajah di dalam permainan tidak.
+    def _nilai(g):
+        cx = sum((q[1] + q[2]) / 2 for q in g) / len(g)
+        return (len({q[0] for q in g}), -min(cx, 1.0 - cx))
+    pilih = max(gugus, key=_nilai)
+
+    kiri = [q[1] for q in pilih]
+    kanan = [q[2] for q in pilih]
+    atas = [q[3] for q in pilih]
+    bawah = [q[4] for q in pilih]
+    # Pusat mendatar per sampel, dari kelompok yang dipilih saja.
+    per_sampel: dict[int, list[float]] = {}
+    for q in pilih:
+        per_sampel.setdefault(q[0], []).append((q[1] + q[2]) / 2)
+    pusat_per_sampel = [
+        (sum(per_sampel[i]) / len(per_sampel[i]) if i in per_sampel else None)
+        for i in range(total)]
+
+    if len({q[0] for q in pilih}) < max(3, total * FACECAM_KEHADIRAN_MIN):
         return None
 
     # Petak yang memuat wajah-wajahnya. Persentil, bukan nilai ekstrem: satu
@@ -3514,11 +3619,36 @@ def _facecam_dari_bingkai(bingkai, sw: int, sh: int,
             # bidang tujuan, jadi ia bisa MELUAP keluar panel — memindai dari
             # sana berarti memulai di sisi permainan dan langsung salah arah.
             "awan_kotak": [x1 * 100, y1 * 100, x2 * 100, y2 * 100],
-            "awan": [lebar_awan, tinggi_awan], "kehadiran": len(kiri) / max(1, total)}
+            "awan": [lebar_awan, tinggi_awan],
+            # Berapa bagian sampel yang benar-benar memperlihatkan panel INI.
+            # Dihitung per sampel, bukan per deteksi: satu sampel dengan dua
+            # wajah di panel yang sama tetap satu sampel.
+            "kehadiran": len({q[0] for q in pilih}) / max(1, total)}
 
 
-FACECAM_JENDELA = 8.0          # detik per potongan pemindaian
-FACECAM_PINDAH = 0.08          # geser pusat (pecahan bingkai) yang dianggap pindah tempat
+# Detik per potongan pemindaian facecam.
+#
+# Turun dari 8 ke 4 pada 27 September 2026. Video multi-POV berganti sumber
+# jauh lebih cepat daripada seorang streamer memindahkan kameranya: pada klip
+# LaperGang pemiliknya, POV berpindah ke YouTuber lain pada detik 143 lalu
+# kembali pada 147 — dua kali di dalam SATU jendela 8 detik, jadi separuh
+# jendela itu pasti salah tempat betapapun tepat deteksinya.
+#
+# Hampir gratis: bingkainya sudah dibaca sekali untuk seluruh klip, dan yang
+# bertambah hanya pengelompokan per jendela. Empat detik masih 32 sampel pada
+# 8 Hz, cukup untuk membedakan panel yang diam dari wajah yang lewat.
+#
+# Turun lagi ke 2 detik pada 28 September 2026, sesudah mengukur video yang
+# sama bingkai demi bingkai: POV-nya berganti untuk DUA DETIK lalu kembali
+# (video detik 98-100 memakai facecam kanan-bawah, 96 dan 102 memakai yang
+# kiri). Jendela 4 detik menelan perpindahan itu bulat-bulat. Dua detik masih
+# 16 sampel pada 8 Hz, dan syarat kehadirannya dinaikkan (FACECAM_SENDIRI_MIN)
+# supaya jendela yang lebih pendek tidak berubah jadi bingkai yang gelisah.
+FACECAM_JENDELA = 2.0
+# Berapa bagian dua kotak harus bertindih untuk disebut panel yang SAMA.
+# 0,45 memisahkan kiri dari kanan dengan telak (tindihnya nol) sambil
+# memaafkan panel yang sama yang kotaknya bergeser beberapa persen.
+FACECAM_TINDIH_MIN = 0.45
 
 
 def deteksi_facecam_waktu(src, segments: list[dict], source_w: int, source_h: int,
@@ -3597,9 +3727,23 @@ def deteksi_facecam_waktu(src, segments: list[dict], source_w: int, source_h: in
         return (f["x"] + f["w"] / 2) / 100.0, (f["y"] + f["h"] / 2) / 100.0
 
     def sama(f, g):
-        (ax, ay), (bx, by) = pusat(f), pusat(g)
-        return (abs(ax - bx) < FACECAM_PINDAH and abs(ay - by) < FACECAM_PINDAH
-                and 0.4 < (f["w"] * f["h"]) / max(1e-6, g["w"] * g["h"]) < 2.5)
+        """
+        Panel yang sama, diukur dari seberapa besar kedua kotaknya bertindih.
+
+        Dulu jarak pusat dan perbandingan luas diperiksa terpisah, dan itu
+        goyah: panel kiri yang sama persis dilaporkan dengan kotak 0-21% lalu
+        3,4-21,1% saat wajahnya bergeser sedikit di dalam panelnya, dan aturan
+        lama menyebutnya PINDAH. Tiap "pindah" jadi satu potongan di hasil
+        render, jadi panel yang diam pun membuat bingkainya berkedip.
+        Tumpang tindih mengurus geseran dan perubahan bentuk sekaligus.
+        """
+        x1 = max(f["x"], g["x"])
+        y1 = max(f["y"], g["y"])
+        x2 = min(f["x"] + f["w"], g["x"] + g["w"])
+        y2 = min(f["y"] + f["h"], g["y"] + g["h"])
+        tindih = max(0.0, x2 - x1) * max(0.0, y2 - y1)
+        gabung = f["w"] * f["h"] + g["w"] * g["h"] - tindih
+        return tindih / max(1e-6, gabung) >= FACECAM_TINDIH_MIN
 
     ringkas: list[dict] = []
     for i, h in enumerate(hasil):
@@ -3612,9 +3756,17 @@ def deteksi_facecam_waktu(src, segments: list[dict], source_w: int, source_h: in
             # bingkai. Terukur pada Devour: satu potongan 8 detik melompat ke
             # kotak 42x68% lalu kembali. Potongan terakhir tidak punya saksi,
             # jadi ia hanya dipercaya bila wajahnya hadir hampir di semua sampel.
+            #
+            # Kecuali bila buktinya sendiri sudah kuat. Video multi-POV memang
+            # berganti facecam untuk satu jendela saja lalu kembali: pada klip
+            # LaperGang pemiliknya, POV kanan-bawah hadir di 55% sampel jendela
+            # detik ke-64, lalu POV berikutnya kembali ke kiri. Menuntut saksi
+            # membuang perpindahan yang benar-benar terjadi, dan delapan detik
+            # bingkai yang salah tempat jelas terlihat.
             nanti = hasil[i + 1]["facecam"] if i + 1 < len(hasil) else None
+            kuat = float(h["facecam"].get("kehadiran") or 0) >= FACECAM_SENDIRI_MIN
             if nanti is not None:
-                if not sama(h["facecam"], nanti):
+                if not sama(h["facecam"], nanti) and not kuat:
                     continue
             elif float(h["facecam"].get("kehadiran") or 0) < 0.8:
                 continue

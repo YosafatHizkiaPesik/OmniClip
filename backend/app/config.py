@@ -328,7 +328,11 @@ JOB_PROGRESS_MIN_INTERVAL = 0.25  # detik antar tulisan progress ke DB
 
 # --- Transkrip ----------------------------------------------------------------
 WHISPER_MODEL_DEFAULT = os.getenv("OMNICLIP_WHISPER_MODEL", "base")
-WHISPER_IDLE_UNLOAD_SECONDS = 600
+# Model ucapan dilepas sesudah menganggur selama ini. Turun dari 600 detik pada
+# 27 September 2026: mesin yang dituju OmniClip adalah laptop dengan RAM 8 GB,
+# dan di sana memegang ratusan megabita "supaya hangat" selama sepuluh menit
+# lebih mahal daripada memuatnya lagi (terukur beberapa detik).
+WHISPER_IDLE_UNLOAD_SECONDS = int(os.getenv("OMNICLIP_WHISPER_IDLE", "180"))
 # Urutan bahasa caption yang DICOBA LEBIH DULU. Bukan daftar tertutup: kalau
 # tidak satu pun ada, `fetch_youtube_captions` melanjutkan ke bahasa yang
 # benar-benar dimiliki videonya. Daftar ini cuma menyatakan "kalau ada

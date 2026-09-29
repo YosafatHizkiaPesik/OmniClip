@@ -166,11 +166,35 @@ async def lifespan(app: FastAPI):
         bersihkan_impor_yatim()
     _th.Thread(target=_impor, name="impor-lama", daemon=True).start()
 
+    # Penjaga memori: melepas model Whisper yang sudah lama tidak dipakai.
+    #
+    # `whisper.unload_if_idle` sudah ada sejak lama, dengan komentar "dipanggil
+    # janitor di lifespan" — tapi janitornya tidak pernah dibuat, jadi model
+    # itu menetap di RAM sampai aplikasi ditutup. Pada laptop pemiliknya
+    # (RAM 7,6 GB dengan swap 2 GB yang sudah terpakai 1,8 GB) ratusan megabita
+    # yang tidak dipakai adalah selisih antara mesin yang lancar dan mesin yang
+    # menukar halaman memori terus-menerus, dan itulah yang terasa sebagai
+    # "freeze".
+    async def _penjaga_memori():
+        from .services import whisper as _whisper
+        while True:
+            await asyncio.sleep(60)
+            try:
+                if await asyncio.to_thread(_whisper.unload_if_idle):
+                    log.info("Model ucapan dilepas; RAM dikembalikan ke sistem.")
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:                   # noqa: BLE001
+                log.info("Penjaga memori melewati satu putaran: %s", str(e)[:120])
+
+    penjaga = asyncio.create_task(_penjaga_memori())
+
     log.info("OmniClip %s siap", __version__)
 
     try:
         yield
     finally:
+        penjaga.cancel()
         queue.stop()
         alat_yt.hentikan()
         log.info("OmniClip backend berhenti")

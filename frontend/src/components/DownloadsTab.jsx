@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Download, Film, Music, Trash2, RefreshCw, Search, Play, X, CheckCircle, Loader2, AlertTriangle } from 'lucide-react';
-import { apiGet, apiDelete, downloadToDisk } from '../lib/api';
+import { Download, Film, Music, Trash2, RefreshCw, Search, Play, X, CheckCircle, Loader2, AlertTriangle, Scissors, ArrowRight } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { apiGet, apiDelete, apiPost, downloadToDisk } from '../lib/api';
 
 function formatBytes(bytes) {
   if (bytes < 1024) return `${bytes} B`;
@@ -151,6 +152,35 @@ export default function DownloadsTab() {
   const [selectedItems, setSelectedItems] = useState(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [loadError, setLoadError] = useState(null);
+  // Video yang sedang dikirim ke Partitur.
+  const [mengirim, setMengirim] = useState(null);
+  const navigate = useNavigate();
+
+  /**
+   * Mengirim satu unduhan ke Partitur, lalu membuka halamannya.
+   *
+   * Videonya sudah ada di komputer, jadi auto-klip melewati langkah unduh dan
+   * langsung menyalin ucapan. Yang sudah pernah diklip tidak diklip lagi:
+   * `/auto-clip` menjawab `cached`, dan yang perlu dilakukan hanya membuka
+   * proyeknya.
+   */
+  const kePartitur = async (item) => {
+    setMengirim(item.video_id);
+    setActionError(null);
+    try {
+      await apiPost('/auto-clip', {
+        video_id: item.video_id,
+        max_clips: Number(localStorage.getItem('omniclip_max_clips') || 0),
+        whisper_model: localStorage.getItem('omniclip_whisper_model') || 'base',
+        gemini_model: localStorage.getItem('omniclip_gemini_model') || null,
+      });
+      navigate('/studio');
+    } catch (e) {
+      setActionError(e.message);
+    } finally {
+      setMengirim(null);
+    }
+  };
   // Kegagalan aksi (hapus / simpan) ditampilkan inline, bukan lewat window.alert
   // yang memblokir dan tidak bisa disalin teksnya.
   const [actionError, setActionError] = useState(null);
@@ -414,6 +444,28 @@ export default function DownloadsTab() {
                     <span>{formatDate(item.created_at)}</span>
                   </div>
                 </div>
+
+                {/* Dari unduhan langsung ke Partitur.
+                    Sebelumnya video yang sudah ada di komputer tetap harus
+                    dicari ulang lewat halaman Cari video, lalu dikenali sebagai
+                    "sudah terunduh" — sebuah jalan memutar untuk berkas yang
+                    sudah ada di depan mata. Diminta pemiliknya. */}
+                {item.video_id && item.type !== 'audio' && (
+                  <button
+                    onClick={() => kePartitur(item)}
+                    disabled={mengirim === item.video_id}
+                    className="btn-primary"
+                    style={{ width: '100%', marginBottom: '6px', padding: '7px',
+                             fontSize: '0.76rem', justifyContent: 'center', gap: '6px' }}
+                    title={item.ada_partitur
+                      ? 'Video ini sudah punya proyek di Partitur'
+                      : 'Buat klip otomatis dari video ini'}>
+                    {mengirim === item.video_id
+                      ? <Loader2 size={13} className="animate-spin" />
+                      : item.ada_partitur ? <ArrowRight size={13} /> : <Scissors size={13} />}
+                    {item.ada_partitur ? 'Buka di Partitur' : 'Masukkan ke Partitur'}
+                  </button>
+                )}
 
                 <div style={{ display: 'flex', gap: '6px' }}>
                   <button

@@ -1,6 +1,12 @@
 """Analisis auto-clip dan render klip."""
 
 import asyncio
+from collections import OrderedDict
+from concurrent.futures import ThreadPoolExecutor
+import os
+import logging
+from pathlib import Path
+import threading
 import re
 from typing import Any, Dict, List, Literal, Optional
 
@@ -19,6 +25,8 @@ from ..services.paths import (
 from ..services.render import list_local_clips
 
 from ..services.ytdlp import RESOLUSI_BAWAAN
+
+log = logging.getLogger("omniclip.clips")
 
 router = APIRouter(prefix="/api", tags=["clips"])
 
@@ -649,6 +657,81 @@ class ReframePlanRequest(BaseModel):
 _REFRAME_CACHE: dict[tuple, dict] = {}
 _REFRAME_CACHE_MAX = 48
 
+# Berapa pemindaian bingkai boleh berjalan BERSAMAAN, di seluruh aplikasi.
+#
+# Sampai 27 September 2026 tidak ada batasnya sama sekali untuk pemindaian yang
+# diminta Studio: gerbang CPU hanya menjaga ANTREAN PEKERJAAN, dan permintaan
+# HTTP tidak lewat sana. Terlihat pada laptop pemiliknya (Core i5-8250U 15 watt,
+# RAM 7,6 GB): sembilan ffmpeg memindai bersamaan dari tiga video berbeda,
+# masing-masing ~20% CPU, sebagian sudah hidup 171 detik. Suhu 93°C, beban 21,6
+# dari 8 utas, swap 95% penuh — dan dari luar itu terasa sebagai "kipasnya
+# kencang, lemot, sering tidak terhubung ke server".
+#
+# Satu, bukan dua: tiap pemindaian sendiri sudah memakai beberapa utas
+# (`reframe.INTI_ANALISIS`), jadi menjalankan dua sekaligus tidak menyelesaikan
+# apa pun lebih cepat pada mesin empat inti, ia hanya membuat keduanya lambat.
+_PINDAI_BERSAMAAN = max(1, int(os.getenv("OMNICLIP_PINDAI_BERSAMAAN", "1")))
+_GERBANG_PINDAI = threading.BoundedSemaphore(_PINDAI_BERSAMAAN)
+
+# Kolam utas SENDIRI untuk pemindaian, terpisah dari kolam bersama.
+#
+# `asyncio.to_thread` memakai satu kolam untuk seluruh aplikasi, dan di mesin
+# pemiliknya kolam itu berisi dua belas utas. Pemindaian yang menunggu giliran
+# di `_GERBANG_PINDAI` tetap MEMEGANG utasnya selama menunggu, jadi belasan
+# klip yang dibuka berturut-turut menghabiskan kolam itu — dan permintaan yang
+# tidak ada hubungannya dengan pemindaian ikut antre di belakangnya.
+#
+# Terukur dan bisa ditirukan: dengan 14 pemindaian mengantre, `/api/projects`
+# yang biasanya dijawab 26 milidetik butuh 26 DETIK. Itulah "Memuat daftar
+# project..." yang berputar tanpa selesai pada laptop pemiliknya, dan dengan
+# antrean yang lebih panjang ia memang tidak pernah selesai.
+#
+# Dengan kolam sendiri, pemindaian yang mengantre menunggu di dalam kolam ini,
+# dan kolam bersama tetap kosong untuk halaman yang sedang dibuka orangnya.
+_PINDAI_EXEC = ThreadPoolExecutor(max_workers=_PINDAI_BERSAMAAN,
+                                  thread_name_prefix="omniclip-pindai")
+
+
+async def _di_kolam_pindai(fn, /, *a, **kw):
+    """Menjalankan pemindaian di kolam utasnya sendiri."""
+    import functools
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(_PINDAI_EXEC, functools.partial(fn, *a, **kw))
+
+# Pemindaian yang sedang berjalan, supaya permintaan kembar MENUNGGU hasilnya
+# alih-alih memindai ulang video yang sama. Terlihat pada laptop pemiliknya:
+# dua ffmpeg dengan `-ss` dan `-t` yang sama persis, berjalan berdampingan.
+_SEDANG_DIHITUNG: dict[tuple, threading.Event] = {}
+_SEDANG_KUNCI = threading.Lock()
+
+# Rencana wajah yang BARU SAJA dihitung, supaya pekerjaan berikutnya untuk klip
+# yang sama tidak menghitungnya lagi.
+#
+# Membuka satu klip game memanggil dua pemindaian berturut-turut: `/clip-reframe`
+# untuk jejak wajah, lalu `/clip-facecam` untuk letak kamera pemain. Yang kedua
+# butuh rencana wajah yang sama persis, dan sampai 29 September 2026 ia
+# menghitungnya sendiri dari nol: terukur sepuluh detik untuk jawaban yang sudah
+# ada di memori sedetik sebelumnya. Dilaporkan pemiliknya sebagai "sangat lemot
+# untuk melihat satu klip di studio".
+#
+# Hanya BEBERAPA yang terakhir: rencana membawa larik per sampel, dan menyimpan
+# semuanya berarti memori yang tumbuh sepanjang sesi.
+_PLAN_TERAKHIR: "OrderedDict[tuple, Any]" = OrderedDict()
+_PLAN_MAKS = 3
+
+
+def _kunci_plan(src: str, segments: list[dict]) -> tuple:
+    return (str(src), tuple((round(float(x["start"]), 3), round(float(x["end"]), 3))
+                            for x in segments))
+
+
+def _ingat_plan(src: str, segments: list[dict], plan) -> None:
+    if plan is None:
+        return
+    _PLAN_TERAKHIR[_kunci_plan(src, segments)] = plan
+    while len(_PLAN_TERAKHIR) > _PLAN_MAKS:
+        _PLAN_TERAKHIR.popitem(last=False)
+
 
 def _kunci_reframe(key: tuple) -> str:
     import hashlib
@@ -738,6 +821,42 @@ def hitung_reframe(*, video_id: str, segments: list[dict], aspect_ratio: str = "
     if sudah is not None:
         return sudah
 
+    # Permintaan kembar menunggu yang pertama, bukan memindai ulang.
+    with _SEDANG_KUNCI:
+        menunggu = _SEDANG_DIHITUNG.get(key)
+        if menunggu is None:
+            selesai = threading.Event()
+            _SEDANG_DIHITUNG[key] = selesai
+        else:
+            selesai = None
+    if selesai is None:
+        # Batas waktunya longgar: pemindaian klip panjang pada mesin pelan bisa
+        # semenit lebih, dan menyerah lebih awal berarti memindai dua kali,
+        # persis yang sedang dihindari.
+        menunggu.wait(timeout=600)
+        sudah = _reframe_tersimpan(key)
+        if sudah is not None:
+            return sudah
+        # Yang pertama gagal atau kehabisan waktu; hitung sendiri.
+        return _hitung_reframe_sekarang(
+            video_id=video_id, segments=segments, aspect_ratio=aspect_ratio,
+            turns=turns, lock_person=lock_person, person_keys=person_keys,
+            frame_motion=frame_motion, subjek=subjek, key=key)
+    try:
+        return _hitung_reframe_sekarang(
+            video_id=video_id, segments=segments, aspect_ratio=aspect_ratio,
+            turns=turns, lock_person=lock_person, person_keys=person_keys,
+            frame_motion=frame_motion, subjek=subjek, key=key)
+    finally:
+        with _SEDANG_KUNCI:
+            _SEDANG_DIHITUNG.pop(key, None)
+        selesai.set()
+
+
+def _hitung_reframe_sekarang(*, video_id: str, segments: list[dict], aspect_ratio: str,
+                             turns: tuple, lock_person, person_keys,
+                             frame_motion: str, subjek: str, key: tuple) -> dict:
+    """Pemindaian sebenarnya, satu per satu (lihat `_GERBANG_PINDAI`)."""
     from ..services.paths import find_local_video
     from ..services.reframe import SAMPLE_FPS, plan_reframe
 
@@ -749,10 +868,20 @@ def hitung_reframe(*, video_id: str, segments: list[dict], aspect_ratio: str = "
     # jendelanya tidak diturunkan dari rasio kanvas. Tanpa itu, video yang
     # sumbernya sudah tegak dijawab "tidak tersedia" padahal bingkai sempit di
     # dalamnya masih punya ruang untuk bergeser.
-    plan = plan_reframe(str(source), segments, aspect_ratio=aspect_ratio,
-                        track_only=True, speaker_turns=list(turns),
-                        lock_person=lock_person, person_keys=person_keys,
-                        frame_motion=frame_motion, subjek=subjek)
+    # Satu pemindaian pada satu waktu, seluruh aplikasi. Lihat `_GERBANG_PINDAI`.
+    with _GERBANG_PINDAI:
+        # Diperiksa lagi sesudah menunggu giliran: selama antre, yang di depan
+        # bisa saja sudah menghitung persis rencana ini.
+        sudah = _reframe_tersimpan(key)
+        if sudah is not None:
+            return sudah
+        plan = plan_reframe(str(source), segments, aspect_ratio=aspect_ratio,
+                            track_only=True, speaker_turns=list(turns),
+                            lock_person=lock_person, person_keys=person_keys,
+                            frame_motion=frame_motion, subjek=subjek)
+        # Disimpan untuk `/clip-facecam` yang datang sedetik kemudian.
+        if subjek == "wajah" and not person_keys and lock_person is None:
+            _ingat_plan(str(source), segments, plan)
     if plan is None:
         payload = {"available": False,
                    "reason": "no_motion" if subjek == "gerak" else "unsupported"}
@@ -815,8 +944,11 @@ async def siapkan_bingkai(video_id: str):
         raise InvalidInput("Video ini belum punya klip yang bisa disiapkan.")
 
     from ..services.pipeline import _jadwalkan_jejak_sekarang
+    # `paksa`: yang menekan tombolnya sudah menyatakan maunya untuk video ini,
+    # dan sakelar pemanasan otomatis (bawaannya mati) tidak boleh membatalkannya.
     job_id = _jadwalkan_jejak_sekarang(vid, klip,
-                                       (cached["result"] or {}).get("aspect_ratio"))
+                                       (cached["result"] or {}).get("aspect_ratio"),
+                                       paksa=True)
     if not job_id:
         raise InvalidInput("Pemanasan bingkai sedang berjalan untuk video ini.")
     return {"job_id": job_id, "klip": len(klip)}
@@ -837,7 +969,7 @@ async def clip_reframe(req: ReframePlanRequest):
         for l in (req.subtitles or [])
         if l.get("speaker") is not None and l.get("end") is not None
     ]
-    return await asyncio.to_thread(
+    return await _di_kolam_pindai(
         hitung_reframe, video_id=video_id, segments=segments,
         aspect_ratio=req.aspect_ratio, turns=tuple(turns),
         lock_person=req.lock_person,
@@ -1490,7 +1622,7 @@ async def clip_jenis(req: FacecamRequest):
     src = find_local_video(video_id)
     if not src:
         raise NotFound("Video sumber belum diunduh.")
-    hasil = await asyncio.to_thread(jenis_klip_tersimpan, video_id, src, segments)
+    hasil = await _di_kolam_pindai(jenis_klip_tersimpan, video_id, src, segments)
     # Yang paling lama masuk dibuang SATU, bukan semuanya. Mengosongkan 200
     # entri sekaligus berarti tiap klip sesudah yang ke-200 menghitung ulang
     # penggolongan yang memakan 10-60 detik, padahal 199 jawaban di antaranya
@@ -1501,13 +1633,24 @@ async def clip_jenis(req: FacecamRequest):
     return hasil
 
 
+# Dinaikkan setiap kali CARA facecam dipindai berubah, supaya hasil lama tidak
+# dipakai lagi. Simpanan ini sengaja tanpa batas umur, jadi tanpa nomor ini
+# perbaikan pemindainya tidak akan pernah terlihat pada video yang sudah pernah
+# dipindai. v2: wajah dikelompokkan per panel dan jendelanya 4 detik, supaya
+# video multi-POV terbaca (27 September 2026). v3: jendelanya 2 detik, dan
+# hasilnya ikut membawa `potongan` — bagian klip yang bingkainya berbeda
+# (29 September 2026). Tanpa naik ke v3, hasil lama yang tidak punya
+# `potongan` tetap dipakai dan Studio tidak pernah melihat pemecahannya.
+FACECAM_VERSI = 4
+
+
 def _kunci_facecam(video_id: str, segments: list[dict]) -> str:
     """Kunci simpanan facecam: video plus batas tiap potongannya."""
     import hashlib
 
     tanda = ";".join(f"{float(s['start']):.3f}-{float(s['end']):.3f}" for s in segments)
     return "facecam:" + hashlib.sha1(
-        f"{video_id}|{tanda}".encode()).hexdigest()[:24]
+        f"{video_id}|{tanda}|v{FACECAM_VERSI}".encode()).hexdigest()[:24]
 
 
 def _facecam_tersimpan(video_id: str, segments: list[dict]):
@@ -1545,6 +1688,80 @@ def _simpan_facecam(video_id: str, segments: list[dict], payload: dict) -> None:
         pass
 
 
+def _potongan_game(src: str, segments: list[dict],
+                   posisi: Optional[list] = None) -> list[dict]:
+    """
+    Klip game dipecah menurut ISINYA: bagian mana permainan, bagian mana wajah.
+
+    Video gameplay jarang permainan dari awal sampai akhir. Bagian pembuka dan
+    penutup sering wajah SATU LAYAR PENUH, orangnya bicara ke kamera. Susunan
+    dua bidang di situ salah: bidang wajah menyorot dinding di belakangnya dan
+    wajahnya sendiri terdorong ke bidang permainan. Terlihat pada render klip
+    skor 98 milik pemiliknya, detik 3 dan 12 dari 47.
+
+    Perhitungannya sudah ada dan sudah dipakai jalur Sutradara AI
+    (`sutradara_ai._dasar_per_waktu`); yang kurang hanyalah memakainya tanpa AI.
+    Kegagalan di sini bukan kegagalan: tanpa potongan, Studio memakai satu
+    susunan untuk seluruh klip seperti sebelumnya.
+    """
+    try:
+        from ..services.render import PLAY_RES
+        from ..services.reframe import plan_reframe
+        from ..services.sutradara_ai import _dasar_per_waktu
+
+        durasi = sum(float(s["end"]) - float(s["start"]) for s in segments)
+        # Rencana wajah yang baru saja dihitung `/clip-reframe` dipakai ulang.
+        # Menghitungnya lagi memakan sepuluh detik untuk jawaban yang sama.
+        plan = _PLAN_TERAKHIR.get(_kunci_plan(src, segments))
+        if plan is None:
+            plan = plan_reframe(src, segments, aspect_ratio="9:16", track_only=True)
+        if plan is None or not plan.people:
+            return []
+        out_w, out_h = PLAY_RES.get("9:16", (1080, 1920))
+        potongan = _dasar_per_waktu(plan, Path(src), segments, durasi, out_w, out_h,
+                                    facecam_waktu=posisi)
+    except Exception as e:                           # noqa: BLE001
+        log.info("Potongan bingkai game tidak terbaca: %s", str(e)[:160])
+        return []
+    keluar: list[dict] = []
+    for a, b, d in potongan:
+        mode = d.get("mode") or "gaming"
+        tata = d.get("layout")
+        posisi = (tata or {}).get("reaksi") or []
+        # Potongan game DIPECAH LAGI di tiap perpindahan facecam.
+        #
+        # Diminta pemiliknya sesudah mengukur sendiri berapa banyak yang
+        # meleset: "buat agar timelinenya terpotong setiap ada perpindahan
+        # bingkai agar saya bisa menyesuaikan secara manual ukuran dan letaknya
+        # serta lamanya". Itu jalan keluar yang benar. Pelacakan otomatis
+        # terukur 88,7% tepat pada klipnya, dan sisanya berkumpul persis di
+        # sekitar pergantian POV — yang paling menolong bukan mengejar seratus
+        # persen, melainkan memberi tiap bidikan satu kunci yang bisa diseret.
+        if mode == "gaming" and len(posisi) > 1:
+            for i, r in enumerate(posisi):
+                mulai = float(a) + float(r.get("t") or 0.0)
+                henti = (float(a) + float(posisi[i + 1]["t"])) if i + 1 < len(posisi) else float(b)
+                if henti - mulai < 0.35:
+                    continue
+                # Tiap kunci membawa SATU letak facecam, jadi menyeretnya di
+                # Studio hanya mengubah bidikan itu, bukan seluruh klip.
+                satu = dict(tata)
+                satu["reaksi"] = [{**r, "t": 0.0}]
+                bingkai = [dict(f) for f in (tata.get("frames") or [])]
+                if len(bingkai) > 1:
+                    bingkai[1] = {**bingkai[1], "src": dict(r.get("src") or bingkai[1]["src"])}
+                satu["frames"] = bingkai
+                keluar.append({"t": round(mulai, 2), "akhir": round(henti, 2),
+                               "mode": mode, "alasan": d.get("alasan") or "",
+                               "layout": satu})
+            continue
+        keluar.append({"t": round(float(a), 2), "akhir": round(float(b), 2),
+                       "mode": mode, "alasan": d.get("alasan") or "",
+                       "layout": tata})
+    # Satu potongan berarti tidak ada yang berubah; biarkan jalur lama.
+    return keluar if len(keluar) > 1 else []
+
+
 @router.post("/clip-facecam")
 async def clip_facecam(req: FacecamRequest):
     """
@@ -1579,7 +1796,9 @@ async def clip_facecam(req: FacecamRequest):
         w, h = int(pindai["src_w"]), int(pindai["src_h"])
         return {"ditemukan": True, "facecam": posisi[0]["facecam"],
                 "src_w": w, "src_h": h,
-                "layout": susun_layout_gaming(posisi, src_w=w, src_h=h)}
+                "layout": susun_layout_gaming(posisi, src_w=w, src_h=h),
+                # Bagian-bagian klip yang bingkainya BERBEDA. Lihat `_potongan_game`.
+                "potongan": pindai.get("potongan") or []}
 
     tersimpan = _facecam_tersimpan(req.video_id, segs)
     if tersimpan is not None and "posisi" in tersimpan:
@@ -1591,8 +1810,9 @@ async def clip_facecam(req: FacecamRequest):
         h = int(info.get("height") or 1080)
         posisi = deteksi_facecam_waktu(str(src), segs, w, h,
                                        rasio_potongan=rasio_bidang_wajah(1080, 1920))
-        return {"posisi": posisi or [], "src_w": w, "src_h": h}
+        return {"posisi": posisi or [], "src_w": w, "src_h": h,
+                "potongan": _potongan_game(str(src), segs, posisi)}
 
-    pindai = await asyncio.to_thread(kerja)
+    pindai = await _di_kolam_pindai(kerja)
     _simpan_facecam(req.video_id, segs, pindai)
     return susun(pindai)

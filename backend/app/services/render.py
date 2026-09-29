@@ -466,7 +466,21 @@ def kotak_reaksi(kotak: dict, muka, rasio_px: float, src_aspek: float) -> dict:
     if butuh is None:
         return dasar
     k = rasio_px / max(1e-6, src_aspek)
-    h = max(float(dasar["h"]), butuh["h"], butuh["w"] / k)
+    # Ukurannya ditentukan WAJAHNYA, bukan seluruh panel.
+    #
+    # Dulu tinggi potongan diambil dari `max(dasar, ...)`, yaitu panel facecam
+    # yang sudah dipaskan ke rasio bidang. Panel itu memuat seluruh sudut
+    # kamera streamer: meja, kursi, dan dinding di belakangnya. Terukur pada
+    # klip pemiliknya, wajahnya hanya mengisi 16-18% luas potongan, dan di
+    # layar itu terlihat sebagai orang kecil di tengah ruangan. Dilaporkan
+    # berkali-kali: "frame bingkai terlalu besar tidak sesuai dengan ukuran
+    # frame facecam".
+    #
+    # Sekarang potongannya sebesar kepala berikut ruangnya (KEPALA_*), dan
+    # panel hanya jadi BATAS: potongan tidak boleh lebih besar daripada
+    # panelnya, karena di luar panel yang ada cuma permainan.
+    h = max(butuh["h"], butuh["w"] / k)
+    h = min(h, max(float(dasar["h"]), butuh["h"], butuh["w"] / k))
     w = h * k
     if w > 100.0:
         w, h = 100.0, 100.0 / k

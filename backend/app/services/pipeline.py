@@ -412,16 +412,29 @@ def pemanasan_bingkai() -> bool:
     """
     Apakah bingkai semua klip dihitung lebih dulu sesudah auto-klip.
 
-    Bawaannya MENYALA, karena itulah perilaku yang sudah ada dan yang diminta
-    pemiliknya sejak awal: "karena malas menunggu untuk tiap klip, saya ingin
-    tiap klip yang sudah direkomendasikan sudah tersusun bingkainya".
+    Bawaannya MATI sejak 27 September 2026, atas permintaan pemiliknya sesudah
+    memakainya di laptopnya sendiri: "sistem saat ini sangat sangat berat bahkan
+    bisa membuat laptop saya freeze... saya rasa tidak harus semua klip kita
+    lihat yang hanya kita lihat skor yang tertinggi".
+
+    Dulu menyala, dan alasannya juga datang dari pemiliknya: "karena malas
+    menunggu untuk tiap klip, saya ingin tiap klip yang sudah direkomendasikan
+    sudah tersusun bingkainya". Keduanya benar, dan yang berubah adalah
+    harganya: menghitung bingkai SEMUA klip berarti mendekode hampir seluruh
+    video, dan pada laptop 4 inti hemat daya dengan RAM 8 GB itu memakai mesin
+    sampai habis untuk klip yang sebagian besar tidak pernah dibuka.
+
+    Yang menyalakannya tetap mendapat perilaku lama, dan klip yang dibuka satu
+    per satu tetap menghitung bingkainya sendiri saat itu juga, lalu
+    menyimpannya. Jadi yang hilang saat mati bukan kemampuannya, hanya
+    pengerjaannya di muka.
     """
     from ..repos import settings as settings_repo
     try:
         nilai = (settings_repo.get(NAMA_PEMANASAN_BINGKAI) or "").strip()
-        return nilai != "0"
+        return nilai == "1"
     except Exception:                               # noqa: BLE001
-        return True
+        return False
 
 
 def setel_pemanasan_bingkai(aktif: bool) -> None:
@@ -534,7 +547,7 @@ def _hasilnya_masih_ada(video_id: str, ringkas: list[dict]) -> bool:
 
 
 def _jadwalkan_jejak_sekarang(video_id: str, clips: list[dict],
-                              aspect_ratio: str | None) -> str:
+                              aspect_ratio: str | None, *, paksa: bool = False) -> str:
     """
     Isi `_jadwalkan_jejak`, tanpa memeriksa sakelarnya.
 
@@ -593,7 +606,7 @@ def _jadwalkan_jejak_sekarang(video_id: str, clips: list[dict],
         job_id, _baru = queue.enqueue(
             "bingkai_awal",
             {"video_id": video_id, "klip": ringkas, "sidik": _sidik_klip(ringkas),
-             "aspect_ratio": aspect_ratio or "9:16"},
+             "aspect_ratio": aspect_ratio or "9:16", "paksa": paksa},
             video_id=video_id, priority=950,
             dedupe_key=f"bingkai-awal:{video_id}")
         return job_id

@@ -33,8 +33,10 @@ function PemanasanBingkai({ videoId }) {
 
   useEffect(() => {
     apiGet('/settings')
-      .then((r) => setAktif(r?.pemanasan_bingkai !== false))
-      .catch(() => setAktif(true));
+      // Bawaannya MATI sejak 27 September 2026, jadi yang dianggap menyala
+      // hanya jawaban yang benar-benar menyatakannya menyala.
+      .then((r) => setAktif(r?.pemanasan_bingkai === true))
+      .catch(() => setAktif(false));
   }, []);
 
   const ubah = async (nilai) => {
@@ -101,19 +103,25 @@ function PemanasanBingkai({ videoId }) {
       <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: 0,
                   lineHeight: 1.55 }}>
         {menyala
-          ? 'Bingkai dua puluh klip pertama dihitung lebih dulu di latar, jadi tiap '
-            + 'klip yang dibuka langsung terbingkai. Mematikannya menghentikan yang '
-            + 'sedang berjalan sekarang juga.'
-          : 'Bingkai dihitung saat klipnya dibuka, beberapa detik tiap kali, dan CPU '
-            + 'di latar bebas untuk hal lain. Menyalakannya melanjutkan dari klip '
-            + 'yang belum terhitung, bukan mengulang dari nol.'}
+          ? 'Bingkai semua klip dihitung lebih dulu di latar, jadi tiap klip yang '
+            + 'dibuka langsung terbingkai. Ini memakai mesin cukup berat: menghitung '
+            + 'bingkai berarti membaca hampir seluruh video. Mematikannya '
+            + 'menghentikan yang sedang berjalan sekarang juga.'
+          : 'Bingkai dihitung saat klipnya dibuka, beberapa detik tiap kali, dan '
+            + 'mesin di latar bebas untuk hal lain. Ini bawaannya, karena biasanya '
+            + 'hanya sebagian klip yang benar-benar dibuka. Yang sudah pernah '
+            + 'terhitung tetap tersimpan, termasuk sesudah aplikasi ditutup.'}
       </p>
-      {videoId && menyala && (
+      {/* Tetap ada walau sakelarnya mati: sakelar itu tentang SEMUA video, dan
+          tombol ini tentang video yang sedang dibuka. Permintaan langsung
+          mengabaikan sakelarnya (lihat `paksa` di routers/clips.py). */}
+      {videoId && (
         <button className="btn-secondary" onClick={siapkanSekarang} disabled={sibuk}
                 style={{ fontSize: '0.72rem', padding: '5px 9px', alignSelf: 'flex-start',
                          display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
           {sibuk ? <Loader2 size={12} className="animate-spin" /> : <Zap size={12} />}
-          Siapkan bingkai video ini sekarang
+          {menyala ? 'Siapkan bingkai video ini sekarang'
+                   : 'Siapkan bingkai semua klip video ini'}
         </button>
       )}
       {kabar && (

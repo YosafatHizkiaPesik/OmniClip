@@ -19,13 +19,15 @@ from pydantic import BaseModel, Field
 
 from ..config import DOWNLOAD_DIR, THUMBS_DIR
 from ..db import get_conn
+from ..repos import analyses as analyses_repo
 from ..repos import cache as cache_repo
 from ..errors import AppError, NotFound
 from ..services.ytdlp import RESOLUSI_BAWAAN
 from ..repos import media as media_repo
 from ..services.media import poster_frame, probe
 from ..services.jobs import queue
-from ..services.paths import extract_youtube_id, find_local_video, safe_media_path, url_sumber
+from ..services.paths import (extract_id_from_filename, extract_youtube_id,
+                             find_local_video, safe_media_path, url_sumber)
 from ..services.ytdlp import (
     SEARCH_SORTS,
     YtdlpError,
@@ -668,6 +670,19 @@ async def downloads():
             if video:
                 f.update({"title": video.get("title"),
                           "channel": video.get("channel")})
+        # Id videonya, walau berkas ini tidak punya baris di basis data.
+        #
+        # Unduhan dari versi lama, atau yang basis datanya hilang, tetap membawa
+        # id itu di nama berkasnya. Tanpa ini tombol "Masukkan ke Partitur"
+        # tidak muncul untuk berkas yang sebenarnya bisa diklip, dan satu-satunya
+        # jalan adalah mengunduhnya lagi.
+        if not f.get("video_id") and f.get("type") != "audio":
+            f["video_id"] = extract_id_from_filename(f["file_name"]) or None
+        # Sudah pernah diklip? Kartunya memakai ini untuk memilih antara
+        # "Masukkan ke Partitur" dan "Buka di Partitur".
+        f["ada_partitur"] = bool(
+            f.get("video_id")
+            and await asyncio.to_thread(analyses_repo.latest_for_video, f["video_id"]))
     return files
 
 
