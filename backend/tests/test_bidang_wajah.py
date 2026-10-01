@@ -132,16 +132,73 @@ class SinggahanFacecam(unittest.TestCase):
 
     def test_pemanasan_menyimpan_bentuk_yang_sama(self):
         """
-        Pemanasan menulis ke simpanan yang SAMA dengan yang dibaca endpoint.
+        Pemanasan menulis ke simpanan yang SAMA dengan yang dibaca endpoint,
+        LENGKAP dengan pemecahan klipnya.
 
         Bentuk yang berbeda berarti pemanasan mengisi simpanan dengan sesuatu
         yang endpoint-nya tidak kenali, lalu memindai ulang semuanya: kerja
         dua kali, dan justru pada jalur yang ada untuk menghemat kerja.
+
+        `potongan` ditambahkan 1 Oktober 2026. Sebelumnya pemanasan menyimpan
+        letak panelnya saja, jadi setengah pekerjaannya tersisa untuk Studio:
+        lajur Bingkai baru terpecah saat klipnya DIBUKA, satu per satu,
+        sementara pekerjaannya sudah melaporkan diri selesai. Dilaporkan
+        pemiliknya: "proses sudah selesai namun bingkai belum tersusun".
         """
         awal = (AKAR / "backend" / "app" / "services" / "bingkai_awal.py").read_text(
             encoding="utf-8")
-        self.assertIn('{"posisi": posisi or [], "src_w": w, "src_h": h}', awal)
+        self.assertIn('"posisi": posisi or [], "src_w": w, "src_h": h', awal)
+        self.assertIn('"potongan": _potongan_game(str(src), segmen, posisi)', awal)
         self.assertIn('if tersimpan is not None and "posisi" in tersimpan:', awal)
+        # Simpanan lama yang belum punya pemecahan ikut dilengkapi, bukan
+        # dibiarkan menyisakan pekerjaan itu ke Studio selamanya.
+        self.assertIn('if "potongan" not in tersimpan', awal)
+
+    def test_pemanasan_menuliskan_bingkainya_ke_klip(self):
+        """
+        Pemanasan yang melaporkan diri selesai harus benar-benar MENYUSUN
+        bingkainya, bukan cuma menghangatkan simpanan.
+
+        Dan tidak boleh menimpa kunci yang sudah ada — milik pengguna maupun
+        milik sutradara.
+        """
+        awal = (AKAR / "backend" / "app" / "services" / "bingkai_awal.py").read_text(
+            encoding="utf-8")
+        self.assertIn("def _tulis_bingkai(", awal)
+        self.assertIn('if _tulis_bingkai(video_id, klip.get("clip_id"), segmen, rasio):',
+                      awal)
+        badan = awal[awal.index("def _tulis_bingkai("):]
+        badan = badan[:badan.index("\ndef ", 10)]
+        self.assertIn('klip[sasaran].get("frame_keys")', badan)
+        self.assertIn("return False", badan)
+        # clip_id harus ikut sampai ke sini, kalau tidak tidak ada yang bisa
+        # ditulisi.
+        pipa = (AKAR / "backend" / "app" / "services" / "pipeline.py").read_text(
+            encoding="utf-8")
+        self.assertIn('"clip_id": c.get("clip_id")', pipa)
+
+
+class IdBingkaiDiSusunanTersimpan(unittest.TestCase):
+    """
+    Susunan yang terlanjur tersimpan tanpa id harus disembuhkan saat DIBACA.
+
+    Memperbaiki sumbernya tidak mengubah apa yang sudah ada di `frame_keys`
+    milik proyek orang, dan di sana akibatnya langsung terasa: menyeret satu
+    kotak memindahkan keduanya.
+    """
+
+    def test_frames_js_punya_penyembuhnya(self):
+        js = (AKAR / "frontend" / "src" / "features" / "studio"
+              / "frames.js").read_text(encoding="utf-8")
+        self.assertIn("export function berIdLengkap", js)
+
+    def test_editor_memakainya_untuk_susunan_dari_kunci(self):
+        jsx = (AKAR / "frontend" / "src" / "features" / "studio"
+               / "Editor.jsx").read_text(encoding="utf-8")
+        self.assertIn("berIdLengkap(kunciBingkaiAktif.layout)", jsx)
+        # Lewat useMemo: id yang berganti tiap render memutus seretan yang
+        # sedang berjalan.
+        self.assertIn("const kunciLayout = useMemo(", jsx)
 
 
 class PembatasDiPratinjau(unittest.TestCase):
@@ -168,3 +225,64 @@ class PembatasDiPratinjau(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MutuPratinjauDiKanvas(unittest.TestCase):
+    """
+    Dua keluhan yang tampak bertentangan, dan jalan keluarnya.
+
+    "Lebih baik preview kualitas terbaik daripada lancar tapi jelek"
+    (1 Oktober 2026), lalu — sesudah kerapatan kanvas dinaikkan sampai ukuran
+    render — "video looping atau hitam terjadi lagi".
+
+    Keduanya benar. Ongkos penskalaan kanvas pada Firefox tiga puluh kali
+    ongkosnya pada Chromium (terukur: 15,33 ms lawan 0,49 ms untuk 1080x1920),
+    dan 15 ms per bingkai di atas pembacaan dekoder memang meruntuhkan
+    pemutaran. Yang memisahkan keduanya BUKAN satu angka melainkan keadaan:
+    yang bergerak dibuat lancar, yang diam dibuat setajam hasil render.
+    """
+
+    def setUp(self):
+        self.jsx = PRATINJAU.read_text(encoding="utf-8")
+
+    def test_kerapatan_mengikuti_berjalan_atau_dijeda(self):
+        self.assertIn("const diam = v.paused && !berubah;", self.jsx)
+        # "Dijeda" saja tidak cukup: menggeser garis main pada pratinjau yang
+        # berhenti mengganti bingkainya puluhan kali sedetik.
+        self.assertIn("const berubah = v.currentTime !== waktuGambarRef.current;",
+                      self.jsx)
+        # Dijeda: sampai plafon ukuran render. Berjalan: dijepit dua kali.
+        self.assertIn("const dpr = diam", self.jsx)
+        self.assertIn("Math.min(Math.max(dprLayar, 2)", self.jsx)
+
+    def test_bingkai_diam_tidak_digambar_ulang(self):
+        """
+        Loop rAF memanggil penggambar enam puluh kali sedetik, juga saat
+        videonya berhenti. Tanpa penjaga ini, pratinjau yang dijeda membakar
+        15 ms tiap bingkai layar untuk menggambar gambar yang sama persis.
+        """
+        self.assertIn("if (sidikGambarRef.current === sidik) return;", self.jsx)
+        # Ukuran kanvas ikut ke dalam sidiknya; itu yang membuat bingkai yang
+        # sama digambar sekali lagi dengan rapat penuh saat gambarnya berhenti.
+        self.assertIn("const sidik = `${v.currentTime}|${bw}x${bh}|${tandaFrames}`;",
+                      self.jsx)
+        # Sidiknya harus ikut berubah saat kotaknya digeser, kalau tidak
+        # menyeret kotak pada pratinjau yang dijeda tidak terlihat apa-apa.
+        self.assertIn("tandaFrames", self.jsx)
+
+    def test_hitam_selalu_punya_keterangan(self):
+        """
+        "Apakah layar hitam ini pertanda bahwa sistem sedang menyiapkan
+        preview, jika iya hingga kapan saya harus menunggu" — pertanyaan yang
+        tidak boleh dijawab dengan menebak warna.
+        """
+        self.assertIn("pakaiKanvas && !kanvasSiap", self.jsx)
+        self.assertIn("Menyiapkan pratinjau", self.jsx)
+        self.assertIn("pratinjau-merayap", self.jsx)
+        # Dan kesiapan itu ditandai hanya sesudah bingkai benar-benar terbaca.
+        self.assertIn("kanvasSiapRef.current = true;", self.jsx)
+
+    def test_bilahnya_ada_di_lembar_gaya(self):
+        css = (AKAR / "frontend" / "src" / "index.css").read_text(encoding="utf-8")
+        self.assertIn("@keyframes pratinjau-merayap", css)
+        self.assertIn("prefers-reduced-motion", css)

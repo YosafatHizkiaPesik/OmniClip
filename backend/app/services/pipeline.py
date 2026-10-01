@@ -565,6 +565,10 @@ def _jadwalkan_jejak_sekarang(video_id: str, clips: list[dict],
     # yang sama juga memilihkan tema, dan tema dipilih dari apa yang diucapkan.
     ringkas = [{"segments": [{"start": s["start"], "end": s["end"]}
                              for s in (c.get("segments") or [])],
+                # Ikut supaya pemanasan bisa MENULISKAN bingkainya ke klip,
+                # bukan cuma menghangatkan simpanan. Tidak masuk `_sidik_klip`,
+                # jadi video yang sudah pernah dipanaskan tidak ikut terulang.
+                "clip_id": c.get("clip_id"),
                 "title": c.get("title") or c.get("hook_text") or "",
                 "jenis": c.get("jenis") or "",
                 "duration": sum(max(0.0, float(s["end"]) - float(s["start"]))
@@ -594,7 +598,13 @@ def _jadwalkan_jejak_sekarang(video_id: str, clips: list[dict],
     # "selesai" berisi hal yang sama persis, dan satu lagi antre di belakangnya.
     # Yang dilihat orangnya: "Menunggu giliran" selama 15 menit untuk bingkai
     # yang sebenarnya sudah jadi sejak setengah jam lalu.
-    if _sudah_dipanaskan(video_id, ringkas):
+    #
+    # `paksa` MELEWATI penjaga ini. Yang menekan tombol "Hitung ulang dari nol"
+    # tahu persis bahwa daftar klipnya sama — itu justru maksudnya: aturan
+    # pembingkaiannya yang berubah, bukan klipnya. Tanpa pengecualian ini
+    # tombolnya menjawab "Pemanasan bingkai sedang berjalan" dan tidak
+    # mengerjakan apa pun. Dilaporkan pemiliknya 1 Oktober 2026.
+    if not paksa and _sudah_dipanaskan(video_id, ringkas):
         log.info("Bingkai awal %s dilewati: daftar klip yang sama sudah pernah selesai",
                  video_id)
         return ""

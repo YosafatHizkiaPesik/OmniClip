@@ -5,6 +5,7 @@ import {
   clipTimeFor, followX, frameInk, personAt, personKeyAt, rasioBidang, rasioKeluaran,
 } from './frames';
 import { beginRectDrag } from './rectDrag';
+import BilahBingkaiKlip from './BilahBingkaiKlip';
 
 /**
  * Meja bingkai: video sumber seutuhnya, dengan kotak yang menandai apa yang
@@ -44,6 +45,13 @@ export default function FrameStage({
   // Dipanggil saat kotak itu diseret atau diubah ukurannya. Tanpa ini kotaknya
   // hanya bisa dilihat, dan ukurannya harus ditebak lewat empat kolom angka.
   onBoxRectChange = null,
+  // Jejak wajah klip ini masih dihitung. Dipakai untuk bilah kemajuan; lihat
+  // BilahBingkaiKlip.jsx.
+  menghitung = false,
+  // Kenapa susunan Main game belum ada, saat pencariannya sudah berhenti.
+  // Kosong berarti tidak ada yang perlu dikatakan.
+  gamingKabar = null,
+  onCariUlangGaming = null,
 }) {
   const mirrorRef = useRef(null);
   const boxRef = useRef(null);
@@ -119,20 +127,50 @@ export default function FrameStage({
     };
   }, [reframe, frameMode]);
 
-  // Membuntuti pemutar utama: waktu disamakan hanya saat sudah menyimpang lebih
-  // dari 0,2 detik. Menyetel `currentTime` tiap frame akan membuat dekoder
-  // mencari terus-menerus dan gambarnya tersendat.
+  // Membuntuti pemutar utama DENGAN KECEPATAN, bukan dengan lompatan.
+  //
+  // Versi sebelumnya melompat (`currentTime = ...`) tiap kali selisihnya lewat
+  // 0,2 detik. Itu lingkaran yang tidak pernah tertutup pada mesin 15 watt:
+  // cermin yang tertinggal dilompatkan, lompatan itu memaksa dekoder mencari
+  // bingkai kunci dan membuatnya tertinggal lagi, lalu dilompatkan lagi.
+  // Gejalanya tiga dan semuanya dilaporkan pemiliknya 30 September 2026:
+  // "tampilan video hitam" (lompatan mendarat sebelum bingkai kunci berikutnya
+  // terdekode), "video looping", dan "preview dan raw tidak singkron".
+  //
+  // Lingkaran yang sama sudah dipatahkan di ClipPreview dengan cara ini:
+  // mengubah kecepatan putar 4% tidak terlihat mata dan tidak memaksa
+  // pencarian sama sekali, jadi cermin mengejar tanpa pernah mengganggu
+  // dekodernya. Lompatan disimpan untuk selisih yang memang tidak bisa dikejar,
+  // yaitu saat pengguna menggeser garis main.
   useEffect(() => {
     let raf;
     const tick = () => {
       const main = videoRef?.current;
       const m = mirrorRef.current;
       if (main && m) {
-        if (Math.abs(m.currentTime - main.currentTime) > 0.2) {
-          m.currentTime = main.currentTime;
+        const beda = m.currentTime - main.currentTime;
+        if (main.paused) {
+          // Berhenti: satu-satunya cara menyamakan gambar adalah melompat.
+          if (Math.abs(beda) > 0.25) m.currentTime = main.currentTime;
+          if (!m.paused) m.pause();
+          if (m.playbackRate !== 1) m.playbackRate = 1;
+        } else {
+          if (m.paused) m.play().catch(() => { /* diabaikan */ });
+          if (Math.abs(beda) > 1.5) {
+            m.currentTime = main.currentTime;
+            m.playbackRate = 1;
+          } else if (Math.abs(beda) > 0.04) {
+            // Kecepatannya SEBANDING dengan selisihnya, bukan satu langkah
+            // tetap 4%. Dengan langkah tetap, selisih 0,29 detik butuh tujuh
+            // detik untuk tertutup — terukur 30 September 2026 — dan selama
+            // tujuh detik itu kedua panel memang menunjukkan momen yang
+            // berbeda. Sebanding menutupnya dalam sekitar dua detik tanpa
+            // pernah menyentuh `currentTime`, jadi dekodernya tidak terganggu.
+            m.playbackRate = Math.max(0.88, Math.min(1.12, 1 - beda * 0.35));
+          } else if (m.playbackRate !== 1) {
+            m.playbackRate = 1;
+          }
         }
-        if (main.paused && !m.paused) m.pause();
-        else if (!main.paused && m.paused) m.play().catch(() => { /* diabaikan */ });
 
         // Kotak ikut-wajah digerakkan lewat ref, bukan state: pada 60 fps,
         // me-render ulang pohon komponen tiap frame akan membuat seluruh
@@ -349,7 +387,7 @@ export default function FrameStage({
             {frameMode === 'gaming'
               ? (gamingSetel
                 ? 'seret kotak untuk memindahkan · tarik sudutnya untuk mengubah ukuran'
-                : 'mencari kamera wajah pemain…')
+                : (gamingKabar || 'mencari kamera wajah pemain'))
               : frameMode === 'layout'
               ? `${layout?.frames?.length ?? 0} bingkai, seret kotaknya`
               : frameMode === 'original' ? 'dipakai utuh, tanpa dipotong'
@@ -357,6 +395,14 @@ export default function FrameStage({
                   : staticCrop ? 'kotak menandai bagian yang diambil'
                     : 'menyiapkan kotak…'}
           </span>
+          {frameMode === 'gaming' && gamingKabar && onCariUlangGaming && (
+            <button type="button" onClick={onCariUlangGaming}
+                    style={{ background: 'none', border: 0, padding: '0 0 0 6px',
+                             cursor: 'pointer', font: 'inherit', color: 'inherit',
+                             textDecoration: 'underline' }}>
+              Cari lagi
+            </button>
+          )}
         </div>
         {/* Ukuran kotak DIHITUNG dari sumurnya, bukan diserahkan ke CSS.
             
@@ -496,6 +542,12 @@ export default function FrameStage({
           })}
         </div>
       </div>
+      <BilahBingkaiKlip
+        aktif={menghitung}
+        panjangKlip={(segments || []).reduce((n, g) => n + (g.end - g.start), 0)}
+        label={frameMode === 'gaming'
+          ? 'Mencari kamera wajah pemain di klip ini…'
+          : 'Mencari wajah di klip ini…'} />
     </div>
   );
 }

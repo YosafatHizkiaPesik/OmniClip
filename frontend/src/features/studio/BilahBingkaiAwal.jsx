@@ -28,6 +28,10 @@ function lamanya(detik) {
 
 export default function BilahBingkaiAwal({ videoId }) {
   const [job, setJob] = useState(null);
+  // Video yang sedang dikerjakan auto bingkai SEKARANG, yang mungkin bukan
+  // video ini. "Antre" tanpa itu tidak menjawab pertanyaan yang sebenarnya:
+  // menunggu siapa, dan kira-kira berapa lama lagi.
+  const [sedangDikerjakan, setSedangDikerjakan] = useState(null);
   const [, paksaGambar] = useState(0);
   const esRef = useRef(null);
 
@@ -68,6 +72,22 @@ export default function BilahBingkaiAwal({ videoId }) {
       });
     };
 
+    // Siapa yang sedang dikerjakan, dari daftar pekerjaan yang sama tanpa
+    // penyaringan video. Ditanya ulang tiap sepuluh detik hanya selama klip ini
+    // masih antre; jawabannya ringkas dan tidak membawa muatan pekerjaan.
+    const lihatGiliran = () => {
+      apiGet('/jobs/aktif?type=bingkai_awal')
+        .then((r) => {
+          if (batal) return;
+          const jalan = (r?.jobs || []).find(
+            (x) => x.status === 'running' && x.video_id !== videoId);
+          setSedangDikerjakan(jalan || null);
+        })
+        .catch(() => { if (!batal) setSedangDikerjakan(null); });
+    };
+    lihatGiliran();
+    const jamGiliran = setInterval(lihatGiliran, 10000);
+
     apiGet(`/jobs/aktif?video_id=${encodeURIComponent(videoId)}&type=bingkai_awal`)
       .then((r) => {
         const ada = (r?.jobs || [])[0];
@@ -91,6 +111,7 @@ export default function BilahBingkaiAwal({ videoId }) {
 
     return () => {
       batal = true;
+      clearInterval(jamGiliran);
       es.close();
       esRef.current = null;
     };
@@ -143,7 +164,10 @@ export default function BilahBingkaiAwal({ videoId }) {
           : <CheckCircle2 size={13} style={{ color: 'var(--entry)', flex: 'none' }} />}
         <span style={{ color: 'var(--ink-2)', flex: 1, minWidth: 0, overflow: 'hidden',
                        textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {job.message || 'Menyiapkan bingkai semua klip…'}
+          {antre && sedangDikerjakan
+            ? `Menunggu giliran. Sekarang: ${sedangDikerjakan.video_title
+               || sedangDikerjakan.video_id}`
+            : (job.message || 'Menyiapkan bingkai semua klip…')}
         </span>
         {jalan && (
           <span style={{ color: 'var(--ink-2)', fontVariantNumeric: 'tabular-nums',
@@ -167,6 +191,9 @@ export default function BilahBingkaiAwal({ videoId }) {
           Berjalan di latar belakang dan mengalah pada apa pun yang Anda tunggu.
           Klip yang belum sampai gilirannya tetap bisa dibuka; ia akan menghitung
           bingkainya sendiri saat itu juga.
+          {antre && sedangDikerjakan?.message
+            ? ` Yang sedang dikerjakan sekarang: ${sedangDikerjakan.message}.`
+            : ''}
         </p>
       )}
     </div>

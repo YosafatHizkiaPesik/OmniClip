@@ -553,7 +553,14 @@ export const CANVAS_ASPECT = {
 
 const STORE_KEY = 'omniclip_framing';
 
-const MODES = new Set(['smart', 'layout', 'blur', 'center', 'original']);
+// "gaming" dan "motion" IKUT, karena keduanya cara membingkai yang sah.
+//
+// Tanpa keduanya, cara yang tersimpan diturunkan diam-diam jadi "smart" saat
+// video itu dibuka lagi: klip game terbuka sebagai ikut-wajah, dan baru
+// berpindah sesudah /clip-jenis menjawab. Yang terlihat pengguna adalah
+// close-up wajah di kamera pojok pada klip permainan.
+const MODES = new Set(['smart', 'layout', 'blur', 'center', 'original',
+                       'gaming', 'motion']);
 
 /**
  * Susunan bingkai diingat PER VIDEO, bukan satu untuk semua.
@@ -574,7 +581,13 @@ export function loadFraming(videoId) {
   try {
     const all = JSON.parse(localStorage.getItem(STORE_KEY) || '{}');
     const saved = all[videoId];
-    if (!saved?.layout?.frames?.length) return fallback;
+    // Cara membingkai berdiri sendiri dari susunannya. "Main game" dan "ikuti
+    // gerakan" tidak menyimpan daftar bingkai apa pun, jadi menuntut adanya
+    // susunan sebelum memulihkan CARANYA berarti keduanya tidak pernah pulih.
+    if (!saved?.layout?.frames?.length) {
+      return { ...fallback,
+               mode: MODES.has(saved?.mode) ? saved.mode : fallback.mode };
+    }
     const l = saved.layout;
     return {
       mode: MODES.has(saved.mode) ? saved.mode : 'smart',
@@ -869,6 +882,41 @@ export function gamingPadaWaktu(layout, t) {
 }
 
 /** Susunan dari server (tanpa id) -> susunan editor. */
+/**
+ * Menjamin tiap bingkai punya id yang berbeda. Susunan yang sudah benar
+ * dikembalikan apa adanya.
+ *
+ * Studio memilih kotak yang sedang diseret dengan `frames.find(f => f.id ===
+ * frameId)`. Bila idnya hilang, `undefined === undefined` cocok untuk SEMUA
+ * kotak: menyeret kotak Reaksi menulis potongannya ke Permainan juga, dan
+ * keduanya bertumpuk jadi satu. Dilaporkan pemiliknya 1 Oktober 2026.
+ *
+ * Sumbernya sudah ditambal (`susun_layout_gaming` memasang id sendiri), tapi
+ * susunan yang TERLANJUR tersimpan di `frame_keys` tidak akan berubah sendiri.
+ * Ini yang menyembuhkannya saat dibaca, tanpa menyentuh apa pun di cakram.
+ */
+export function berIdLengkap(l) {
+  const fs = l?.frames;
+  if (!fs?.length) return l;
+  const id = fs.map((f) => f.id).filter(Boolean);
+  if (id.length === fs.length && new Set(id).size === fs.length) return l;
+  // Id yang KEMBAR sama buruknya dengan id yang hilang: `find` tetap memberi
+  // kotak yang salah. Jadi yang dipertahankan hanya id pertama yang unik.
+  const dipakai = new Set();
+  return {
+    ...l,
+    frames: fs.map((f) => {
+      if (f.id && !dipakai.has(f.id)) {
+        dipakai.add(f.id);
+        return f;
+      }
+      const baru = newFrameId();
+      dipakai.add(baru);
+      return { ...f, id: baru };
+    }),
+  };
+}
+
 export function susunanDariServer(l) {
   if (!l?.frames?.length) return null;
   return {

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, Trash2, ArrowUp, ArrowDown, ScanFace, Loader2, Zap } from 'lucide-react';
+import { Plus, Trash2, ArrowUp, ArrowDown, ScanFace, Loader2, Zap, RotateCcw } from 'lucide-react';
 import { apiGet, apiPost } from '../../lib/api';
 import FrameKeysPanel from './FrameKeysPanel';
 import {
@@ -26,7 +26,7 @@ import {
  * melanjutkan, dan melanjutkan hampir gratis karena klip yang sudah terhitung
  * ada di simpanan.
  */
-function PemanasanBingkai({ videoId }) {
+function PemanasanBingkai({ videoId, onUlangSemua = null }) {
   const [aktif, setAktif] = useState(null);
   const [sibuk, setSibuk] = useState(false);
   const [kabar, setKabar] = useState(null);
@@ -60,6 +60,20 @@ function PemanasanBingkai({ videoId }) {
     } catch (e) {
       setAktif(sebelum);
       setKabar(e.message);
+    }
+  };
+
+  const ulangSemua = async () => {
+    if (!onUlangSemua) return;
+    setSibuk(true);
+    setKabar(null);
+    try {
+      await onUlangSemua();
+      setKabar('Bingkai semua klip dibuang dan sedang dihitung ulang dari nol.');
+    } catch (e) {
+      setKabar(e.message);
+    } finally {
+      setSibuk(false);
     }
   };
 
@@ -116,13 +130,27 @@ function PemanasanBingkai({ videoId }) {
           tombol ini tentang video yang sedang dibuka. Permintaan langsung
           mengabaikan sakelarnya (lihat `paksa` di routers/clips.py). */}
       {videoId && (
-        <button className="btn-secondary" onClick={siapkanSekarang} disabled={sibuk}
-                style={{ fontSize: '0.72rem', padding: '5px 9px', alignSelf: 'flex-start',
-                         display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-          {sibuk ? <Loader2 size={12} className="animate-spin" /> : <Zap size={12} />}
-          {menyala ? 'Siapkan bingkai video ini sekarang'
-                   : 'Siapkan bingkai semua klip video ini'}
-        </button>
+        <div style={{ display: 'flex', gap: '6px', alignItems: 'center',
+                      alignSelf: 'flex-start' }}>
+          <button className="btn-secondary" onClick={siapkanSekarang} disabled={sibuk}
+                  style={{ fontSize: '0.72rem', padding: '5px 9px',
+                           display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+            {sibuk ? <Loader2 size={12} className="animate-spin" /> : <Zap size={12} />}
+            Siapkan bingkai
+          </button>
+          {/* Ikon saja. Diminta pemiliknya 1 Oktober 2026 supaya tidak memakan
+              tempat; artinya sudah terbaca dari ikon putar-ulang, dan
+              keterangan lengkapnya ada di `title`. */}
+          {onUlangSemua && (
+            <button className="btn-secondary" onClick={ulangSemua} disabled={sibuk}
+                    aria-label="Hitung ulang bingkai dari nol"
+                    title="Hitung ulang dari nol: buang bingkai otomatis semua klip video ini lalu hitung lagi. Bingkai yang Anda atur sendiri tidak ikut terbuang."
+                    style={{ padding: '5px 7px', display: 'inline-flex',
+                             alignItems: 'center', flex: 'none' }}>
+              <RotateCcw size={13} />
+            </button>
+          )}
+        </div>
       )}
       {kabar && (
         <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', margin: 0,
@@ -156,6 +184,8 @@ export default function FramePanel({
   frameMotion = 'smooth', onFrameMotionChange = null,
   frameZoom = 1, frameGeserY = 0, onFrameZoom = null, onFrameGeserY = null,
   videoId = null,
+  // Menghitung ulang bingkai SELURUH klip video ini dari nol.
+  onUlangSemua = null,
   layout, onLayoutChange,
   // Main game: setelan susunan dua bidangnya.
   gamingSibuk = false, onGaming = null, onGamingUlang = null,
@@ -209,7 +239,7 @@ export default function FramePanel({
       {/* Paling atas, dan dengan kotaknya sendiri. Sebelumnya ia terselip di
           antara setelan yang hanya muncul untuk sebagian cara membingkai, jadi
           letaknya berpindah-pindah dan sering tidak terlihat sama sekali. */}
-      <PemanasanBingkai videoId={videoId} />
+      <PemanasanBingkai videoId={videoId} onUlangSemua={onUlangSemua} />
 
       <div className="mark" style={{ color: 'var(--ink)' }}>Cara membingkai</div>
       {jenisKlip === 'memuat' && !pilihanSendiri && (

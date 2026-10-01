@@ -3,7 +3,7 @@ import { Play, Pause, RotateCcw, Loader2, Move, Maximize2, Minimize2, Frame } fr
 import { apiPost } from '../../lib/api';
 import { fontStack } from '../../lib/fonts';
 import { CARD_VARIANTS } from './cardStyles';
-import { CANVAS_ASPECT, coverPercent, followX, frameInk } from './frames';
+import { CANVAS_ASPECT, clipTimeFor, coverPercent, followX, frameInk } from './frames';
 import { beginRectDrag } from './rectDrag';
 import MediaOverlay from './MediaOverlay';
 import { sensorTeks } from '../../lib/sensor';
@@ -25,6 +25,9 @@ const RATIO_BOX = {
 // sebenarnya. Karena Fontsize pada ASS relatif terhadap PlayResY, pecahan
 // nilai/1920 berlaku untuk SEMUA rasio, jadi pratinjau bisa memakai satu rumus.
 const CANVAS_H = 1920;
+
+// Plafon jumlah piksel kanvas pratinjau: sebesar bingkai yang akan dirender.
+const PIKSEL_KANVAS_MAKS = 1080 * 1920;
 
 // Sama persis dengan WARNA_BAWAAN di backend/app/services/subtitles.py.
 // Kalibrasi CSS -> libass. Dipakai subtitle DAN tanda air, karena keduanya
@@ -242,6 +245,37 @@ export default function ClipPreview({
   // Mode gaming ikut memakai jalur susunan: susunannya memang dua bidang, dan
   // satu-satunya bedanya dari "Susun sendiri" adalah siapa yang menyusunnya.
   const useLayout = (frameMode === 'layout' || frameMode === 'gaming') && frames.length > 0;
+  // Susunan bidang digambar di KANVAS dari satu dekoder. Alasannya panjang dan
+  // ada di catatan `jumlahCermin` di bawah.
+  const pakaiKanvas = (frameMode === 'layout' || frameMode === 'gaming') && frames.length > 0;
+  const kanvasRef = useRef(null);
+  // Kanvas kecil untuk latar kabur, dan salinan satu bingkai video yang
+  // dipakai bersama ketiga gambar; lihat `gambarKanvas`.
+  const kaburRef = useRef(null);
+  const bufRef = useRef(null);
+  // Sidik bingkai yang TERAKHIR digambar, supaya pratinjau yang dijeda tidak
+  // menggambar ulang gambar yang sama enam puluh kali sedetik.
+  const sidikGambarRef = useRef(null);
+  // Detik yang terakhir benar-benar digambar. Dipakai membedakan gambar yang
+  // DIAM dari gambar yang sedang berganti; lihat `gambarKanvas`.
+  const waktuGambarRef = useRef(null);
+  // Sudah pernah ada satu bingkai yang benar-benar tergambar?
+  //
+  // Sebelum itu kanvasnya hitam pekat, dan hitam tidak mengatakan apa-apa.
+  // Pemiliknya bertanya persis itu, 1 Oktober 2026: "apakah layar hitam ini
+  // pertanda bahwa sistem sedang menyiapkan preview, jika iya hingga kapan
+  // saya harus menunggu". Jawabannya tidak boleh ditebak dari warna.
+  const [kanvasSiap, setKanvasSiap] = useState(false);
+  // Cermin `kanvasSiap` yang bisa dibaca dari dalam loop rAF tanpa membuat
+  // `gambarKanvas` dibangun ulang tiap kali nilainya berubah.
+  const kanvasSiapRef = useRef(false);
+  // Bentuk susunan yang sedang digambar, dalam satu teks. Ikut ke dalam sidik
+  // di atas supaya menggeser sebuah kotak langsung menggambar ulang.
+  const tandaFrames = useMemo(
+    () => (frames ?? []).map((f) => `${f.src?.x},${f.src?.y},${f.src?.w},${f.src?.h}`
+      + `:${f.dst?.x},${f.dst?.y},${f.dst?.w},${f.dst?.h}`).join('|')
+      + `#${layout?.background ?? ''}`,
+    [frames, layout?.background]);
   const useReframe = (frameMode === 'smart' || frameMode === 'motion')
     && reframe?.available && constrained && !useLayout;
   const useCenter = frameMode === 'center' && !useLayout;
@@ -275,8 +309,12 @@ export default function ClipPreview({
     }
     return y >= 99.99;
   })();
-  const showBlurBg = useBlur || (useLayout && layout?.background !== 'black'
-                                 && !bidangMenutupKanvas && !petakTertutup);
+  // Latar kabur: kanvas menggambarnya sendiri dari bingkai yang sama, jadi
+  // elemen videonya tidak perlu dibuat sama sekali di jalur kanvas. Itu satu
+  // dekoder 1080p60 yang hilang begitu saja.
+  const showBlurBg = !pakaiKanvas
+    && (useBlur || (useLayout && layout?.background !== 'black'
+                    && !bidangMenutupKanvas && !petakTertutup));
   const canvasAspect = CANVAS_ASPECT[aspectRatio] ?? 9 / 16;
 
   const secondaries = useCallback(
@@ -340,27 +378,287 @@ export default function ClipPreview({
   // Daftar cermin dipangkas saat jumlah bingkai berkurang. Tanpa ini, elemen
   // yang sudah dilepas React tetap tercatat di sini dan loop sinkronisasi
   // menyetel `currentTime` pada node yang tidak lagi ada di halaman.
-  // Jumlah cermin: sebanyak bidang yang sedang tampil, atau sebanyak yang
-  // AKAN dibutuhkan klip ini (`cerminSiap`, dari potongan Susun/game di lajur
-  // Bingkai). Cermin yang menunggu tetap dirender transparan supaya siap
-  // pakai — tapi itu berbiaya: terukur 111 lawan 61 bingkai terbuang per 6
-  // dtk di Firefox. Klip tanpa potongan susunan tidak menanggungnya sama sekali.
-  // Cermin SIAGA dibatasi satu.
+
+  /**
+   * SATU dekoder, digambar berkali-kali.
+   *
+   * Susunan dua bidang dulu dibuat dengan satu elemen `<video>` per bidang,
+   * masing-masing memutar BERKAS YANG SAMA. Terukur di mesin pemiliknya pada
+   * klip gaming 1920x1080 60 fps: EMPAT pemutar hidup sekaligus — pemutar
+   * utama, latar kabur, bidang wajah, bidang permainan — menuntut 210 bingkai
+   * per detik didekode, dan yang berhasil cuma sebagian. Dari 2.517 bingkai
+   * dalam 12 detik, 1.043 jatuh: 41%. Itulah yang terlihat sebagai gambar
+   * tersendat, dan saat dekodernya kehabisan napas sama sekali, sebagai bidang
+   * yang kosong. Dilaporkan pemiliknya 30 September 2026: "maju mundur
+   * tersendat sendat" dan "gamenya menjadi putih".
+   *
+   * Satu berkas tidak perlu didekode empat kali untuk digambar di empat
+   * tempat. Pemutar utama tetap satu-satunya yang mendekode; kanvas menyalin
+   * bingkainya ke tiap bidang dengan `drawImage`. Menyalin sudah dikerjakan
+   * GPU dan ongkosnya tidak sebanding dengan mendekode.
+   *
+   * Ini sekaligus menghapus seluruh persoalan penyerentakan: tidak ada lagi
+   * cermin yang bisa tertinggal, jadi tidak ada lagi yang perlu dikejar dengan
+   * kecepatan putar atau dilompatkan.
+   *
+   * HARGANYA, dan kenapa ia tetap dibayar. Memindahkan bingkai dari elemen
+   * <video> ke kanvas memakan 11 ms dan angkanya sama saja berapa pun ukuran
+   * tujuannya — terukur 30 September 2026, menggambar ke kanvas 48 piksel pun
+   * 10,78 ms. Elemen <video> tidak menanggung itu karena disusun langsung oleh
+   * GPU tanpa pernah melewati CPU. Jadi jalur kanvas menahan pratinjau di
+   * sekitar 30 fps.
+   *
+   * Keduanya diukur berdampingan di mesin yang sama, dan kanvas tetap menang:
+   *
+   *   kanvas         : 30 fps, 2 pemutar, 68-90 bingkai jatuh di satu pemutar
+   *   elemen <video> : 23 fps, 4 pemutar, 179-180 jatuh di TIGA pemutar
+   *
+   * Membatasi ukuran salinan tidak menolong (30,1 -> 29,0 fps), yang
+   * menegaskan ongkosnya murni pembacaan, bukan pengisian piksel.
+   *
+   * Tuas berikutnya bukan di sini melainkan di SUMBERNYA: ongkos pembacaan
+   * ikut resolusi video, dan pratinjau memutar berkas 1080p60 apa adanya.
+   * `services/proksi.py` sudah bisa membuat salinan yang lebih kecil, tapi
+   * `AMBANG_PUTAR = 1920` menahannya untuk sumber yang lebih lebar dari 1920.
+   * Aturan itu ditulis demi kualitas gambar dan masih benar untuk satu
+   * dekoder; ia hanya tidak melihat laju bingkai.
+   */
+  // CERMIN SIAGA DIHAPUS.
   //
-  // Cermin yang menunggu memang membuat potongan "Susun" tampil tanpa jeda
-  // hitam, dan penulisnya sudah mengukur harganya sendiri: 111 lawan 61 bingkai
-  // terbuang per 6 detik di Firefox. Pada laptop 15 watt harga itu terlalu
-  // mahal. Terukur pada mesin pemiliknya, satu klip gaming membuka LIMA pemutar
-  // 1920x1080 sekaligus dari berkas yang sama, dan berpindah klip memaksa
-  // kelimanya memuat ulang serentak — sebagian gagal mendekode dan pratinjaunya
-  // tinggal hitam. Terekam olehnya 29 September 2026: dua klip terakhir yang
-  // dibuka hitam total dan tidak pernah mulai.
+  // Ia ada supaya potongan "Susun" berikutnya tampil tanpa jeda hitam: satu
+  // pemutar dihangatkan lebih dulu di belakang layar. Harganya satu dekoder
+  // 1080p60 yang berjalan terus untuk sesuatu yang mungkin tidak pernah tiba.
   //
-  // Satu cermin siaga menutup kasus yang paling sering (satu potongan berikutnya
-  // sudah hangat) tanpa membuka pemutar ketiga dan keempat yang menganggur.
-  const CERMIN_SIAGA_MAKS = 1;
-  const jumlahCermin = Math.max(useLayout ? frames.length : 0,
-                                Math.min(cerminSiap, CERMIN_SIAGA_MAKS));
+  // Dengan jalur kanvas tidak ada lagi yang perlu dihangatkan. Begitu potongan
+  // bersusun tiba, kanvas menggambar dari pemutar utama yang memang sudah
+  // berjalan, pada bingkai layar berikutnya. Menunggu satu bingkai jauh lebih
+  // murah daripada mendekode 60 bingkai per detik sepanjang klip.
+  const jumlahCermin = pakaiKanvas ? 0 : (useLayout ? frames.length : 0);
+
+  /**
+   * Menggambar seluruh susunan ke kanvas dari SATU bingkai video.
+   *
+   * Geometrinya diambil dari `coverPercent` yang sama persis dengan yang dulu
+   * dipakai untuk menempatkan elemen `<video>` cermin. Itu disengaja: kalau
+   * rumusnya ditulis ulang di sini, pratinjau bisa bergeser diam-diam dari
+   * apa yang sudah terbukti benar.
+   */
+  const gambarKanvas = useCallback(() => {
+    const cv = kanvasRef.current;
+    const v = videoRef.current;
+    if (!cv || !v || !v.videoWidth) return;
+    const lebar = cv.clientWidth;
+    const tinggi = cv.clientHeight;
+    if (!lebar || !tinggi) return;
+    // KANVAS DIGAMBAR LEBIH RAPAT DARIPADA LAYAR.
+    //
+    // Terukur 1 Oktober 2026 di Studio pemiliknya: kanvas pratinjau 287x511
+    // piksel, di sebelah panel VIDEO SUMBER selebar 913. Ukurannya tidak bisa
+    // dinaikkan — `fit` sudah mengambil seluruh tinggi yang tersedia — jadi
+    // yang bisa dinaikkan kerapatannya. Pada satu piksel per piksel, tepi
+    // huruf subtitle dan garis di dalam permainan jatuh persis di antara dua
+    // piksel dan hilang; itu yang terbaca sebagai "kualitas video preview yang
+    // masih jelek", dua kali dilaporkan.
+    //
+    // Menggambar lebih rapat lalu membiarkan peramban mengecilkannya memberi
+    // perata-rataan yang benar untuk tiap piksel layar.
+    //
+    // DIJEDA: serapat ukuran render. BERJALAN: dua kali kerapatan layar.
+    //
+    // Pemiliknya meminta mutu tertinggi, 1 Oktober 2026: "lebih baik jika
+    // membuat video preview dengan kualitas terbaik daripada lancar tapi
+    // kualitasnya jelek". Lalu, sesudah kerapatan dinaikkan sampai ukuran
+    // render, ia melaporkan kembalinya "video looping atau hitam". Keduanya
+    // benar, dan keduanya bisa dipenuhi sekaligus — tapi tidak dengan satu
+    // angka.
+    //
+    // Sebabnya ongkos yang SAYA UKUR DI PERAMBAN YANG SALAH. Angka pertama
+    // (0,25 / 0,69 / 1,34 ms) datang dari Chromium headless. Pada Firefox,
+    // yang dipakai pemiliknya, penskalaan kanvas tiga puluh kali lebih mahal.
+    // Ketiga penggambaran satu bingkai, mesin yang sama, 1 Oktober 2026:
+    //
+    //                      Firefox    Chromium
+    //   287x511            2,07 ms     0,09 ms
+    //   574x1022           6,27 ms     0,23 ms
+    //   1080x1920         15,33 ms     0,49 ms
+    //
+    // `imageSmoothingQuality` hampir tidak berpengaruh di Firefox (15,33
+    // lawan 14,67), jadi yang mahal memang jumlah pikselnya.
+    //
+    // 15,3 ms di atas 10,8-12,3 ms untuk membaca bingkai dari dekoder berarti
+    // plafon 38 fps sebelum apa pun yang lain dihitung — dan pada mesin yang
+    // sedang memindai wajah di latar, itu runtuh jadi hitam dan tersendat.
+    // Pada 574x1022 ongkosnya 17 ms, yaitu plafon 58 fps: aman.
+    //
+    // Yang menjadikannya bukan kompromi: saat DIJEDA tidak ada bingkai
+    // berikutnya yang dikejar, jadi 15 ms boleh dibayar — sekali saja, lihat
+    // penjaga `diam` di bawah. Dan dijeda itulah saat orang benar-benar
+    // memeriksa mutu gambarnya. Yang bergerak dibuat lancar, yang diam dibuat
+    // setajam hasil rendernya.
+    const dprLayar = Math.min(2, window.devicePixelRatio || 1);
+    const luas = Math.max(1, lebar * tinggi);
+    // "Diam" berarti gambarnya BENAR-BENAR tidak berganti: berhenti, dan
+    // detiknya sama dengan yang terakhir digambar.
+    //
+    // Memakai `paused` saja tidak cukup. Menggeser garis main pada pratinjau
+    // yang berhenti mengganti bingkainya puluhan kali sedetik, dan tiap
+    // bingkai itu akan dibayar penuh 15 ms — persis beban yang sedang
+    // dihindari, hanya pindah dari memutar ke menggeser. Yang berganti
+    // digambar cepat; begitu ia berhenti berganti, denyut rAF berikutnya
+    // menggambarnya sekali lagi dengan rapat penuh.
+    const berubah = v.currentTime !== waktuGambarRef.current;
+    const diam = v.paused && !berubah;
+    const dpr = diam
+      ? Math.max(dprLayar, Math.sqrt(PIKSEL_KANVAS_MAKS / luas))
+      : Math.min(Math.max(dprLayar, 2), Math.sqrt(PIKSEL_KANVAS_MAKS / luas));
+    const bw = Math.round(lebar * dpr);
+    const bh = Math.round(tinggi * dpr);
+
+    // GAMBAR YANG SAMA TIDAK DIGAMBAR DUA KALI.
+    //
+    // Loop rAF memanggil fungsi ini enam puluh kali sedetik, juga saat
+    // videonya berhenti. Tanpa penjaga ini, pratinjau yang dijeda membakar
+    // 15 ms tiap bingkai layar untuk menggambar gambar yang sama persis —
+    // dan mesin yang sibuk begitu tidak punya sisa untuk pekerjaan yang
+    // benar-benar ditunggu orang. Terukur sesudah penjaga ini dipasang: nol
+    // penggambaran dalam tiga detik pratinjau yang berhenti.
+    //
+    // Ukuran kanvas ikut ke dalam sidiknya, dan itu yang membuat peningkatan
+    // mutu di atas terjadi: bingkai yang sama pada rapat yang lebih tinggi
+    // bersidik lain, jadi ia digambar sekali lagi lalu berhenti.
+    const sidik = `${v.currentTime}|${bw}x${bh}|${tandaFrames}`;
+    if (sidikGambarRef.current === sidik) return;
+    sidikGambarRef.current = sidik;
+    waktuGambarRef.current = v.currentTime;
+
+    if (cv.width !== bw) cv.width = bw;
+    if (cv.height !== bh) cv.height = bh;
+    const g = cv.getContext('2d', { alpha: false });
+    if (!g) return;
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // Penyaring penskalaan yang BAIK, disetel sekali di sini.
+    //
+    // Bawaan kanvas untuk `imageSmoothingQuality` adalah 'low', yaitu bilinear
+    // dua titik. Untuk memperbesar itu tidak apa-apa, tapi bidang permainan
+    // justru DIKECILKAN — 1920 piksel sumber ke sekitar 560 piksel panel,
+    // hampir 3,5 kali — dan bilinear yang mengecilkan sebanyak itu membuang
+    // sebagian besar pikselnya tanpa dirata-rata dulu. Hasilnya tepi yang
+    // bergerigi dan berkedip saat gambarnya bergerak. Di sebelahnya panel
+    // VIDEO SUMBER menampilkan video yang sama, dikecilkan peramban dengan
+    // penyaring yang benar, jadi bedanya berdampingan dan jelas: "kualitas
+    // video preview yang masih jelek" (1 Oktober 2026).
+    //
+    // 'high' meminta penyaring bertahap milik peramban. Ongkosnya tidak
+    // terukur di sini karena yang mahal tetap membaca bingkai dari dekoder
+    // (10,8-12,3 ms), bukan mengisi pikselnya.
+    g.imageSmoothingEnabled = true;
+    g.imageSmoothingQuality = 'high';
+
+    // BINGKAI VIDEO DIBACA SEKALI, lalu disalin dari salinannya.
+    //
+    // Terukur 30 September 2026 di mesin pemiliknya: `drawImage` dari sebuah
+    // elemen <video> memakan 10,8-12,3 ms, dan angkanya SAMA saja berapa pun
+    // ukuran tujuannya — menggambar ke kanvas 48 piksel pun 10,78 ms. Jadi
+    // yang mahal bukan mengisi piksel melainkan memindahkan bingkainya dari
+    // dekoder ke kanvas. `drawImage` dari kanvas ke kanvas cuma 1,07 ms.
+    //
+    // Versi sebelumnya membaca video TIGA KALI per bingkai (latar, bidang
+    // wajah, bidang permainan): 33 ms, yang sendirian sudah menahan pratinjau
+    // di sekitar 30 fps, dan terukur 21,8 fps. Membacanya sekali lalu menyalin
+    // tiga kali: 11 + 3 = 14 ms.
+    // Salinannya SEBESAR SUMBERNYA, bukan dikecilkan.
+    //
+    // Sempat dibatasi dua kali lebar kanvas dengan alasan menghemat pengisian
+    // piksel. Itu dua kali salah. Pertama, ia tidak menghemat apa pun —
+    // terukur 30,1 lawan 29,0 fps, di dalam batas galat — karena yang mahal
+    // membaca bingkainya, bukan mengisinya. Kedua, dan ini yang merusak:
+    // bidang wajah memotong sekitar 15% dari salinan itu lalu
+    // MEMBESARKANNYA. Dari salinan 496 piksel, potongan itu lahir dari 74
+    // piksel. Pemiliknya melihatnya langsung, 1 Oktober 2026: "kualitasnya
+    // masih tetap jelek di preview".
+    const sw = v.videoWidth;
+    const sh = v.videoHeight;
+    const buf = bufRef.current || (bufRef.current = document.createElement('canvas'));
+    if (buf.width !== sw) buf.width = sw;
+    if (buf.height !== sh) buf.height = sh;
+    const gb = buf.getContext('2d', { alpha: false });
+    if (!gb) return;
+    try {
+      gb.drawImage(v, 0, 0, sw, sh);
+    } catch {
+      // Bingkai belum siap. Kanvasnya dibiarkan apa adanya dan kabar
+      // "menyiapkan" tetap terpampang; yang tidak boleh terjadi adalah
+      // hitam diam-diam.
+      sidikGambarRef.current = null;
+      waktuGambarRef.current = null;
+      return;
+    }
+    if (!kanvasSiapRef.current) {
+      kanvasSiapRef.current = true;
+      setKanvasSiap(true);
+    }
+
+    // Latar: hitam pekat, atau bingkai yang sama diperbesar dan dikaburkan —
+    // sama seperti yang dilakukan ffmpeg saat merender.
+    g.fillStyle = '#000';
+    g.fillRect(0, 0, lebar, tinggi);
+    if (layout?.background !== 'black') {
+      const sa = v.videoWidth / v.videoHeight;
+      const ka = lebar / tinggi;
+      const w = sa > ka ? tinggi * sa : lebar;
+      const h = sa > ka ? tinggi : lebar / sa;
+      // DIKECILKAN LALU DIBESARKAN LAGI, bukan `ctx.filter = 'blur(...)'`.
+      //
+      // Blur kanvas di Firefox dikerjakan perangkat lunak dan mahalnya tidak
+      // sebanding: terukur 19,4 ms per bingkai pada kanvas 248x441 saja, yang
+      // sendirian sudah menahan pratinjau di bawah 51 fps. Digabung dengan
+      // sisanya, pratinjau jatuh ke 12,6 fps sementara panel sumber tetap
+      // lancar — persis yang dilaporkan pemiliknya 30 September 2026.
+      //
+      // Mengecilkan gambar ke 48 piksel lalu membesarkannya kembali memberi
+      // pengaburan yang sama meyakinkannya, dikerjakan penskala bawaan
+      // peramban, dan ongkosnya mendekati nol. Yang dilihat penonton di sini
+      // memang cuma warna yang melebar di belakang bidang-bidangnya.
+      const kecil = kaburRef.current || (kaburRef.current = document.createElement('canvas'));
+      const kw = 48;
+      const kh = Math.max(1, Math.round(kw / Math.max(0.2, sa)));
+      if (kecil.width !== kw) kecil.width = kw;
+      if (kecil.height !== kh) kecil.height = kh;
+      try {
+        const gk = kecil.getContext('2d');
+        gk.drawImage(buf, 0, 0, kw, kh);
+        g.drawImage(kecil, (lebar - w) / 2, (tinggi - h) / 2, w, h);
+      } catch { /* bingkai belum siap */ }
+    }
+
+    for (const f of frames) {
+      const geo = coverPercent(f.src, f.dst, sourceAspect, canvasAspect, f.fit);
+      if (!geo) continue;
+      const kx = (f.dst.x / 100) * lebar;
+      const ky = (f.dst.y / 100) * tinggi;
+      const kw = (f.dst.w / 100) * lebar;
+      const kh = (f.dst.h / 100) * tinggi;
+      // Bingkai pengikut: geser mendatar mengikuti jejak wajah, rumus yang
+      // sama dengan yang dipakai render.
+      let kiri = geo.left;
+      if (f.follow && reframe?.people?.length) {
+        const t = clipTimeFor(clip?.segments, v.currentTime);
+        const x = followX(reframe, f, t);
+        if (x !== null) kiri = geo.left + ((f.src.x - x) / 100) * geo.width;
+      }
+      g.save();
+      g.beginPath();
+      g.rect(kx, ky, kw, kh);
+      g.clip();
+      try {
+        g.drawImage(buf,
+          kx + (kiri / 100) * kw, ky + (geo.top / 100) * kh,
+          (geo.width / 100) * kw, (geo.height / 100) * kh);
+      } catch { /* bingkai belum siap */ }
+      g.restore();
+    }
+  }, [frames, sourceAspect, canvasAspect, layout?.background, reframe,
+      clip?.segments, videoRef]);
 
   /**
    * Posisi crop pada waktu klip tertentu.
@@ -493,6 +791,13 @@ export default function ClipPreview({
           }
         }
 
+        // Jalur kanvas: satu gambar per bingkai layar, dari dekoder yang sama.
+        // Tidak ada cermin yang perlu diserentakkan, jadi seluruh blok di
+        // bawah ini dilewati.
+        if (pakaiKanvas) {
+          gambarKanvas();
+        }
+
         // Semua elemen cermin — latar kabur dan bingkai kedua dan seterusnya —
         // dibetulkan hanya saat sudah menyimpang. Menyetel `currentTime` tiap
         // frame membuat dekoder mencari terus dan gambarnya tersendat.
@@ -523,10 +828,10 @@ export default function ClipPreview({
           if (Math.abs(beda) > 1.5) {
             m.currentTime = v.currentTime;
             m.playbackRate = 1;
-          } else if (beda < -0.08) {
-            m.playbackRate = 1.04;
-          } else if (beda > 0.08) {
-            m.playbackRate = 0.96;
+          } else if (Math.abs(beda) > 0.04) {
+            // Kecepatannya SEBANDING dengan selisihnya, bukan satu langkah
+            // tetap 4%. Lihat catatan yang sama di FrameStage.jsx.
+            m.playbackRate = Math.max(0.88, Math.min(1.12, 1 - beda * 0.35));
           } else if (m.playbackRate !== 1) {
             m.playbackRate = 1;
           }
@@ -553,8 +858,36 @@ export default function ClipPreview({
     // dari nilai yang tertangkap saat efeknya dibuat; tanpa ia di sini,
     // penggeser di panel Bingkai mengubah angkanya sementara gambar di
     // pratinjau tetap diam pada nilai lama.
+    // `pakaiKanvas` dan `gambarKanvas` WAJIB ada di daftar ini.
+    //
+    // Loop rAF menangkap nilainya saat efek dibuat. Saat pratinjau pertama
+    // dipasang, susunan bingkainya belum sampai, jadi `pakaiKanvas` masih
+    // false — dan tanpa keduanya di sini loop itu memakai false SELAMANYA.
+    // Kanvasnya tetap terpasang menutupi video (yang di mode susunan memang
+    // dibuat transparan), tapi tidak pernah ada yang menggambarinya. Yang
+    // terlihat: pratinjau hitam yang tidak bisa diputar, sementara panel
+    // Video sumber di sebelahnya sudah menunjukkan kotak-kotaknya. Dilaporkan
+    // pemiliknya 30 September 2026.
   }, [videoRef, segments, segIndex, offsets, constrained, useReframe, cropXAt,
-      reframe, secondaries, cerminTersembunyi, useLayout, frames, zGeserPct, segarkan]);
+      reframe, secondaries, cerminTersembunyi, useLayout, frames, zGeserPct, segarkan,
+      pakaiKanvas, gambarKanvas]);
+
+  // Sekali gambar begitu kanvasnya terpasang atau susunannya berubah, tanpa
+  // menunggu bingkai animasi berikutnya. Pratinjau yang sedang DIJEDA tidak
+  // boleh menunggu apa pun untuk menampilkan gambarnya.
+  useEffect(() => {
+    if (!pakaiKanvas) return undefined;
+    const id = requestAnimationFrame(gambarKanvas);
+    return () => cancelAnimationFrame(id);
+  }, [pakaiKanvas, gambarKanvas, frames]);
+
+  // Berkas lain berarti dekoder lain: kesiapan yang lama tidak berlaku lagi.
+  useEffect(() => {
+    kanvasSiapRef.current = false;
+    sidikGambarRef.current = null;
+    waktuGambarRef.current = null;
+    setKanvasSiap(false);
+  }, [src]);
 
   const handleTimeUpdate = () => {
     const v = videoRef.current;
@@ -1212,6 +1545,45 @@ export default function ClipPreview({
               playsInline
               style={useLayout ? { ...videoStyle, opacity: 0 } : videoStyle}
             />
+            {pakaiKanvas && (
+              <canvas
+                ref={kanvasRef}
+                aria-hidden="true"
+                style={{ position: 'absolute', inset: 0, width: '100%', height: '100%',
+                         display: 'block', pointerEvents: 'none' }} />
+            )}
+            {/* HITAM HARUS PUNYA KETERANGAN.
+                Sampai bingkai pertama benar-benar tergambar, kanvasnya hitam
+                pekat — dan hitam tidak bisa dibedakan dari rusak. Pemiliknya
+                bertanya persis itu, 1 Oktober 2026: "apakah layar hitam ini
+                pertanda bahwa sistem sedang menyiapkan preview, jika iya
+                hingga kapan saya harus menunggu... sebaiknya tampilkan saja
+                loading bar yang jelas".
+                Bilahnya BERJALAN TERUS, tanpa persen: yang ditunggu di sini
+                dekoder peramban, yang tidak melaporkan kemajuannya. Bilah
+                berpersen yang angkanya dikarang lebih buruk daripada tidak
+                ada. */}
+            {pakaiKanvas && !kanvasSiap && (
+              <div style={{
+                position: 'absolute', inset: 0, display: 'flex', gap: '10px',
+                flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                background: 'rgba(0,0,0,.72)', pointerEvents: 'none', padding: '0 14px',
+              }}>
+                <div style={{ width: 'min(70%, 180px)', height: '4px', borderRadius: '99px',
+                              background: 'rgba(255,255,255,.18)', overflow: 'hidden' }}>
+                  <div className="pratinjau-merayap" style={{
+                    width: '38%', height: '100%', borderRadius: '99px',
+                    background: 'var(--reh, #E0473A)' }} />
+                </div>
+                <div style={{ fontSize: '.72rem', lineHeight: 1.5, textAlign: 'center',
+                              color: 'rgba(255,255,255,.82)' }}>
+                  Menyiapkan pratinjau…
+                  <div style={{ fontSize: '.66rem', color: 'rgba(255,255,255,.55)' }}>
+                    menunggu bingkai pertama dari videonya
+                  </div>
+                </div>
+              </div>
+            )}
             {Array.from({ length: jumlahCermin }, (_, i) => {
               const f = useLayout ? frames[i] : null;
               // Semuanya persen kotak tujuan: tidak ada satu pun angka di sini

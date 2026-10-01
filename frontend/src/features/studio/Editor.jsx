@@ -13,9 +13,11 @@ import StaveSystem, { rehearsalLetter } from './StaveSystem';
 import { TrimPanel, SubtitlePanel, StylePanel } from './EditorPanels';
 import FrameStage from './FrameStage';
 import BilahBingkaiAwal from './BilahBingkaiAwal';
+import BilahPratinjau from './BilahPratinjau';
 import ClipTimeline from './ClipTimeline';
 import FramePanel from './FramePanel';
 import TitlePanel from './TitlePanel';
+import SakelarSensor from '../../components/SakelarSensor';
 import { DEFAULT_JUDUL_VIDEO } from './JudulTema';
 import SutradaraPanel from './SutradaraPanel';
 import VideoHilang from './VideoHilang';
@@ -32,6 +34,7 @@ import {
   personKeyAt, withPersonKey,
   presentPeople,
   GAMING_WAJAH_BAWAAN, gamingPadaWaktu, newFrameId, reaksiAktif, selaraskanBentuk, rasioKeluaran,
+  berIdLengkap,
   susunanDariServer,
   susunGaming,
   CANVAS_ASPECT, layoutDariCrop, pusatWajahPada,
@@ -437,6 +440,15 @@ export default function Editor({ project, onBack }) {
   }, [selected, editor]);
   const [deteksiUlang, setDeteksiUlang] = useState(0);
   const [gamingSibuk, setGamingSibuk] = useState(false);
+  // Kenapa susunan Main game belum ada: masih dicari, tidak ketemu, atau gagal.
+  //
+  // Dilaporkan pemiliknya 1 Oktober 2026: "proses sudah selesai namun bingkai
+  // belum tersusun". Keterangan di panel VIDEO SUMBER dulu cuma membaca ADA
+  // atau TIDAK ADA susunan, jadi pencarian yang gagal — dan `.catch` di bawah
+  // memang menelannya diam-diam — membuatnya menulis "mencari kamera wajah
+  // pemain" selamanya, tanpa bilah kemajuan di bawahnya, tanpa galat, dan
+  // tanpa satu pun hal yang bisa ditekan.
+  const [gamingKabar, setGamingKabar] = useState(null);
   const tKlip = selected ? clipTimeFor(selected.segments, sourceTime) : 0;
 
   useEffect(() => {
@@ -446,10 +458,14 @@ export default function Editor({ project, onBack }) {
     const idKlip = selected.clip_id;
     let batal = false;
     setGamingSibuk(true);
+    setGamingKabar(null);
     apiPost('/clip-facecam', { video_id: videoId, segments: selected.segments })
       .then((r) => {
         if (batal) return;
         const l = susunanDariServer(r?.layout);
+        if (!l?.frames?.length) {
+          setGamingKabar('tidak ada kamera wajah pemain yang terlihat di klip ini');
+        }
         const srcAspek = (r?.src_w && r?.src_h) ? r.src_w / r.src_h : 16 / 9;
         // Dihitung ulang untuk rasio keluaran yang sedang dipilih — server
         // menyusunnya untuk 9:16.
@@ -486,7 +502,12 @@ export default function Editor({ project, onBack }) {
           }));
         }
       })
-      .catch(() => { /* tanpa susunan: render mencari facecam sendiri */ })
+      .catch(() => {
+        // Render tetap mencari facecamnya sendiri, jadi ini bukan kegagalan
+        // yang menghentikan apa pun. Tapi ia harus KELIHATAN: tanpa ini
+        // panelnya menulis "mencari kamera wajah pemain" tanpa akhir.
+        if (!batal) setGamingKabar('pencarian kamera wajah gagal, coba lagi');
+      })
       .finally(() => { if (!batal) setGamingSibuk(false); });
     return () => { batal = true; };
   }, [frameModeEfektif, selected?.clip_id, videoId, deteksiUlang]);   // eslint-disable-line
@@ -504,13 +525,50 @@ export default function Editor({ project, onBack }) {
   }, [aspectRatio, setLayoutGaming]);
 
   /** Membuang setelan klip ini dan mencari letak facecam dari awal. */
-  const ulangiGaming = useCallback(() => {
-    if (!selected) return;
-    layoutGamingRef.current = null;
-    editor.updateClip(selected.clip_id, { susunan_game: null });
-    setCacheGaming((c) => { const n = { ...c }; delete n[selected.clip_id]; return n; });
+  /**
+   * Menghitung ulang bingkai klip ini dari nol.
+   *
+   * KUNCI BINGKAI OTOMATIS IKUT DIBUANG, dan itu bagian yang dulu hilang.
+   * Potongan baru dari server hanya dipasang bila lajur Bingkai masih kosong —
+   * aturan yang benar, karena kunci buatan pengguna tidak boleh ditimpa. Tapi
+   * kunci OTOMATIS dari perhitungan sebelumnya juga mengisi lajur itu, jadi
+   * perhitungan yang lebih baik tidak pernah terpakai. Pemiliknya melaporkannya
+   * 30 September 2026 dengan kalimat yang tepat: "jika tidak di reset
+   * bingkainya saya tidak tahu apakah sudah beneran kamu kerjakan atau belum".
+   *
+   * Yang dibuang hanya yang berasal 'otomatis'. Kunci yang diseret pengguna
+   * sendiri tetap, karena membuangnya berarti menghapus pekerjaannya.
+   */
+  const ulangiGaming = useCallback((klip) => {
+    const c = klip || selected;
+    if (!c) return;
+    if (!klip || klip.clip_id === selected?.clip_id) layoutGamingRef.current = null;
+    const sisa = (c.frame_keys ?? []).filter((k) => k.asal && k.asal !== 'otomatis');
+    editor.updateClip(c.clip_id, { susunan_game: null, frame_keys: sisa });
+    setCacheGaming((x) => { const n = { ...x }; delete n[c.clip_id]; return n; });
     setDeteksiUlang((n) => n + 1);
   }, [selected, editor]);
+
+  /**
+   * Menghitung ulang bingkai SELURUH klip video ini, lalu memanaskannya lagi.
+   *
+   * Dipakai tombol putar-ulang di panel Bingkai. Tanpa ini, memeriksa apakah
+   * sebuah perbaikan benar-benar bekerja berarti menghapus kunci klip demi
+   * klip dengan tangan.
+   */
+  const ulangiSemuaBingkai = useCallback(async () => {
+    clips.forEach((c) => {
+      const sisa = (c.frame_keys ?? []).filter((k) => k.asal && k.asal !== 'otomatis');
+      editor.updateClip(c.clip_id, { susunan_game: null, frame_keys: sisa });
+    });
+    layoutGamingRef.current = null;
+    setCacheGaming({});
+    setDeteksiUlang((n) => n + 1);
+    // `ulang=true`: server membuang simpanan letak facecam dan penggolongan
+    // jenis klip video ini lebih dulu. Tanpa itu pemanasan membaca simpanan
+    // yang sama dan selesai seketika, dan tombolnya terlihat tidak bekerja.
+    await apiPost(`/projects/${videoId}/siapkan-bingkai?ulang=true`, {});
+  }, [clips, editor, videoId]);
 
   // Rasio keluaran berubah (9:16 -> 1:1): bidangnya dihitung ulang; tebakan
   // yang belum disentuh dicari lagi untuk rasio baru.
@@ -525,7 +583,15 @@ export default function Editor({ project, onBack }) {
   // potongan itu); yang itu yang ditampilkan dan disunting.
   const kunciGamePunyaSusunan = frameModeEfektif === 'gaming'
     && !!kunciBingkaiAktif?.layout?.frames?.length;
-  const susunanTampil = kunciGamePunyaSusunan ? kunciBingkaiAktif.layout
+  // `berIdLengkap`: susunan yang ditulis pemanasan ke `frame_keys` sebelum
+  // 1 Oktober 2026 tidak membawa id bingkai, dan tanpa id kedua kotak sama-sama
+  // cocok saat salah satunya diseret — keduanya langsung bertumpuk. Dibungkus
+  // `useMemo` supaya id yang dibuatkan tetap sama antar render; id yang berganti
+  // tiap render akan memutus seretan yang sedang berjalan.
+  const kunciLayout = useMemo(
+    () => (kunciGamePunyaSusunan ? berIdLengkap(kunciBingkaiAktif.layout) : null),
+    [kunciGamePunyaSusunan, kunciBingkaiAktif?.layout]);
+  const susunanTampil = kunciGamePunyaSusunan ? kunciLayout
     : frameModeEfektif === 'gaming' ? gamingPadaWaktu(layoutGaming, tKlip) : layoutEfektif;
 
   /** Menulis susunan bingkai ke potongan yang berlaku, atau ke klip. */
@@ -775,16 +841,22 @@ export default function Editor({ project, onBack }) {
 
   // Gelombang suara dihitung terpisah: pada video panjang butuh belasan detik
   // pada pemanggilan pertama, dan editor tidak perlu menunggunya untuk tampil.
+  const duration = data?.duration || project?.duration || 0;
   useEffect(() => {
     let cancelled = false;
     if (!videoId) return undefined;
-    apiGet(`/videos/${videoId}/waveform?bins=1200`)
+    // Jumlah bak mengikuti PANJANG rekaman, bukan angka tetap.
+    //
+    // 1.200 bak untuk rekaman 38 menit berarti satu batang mewakili 1,9 detik,
+    // dan lajur Dinamika jadi kosong begitu linimasa diperbesar. Lima bak per
+    // detik memberi 0,2 detik per batang, cukup untuk digambar sebagai
+    // gelombang sampai perbesaran tertinggi. Dihitung sekali lalu tersimpan.
+    const bak = Math.min(16000, Math.max(1200, Math.round((duration || 600) * 5)));
+    apiGet(`/videos/${videoId}/waveform?bins=${bak}`)
       .then((res) => { if (!cancelled) setPeaks(res.peaks || []); })
       .catch(() => { /* timeline tetap berguna tanpa gelombang */ });
     return () => { cancelled = true; };
-  }, [videoId]);
-
-  const duration = data?.duration || project?.duration || 0;
+  }, [videoId, duration]);
 
   // Ambil rencana reframe setiap kali klip, rasio, atau mode bingkai berubah.
   // Dikunci pada susunan segmen, jadi menggeser batas ikut memperbarui bingkai.
@@ -1856,6 +1928,8 @@ export default function Editor({ project, onBack }) {
               menunjukkannya, dan pemiliknya dua kali melaporkan hal yang sama:
               bukan bahwa ia lama, melainkan bahwa ia tidak bisa dibedakan dari
               macet. */}
+          <BilahPratinjau disiapkan={!!data?.pratinjau_disiapkan}
+                          kemajuan={data?.pratinjau_kemajuan} />
           <BilahBingkaiAwal videoId={videoId} />
 
           <div className="stage-row">
@@ -1866,7 +1940,11 @@ export default function Editor({ project, onBack }) {
                         onBoxRectChange={setKotakBingkai}
                         layout={susunanTampil} onLayoutChange={setSusunanEfektif}
                         selectedFrameId={selectedFrameId} onSelectFrame={setSelectedFrameId}
-                        personKeys={personKeys} onLockPerson={aimPerson} />
+                        personKeys={personKeys} onLockPerson={aimPerson}
+                        menghitung={frameModeEfektif === 'gaming'
+                          ? gamingSibuk : reframeLoading}
+                        gamingKabar={gamingSibuk ? null : gamingKabar}
+                        onCariUlangGaming={() => setDeteksiUlang((n) => n + 1)} />
 
             <div className="pit editor-pit">
               <ClipPreview src={srcPutar} clip={selected} aspectRatio={aspectRatio}
@@ -1951,6 +2029,7 @@ export default function Editor({ project, onBack }) {
                   )}
                 </>
               )}
+              {tab === 'subtitle' && <SakelarSensor ringkas />}
               {tab === 'subtitle' && (
                 <TerjemahPanel clip={selected} videoId={videoId}
                                styleUtama={style} onStyleUtama={setStyle}
@@ -2030,6 +2109,7 @@ export default function Editor({ project, onBack }) {
                             layout={susunanTampil} onLayoutChange={setSusunanEfektif}
                             gamingSibuk={gamingSibuk}
                             onGaming={setelGaming} onGamingUlang={ulangiGaming}
+                            onUlangSemua={ulangiSemuaBingkai}
                             selectedFrameId={selectedFrameId}
                             onSelectFrame={setSelectedFrameId}
                             faceTrackAvailable={!!reframe?.people?.length}

@@ -120,7 +120,7 @@ def _jalankan(ctx) -> dict:
             # giliran penutur yang dipakai di bawah adalah yang lama lagi.
             daftar = _daftar_terbaru(video_id, daftar)
 
-    siap = gagal = 0
+    siap = gagal = tersusun = 0
     berhenti = False
     for i, klip in enumerate(daftar):
         ctx.check_cancelled()
@@ -175,6 +175,8 @@ def _jalankan(ctx) -> dict:
             mode = _mode_klip(video_id, segmen)
             if mode == "gaming":
                 _panaskan_facecam(video_id, segmen)
+                if _tulis_bingkai(video_id, klip.get("clip_id"), segmen, rasio):
+                    tersusun += 1
             elif mode == "motion":
                 # Klip tanpa wajah dibingkai dengan MENGIKUTI GERAKAN, dan
                 # Studio memintanya sebagai jejak yang berbeda. Sampai
@@ -209,6 +211,8 @@ def _jalankan(ctx) -> dict:
 
     pesan = (f"Susunan Main game {siap} klip siap dipakai" if gameplay
              else f"Bingkai {siap} klip siap dipakai")
+    if tersusun:
+        pesan += f", {tersusun} di antaranya sudah tersusun di lajur Bingkai"
     if tambat:
         pesan += f", {tambat['speaker_count']} penutur ditandai dari wajahnya"
     if gagal:
@@ -218,11 +222,88 @@ def _jalankan(ctx) -> dict:
     ctx.progress(1.0, stage="done", message=pesan + ".")
     log.info("Bingkai awal video %s: %d siap, %d gagal, %d tema",
              video_id, siap, gagal, tema_siap)
-    return {"siap": siap, "gagal": gagal, "tema": tema_siap,
+    return {"siap": siap, "gagal": gagal, "tema": tema_siap, "tersusun": tersusun,
             # Sidik daftar klipnya, dibaca `_sudah_dipanaskan` supaya membuka
             # proyek yang sama lagi tidak mengantrekan pekerjaan yang sama.
             "sidik": ctx.payload.get("sidik") or ""}
 
+
+
+
+def _tulis_bingkai(video_id: str, clip_id, segmen: list[dict], rasio: str) -> bool:
+    """
+    Potongan hasil pemindaian -> kunci bingkai di klip tersimpan.
+
+    Dilaporkan pemiliknya 1 Oktober 2026: "proses sudah selesai namun bingkai
+    belum tersusun". Benar, dan sampai sekarang memang begitu: pekerjaan ini
+    hanya MENGHANGATKAN simpanan. Yang menyusun lajur Bingkai adalah Studio,
+    dan ia baru mengerjakannya saat sebuah klip DIBUKA, satu per satu. Jadi
+    pesan "Susunan Main game 12 klip siap dipakai" benar secara teknis dan
+    menyesatkan secara arti: dua belas klip itu dipindai, tapi tidak satu pun
+    punya bingkai tersusun sampai dibuka.
+
+    Sekarang pekerjaan ini menuliskannya sendiri. Perhitungannya sama persis
+    dengan yang dipakai `/clip-facecam`, bukan jalur kedua: letak facecam dari
+    simpanan, `susun_layout_gaming` untuk seluruh klip, lalu `_layout_bidikan`
+    per bidikan.
+
+    Kunci buatan pengguna tidak pernah ditimpa. Klip yang sudah punya kunci —
+    apa pun asalnya — dilewati, aturan yang sama dengan yang dipakai Studio.
+    """
+    if not clip_id:
+        return False
+    try:
+        from ..repos import analyses as analyses_repo
+        from ..routers.clips import _facecam_tersimpan, _layout_bidikan
+        from .render import PLAY_RES, susun_layout_gaming
+
+        tersimpan = _facecam_tersimpan(video_id, segmen) or {}
+        posisi = tersimpan.get("posisi") or []
+        potongan = tersimpan.get("potongan") or []
+        # Satu potongan berarti tidak ada yang berganti sepanjang klip; lajur
+        # Bingkai yang berisi satu kunci tidak mengatakan apa pun.
+        if not posisi or len(potongan) < 2:
+            return False
+
+        cached = analyses_repo.latest_for_video(video_id)
+        if not cached:
+            return False
+        hasil = dict(cached["result"])
+        klip = list(hasil.get("clips") or [])
+        sasaran = next((i for i, c in enumerate(klip)
+                        if str(c.get("clip_id")) == str(clip_id)), None)
+        if sasaran is None:
+            return False
+        if [k for k in (klip[sasaran].get("frame_keys") or []) if isinstance(k, dict)]:
+            return False
+
+        w = int(tersimpan.get("src_w") or 1920)
+        h = int(tersimpan.get("src_h") or 1080)
+        out_w, out_h = PLAY_RES.get(rasio, (1080, 1920))
+        tata = susun_layout_gaming(posisi, src_w=w, src_h=h, out_w=out_w, out_h=out_h)
+
+        kunci = []
+        for n, bagian in enumerate(potongan):
+            k = {"id": f"auto-{n}", "t": round(float(bagian.get("t") or 0), 3),
+                 "mode": bagian.get("mode") or "gaming", "asal": "otomatis",
+                 "alasan": bagian.get("alasan") or ""}
+            r = ((bagian.get("layout") or {}).get("reaksi") or [None])[0]
+            if k["mode"] == "gaming" and r:
+                k["layout"] = _layout_bidikan(tata, r, src_w=w, src_h=h,
+                                              out_w=out_w, out_h=out_h)
+            kunci.append(k)
+        if len(kunci) < 2:
+            return False
+
+        klip[sasaran] = {**klip[sasaran], "frame_keys": kunci}
+        hasil["clips"] = klip
+        analyses_repo.replace_result(cached["id"], hasil)
+        return True
+    except Exception as e:                                # noqa: BLE001
+        # Bingkai yang gagal ditulis bukan alasan menggagalkan pemanasannya;
+        # Studio tetap menyusunnya sendiri saat klipnya dibuka.
+        log.warning("Bingkai klip %s tidak tersusun: %s", clip_id, str(e)[:160])
+        return False
 
 def _jenis_video(video_id: str, daftar: list[dict]) -> bool:
     """Gameplay atau bukan, dari klip pertama yang punya potongan sah."""
@@ -350,26 +431,44 @@ def _panaskan_facecam(video_id: str, segmen: list[dict]) -> bool:
     apakah klip ini punya facecam sama sekali.
 
     Memakai simpanan yang SAMA dengan yang dibaca `/clip-facecam`, jadi saat
-    klipnya dibuka Studio menemukannya sudah jadi. Yang disimpan hanya letak
-    panelnya; susunannya dihitung ulang saat dibaca, supaya aturan susunan yang
-    berubah berlaku juga untuk klip yang sudah pernah dipanaskan.
+    klipnya dibuka Studio menemukannya sudah jadi. Yang disimpan letak panelnya
+    DAN pemecahan klipnya; susunannya sendiri dihitung ulang saat dibaca,
+    supaya aturan susunan yang berubah berlaku juga untuk klip yang sudah
+    pernah dipanaskan.
+
+    Pemecahan klip (`potongan`) dulu TIDAK ikut disimpan di sini, dan itu
+    menyisakan setengah pekerjaan untuk nanti: Studio menemukan simpanan tanpa
+    `potongan` lalu menghitungnya sendiri saat klip dibuka, satu per satu.
+    Akibatnya pemanasan melaporkan dirinya selesai sementara lajur Bingkai
+    masih kosong — dilaporkan pemiliknya 1 Oktober 2026, "proses sudah selesai
+    namun bingkai belum tersusun". Pemecahannya memakai pemindaian yang sudah
+    ada di tangan, jadi menghitungnya di sini hampir tidak menambah ongkos.
 
     Kegagalannya ditelan: pemanasan yang gagal bukan alasan menggagalkan
     sisanya, dan klip itu akan memindai sendiri saat dibuka, persis seperti
     sebelumnya.
     """
     try:
-        from ..routers.clips import _facecam_tersimpan, _kunci_facecam
+        from ..routers.clips import _facecam_tersimpan, _kunci_facecam, _potongan_game
         from ..repos import cache as cache_repo
         from .media import probe
         from .paths import find_local_video
         from .reframe import deteksi_facecam_waktu
         from .render import rasio_bidang_wajah
 
+        src = find_local_video(video_id)
         tersimpan = _facecam_tersimpan(video_id, segmen)
         if tersimpan is not None and "posisi" in tersimpan:
+            # Simpanan lama yang belum punya pemecahan klip DILENGKAPI, bukan
+            # dipakai apa adanya: kalau tidak, video yang sempat dipanaskan
+            # oleh versi sebelumnya selamanya menyisakan pekerjaan itu ke
+            # Studio.
+            if "potongan" not in tersimpan and src:
+                lengkap = dict(tersimpan)
+                lengkap["potongan"] = _potongan_game(
+                    str(src), segmen, tersimpan.get("posisi") or [])
+                cache_repo.simpan(_kunci_facecam(video_id, segmen), lengkap)
             return bool(tersimpan["posisi"])
-        src = find_local_video(video_id)
         if not src:
             return False
         info = probe(str(src))
@@ -378,7 +477,8 @@ def _panaskan_facecam(video_id: str, segmen: list[dict]) -> bool:
         posisi = deteksi_facecam_waktu(str(src), segmen, w, h,
                                        rasio_potongan=rasio_bidang_wajah(1080, 1920))
         cache_repo.simpan(_kunci_facecam(video_id, segmen),
-                          {"posisi": posisi or [], "src_w": w, "src_h": h})
+                          {"posisi": posisi or [], "src_w": w, "src_h": h,
+                           "potongan": _potongan_game(str(src), segmen, posisi)})
         return bool(posisi)
     except Exception as e:                           # noqa: BLE001
         log.info("Pemanasan facecam dilewati: %s", str(e)[:140])
