@@ -29,7 +29,7 @@ from .paths import extract_id_from_filename
 from .reframe import build_reframe_filter, plan_reframe
 from .paths import ffpath
 from .fonts import dir_font
-from .subtitles import CaptionStyle, HookSpec, build_ass, gaya_dari_dict
+from .subtitles import CaptionStyle, sensor_aktif, HookSpec, build_ass, gaya_dari_dict
 from . import titlecard as tc
 
 log = logging.getLogger("omniclip.render")
@@ -429,8 +429,14 @@ REAKSI_LUAR_MAKS = 0.08
 PERMAINAN_GESER_MAKS = 3.0
 
 
-def _ruang_wajah(muka) -> Optional[dict]:
-    """Petak wajah [x1,y1,x2,y2] (persen) -> kotak kepala utuh yang harus terlihat."""
+def _ruang_wajah(muka, panel: Optional[dict] = None) -> Optional[dict]:
+    """
+    Petak wajah [x1,y1,x2,y2] (persen) -> kotak kepala utuh yang harus terlihat.
+
+    Dengan `panel`, hasilnya DIKURUNG di dalam panel facecam. Ruang kepala yang
+    meluap keluar panel berarti potongan bidang wajah ikut memuat gambar
+    permainan di sebelahnya, dan itu persis yang tidak boleh terjadi.
+    """
     if not muka or len(muka) != 4:
         return None
     x1, y1, x2, y2 = (float(v) for v in muka)
@@ -439,7 +445,38 @@ def _ruang_wajah(muka) -> Optional[dict]:
     b = min(100.0, x2 + KEPALA_SAMPING * fw)
     c = max(0.0, y1 - KEPALA_ATAS * fh)
     d = min(100.0, y2 + KEPALA_BAWAH * fh)
+    if panel:
+        pa, pb = float(panel["x"]), float(panel["x"]) + float(panel["w"])
+        pc, pd = float(panel["y"]), float(panel["y"]) + float(panel["h"])
+        a, b = max(a, pa), min(b, pb)
+        c, d = max(c, pc), min(d, pd)
+        if b - a <= 0.01 or d - c <= 0.01:
+            return None
     return {"x": a, "y": c, "w": b - a, "h": d - c}
+
+
+def _petak_wajah(facecam: dict):
+    """
+    Petak kepala yang dipakai untuk membentuk potongan bidang wajah.
+
+    Yang dipakai `awan_kotak`: petak yang memuat SELURUH posisi wajah selama
+    jendela pemindaian, yaitu jelajah gerak orangnya, bukan satu kepala.
+
+    Sempat diganti `wajah_kotak` (satu kepala berukuran tengah) pada
+    30 September 2026 untuk menghentikan potongan yang meluap keluar panel.
+    Itu memang berhenti, tapi sekalian membuang toleransi terhadap gerakan:
+    terukur pada empat klip LaperGang, 1.456 sampel berwajah, wajah yang
+    benar-benar termuat di potongannya turun jadi 64,5%. Dengan jelajah
+    geraknya, 73,3%.
+
+    Yang menghentikan luapan bukan mengecilkan petaknya melainkan MENGURUNGnya
+    di dalam panel — itu dikerjakan `_ruang_wajah(muka, panel)`. Jadi keduanya
+    bisa sekaligus: menampung gerakan, dan tidak pernah keluar facecam.
+
+    `wajah_kotak` tetap disimpan dan dipakai sebagai cadangan, plus sebagai
+    dasar penanda `awan_besar` yang memecah jendela berisi dua letak.
+    """
+    return facecam.get("awan_kotak") or facecam.get("wajah_kotak")
 
 
 def _pilih(lo: float, hi: float, plo: float, phi: float, ingin: float) -> float:
@@ -453,45 +490,70 @@ def _pilih(lo: float, hi: float, plo: float, phi: float, ingin: float) -> float:
     return min(max((plo + phi) / 2, lo), hi)
 
 
+# Bagian ruang sisa yang ditaruh di ATAS kepala; sisanya di bawah.
+ATAS_KEPALA_SISA = 0.25
+
+
 def kotak_reaksi(kotak: dict, muka, rasio_px: float, src_aspek: float) -> dict:
     """
-    Potongan bidang reaksi: rasionya sama dengan bidangnya, memuat SELURUH
-    kepala, dan sebisanya tetap di dalam panel facecam.
+    Potongan bidang reaksi: SEBESAR MUNGKIN di dalam kotak facecam, berasio
+    bidangnya, dan diletakkan pada kepalanya.
 
     Tanpa `muka` (petak wajah tidak diketahui — kotak yang diseret pengguna)
-    sama dengan `_pas_rasio(..., dalam=True)` seperti dulu.
+    hasilnya sama: kotak terbesar berasio bidang yang muat di dalam panel,
+    hanya letaknya di tengah panel.
+
+    UKURANNYA DITENTUKAN PANEL, BUKAN KEPALA. Ini kebalikan dari aturan
+    30 September 2026, dan koreksi atasnya.
+
+    Aturan lama mengambil sebesar KEPALA berikut ruangnya, dengan alasan yang
+    waktu itu benar: potongan sebesar panel membawa meja, kursi, dan dinding,
+    dan wajahnya hanya mengisi 16-18% luasnya. Tapi obatnya kelewatan. Terukur
+    pada klip pemiliknya: panel 386x303 piksel dipotong jadi 240x136 — lebih
+    kecil daripada panelnya di KEDUA sisi, padahal 320x303 muat di situ.
+    Akibatnya dua-duanya: facecamnya tidak tampil utuh, DAN perbesarannya naik
+    dari 3,4x ke 4,5x sehingga lebih buram. Dilaporkan 1 Oktober 2026:
+    "bingkai wajahnya terlalu kecil, apakah kamu tidak bisa memetakkan ukuran
+    facecam... agar bingkai bisa pas dengan ukuran kotak facecam tersebut".
+    Ia benar.
+
+    Yang membuat aturan lama perlu adalah potongan yang MELEBIHI panel, bukan
+    potongan yang mengisinya. Mengisi panel setepat-tepatnya memberi ketiganya
+    sekaligus: tidak ada permainan yang ikut masuk (potongan ada di dalam
+    panel), facecamnya tampil sebanyak yang muat, dan perbesarannya sekecil
+    yang bisa dicapai bidang selebar itu.
+
+    Yang dipilih kepala karena itu tinggal LETAKNYA. Panel yang bentuknya
+    berbeda dari bidangnya tetap harus dipangkas pada satu sisi, dan yang
+    menentukan di mana memangkasnya adalah di mana kepalanya.
     """
     dasar = _pas_rasio(kotak, rasio_px, src_aspek, dalam=True)
-    butuh = _ruang_wajah(muka)
+    butuh = _ruang_wajah(muka, kotak)
     if butuh is None:
         return dasar
-    k = rasio_px / max(1e-6, src_aspek)
-    # Ukurannya ditentukan WAJAHNYA, bukan seluruh panel.
-    #
-    # Dulu tinggi potongan diambil dari `max(dasar, ...)`, yaitu panel facecam
-    # yang sudah dipaskan ke rasio bidang. Panel itu memuat seluruh sudut
-    # kamera streamer: meja, kursi, dan dinding di belakangnya. Terukur pada
-    # klip pemiliknya, wajahnya hanya mengisi 16-18% luas potongan, dan di
-    # layar itu terlihat sebagai orang kecil di tengah ruangan. Dilaporkan
-    # berkali-kali: "frame bingkai terlalu besar tidak sesuai dengan ukuran
-    # frame facecam".
-    #
-    # Sekarang potongannya sebesar kepala berikut ruangnya (KEPALA_*), dan
-    # panel hanya jadi BATAS: potongan tidak boleh lebih besar daripada
-    # panelnya, karena di luar panel yang ada cuma permainan.
-    h = max(butuh["h"], butuh["w"] / k)
-    h = min(h, max(float(dasar["h"]), butuh["h"], butuh["w"] / k))
-    w = h * k
-    if w > 100.0:
-        w, h = 100.0, 100.0 / k
-    if h > 100.0:
-        h, w = 100.0, 100.0 * k
+    w, h = float(dasar["w"]), float(dasar["h"])
     px, py = float(kotak["x"]), float(kotak["y"])
     pw, ph = float(kotak["w"]), float(kotak["h"])
-    x = _pilih(butuh["x"] + butuh["w"] - w, butuh["x"], px, px + pw - w,
+    # Panel syarat KERAS, kepala syarat lunak: apa pun yang di luar panel
+    # isinya permainan, dan permainan di bidang wajah adalah keluhan yang
+    # berulang — "bingkai wajahnya terlalu besar melebihi facecam bahkan
+    # memotong bingkai game" (30 September 2026).
+    x = _pilih(px, px + pw - w,
+               butuh["x"] + butuh["w"] - w, butuh["x"],
                butuh["x"] + butuh["w"] / 2 - w / 2)
-    y = _pilih(butuh["y"] + butuh["h"] - h, butuh["y"], py, py + ph - h,
-               butuh["y"] + butuh["h"] / 2 - h / 2)
+    # Ruang sisa ditaruh sebagian besar DI BAWAH kepala, bukan dibagi rata.
+    #
+    # Menaruhnya rata berarti separuhnya di atas kepala. Bila tepi atas panel
+    # ditaksir terlalu tinggi — dan itu sering, karena facecam menempel di sudut
+    # sehingga tepinya berimpit dengan tepi bingkai — ruang di atas itu terisi
+    # gambar permainan, dan bidang wajah menampilkan langit-langit Minecraft di
+    # atas kepala orangnya. Terlihat pada render klip LaperGang, 30 September
+    # 2026. Di bawah kepala yang ada bahu dan dada, yang memang bagian dari
+    # bidikan wajah.
+    sisa = max(0.0, h - butuh["h"])
+    y = _pilih(py, py + ph - h,
+               butuh["y"] + butuh["h"] - h, butuh["y"],
+               butuh["y"] - sisa * ATAS_KEPALA_SISA)
     x = min(max(0.0, x), 100.0 - w)
     y = min(max(0.0, y), 100.0 - h)
     return {"x": round(x, 2), "y": round(y, 2), "w": round(w, 2), "h": round(h, 2)}
@@ -506,19 +568,41 @@ def _porsi_luar(r: dict, panel: dict) -> float:
 
 
 def tinggi_wajah_otomatis(posisi: list, src_aspek: float, out_w: int, out_h: int) -> float:
-    """Tinggi bidang wajah terendah (30-40%) yang kotak reaksinya tetap di panel."""
-    terbaik, nilai_terbaik = GAMING_WAJAH_TINGGI, None
+    """
+    Tinggi bidang wajah (30-40%) yang membuat potongannya MENUTUP paling banyak
+    kotak facecam.
+
+    Dulu yang dicari tinggi terendah yang kotak reaksinya tidak meluber keluar
+    panel. Sejak `kotak_reaksi` memotong di DALAM panel tanpa kecuali, ukuran
+    itu selalu nol dan pilihannya selalu jatuh ke angka terendah — ukuran yang
+    sudah tidak mengukur apa pun.
+
+    Yang diukur sekarang hal yang benar-benar dilihat orang: seberapa banyak
+    isi kotak facecam yang sampai ke layar. Bidang selebar kanvas berbentuk
+    sangat lebar sementara panel facecam tegak, jadi panel selalu dipangkas
+    pada satu sisi; bidang yang lebih tinggi berbentuk kurang lebar, dan
+    pangkasannya lebih sedikit. Dilaporkan pemiliknya 1 Oktober 2026:
+    "bingkai wajahnya terlalu kecil... agar bingkai bisa pas dengan ukuran
+    kotak facecam tersebut".
+
+    Seri dimenangkan tinggi TERENDAH: bidang permainan tidak boleh kehilangan
+    satu piksel pun demi perbaikan yang tidak terlihat.
+    """
     langkah = [GAMING_WAJAH_MIN + 2.5 * i
                for i in range(int((GAMING_WAJAH_MAKS - GAMING_WAJAH_MIN) / 2.5) + 1)]
+    terbaik, nilai_terbaik = GAMING_WAJAH_TINGGI, -1.0
     for wajah in langkah:
         rasio = out_w / max(1.0, out_h * wajah / 100.0)
-        luar = max(_porsi_luar(kotak_reaksi(p["facecam"], p["facecam"].get("awan_kotak"),
-                                            rasio, src_aspek), p["facecam"])
-                   for p in posisi)
-        if luar <= REAKSI_LUAR_MAKS:
-            return wajah
-        if nilai_terbaik is None or luar < nilai_terbaik - 1e-6:
-            terbaik, nilai_terbaik = wajah, luar
+        tutup = []
+        for p in posisi:
+            f = p["facecam"]
+            luas = max(1e-6, float(f["w"]) * float(f["h"]))
+            r = kotak_reaksi(f, _petak_wajah(f), rasio, src_aspek)
+            tutup.append((float(r["w"]) * float(r["h"])) / luas)
+        nilai = sum(tutup) / max(1, len(tutup))
+        # 1% bedanya tidak terlihat; di bawah itu yang menang tinggi terendah.
+        if nilai > nilai_terbaik + 0.01:
+            terbaik, nilai_terbaik = wajah, nilai
     return terbaik
 
 
@@ -563,14 +647,30 @@ def susun_layout_gaming(facecam, *, src_w: int = 1920, src_h: int = 1080,
         main_src = _permainan_tanpa_wajah(
             [p["facecam"] for p in posisi],
             (out_w * main_dst["w"]) / (out_h * main_dst["h"]), src_aspek,
-            wajah_saja=[_ruang_wajah(p["facecam"].get("awan_kotak")) or p["facecam"]
-                        for p in posisi])
+            wajah_saja=[_ruang_wajah(_petak_wajah(p["facecam"]), p["facecam"])
+                        or p["facecam"] for p in posisi])
+    # BIDANG WAJAH SELEBAR KANVAS.
+    #
+    # Sempat dipersempit mengikuti bentuk kotak facecam, 1 Oktober 2026, atas
+    # usul pemiliknya sendiri: "bukannya lebih enak jika bingkai itu pas sesuai
+    # dengan kotak facecam". Secara ukuran itu memang jadi persis — tumpang
+    # tindih potongan dengan panelnya naik dari 71% ke 97% — tapi yang ia lihat
+    # bukan itu: bidangnya jadi kotak kecil di tengah dengan permainan kabur di
+    # kiri dan kanannya. "Tampilannya malah berbeda dengan yang saya minta."
+    # Diminta kembali seperti semula di hari yang sama.
+    #
+    # Yang tidak bisa dipunyai dua-duanya, dan itu ukur-mengukur bentuk saja:
+    # panel facecam tegak atau hampir persegi, bidang selebar kanvas sangat
+    # lebar. Sumber tegak tidak bisa mengisi bidang lebar tanpa dipotong. Jadi
+    # yang dipilih di sini mengisi penuh, dan `kotak_reaksi` di bawah yang
+    # memotong panel itu ke bentuk bidangnya — dengan KEPALA sebagai acuan, dan
+    # tanpa pernah keluar dari panelnya.
     wajah_dst = {"x": 0, "y": 0, "w": 100, "h": round(wajah, 2)}
     rasio_wajah = (out_w * wajah_dst["w"]) / (out_h * wajah_dst["h"])
     reaksi = []
     for p in posisi:
         kotak = {k: round(float(p["facecam"][k]), 2) for k in ("x", "y", "w", "h")}
-        muka = p["facecam"].get("awan_kotak")
+        muka = _petak_wajah(p["facecam"])
         muka = [round(float(v), 2) for v in muka] if muka else None
         r = {"t": round(float(p["t"]), 2), "kotak": kotak,
              "src": kotak_reaksi(kotak, muka, rasio_wajah, src_aspek)}
@@ -587,8 +687,22 @@ def susun_layout_gaming(facecam, *, src_w: int = 1920, src_h: int = 1080,
         "frames": [
             # Permainan digambar lebih dulu supaya wajah berada di atasnya bila
             # suatu saat keduanya bersinggungan.
-            {"label": "Permainan", "src": main_src, "dst": main_dst, "fit": "cover"},
-            {"label": "Reaksi", "src": reaksi[0]["src"], "dst": wajah_dst, "fit": "cover"},
+            #
+            # `id` ikut, dan itu bukan hiasan. Studio memilih kotak yang sedang
+            # diseret dengan `frames.find(f => f.id === frameId)`. Tanpa id,
+            # DUA kotak sama-sama cocok dengan `undefined`: menyeret kotak
+            # Reaksi menulis potongannya ke Permainan juga, dan keduanya
+            # langsung bertumpuk jadi satu. Dilaporkan pemiliknya 1 Oktober
+            # 2026, dengan dua tangkapan layar sebelum dan sesudah.
+            #
+            # Dulu susunan ini selalu lewat `susunanDariServer` di peramban,
+            # yang memasang id sendiri. Sejak pemanasan menuliskan susunannya
+            # langsung ke klip (services/bingkai_awal.py), jalan itu tidak lagi
+            # selalu dilalui — jadi idnya harus datang dari sini.
+            {"id": "permainan", "label": "Permainan", "src": main_src,
+             "dst": main_dst, "fit": "cover"},
+            {"id": "reaksi", "label": "Reaksi", "src": reaksi[0]["src"],
+             "dst": wajah_dst, "fit": "cover"},
         ],
     }
 
@@ -923,6 +1037,56 @@ def petak_sisipan(l: dict, out_w: int, out_h: int) -> tuple[int, int, int, int]:
     return _petak_sisipan(str(l.get("posisi") or "penuh"), out_w, out_h)
 
 
+# Tinggi huruf sisipan teks, dalam persen tinggi kanvas.
+TEKS_UKURAN_BAWAAN = 4.5
+TEKS_WARNA_BAWAAN = "#FFFFFF"
+TEKS_KELUARGA_BAWAAN = "Archivo Black"
+
+
+def _siapkan_teks(l: dict, durasi: float) -> Optional[dict]:
+    """Satu lapisan teks yang sudah bersih, atau None bila tidak ada isinya."""
+    teks = str(l.get("teks") or "").strip()
+    if not teks:
+        return None
+    try:
+        t = max(0.0, float(l.get("t") or 0.0))
+    except (TypeError, ValueError):
+        return None
+    if t >= durasi:
+        return None
+    try:
+        dur = float(l["dur"]) if l.get("dur") not in (None, "") else durasi - t
+    except (TypeError, ValueError):
+        dur = durasi - t
+    dur = min(max(0.05, dur), durasi - t)
+    if dur <= 0.05:
+        return None
+    try:
+        opasitas = max(0.0, min(1.0, float(l.get("opasitas", 1.0))))
+        masuk = max(0.0, min(dur / 2, float(l.get("fade_masuk") or 0.0)))
+        keluar_f = max(0.0, min(dur / 2, float(l.get("fade_keluar") or 0.0)))
+        ukuran = max(1.0, min(40.0, float(l.get("ukuran") or TEKS_UKURAN_BAWAAN)))
+    except (TypeError, ValueError):
+        opasitas, masuk, keluar_f, ukuran = 1.0, 0.0, 0.0, TEKS_UKURAN_BAWAAN
+    rect = l.get("rect")
+    return {
+        "jenis": "teks", "path": None, "punya_suara": False,
+        "teks": teks[:200],
+        "t": t, "dur": dur, "mulai": 0.0, "volume": 0.0,
+        "posisi": str(l.get("posisi") or "bawah"),
+        "rect": rect if isinstance(rect, dict) else None,
+        "isi": "muat",
+        "opasitas": opasitas, "fade_masuk": masuk, "fade_keluar": keluar_f,
+        "ukuran": ukuran,
+        "keluarga": str(l.get("keluarga") or TEKS_KELUARGA_BAWAAN),
+        "warna": str(l.get("warna") or TEKS_WARNA_BAWAAN),
+        "garis": str(l.get("garis") or "#000000"),
+        "tebal_garis": max(0.0, min(12.0, float(l.get("tebal_garis") or 3.0))),
+        "latar": str(l.get("latar") or ""),      # kosong = tanpa kotak di belakangnya
+        "ulang": False,
+    }
+
+
 def siapkan_sisipan(lapisan: Optional[list], durasi: float) -> list[dict]:
     """Membersihkan daftar sisipan dan mencari berkasnya. Yang tak dikenal dibuang."""
     from . import aset as aset_svc
@@ -930,6 +1094,19 @@ def siapkan_sisipan(lapisan: Optional[list], durasi: float) -> list[dict]:
     keluar: list[dict] = []
     for l in lapisan or []:
         if not isinstance(l, dict):
+            continue
+        # Sisipan TEKS tidak punya berkas.
+        #
+        # Diminta pemiliknya 30 September 2026, dengan alasan yang jelas: ada
+        # kampanye yang mensyaratkan tulisan tertentu muncul di klip, misalnya
+        # "@motionklip" berikut logonya. Itu bukan judul klip — judul punya
+        # tema, animasi, dan tempatnya sendiri di awal — melainkan tempelan
+        # yang berdiri sendiri, bisa ditaruh di mana saja, selama apa saja, dan
+        # bisa diatur ketembusannya seperti tempelan lain.
+        if str(l.get("jenis") or "") == "teks" or (l.get("teks") and not l.get("aset")):
+            satu = _siapkan_teks(l, durasi)
+            if satu:
+                keluar.append(satu)
             continue
         path = aset_svc.jalur(str(l.get("aset") or ""))
         info = aset_svc.info(str(l.get("aset") or "")) if path else None
@@ -1080,6 +1257,87 @@ def rumus_redam(bicara: list[tuple[float, float]]) -> Optional[str]:
     return f"1-{1.0 - REDAM_DALAM:.3f}*({puncak})"
 
 
+def _lolos_teks(t: str) -> str:
+    """Teks yang aman untuk `drawtext`: tanda yang punya arti bagi ffmpeg dikawal."""
+    keluar = []
+    for ch in t:
+        if ch in "\\":
+            keluar.append("\\\\")
+        elif ch in ":'%":
+            keluar.append("\\" + ch)
+        elif ch == "\n":
+            keluar.append("\\n")
+        else:
+            keluar.append(ch)
+    return "".join(keluar)
+
+
+def _warna_ff(warna: str, bawaan: str = "white") -> str:
+    w = (warna or "").strip()
+    if not w:
+        return bawaan
+    if w.startswith("#") and len(w) in (4, 7):
+        return "0x" + (w[1:] if len(w) == 7 else "".join(c * 2 for c in w[1:]))
+    return w
+
+
+def _graf_teks(bagian: list[str], l: dict, video: str, i: int,
+               out_w: int, out_h: int) -> str:
+    """Satu `drawtext` untuk sebuah sisipan teks. Mengembalikan label barunya."""
+    from .fonts import _berkas_keluarga
+
+    t0, dur = float(l["t"]), float(l["dur"])
+    t1 = t0 + dur
+    tinggi = max(8, int(round(out_h * float(l.get("ukuran") or TEKS_UKURAN_BAWAAN) / 100.0)))
+    x, y, w, h = petak_sisipan(l, out_w, out_h)
+    # Di tengah petaknya, tapi TIDAK PERNAH keluar kanvas.
+    #
+    # Tulisan bisa lebih lebar daripada petaknya — "@namakanal" pada preset
+    # sudut sudah cukup — dan tanpa kurungan ini ujungnya terpotong di tepi
+    # layar. Terlihat pada render uji 30 September 2026. Komanya dikawal karena
+    # di dalam nilai opsi `drawtext` koma memisahkan filter.
+    tengah_x = f"{x}+({w}-text_w)/2"
+    tengah_y = f"{y}+({h}-text_h)/2"
+    px = f"max(0\\,min({out_w}-text_w\\,{tengah_x}))"
+    py = f"max(0\\,min({out_h}-text_h\\,{tengah_y}))"
+
+    # Alfa yang berubah menurut waktu: ketembusan, lembut masuk, lembut keluar,
+    # ketiganya dalam satu ungkapan. Waktunya waktu KLIP, karena `drawtext`
+    # menggambar di atas video yang jamnya sudah jam klip.
+    op = float(l.get("opasitas", 1.0))
+    fi = float(l.get("fade_masuk") or 0.0)
+    fo = float(l.get("fade_keluar") or 0.0)
+    alfa = f"{op:.3f}"
+    if fi > 0:
+        alfa = f"if(lt(t,{t0 + fi:.3f}),(t-{t0:.3f})/{fi:.3f}*{op:.3f},{alfa})"
+    if fo > 0:
+        alfa = f"if(gt(t,{t1 - fo:.3f}),({t1:.3f}-t)/{fo:.3f}*{op:.3f},{alfa})"
+
+    opsi = [
+        f"text='{_lolos_teks(str(l.get('teks') or ''))}'",
+        f"fontsize={tinggi}",
+        f"fontcolor={_warna_ff(l.get('warna'), 'white')}",
+        f"x={px}", f"y={py}",
+        f"alpha='{alfa}'",
+        f"enable='between(t,{t0:.3f},{t1:.3f})'",
+    ]
+    berkas = _berkas_keluarga(str(l.get("keluarga") or ""))
+    if berkas and Path(berkas).is_file():
+        opsi.append(f"fontfile='{ffpath(Path(berkas))}'")
+    tebal = float(l.get("tebal_garis") or 0.0)
+    if tebal > 0:
+        opsi.append(f"borderw={int(round(tebal))}")
+        opsi.append(f"bordercolor={_warna_ff(l.get('garis'), 'black')}")
+    latar = str(l.get("latar") or "").strip()
+    if latar:
+        opsi.append("box=1")
+        opsi.append(f"boxcolor={_warna_ff(latar, 'black')}@0.55")
+        opsi.append(f"boxborderw={max(4, tinggi // 5)}")
+    keluar = f"[svt{i}]"
+    bagian.append(f"{video}drawtext={':'.join(opsi)}{keluar}")
+    return keluar
+
+
 def build_sisipan_graph(lapisan: list[dict], vin: str, ain: str, *,
                         input_awal: int, out_w: int, out_h: int,
                         bicara: Optional[list[tuple[float, float]]] = None
@@ -1098,6 +1356,17 @@ def build_sisipan_graph(lapisan: list[dict], vin: str, ain: str, *,
 
     for i, l in enumerate(lapisan):
         t0, dur = l["t"], l["dur"]
+        if l["jenis"] == "teks":
+            # Teks digambar LANGSUNG di atas video, tanpa masukan tambahan.
+            #
+            # Membuatnya jadi gambar lebih dulu berarti satu proses dan satu
+            # berkas sementara per tempelan, untuk hasil yang sama. `drawtext`
+            # sudah bisa semuanya: font yang dibundel, garis luar, kotak latar,
+            # dan alfa yang berubah menurut waktu — yang terakhir itulah yang
+            # membuat lembut masuk, lembut keluar, dan ketembusan bisa
+            # dinyatakan dalam satu ungkapan.
+            video = _graf_teks(bagian, l, video, i, out_w, out_h)
+            continue
         if l["jenis"] == "gambar":
             inputs += ["-loop", "1", "-t", f"{dur:.3f}", "-i", str(l["path"])]
         else:
@@ -1653,6 +1922,12 @@ def render_clip(
                     kedua_ikut_orang=bool(((subtitle_kedua or {}).get("style") or {})
                                           .get("ikut_warna_orang")),
                     tambahan=judul_baris,
+                    # Sakelar sensor kata kasar, milik seluruh aplikasi.
+                    # Dibaca DI SINI, bukan dititipkan lewat gaya subtitle:
+                    # gaya itu tersimpan per klip, dan sakelar yang diubah hari
+                    # ini tidak boleh dikalahkan oleh gaya yang disimpan bulan
+                    # lalu.
+                    sensor=sensor_aktif(),
                 ),
                 encoding="utf-8",
             )

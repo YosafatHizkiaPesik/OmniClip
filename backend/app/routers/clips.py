@@ -925,8 +925,37 @@ def _hitung_reframe_sekarang(*, video_id: str, segments: list[dict], aspect_rati
     return payload
 
 
+def _buang_kunci_otomatis(video_id: str) -> int:
+    """
+    Membuang kunci bingkai bikinan mesin dari semua klip video ini.
+
+    Mengembalikan jumlah klip yang berubah. Kunci buatan pengguna — yang
+    `asal`-nya bukan "otomatis" maupun "ai" — tidak pernah disentuh, dan satu
+    saja kunci seperti itu membuat seluruh klipnya dilewati: setengah susunan
+    pengguna lebih buruk daripada susunan yang utuh.
+    """
+    cached = analyses_repo.latest_for_video(video_id)
+    if not cached:
+        return 0
+    hasil = dict(cached["result"] or {})
+    klip = list(hasil.get("clips") or [])
+    n = 0
+    for i, c in enumerate(klip):
+        kunci = [k for k in (c.get("frame_keys") or []) if isinstance(k, dict)]
+        if not kunci:
+            continue
+        if any((k.get("asal") or "pengguna") not in ("otomatis", "ai") for k in kunci):
+            continue
+        klip[i] = {**c, "frame_keys": []}
+        n += 1
+    if n:
+        hasil["clips"] = klip
+        analyses_repo.replace_result(cached["id"], hasil)
+    return n
+
+
 @router.post("/projects/{video_id}/siapkan-bingkai", status_code=202)
-async def siapkan_bingkai(video_id: str):
+async def siapkan_bingkai(video_id: str, ulang: bool = False):
     """
     Menghitung bingkai semua klip video ini SEKARANG, tanpa mengulang auto-klip.
 
@@ -943,6 +972,33 @@ async def siapkan_bingkai(video_id: str):
     if not klip:
         raise InvalidInput("Video ini belum punya klip yang bisa disiapkan.")
 
+    # `ulang`: simpanan dibuang LEBIH DULU, supaya pemanasan benar-benar
+    # menghitung. Tanpa itu ia membaca simpanan yang sama dan selesai dalam
+    # 0,06 detik — tombolnya terlihat tidak mengerjakan apa pun. Hanya tombol
+    # "hitung ulang dari nol" yang meminta ini; "Siapkan bingkai" biasa tetap
+    # memakai simpanan, karena itu memang gunanya.
+    if ulang:
+        dibuang = _buang_simpanan_bingkai(vid)
+        # Hanya milik video INI yang dibuang dari simpanan di memori. Kuncinya
+        # (video_id, segmen), jadi menyaringnya mudah — dan mengosongkan
+        # seluruh simpanan berarti klip video LAIN ikut menghitung ulang
+        # penggolongan yang memakan 10-60 detik, padahal jawabannya masih sah.
+        for k in [k for k in _JENIS_CACHE if k and k[0] == vid]:
+            _JENIS_CACHE.pop(k, None)
+        # Kunci bingkai OTOMATIS ikut dibuang.
+        #
+        # Sejak pemanasan menuliskan susunannya sendiri ke klip, simpanan yang
+        # dibuang saja tidak cukup: `_tulis_bingkai` melewati klip yang sudah
+        # punya kunci, jadi hitung-ulang akan memindai lagi dari nol lalu
+        # menyimpan hasilnya ke tempat yang tidak pernah dibaca. Yang terlihat:
+        # tombolnya bekerja belasan menit dan tidak ada yang berubah.
+        #
+        # Hanya yang `asal`-nya otomatis. Kunci buatan pengguna tidak pernah
+        # disentuh, aturan yang sama dengan yang dipakai Studio.
+        dikosongkan = _buang_kunci_otomatis(vid)
+        log.info("Hitung ulang bingkai %s: %d simpanan dibuang, %d klip dikosongkan",
+                 vid, dibuang, dikosongkan)
+
     from ..services.pipeline import _jadwalkan_jejak_sekarang
     # `paksa`: yang menekan tombolnya sudah menyatakan maunya untuk video ini,
     # dan sakelar pemanasan otomatis (bawaannya mati) tidak boleh membatalkannya.
@@ -950,7 +1006,13 @@ async def siapkan_bingkai(video_id: str):
                                        (cached["result"] or {}).get("aspect_ratio"),
                                        paksa=True)
     if not job_id:
-        raise InvalidInput("Pemanasan bingkai sedang berjalan untuk video ini.")
+        # Pesannya dulu selalu "sedang berjalan", padahal kosongnya `job_id`
+        # juga berarti "daftar klip ini sudah pernah selesai dipanaskan". Dua
+        # keadaan yang menuntut tindakan berbeda diberi satu kalimat yang
+        # hanya benar untuk salah satunya.
+        raise InvalidInput(
+            "Bingkai video ini sudah pernah dihitung, atau perhitungannya sedang "
+            "berjalan. Pakai tombol hitung ulang kalau ingin memaksanya dari nol.")
     return {"job_id": job_id, "klip": len(klip)}
 
 
@@ -1641,7 +1703,7 @@ async def clip_jenis(req: FacecamRequest):
 # hasilnya ikut membawa `potongan` — bagian klip yang bingkainya berbeda
 # (29 September 2026). Tanpa naik ke v3, hasil lama yang tidak punya
 # `potongan` tetap dipakai dan Studio tidak pernah melihat pemecahannya.
-FACECAM_VERSI = 4
+FACECAM_VERSI = 9
 
 
 def _kunci_facecam(video_id: str, segments: list[dict]) -> str:
@@ -1649,8 +1711,36 @@ def _kunci_facecam(video_id: str, segments: list[dict]) -> str:
     import hashlib
 
     tanda = ";".join(f"{float(s['start']):.3f}-{float(s['end']):.3f}" for s in segments)
-    return "facecam:" + hashlib.sha1(
-        f"{video_id}|{tanda}|v{FACECAM_VERSI}".encode()).hexdigest()[:24]
+    # Nomor videonya ikut di kuncinya, bukan hanya di dalam sidiknya.
+    #
+    # Tanpa itu simpanan sebuah video tidak bisa dibuang tanpa membuang
+    # simpanan SEMUA video, dan tombol "hitung ulang dari nol" karena itu tidak
+    # pernah benar-benar menghitung dari nol — ia memanggil pemanasan yang
+    # membaca simpanan yang sama lalu selesai dalam 0,06 detik. Terlihat
+    # langsung pemiliknya 1 Oktober 2026: tidak ada bilah kemajuan yang muncul,
+    # dan bingkainya tidak berubah.
+    return (f"facecam:{video_id}:"
+            + hashlib.sha1(f"{tanda}|v{FACECAM_VERSI}".encode()).hexdigest()[:24])
+
+
+def _buang_simpanan_bingkai(video_id: str) -> int:
+    """
+    Membuang SEMUA simpanan bingkai milik satu video: letak facecam dan
+    penggolongan jenis klipnya.
+
+    Dipakai tombol "hitung ulang dari nol". Tanpa ini tombol itu hanya
+    mengantrekan pekerjaan yang membaca simpanan yang sama.
+    """
+    from ..db import get_conn
+
+    try:
+        cur = get_conn().execute(
+            "DELETE FROM search_cache WHERE cache_key LIKE ? OR cache_key LIKE ?",
+            (f"facecam:{video_id}:%", f"jenis:%:{video_id}:%"))
+        return cur.rowcount or 0
+    except Exception as e:                           # noqa: BLE001
+        log.warning("Simpanan bingkai %s tidak bisa dibuang: %s", video_id, str(e)[:160])
+        return 0
 
 
 def _facecam_tersimpan(video_id: str, segments: list[dict]):
@@ -1688,6 +1778,43 @@ def _simpan_facecam(video_id: str, segments: list[dict], payload: dict) -> None:
         pass
 
 
+def _layout_bidikan(tata: dict, r: dict, *, src_w: int, src_h: int,
+                    out_w: int, out_h: int) -> dict:
+    """
+    Susunan untuk SATU bidikan: bidang permainan milik seluruh klip, bidang
+    wajah milik bidikan ini.
+
+    Bidang permainan sengaja tidak dihitung ulang. Tinggi dan potongannya tetap
+    sama sepanjang klip, supaya permainan tidak melompat tiap kali bidikan
+    berganti; yang boleh berubah hanya bidang wajahnya, karena tiap POV menaruh
+    panel facecam dengan bentuk yang berbeda.
+
+    Dipanggil dua kali: saat potongan dihitung, dan saat simpanan lama dibaca.
+    Yang kedua penting — simpanan menyimpan susunan yang sudah dipanggang, jadi
+    tanpa ini aturan bidang wajah yang baru tidak pernah sampai ke klip yang
+    sudah pernah dipindai, kecuali dengan memindai ulang videonya.
+    """
+    from ..services.render import susun_layout_gaming
+
+    satu = dict(tata)
+    satu["reaksi"] = [{**r, "t": 0.0}]
+    bingkai = [dict(f) for f in (tata.get("frames") or [])]
+    if not r.get("kotak") or len(bingkai) < 2:
+        satu["frames"] = bingkai
+        return satu
+    panel = {**r["kotak"], "awan_kotak": r.get("muka")}
+    gaming = tata.get("gaming") or {}
+    sendiri = susun_layout_gaming(
+        [{"t": 0.0, "facecam": panel}], src_w=src_w, src_h=src_h,
+        out_w=out_w, out_h=out_h, wajah=gaming.get("wajah"),
+        permainan=gaming.get("permainan") or "isi")
+    if len(sendiri.get("frames") or []) > 1:
+        bingkai[1] = dict(sendiri["frames"][1])
+        satu["reaksi"] = [{**sendiri["reaksi"][0], "t": 0.0}]
+    satu["frames"] = bingkai
+    return satu
+
+
 def _potongan_game(src: str, segments: list[dict],
                    posisi: Optional[list] = None) -> list[dict]:
     """
@@ -1720,6 +1847,7 @@ def _potongan_game(src: str, segments: list[dict],
         out_w, out_h = PLAY_RES.get("9:16", (1080, 1920))
         potongan = _dasar_per_waktu(plan, Path(src), segments, durasi, out_w, out_h,
                                     facecam_waktu=posisi)
+        sw, sh = plan.source_w, plan.source_h
     except Exception as e:                           # noqa: BLE001
         log.info("Potongan bingkai game tidak terbaca: %s", str(e)[:160])
         return []
@@ -1745,12 +1873,15 @@ def _potongan_game(src: str, segments: list[dict],
                     continue
                 # Tiap kunci membawa SATU letak facecam, jadi menyeretnya di
                 # Studio hanya mengubah bidikan itu, bukan seluruh klip.
-                satu = dict(tata)
-                satu["reaksi"] = [{**r, "t": 0.0}]
-                bingkai = [dict(f) for f in (tata.get("frames") or [])]
-                if len(bingkai) > 1:
-                    bingkai[1] = {**bingkai[1], "src": dict(r.get("src") or bingkai[1]["src"])}
-                satu["frames"] = bingkai
+                #
+                # Susunannya dihitung ULANG untuk bidikan ini, bukan disalin
+                # dari susunan seluruh klip: lebar bidang wajah mengikuti bentuk
+                # panel facecam, dan tiap POV menaruh panelnya dengan bentuk
+                # yang berbeda. Menyalin satu susunan untuk semuanya berarti
+                # sebagian bidikan memakai bidang yang bentuknya milik bidikan
+                # lain.
+                satu = _layout_bidikan(tata, r, src_w=sw, src_h=sh,
+                                       out_w=out_w, out_h=out_h)
                 keluar.append({"t": round(mulai, 2), "akhir": round(henti, 2),
                                "mode": mode, "alasan": d.get("alasan") or "",
                                "layout": satu})
@@ -1781,8 +1912,9 @@ async def clip_facecam(req: FacecamRequest):
     from ..services.media import probe
     from ..services.paths import find_local_video
     from ..services.reframe import deteksi_facecam_waktu
-    from ..services.render import rasio_bidang_wajah, susun_layout_gaming
+    from ..services.render import PLAY_RES, rasio_bidang_wajah, susun_layout_gaming
 
+    out_w, out_h = PLAY_RES.get("9:16", (1080, 1920))
     src = find_local_video(req.video_id)
     if not src:
         raise NotFound("Video sumber belum diunduh.")
@@ -1794,14 +1926,45 @@ async def clip_facecam(req: FacecamRequest):
         if not posisi:
             return {"ditemukan": False, "layout": None}
         w, h = int(pindai["src_w"]), int(pindai["src_h"])
+        tata = susun_layout_gaming(posisi, src_w=w, src_h=h)
+        # Susunan tiap bidikan DIHITUNG ULANG dari simpanan, bukan dibaca apa
+        # adanya: yang disimpan hanyalah letak facecam dan batas waktunya, dan
+        # aturan bidang wajah masih bisa berubah sesudah simpanan itu dibuat.
+        potongan = []
+        for bagian in (pindai.get("potongan") or []):
+            tiap = dict(bagian)
+            r = ((bagian.get("layout") or {}).get("reaksi") or [None])[0]
+            if bagian.get("mode") == "gaming" and r:
+                tiap["layout"] = _layout_bidikan(tata, r, src_w=w, src_h=h,
+                                                 out_w=out_w, out_h=out_h)
+            potongan.append(tiap)
         return {"ditemukan": True, "facecam": posisi[0]["facecam"],
-                "src_w": w, "src_h": h,
-                "layout": susun_layout_gaming(posisi, src_w=w, src_h=h),
+                "src_w": w, "src_h": h, "layout": tata,
                 # Bagian-bagian klip yang bingkainya BERBEDA. Lihat `_potongan_game`.
-                "potongan": pindai.get("potongan") or []}
+                "potongan": potongan}
 
     tersimpan = _facecam_tersimpan(req.video_id, segs)
     if tersimpan is not None and "posisi" in tersimpan:
+        # Simpanan yang belum punya `potongan` DILENGKAPI, bukan dipakai apa
+        # adanya.
+        #
+        # Ada dua penulis simpanan ini: endpoint ini, dan pemanasan bingkai di
+        # services/bingkai_awal.py. Yang kedua hanya memindai letak facecam dan
+        # menyimpannya tanpa pemecahan klip. Jadi video yang bingkainya sempat
+        # dipanaskan lebih dulu membuat Studio membaca simpanan tanpa
+        # `potongan`, dan lajur Bingkai tidak pernah terpotong sama sekali.
+        # Terlapor pemiliknya 29 September 2026, dan terbukti: simpanan untuk
+        # klipnya hanya berisi posisi, src_w, src_h.
+        #
+        # Bedanya "belum pernah dihitung" dan "sudah dihitung, hasilnya kosong"
+        # dijaga: kunci yang TIDAK ADA berarti yang pertama, daftar kosong
+        # berarti yang kedua.
+        if "potongan" not in tersimpan:
+            lengkap = dict(tersimpan)
+            lengkap["potongan"] = await _di_kolam_pindai(
+                _potongan_game, str(src), segs, tersimpan.get("posisi") or [])
+            _simpan_facecam(req.video_id, segs, lengkap)
+            return susun(lengkap)
         return susun(tersimpan)
 
     def kerja():

@@ -561,6 +561,52 @@ FACECAM_TEPI_KERAS = 0.18      # ... dan pusatnya di luar 18-82% lebar
 # detik. Pergantian bingkai DASAR yang lebih singkat dari empat detik tidak
 # terbaca sebagai keputusan, melainkan sebagai kedipan.
 POTONGAN_DASAR_MIN = 4.0
+# Batas yang jauh lebih longgar untuk potongan WAJAH yang wajahnya besar.
+#
+# Batas empat detik ada untuk menahan kedipan, dan itu benar selama kedua
+# pilihannya sama-sama masuk akal. Tapi saat wajah orangnya memenuhi layar,
+# bingkai game bukan pilihan yang kurang bagus melainkan SALAH: ia memotong
+# kotak sebesar facecam dari wajah yang sedang besar-besarnya, lalu menaruh
+# balok permainan di bidang bawah. Terukur pada klip LaperGang, penggolongnya
+# sudah menandai detik 32,5-34,9 sebagai wajah — persis momen yang dikeluhkan
+# pemiliknya 30 September 2026 — tapi 2,4 detik itu ditelan batas empat detik.
+POTONGAN_WAJAH_BESAR_MIN = 1.5
+# Batas TERLONGGAR di seluruh berkas ini, dan hanya untuk potongan yang lahir
+# dari PANEL facecam yang besar.
+#
+# Dibenarkan oleh kekuatan sinyalnya. Wajah yang lebar bisa berarti macam-macam
+# — orang mencondong ke kamera, deteksi yang meleset — tapi panel yang menempati
+# seperlima layar hanya terjadi kalau streamer memang membesarkan kameranya,
+# dan itu pernyataan yang jelas tentang apa yang sedang penting. Terukur pada
+# klip LaperGang, momen seperti itu berlangsung 1,0 sampai 2,5 detik; batas 1,5
+# detik menelan yang terpendek justru di saat bidang gamenya paling salah.
+POTONGAN_PANEL_BESAR_MIN = 1.0
+# Batas untuk kembali ke BINGKAI GAME, yaitu keadaan dasar klip gameplay.
+#
+# Batas empat detik ada untuk menahan kedipan, dan itu benar untuk BERPINDAH
+# dari keadaan dasar ke sesuatu yang khusus: pindah seperti itu adalah
+# keputusan, dan keputusan yang berumur dua detik terbaca sebagai kerusakan.
+# Tapi KEMBALI ke keadaan dasar bukan keputusan — itu berhenti melakukan
+# sesuatu yang khusus, dan menuntut bukti sebanyak itu untuk berhenti berarti
+# klip terjebak di bingkai wajah lama sesudah alasannya lewat. Terukur pada
+# klip LaperGang: 2,9 detik permainan di antara dua momen wajah diserap
+# seluruhnya, dan yang terlihat pemiliknya adalah bingkai yang tidak pernah
+# kembali ke game.
+POTONGAN_GAME_MIN = 1.5
+# Lebar wajah (pecahan lebar bingkai) yang membuat sebuah potongan wajah
+# dianggap "besar".
+#
+# Angkanya diukur, bukan ditebak. Pada klip LaperGang, lebar wajah TENGAH tiap
+# potongan memisah dengan bersih:
+#
+#   potongan "game"  : 3,6  3,6  4,0  4,4  5,4  5,9  8,3 %
+#   potongan "wajah" : 10,3  11,6  13,4  14,1 %
+#
+# Sepersepuluh lebar bingkai ada di tengah jurang itu, dan artinya bisa
+# diucapkan: wajah sebesar itu adalah bidikan medium close-up, bukan kamera
+# pemain di sudut layar. Percobaan pertama memakai 0,17 dan tidak pernah
+# memicu satu kali pun.
+WAJAH_BESAR_MIN = 0.10
 
 
 def _wajah_pojok(x: float, cy: float, w: float, sw: int, sh: int) -> bool:
@@ -574,6 +620,56 @@ def _wajah_pojok(x: float, cy: float, w: float, sw: int, sh: int) -> bool:
     # Menempel di tepi kiri/kanan, seberapa pun tingginya. Lihat FACECAM_KECIL.
     return fw <= FACECAM_KECIL and (fx < FACECAM_TEPI_KERAS
                                     or fx > 1 - FACECAM_TEPI_KERAS)
+
+
+# Lebar jendela penghalus label, dalam sampel. Pada 8 Hz, 5 sampel = 0,6 detik.
+HALUS_JENDELA = 5
+
+
+def _haluskan(label: list[str]) -> list[str]:
+    """
+    Membuang KEDIPAN label per sampel dengan suara terbanyak di jendela kecil.
+
+    Deteksi wajah bekerja per bingkai dan sesekali meleset satu-dua bingkai:
+    orangnya menoleh, tangannya menutupi muka, atau kotaknya bergeser melewati
+    ambang "di pojok". Tanpa penghalusan, satu sampel yang meleset memecah
+    potongan game 3 detik jadi empat potongan 0,4-0,8 detik — dan tiap pecahan
+    lalu terlalu pendek untuk bertahan, sehingga SELURUHNYA diserap potongan
+    wajah di sebelahnya. Terukur pada klip LaperGang detik 17,6-20,5, dan
+    dilaporkan pemiliknya 1 Oktober 2026: "ketika kembali normal bingkai tidak
+    kembali ke game".
+
+    Yang dihaluskan hanya kedipan sependek setengah detik; pergantian yang
+    benar-benar terjadi berlangsung jauh lebih lama dan tidak tersentuh.
+    """
+    n = len(label)
+    if n < HALUS_JENDELA:
+        return list(label)
+    sisi = HALUS_JENDELA // 2
+    keluar = []
+    for i in range(n):
+        jendela = label[max(0, i - sisi):min(n, i + sisi + 1)]
+        keluar.append(max(set(jendela), key=jendela.count))
+    return keluar
+
+
+def _lebar_wajah_per_sampel(plan) -> list[float]:
+    """Lebar wajah TERBESAR di tiap sampel, sebagai pecahan lebar bingkai."""
+    sw = plan.source_w
+    n = min((len(s) for s in plan.people_seen), default=0)
+    keluar = []
+    for i in range(n):
+        lebar = 0.0
+        for p in range(len(plan.people)):
+            if not plan.people_seen[p][i]:
+                continue
+            kotak = (plan.people_box[p][i]
+                     if p < len(plan.people_box) and i < len(plan.people_box[p]) else None)
+            if kotak is None:
+                continue
+            lebar = max(lebar, float(kotak[1]) / max(1, sw))
+        keluar.append(lebar)
+    return keluar
 
 
 def _label_per_sampel(plan) -> list[str]:
@@ -649,19 +745,30 @@ def _snap_ke_adegan(runs: list[list], potongan_adegan: list[float]) -> list[list
     return runs
 
 
-def _rapikan_potongan(runs: list[list], potongan_adegan: Optional[list] = None
-                      ) -> list[list]:
-    """Potongan [label, a, b] yang terlalu pendek disatukan ke tetangga terpanjang."""
+def _rapikan_potongan(runs: list[list], potongan_adegan: Optional[list] = None,
+                      minimum: Optional[dict] = None) -> list[list]:
+    """
+    Potongan [label, a, b] yang terlalu pendek disatukan ke tetangga terpanjang.
+
+    `minimum` memberi batas SENDIRI untuk potongan tertentu, dikunci pada
+    (label, mulai) potongan itu sebelum apa pun disatukan. Dipakai untuk
+    potongan wajah yang wajahnya memenuhi layar: lihat POTONGAN_WAJAH_BESAR_MIN.
+    """
     runs = [r[:] for r in runs]
     adegan = list(potongan_adegan or [])
+    khusus = dict(minimum or {})
+
+    def batas(r) -> float:
+        return khusus.get((r[0], round(r[1], 3)), POTONGAN_DASAR_MIN)
 
     def di_adegan(t: float) -> bool:
         return any(abs(c - t) <= 0.2 for c in adegan)
 
     while len(runs) > 1:
-        pendek = min(range(len(runs)), key=lambda i: runs[i][2] - runs[i][1])
+        pendek = min(range(len(runs)),
+                     key=lambda i: (runs[i][2] - runs[i][1]) - batas(runs[i]))
         panjang = runs[pendek][2] - runs[pendek][1]
-        if panjang >= POTONGAN_DASAR_MIN:
+        if panjang >= batas(runs[pendek]):
             break
         # Potongan pendek yang berdiri di antara dua potongan adegan adalah
         # bidikan tersendiri, bukan kedipan.
@@ -670,12 +777,12 @@ def _rapikan_potongan(runs: list[list], potongan_adegan: Optional[list] = None
             sisa = [i for i in range(len(runs)) if i != pendek]
             if not sisa:
                 break
-            kedua = min(sisa, key=lambda i: runs[i][2] - runs[i][1])
-            if runs[kedua][2] - runs[kedua][1] >= POTONGAN_DASAR_MIN:
+            kedua = min(sisa, key=lambda i: (runs[i][2] - runs[i][1]) - batas(runs[i]))
+            if runs[kedua][2] - runs[kedua][1] >= batas(runs[kedua]):
                 break
             pendek = kedua
             panjang = runs[pendek][2] - runs[pendek][1]
-            if panjang >= POTONGAN_DASAR_MIN:
+            if panjang >= batas(runs[pendek]):
                 break
         kiri = runs[pendek - 1] if pendek > 0 else None
         kanan = runs[pendek + 1] if pendek + 1 < len(runs) else None
@@ -727,6 +834,53 @@ def _buang_game_sekilas(runs: list[list], durasi: float) -> list[list]:
     return gabung
 
 
+# Luas panel facecam (pecahan luas bingkai) yang membuat sebuah potongan
+# dianggap bidikan WAJAH, bukan permainan. Lihat catatan di `_dasar_per_waktu`.
+PANEL_BESAR_MIN = 0.095
+
+
+def _tandai_panel_besar(runs: list[list], facecam_waktu) -> tuple[list[list], set]:
+    """
+    Potongan "game" yang panelnya besar diubah jadi "wajah", dipecah tepat di
+    tempat panelnya berubah besar atau mengecil lagi.
+
+    Tanpa `facecam_waktu` tidak ada yang bisa dinilai, dan runs dikembalikan
+    apa adanya — itu jalur yang dipakai pemanggil yang belum memindai panel.
+    """
+    pos = sorted((float(p["t"]), p["facecam"]) for p in (facecam_waktu or []))
+    if not pos:
+        return runs, set()
+
+    def besar_pada(t: float) -> bool:
+        f = pos[0][1]
+        for tt, ff in pos:
+            if tt <= t + 1e-6:
+                f = ff
+        return (float(f["w"]) * float(f["h"]) / 10000.0) >= PANEL_BESAR_MIN
+
+    # Batas waktu yang perlu diperiksa: awal tiap potongan, plus tiap saat
+    # panelnya berganti.
+    keluar: list[list] = []
+    dari_panel: set = set()
+    for l, a, b in runs:
+        if l != "game":
+            keluar.append([l, a, b])
+            continue
+        titik = [a] + [tt for tt, _f in pos if a < tt < b] + [b]
+        for i in range(len(titik) - 1):
+            x, y = titik[i], titik[i + 1]
+            if y - x <= 1e-6:
+                continue
+            nama = "wajah" if besar_pada(x) else "game"
+            if keluar and keluar[-1][0] == nama and abs(keluar[-1][2] - x) < 1e-6:
+                keluar[-1][2] = y
+            else:
+                keluar.append([nama, x, y])
+                if nama == "wajah":
+                    dari_panel.add((nama, round(x, 3)))
+    return keluar, dari_panel
+
+
 def _dasar_per_waktu(plan, src: Path, segments: list[dict], durasi: float,
                      out_w: int, out_h: int,
                      # Linimasa facecam yang sudah dipindai pemanggil. Tanpa ini
@@ -744,7 +898,7 @@ def _dasar_per_waktu(plan, src: Path, segments: list[dict], durasi: float,
 
     if plan is None or not getattr(plan, "people_seen", None):
         return None
-    label = _label_per_sampel(plan)
+    label = _haluskan(_label_per_sampel(plan))
     if not label:
         return None
     runs: list[list] = []
@@ -755,11 +909,43 @@ def _dasar_per_waktu(plan, src: Path, segments: list[dict], durasi: float,
         else:
             runs.append([l, t, t + 1 / SAMPLE_FPS])
     runs[-1][2] = durasi
+    # PANEL FACECAM YANG BESAR berarti wajah, bukan permainan.
+    #
+    # Diminta pemiliknya 30 September 2026, dan ia mengoreksi pemahaman saya
+    # yang sebelumnya: "jika facecam nya membesar maka sorot saja mukanya" —
+    # bahkan saat permainannya masih 60% layar dan wajahnya sendiri tidak
+    # besar. Yang menentukan bukan ukuran WAJAHNYA melainkan ukuran PANELNYA:
+    # streamer yang membesarkan kameranya sedang menyatakan apa yang penting.
+    #
+    # Ambangnya diukur pada 68 bidikan dari empat klip LaperGang. Luas panel
+    # terhadap luas bingkai memisah dengan jurang yang bersih:
+    #
+    #   panel besar : 15,0  14,9  14,9  14,6  13,2  11,6  11,4  10,3 %
+    #   panel biasa :  8,9   7,4   7,1   6,9   6,9   6,8 ... 1,4 %
+    #
+    # 9,5% duduk di tengah jurang itu. Panel sebesar itu lebarnya 27-40% layar.
+    runs, panel_besar = _tandai_panel_besar(runs, facecam_waktu)
     # Batas ditarik ke potongan adegan SEBELUM yang pendek dilebur: batas yang
     # sudah benar membuat potongan pendek yang sah jadi terlihat sah.
     adegan = [float(c) for c in (getattr(plan, "cut_times", None) or [])]
     runs = _snap_ke_adegan(runs, adegan)
-    runs = _rapikan_potongan(runs, adegan)
+    # Potongan wajah yang wajahnya MENDOMINASI layar diberi batas sendiri yang
+    # jauh lebih longgar, supaya tidak ditelan batas empat detik. Lihat
+    # POTONGAN_WAJAH_BESAR_MIN.
+    lebar = _lebar_wajah_per_sampel(plan)
+    minimum = {k: POTONGAN_PANEL_BESAR_MIN for k in panel_besar}
+    for l, a, _b in runs:
+        if l == "game":
+            minimum.setdefault((l, round(a, 3)), POTONGAN_GAME_MIN)
+    for l, a, b in runs:
+        if l != "wajah" or not lebar:
+            continue
+        i0 = max(0, int(round(a * SAMPLE_FPS)))
+        i1 = min(len(lebar), max(i0 + 1, int(round(b * SAMPLE_FPS))))
+        petak = sorted(lebar[i0:i1])
+        if petak and petak[len(petak) // 2] >= WAJAH_BESAR_MIN:
+            minimum[(l, round(a, 3))] = POTONGAN_WAJAH_BESAR_MIN
+    runs = _rapikan_potongan(runs, adegan, minimum)
     runs = _buang_game_sekilas(runs, durasi)
 
     sw, sh = plan.source_w, plan.source_h

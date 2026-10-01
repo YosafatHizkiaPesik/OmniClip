@@ -65,7 +65,7 @@ class PotonganDasar(unittest.TestCase):
 class GeometriGaming(unittest.TestCase):
     FACECAM = {"x": 2.0, "y": 4.0, "w": 22.0, "h": 24.0}
 
-    def test_dua_bidang_memenuhi_layar_tanpa_celah(self):
+    def test_dua_bidang_menutup_tinggi_layar_tanpa_celah(self):
         tata = susun_layout_gaming(self.FACECAM, src_w=1920, src_h=1080,
                                    out_w=1080, out_h=1920)
         bidang = tata["frames"]
@@ -73,9 +73,139 @@ class GeometriGaming(unittest.TestCase):
         tinggi = sum(f["dst"]["h"] for f in bidang)
         self.assertAlmostEqual(tinggi, 100.0, places=3)
         for f in bidang:
-            self.assertAlmostEqual(f["dst"]["w"], 100.0, places=3)
             for sisi in ("x", "y", "w", "h"):
                 self.assertGreaterEqual(f["src"][sisi], -0.001)
+
+    def test_permainan_selebar_layar_penuh(self):
+        """Bidang permainan tidak boleh menyusut: itu isi klipnya."""
+        tata = susun_layout_gaming(self.FACECAM, src_w=1920, src_h=1080,
+                                   out_w=1080, out_h=1920)
+        main = tata["frames"][0]
+        self.assertAlmostEqual(main["dst"]["x"], 0.0, places=3)
+        self.assertAlmostEqual(main["dst"]["w"], 100.0, places=3)
+
+    def test_bidang_wajah_selebar_kanvas(self):
+        """
+        Bidang wajah mengisi lebar kanvas, tanpa sisa di kiri dan kanan.
+
+        Sempat dipersempit mengikuti bentuk kotak facecam, 1 Oktober 2026, atas
+        usul pemiliknya sendiri. Secara ukuran itu memang jadi persis, tapi yang
+        ia lihat kotak kecil di tengah dengan permainan kabur di kiri-kanannya:
+        "tampilannya malah berbeda dengan yang saya minta". Diminta kembali
+        seperti semula di hari yang sama.
+
+        Yang menjaga potongannya tidak ikut membawa meja dan dinding bukan
+        lebar bidangnya, melainkan `kotak_reaksi`: ia memotong dengan KEPALA
+        sebagai acuan dan tidak pernah keluar dari panel facecamnya.
+        """
+        tata = susun_layout_gaming(self.FACECAM, src_w=1920, src_h=1080,
+                                   out_w=1080, out_h=1920)
+        wajah = tata["frames"][1]["dst"]
+        self.assertAlmostEqual(wajah["x"], 0.0, places=3)
+        self.assertAlmostEqual(wajah["w"], 100.0, places=3)
+
+    def test_tiap_bingkai_punya_id_yang_berbeda(self):
+        """
+        Studio memilih kotak yang sedang diseret dengan
+        `frames.find(f => f.id === frameId)`. Tanpa id, DUA kotak sama-sama
+        cocok dengan `undefined`: menyeret kotak Reaksi menulis potongannya ke
+        Permainan juga, dan keduanya langsung bertumpuk jadi satu kotak.
+        Dilaporkan pemiliknya 1 Oktober 2026.
+
+        Dulu susunan ini selalu lewat `susunanDariServer` di peramban, yang
+        memasang id sendiri. Sejak pemanasan menuliskan susunannya langsung ke
+        `frame_keys`, jalan itu tidak lagi selalu dilalui.
+        """
+        tata = susun_layout_gaming(self.FACECAM, src_w=1920, src_h=1080,
+                                   out_w=1080, out_h=1920)
+        id_ = [f.get("id") for f in tata["frames"]]
+        self.assertTrue(all(id_), "ada bingkai tanpa id")
+        self.assertEqual(len(set(id_)), len(id_), "id bingkai tidak unik")
+
+    def test_potongan_wajah_tidak_pernah_keluar_panel_facecam(self):
+        """
+        Apa pun bentuk bidangnya, yang tampil di bidang wajah harus isi
+        facecam — bukan sepotong permainan di sebelahnya.
+
+        Ini yang menggantikan penyempitan bidang: dengan bidang selebar
+        kanvas, satu-satunya penjaga yang tersisa adalah kurungan di
+        `kotak_reaksi`. Keluhan aslinya, 30 September 2026: "bingkai wajahnya
+        terlalu besar melebihi facecam bahkan memotong bingkai game".
+        """
+        for panel in (self.FACECAM,
+                      {"x": 70.0, "y": 60.0, "w": 28.0, "h": 36.0},
+                      {"x": 0.0, "y": 0.0, "w": 16.0, "h": 50.0}):
+            with self.subTest(panel=panel):
+                src = susun_layout_gaming(panel, src_w=1920, src_h=1080,
+                                          out_w=1080, out_h=1920)["frames"][1]["src"]
+                self.assertGreaterEqual(src["x"], panel["x"] - 0.05)
+                self.assertGreaterEqual(src["y"], panel["y"] - 0.05)
+                self.assertLessEqual(src["x"] + src["w"],
+                                     panel["x"] + panel["w"] + 0.05)
+                self.assertLessEqual(src["y"] + src["h"],
+                                     panel["y"] + panel["h"] + 0.05)
+
+    def test_potongan_sebesar_mungkin_di_dalam_panel(self):
+        """
+        Syarat yang diminta pemiliknya, 1 Oktober 2026: "bingkai wajah benar-
+        benar presisi dengan kotak facecam, tidak boleh lebih bahkan hingga
+        memotong sampai ke dalam bingkai game, tapi jika bingkai hanya kurang
+        atau lebih kecil sedikit dari kotak facecam maka tidak masalah".
+
+        Jadi dua hal, dan urutannya penting: tidak boleh LEBIH (keras), dan
+        sekecil-kecilnya kurang (sebisanya). Yang kedua inilah yang dulu
+        dilanggar — potongan diukur dari kepala, jadi ia lebih kecil daripada
+        panelnya di kedua sisi sekaligus. Sekarang satu sisinya selalu pas
+        dengan sisi panelnya; yang dipangkas hanya sisi yang bentuknya memang
+        tidak muat.
+        """
+        for panel in (self.FACECAM,
+                      {"x": 70.0, "y": 60.0, "w": 28.0, "h": 36.0},
+                      {"x": 2.0, "y": 10.0, "w": 6.0, "h": 70.0,
+                       "awan_kotak": [3.0, 14.0, 7.0, 24.0]},
+                      {"x": 5.0, "y": 5.0, "w": 40.0, "h": 12.0}):
+            with self.subTest(panel=panel):
+                tata = susun_layout_gaming(panel, src_w=1920, src_h=1080,
+                                           out_w=1080, out_h=1920)
+                src = tata["frames"][1]["src"]
+                # Tidak boleh LEBIH: seluruh potongan ada di dalam panel.
+                self.assertGreaterEqual(src["x"], panel["x"] - 0.05)
+                self.assertGreaterEqual(src["y"], panel["y"] - 0.05)
+                self.assertLessEqual(src["x"] + src["w"], panel["x"] + panel["w"] + 0.05)
+                self.assertLessEqual(src["y"] + src["h"], panel["y"] + panel["h"] + 0.05)
+                # Dan sebesar yang bentuknya izinkan: satu sisi pas dengan
+                # sisi panelnya, tidak keduanya mengecil.
+                pas_lebar = abs(src["w"] - panel["w"]) <= 0.05
+                pas_tinggi = abs(src["h"] - panel["h"]) <= 0.05
+                self.assertTrue(pas_lebar or pas_tinggi,
+                                f"potongan {src['w']}x{src['h']} lebih kecil dari "
+                                f"panel {panel['w']}x{panel['h']} di KEDUA sisi")
+
+    def test_panel_terlalu_tegak_dipotong_dengan_kepala_sebagai_acuan(self):
+        """
+        Panel tegak tidak bisa mengisi bidang selebar kanvas, jadi ia harus
+        dipotong. Yang dipotong tidak boleh kepalanya.
+
+        Sebelum 1 Oktober 2026 kurungan panel mengembalikan kotak yang
+        dipaskan di TENGAH panel, tanpa tahu di mana kepalanya. Pada panel
+        6% x 70% dengan kepala di y 14-24%, potongannya mulai di y 37,9% —
+        di bawah dagu. Yang terlihat di bidang wajah cuma dada dan perut.
+        """
+        panel = {"x": 2.0, "y": 10.0, "w": 6.0, "h": 70.0,
+                 "awan_kotak": [3.0, 14.0, 7.0, 24.0]}
+        src = susun_layout_gaming(panel, src_w=1920, src_h=1080,
+                                  out_w=1080, out_h=1920)["frames"][1]["src"]
+        # Bukan panel utuh: tingginya dipotong supaya pas bentuk bidangnya.
+        self.assertLess(src["h"], panel["h"] - 1.0)
+        # Potongan selebar panel 6% hanya setinggi 5,7%, sementara kepalanya
+        # 10%: memuatnya UTUH memang mustahil di sini. Yang bisa dituntut, dan
+        # yang benar-benar menentukan tampilannya, adalah potongan itu jatuh di
+        # KEPALA — bukan di tengah panel, yang pada panel setinggi 70% berarti
+        # dada dan perut.
+        pusat = src["y"] + src["h"] / 2
+        atas, bawah = panel["awan_kotak"][1], panel["awan_kotak"][3]
+        self.assertGreaterEqual(pusat, atas)
+        self.assertLessEqual(pusat, bawah)
 
     def test_tinggi_panel_wajah_dijaga_di_rentang_yang_masuk_akal(self):
         """

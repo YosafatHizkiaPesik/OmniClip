@@ -3349,7 +3349,35 @@ def _tengah_sebaran(nilai: list[float]) -> tuple[float, float]:
 # Tepi panel: puncak gradien rata-rata waktu harus sekian kali median jalurnya.
 PANEL_TEPI_KALI = 2.5
 PANEL_CARI = 2.5               # jarak cari dari awan wajah, dalam lebar/tinggi awan
+# ...dan sejauh ini DALAM PECAHAN BINGKAI, mana yang lebih jauh.
+#
+# Jarak yang hanya relatif terhadap awan wajah gagal justru pada keadaan yang
+# paling sering: orang duduk agak jauh dari kameranya, jadi wajahnya kecil di
+# dalam panel yang besar. Terukur pada klip LaperGang detik 3 — awan wajah
+# selebar 3,7% bingkai di dalam panel selebar 20,8%: jangkauan 2,5 x 3,7% = 9,3%
+# berhenti di 20,1%, tujuh persepuluh persen sebelum tepi panelnya. Tepi itu
+# tidak pernah dilihat, dan kotak yang keluar cuma separuh panelnya.
+#
+# Melebarkan jangkauan tidak melonggarkan syaratnya: yang menyaring tepi palsu
+# adalah uji GARIS LURUS UTUH di bawah, bukan sempitnya tempat mencari.
+# Diturunkan dari 0,22 ke 0,13 pada 1 Oktober 2026, sore. Jangkauan 0,22
+# memang menemukan tepi panel yang dulu terlewat, tapi ia juga memberi ruang
+# bagi tepi PALSU jauh di dalam gambar permainan: dilaporkan pemiliknya di hari
+# yang sama, "banyak bingkai yang melewati kotak facecam dan hingga menyorot
+# sebagian kecil panel game". Tepi palsu yang jauh jauh lebih merugikan
+# daripada tepi yang tidak ketemu, karena aturan kerasnya satu arah — potongan
+# tidak boleh LEBIH dari kotak facecam, kurang sedikit tidak apa-apa.
+#
+# 0,13 masih jauh lebih longgar daripada aturan lama: pada awan wajah selebar
+# 3,7% bingkai, aturan lama memberi 9,3% dan berhenti tepat sebelum tepi panel
+# di 20,1%; 0,13 mencapai 23,8%.
+PANEL_CARI_MIN = 0.13          # pecahan lebar/tinggi bingkai
 PANEL_TEPI_UTUH = 0.7          # bagian sisi panel yang harus ikut kuat
+# Bagian tiap sisi panel yang dibuang sebagai marjin aman, berplafon 1% bingkai.
+PANEL_AMAN = 0.02
+
+# Awan wajah sebesar ini kali satu kepala dianggap memuat DUA letak, bukan satu.
+AWAN_PECAH_KALI = 1.5
 
 
 def _tepi_panel(gx, gy, kotak, awan):
@@ -3413,10 +3441,25 @@ def _tepi_panel(gx, gy, kotak, awan):
     # Sisi yang menempel di pinggir bingkai tidak dicari: di sana tidak ada
     # tepi panel, hanya grafis di dalamnya (angka, logo) yang bisa terbaca
     # sebagai tepi dan memangkas panelnya.
-    kanan = None if kx1 > 0.97 else puncak(kol, med_k, ax1, ax1 + PANEL_CARI * aw, sw, lintas_kol)
-    kiri = None if kx0 < 0.03 else puncak(kol, med_k, ax0 - PANEL_CARI * aw, ax0, sw, lintas_kol)
-    bawah = None if ky1 > 0.97 else puncak(bar, med_b, ay1, ay1 + PANEL_CARI * ah, sh, lintas_bar)
-    atas = None if ky0 < 0.03 else puncak(bar, med_b, ay0 - PANEL_CARI * ah, ay0, sh, lintas_bar)
+    # Yang memutuskan "sisi ini menempel di pinggir bingkai" adalah AWAN WAJAH,
+    # bukan kotak tebakan.
+    #
+    # Kotak tebakan itu awan wajah yang sudah dilebarkan 1,85-2,2 kali, jadi ia
+    # menyentuh pinggir bingkai jauh lebih sering daripada panelnya sendiri.
+    # Tiap kali itu terjadi, sisi yang bersangkutan TIDAK PERNAH DICARI dan
+    # langsung dianggap menempel di pinggir. Terukur pada klip LaperGang detik
+    # 12: panel dilaporkan mulai dari baris 0 padahal facecam-nya mulai di 20%,
+    # dan 20% bingkai permainan itu ikut masuk ke bidang wajah — terlihat
+    # sebagai langit-langit Minecraft di atas kepala orangnya.
+    #
+    # Awan wajah sendiri hampir tidak pernah menyentuh pinggir kecuali panelnya
+    # memang menempel di situ, karena wajah selalu berada di DALAM panel.
+    jauh_x = max(PANEL_CARI * aw, PANEL_CARI_MIN)
+    jauh_y = max(PANEL_CARI * ah, PANEL_CARI_MIN)
+    kanan = None if ax1 > 0.97 else puncak(kol, med_k, ax1, ax1 + jauh_x, sw, lintas_kol)
+    kiri = None if ax0 < 0.03 else puncak(kol, med_k, ax0 - jauh_x, ax0, sw, lintas_kol)
+    bawah = None if ay1 > 0.97 else puncak(bar, med_b, ay1, ay1 + jauh_y, sh, lintas_bar)
+    atas = None if ay0 < 0.03 else puncak(bar, med_b, ay0 - jauh_y, ay0, sh, lintas_bar)
     if all(v is None for v in (kanan, kiri, bawah, atas)):
         return None
     x0 = kiri if kiri is not None else (0.0 if kx0 < 0.03 else kx0)
@@ -3425,13 +3468,15 @@ def _tepi_panel(gx, gy, kotak, awan):
     y1 = bawah if bawah is not None else (1.0 if ky1 > 0.97 else ky1)
     if x1 - x0 < 0.05 or y1 - y0 < 0.05:
         return None
+    sisi = {n for n, v in (("kiri", kiri), ("kanan", kanan),
+                           ("atas", atas), ("bawah", bawah)) if v is not None}
     # Panel selalu jauh lebih besar dari wajah di dalamnya. Kotak yang nyaris
     # hanya selebar wajah berarti yang ditemukan adalah garis DI DALAM gambar
     # kamera (sandaran kursi), bukan tepi panelnya: terukur pada Devour, 8%
     # lebar untuk awan wajah 6%.
     if aw / (x1 - x0) > 0.55 or ah / (y1 - y0) > 0.65:
         return None
-    return x0, y0, x1, y1
+    return x0, y0, x1, y1, sisi
 
 
 def deteksi_facecam(src, start: float, duration: float,
@@ -3452,7 +3497,8 @@ def deteksi_facecam(src, start: float, duration: float,
 
 
 def _facecam_dari_bingkai(bingkai, sw: int, sh: int,
-                          rasio_potongan: float = 1080 / 691) -> Optional[dict]:
+                          rasio_potongan: float = 1080 / 691,
+                          grad=None) -> Optional[dict]:
     """
     Inti pencarian facecam, dari bingkai yang SUDAH dibaca orang lain.
 
@@ -3487,7 +3533,20 @@ def _facecam_dari_bingkai(bingkai, sw: int, sh: int,
     for buf in bingkai:
         total += 1
         frame = np.frombuffer(buf, dtype=np.uint8).reshape((sh, sw, 3))
-        if total % 2 == 1:
+        # GRADIEN DIHITUNG DI SETIAP SAMPEL, bukan tiap sampel ganjil.
+        #
+        # Melewati separuh sampel dulu menghemat waktu saat jendelanya dua
+        # detik (16 sampel, 8 gradien). Sejak jendelanya dipersempit jadi 0,5
+        # detik — yang menaikkan akurasi letak dari 64,5% ke 91,6% — satu
+        # jendela cuma berisi 4 sampel, jadi lewatan itu meninggalkan 2
+        # gradien. Dan `_tepi_panel` di bawah menuntut sekurangnya 4.
+        #
+        # Akibatnya penajaman tepi panel MATI tanpa suara: tidak pernah
+        # dipanggil sejak jendelanya dipersempit, dan yang dilaporkan sebagai
+        # "panel" sejak itu hanyalah awan wajah yang dilebarkan. Itu yang
+        # dilihat pemiliknya, 1 Oktober 2026: panel 400x325 piksel dilaporkan
+        # 192x236 — "bingkai hijau pada video raw terlalu kecil".
+        if grad is None:
             abu = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY).astype(np.float32)
             gx = np.abs(np.diff(abu, axis=1))
             gy = np.abs(np.diff(abu, axis=0))
@@ -3574,6 +3633,27 @@ def _facecam_dari_bingkai(bingkai, sw: int, sh: int,
     cx = (x1 + x2) / 2
     cy = (y1 + y2) / 2
 
+    # Ukuran SATU kepala, bukan ukuran gabungan semua posisinya.
+    #
+    # `awan_kotak` di bawah adalah petak yang memuat seluruh wajah yang
+    # terlihat selama jendela ini. Selama orangnya diam itu memang sebesar
+    # kepalanya, tapi begitu ia bergerak — condong ke depan lalu bersandar,
+    # menoleh ke samping — petak itu melar sampai setinggi panelnya sendiri.
+    # Terukur pada klip LaperGang: kepala 15,7% x 51,6% bingkai, yaitu separuh
+    # tinggi layar untuk satu kepala. Potongan yang harus memuatnya lalu ikut
+    # melar sampai 105% lebar panel dan 101% tingginya — keluar dari facecam
+    # yang seharusnya ia potong. Dilaporkan pemiliknya 30 September 2026:
+    # "bingkai wajahnya terlalu besar melebihi facecam".
+    #
+    # Yang dipakai untuk membentuk potongan karena itu ukuran TENGAH satu
+    # deteksi, ditaruh di pusat awan. Kepala yang bergerak tetap tertangkap,
+    # karena pusatnya rata-rata, tapi potongannya tidak lagi sebesar seluruh
+    # jelajah gerakannya.
+    lebar_satu = _persentil([b - a for a, b in zip(kiri, kanan)], 0.5)
+    tinggi_satu = _persentil([b - a for a, b in zip(atas, bawah)], 0.5)
+    wajah_kotak = [(cx - lebar_satu / 2) * 100, (cy - tinggi_satu / 2) * 100,
+                   (cx + lebar_satu / 2) * 100, (cy + tinggi_satu / 2) * 100]
+
     # Potongan dibentuk dari petak wajahnya SAJA. `rasio_potongan` sengaja
     # tidak lagi dipakai untuk menentukan ukurannya.
     #
@@ -3596,18 +3676,58 @@ def _facecam_dari_bingkai(bingkai, sw: int, sh: int,
     x0 = min(max(cx - w_pot / 2, 0.0), max(0.0, 1.0 - w_pot))
     y0 = min(max(cy - h_pot / 2, 0.0), max(0.0, 1.0 - h_pot))
 
+    if grad is not None:
+        gx_jumlah, gy_jumlah, n_grad = grad
+    dari_tepi = False
+    sisi_tepi: set = set()
     if n_grad >= 4:
         tepi = _tepi_panel(gx_jumlah / n_grad, gy_jumlah / n_grad,
                            (x0, y0, x0 + w_pot, y0 + h_pot), (x1, y1, x2, y2))
         if tepi is not None:
-            x0, y0, xe, ye = tepi
+            x0, y0, xe, ye, sisi_tepi = tepi
             w_pot, h_pot = xe - x0, ye - y0
+            dari_tepi = True
 
+    # Panel yang SANGAT besar DILAPORKAN, bukan dibuang.
+    #
+    # Dulu jendela seperti ini mengembalikan None dengan alasan "ini bidikan
+    # kamera biasa, bukan gameplay". Akibatnya bukan penolakan yang rapi
+    # melainkan panel BASI: jendela tanpa facecam mewarisi letak jendela
+    # sebelumnya, jadi saat streamer membesarkan kameranya, bidang wajah justru
+    # menunjuk tempat facecam-nya yang LAMA — sudut ruangan gelap, atau balok
+    # permainan. Terlihat pada klip LaperGang detik 33, dan dilaporkan
+    # pemiliknya 30 September 2026 dengan tangkapan layarnya.
+    #
+    # Dan yang diminta pemiliknya untuk keadaan ini justru bukan bingkai game:
+    # "jika facecam nya membesar maka sorot saja mukanya". Panel sebesar ini
+    # adalah bukti terkuat untuk keputusan itu, jadi membuangnya berarti
+    # membuang justru sinyal yang paling berguna.
+    #
+    # Yang memutuskan klip ini gameplay atau bukan bukan di sini melainkan
+    # `jenis_klip`, dan `_wajah_pojok` sudah menolak wajah yang lebih lebar
+    # dari 14% bingkai. Jadi melaporkannya tidak membuat podcast berubah jadi
+    # klip game.
     if w_pot * h_pot > FACECAM_LUAS_MAKS:
-        log.info("Petak wajah %.0f%%x%.0f%% memakan %.0f%% bingkai, terlalu besar "
-                 "untuk panel facecam: ini bidikan kamera biasa, bukan gameplay",
+        log.info("Panel facecam BESAR: %.0f%%x%.0f%% memakan %.0f%% bingkai; "
+                 "dilaporkan supaya bidikannya jadi sorot wajah, bukan dibuang",
                  w_pot * 100, h_pot * 100, w_pot * h_pot * 100)
-        return None
+
+    # MARJIN AMAN: panel disusutkan sedikit sebelum dilaporkan.
+    #
+    # Aturan pemiliknya satu arah: "tidak boleh lebih bahkan hingga memotong
+    # sampai ke dalam bingkai game, tapi jika bingkai hanya kurang atau lebih
+    # kecil sedikit dari kotak facecam maka tidak masalah". Taksiran tepi yang
+    # meleset satu-dua persen ke luar karena itu jauh lebih mahal daripada yang
+    # meleset ke dalam, dan menyusutkan sedikit membuat kesalahan kecil selalu
+    # jatuh ke sisi yang murah.
+    #
+    # Hanya untuk kotak yang tepinya memang DITEMUKAN. Kotak tebakan sudah
+    # terlalu rapat ke wajahnya; menyusutkannya lagi hanya memperburuk.
+    if dari_tepi and w_pot > 0.02 and h_pot > 0.02:
+        mx = min(PANEL_AMAN * w_pot, 0.01)
+        my = min(PANEL_AMAN * h_pot, 0.01)
+        x0, y0 = x0 + mx, y0 + my
+        w_pot, h_pot = w_pot - 2 * mx, h_pot - 2 * my
 
     log.info("Facecam terdeteksi: %.0f%%x%.0f%% di (%.0f%%, %.0f%%), "
              "awan wajah %.2fx%.2f, %d deteksi dari %d sampel",
@@ -3619,13 +3739,75 @@ def _facecam_dari_bingkai(bingkai, sw: int, sh: int,
             # bidang tujuan, jadi ia bisa MELUAP keluar panel — memindai dari
             # sana berarti memulai di sisi permainan dan langsung salah arah.
             "awan_kotak": [x1 * 100, y1 * 100, x2 * 100, y2 * 100],
+            # Satu kepala berukuran khas di pusat awan. Inilah yang dipakai
+            # untuk membentuk potongan bidang wajah; lihat catatan di atas.
+            "wajah_kotak": wajah_kotak,
             "awan": [lebar_awan, tinggi_awan],
+            # Kotak ini TEMUAN tepi panel, bukan tebakan dari awan wajah.
+            #
+            # Bedanya dipakai `_warisi_tepi`: tepi panel kadang ketemu dan
+            # kadang tidak pada jendela yang bersebelahan di panel yang SAMA,
+            # dan jendela yang gagal jatuh ke tebakan yang jauh lebih kecil.
+            # Dua ukuran berganti-ganti di satu bidikan terbaca sebagai bingkai
+            # yang berkedip.
+            "dari_tepi": dari_tepi,
+            # Sisi MANA yang benar-benar ditemukan. Sebuah kotak bisa separuh
+            # temuan separuh tebakan — tepi atas dan bawah terbaca sementara
+            # tepi kanan kebetulan sewarna dengan gambar di sebelahnya — dan
+            # peminjaman di `_warisi_tepi` dikerjakan per sisi karena itu.
+            "tepi_sisi": sorted(sisi_tepi),
+            # Awan wajah jauh lebih besar daripada SATU kepala berarti isinya
+            # bukan satu kepala yang diam, melainkan dua letak yang berbeda —
+            # facecam yang berpindah di tengah jendela ini. Dipakai
+            # `deteksi_facecam_waktu` untuk memecah jendelanya; lihat di sana.
+            "awan_besar": bool(lebar_satu > 0 and tinggi_satu > 0
+                               and (lebar_awan > lebar_satu * AWAN_PECAH_KALI
+                                    or tinggi_awan > tinggi_satu * AWAN_PECAH_KALI)),
             # Berapa bagian sampel yang benar-benar memperlihatkan panel INI.
             # Dihitung per sampel, bukan per deteksi: satu sampel dengan dua
             # wajah di panel yang sama tetap satu sampel.
-            "kehadiran": len({q[0] for q in pilih}) / max(1, total)}
+            "kehadiran": len({q[0] for q in pilih}) / max(1, total),
+            # SELURUH deteksi wajah di jendela ini, (nomor sampel, x1, x2, y1, y2)
+            # dalam pecahan bingkai — termasuk yang tidak masuk gugus terpilih.
+            #
+            # BELUM DIPAKAI SIAPA PUN, dan sengaja ditinggalkan. Lihat catatan
+            # "menempelkan sampel ke panel" di bawah: percobaan memakainya untuk
+            # menentukan ulang waktu perpindahan menurunkan akurasi dari 75,1%
+            # ke 60,0%, jadi jalurnya dibuang. Muatan ini murah — deteksinya
+            # sudah dikerjakan di sini — dan percobaan berikutnya akan
+            # membutuhkannya lagi.
+            "deteksi": list(deteksi),
+            "n_sampel": total}
 
 
+# Panjang satu jendela pemindaian facecam, dalam detik.
+#
+# Turun dari 2,0 ke 0,5 pada 30 September 2026, dan inilah perubahan dengan
+# dampak terbesar pada akurasi bingkai game sejauh ini.
+#
+# Sebuah panel berlaku mulai dari awal jendela tempat ia ditemukan. Pada video
+# multi-POV yang facecam-nya berpindah tiap beberapa detik, jendela 2 detik
+# berarti panel bisa BASI selama dua detik penuh — dan saat basi ia tidak
+# meleset sedikit, ia menunjuk bagian layar yang sama sekali lain. Terlihat
+# pada klip LaperGang: detik 21 memakai panel detik 18 (menunjuk sudut gelap
+# ruangan) dan detik 33 memakai panel detik 29 (menunjuk balok Minecraft),
+# sementara facecam-nya besar dan jelas di tempat lain.
+#
+# Terukur pada empat klip, 1.456 sampel berwajah:
+#
+#   jendela 2,0 dtk -> 75,1% tepat, 363 meleset, 11,9 detik memindai
+#   jendela 1,0 dtk -> 85,2% tepat, 215 meleset, 11,1 detik
+#   jendela 0,5 dtk -> 88,7% tepat, 164 meleset, 10,7 detik
+#
+# Ongkosnya TIDAK bertambah karena deteksi wajah berjalan per bingkai; jumlah
+# jendela hanya memengaruhi pengelompokan yang murah.
+#
+# Dugaan bahwa 0,5 detik akan merugikan — karena `_tepi_panel` butuh empat
+# bingkai gradien sementara jendela sependek itu hanya memberi dua, sehingga
+# pencarian tepi panel tidak pernah jalan — TIDAK terbukti. Keuntungan dari
+# panel yang selalu segar lebih besar daripada kerugian dari tepi yang lebih
+# kasar. Satu dari empat klip memang turun (80,3% ke 77,2%); tiga lainnya naik
+# jauh.
 # Detik per potongan pemindaian facecam.
 #
 # Turun dari 8 ke 4 pada 27 September 2026. Video multi-POV berganti sumber
@@ -3644,11 +3826,227 @@ def _facecam_dari_bingkai(bingkai, sw: int, sh: int,
 # kiri). Jendela 4 detik menelan perpindahan itu bulat-bulat. Dua detik masih
 # 16 sampel pada 8 Hz, dan syarat kehadirannya dinaikkan (FACECAM_SENDIRI_MIN)
 # supaya jendela yang lebih pendek tidak berubah jadi bingkai yang gelisah.
-FACECAM_JENDELA = 2.0
+FACECAM_JENDELA = 0.5
 # Berapa bagian dua kotak harus bertindih untuk disebut panel yang SAMA.
 # 0,45 memisahkan kiri dari kanan dengan telak (tindihnya nol) sambil
 # memaafkan panel yang sama yang kotaknya bergeser beberapa persen.
 FACECAM_TINDIH_MIN = 0.45
+
+
+# Berapa bagian kotak wajah yang harus berada di dalam panel supaya wajah itu
+# dianggap MILIK panel tersebut. Deteksi wajah pada 128 piksel lebar memberi
+# kotak yang tepinya kasar, jadi menuntut 100% akan menolak wajah yang jelas
+# ada di dalam panelnya.
+MILIK_PANEL_MIN = 0.7
+# Dari sampel yang dicurigai jadi awal panel baru sampai akhir jendela, sebesar
+# ini harus setuju. Satu deteksi nyasar — wajah di dalam gambar permainan,
+# poster di dinding — tidak boleh memindahkan batas waktu.
+BATAS_SETUJU_MIN = 0.6
+# Batas tidak digeser lebih dekat dari ini ke batas sebelumnya, supaya penajaman
+# tidak melahirkan potongan sependek satu kedipan.
+BATAS_JARAK_MIN = 0.3
+# Batas dimajukan sejauh ini dari titik perpindahan yang terukur, dalam detik.
+# Satu sampel pada 8 Hz; cukup untuk membuat pergantian terasa mendahului
+# isinya, tidak cukup untuk terlihat sebagai potongan yang meleset.
+BATAS_MENDAHULUI = 0.125
+
+
+def _milik_panel(panel: dict, kotak: tuple[float, float, float, float]) -> bool:
+    """Apakah kotak wajah (x0, x1, y0, y1 dalam 0..1) berada di dalam `panel`?"""
+    x0, x1, y0, y1 = (v * 100.0 for v in kotak)
+    luas = max(1e-6, (x1 - x0) * (y1 - y0))
+    px, py = float(panel["x"]), float(panel["y"])
+    pw, ph = float(panel["w"]), float(panel["h"])
+    ix = max(0.0, min(x1, px + pw) - max(x0, px))
+    iy = max(0.0, min(y1, py + ph) - max(y0, py))
+    return (ix * iy) / luas >= MILIK_PANEL_MIN
+
+
+def _tajamkan_batas(ringkas: list[dict], hasil: list[dict], sama) -> None:
+    """
+    Memindahkan batas perpindahan panel ke SAMPEL tempat wajahnya benar-benar
+    berpindah, bukan ke awal jendela tempat perpindahannya baru terbaca.
+
+    Keluhan pemiliknya, dua kali: "bingkai wajah telat transisinya ke wajah
+    orang lain", lalu "perpindahan bingkai yang telat selama 1 detik".
+    Sebabnya mekanis, bukan salah baca. Satu panel berlaku mulai dari awal
+    jendela tempat ia ditemukan; bila facecam berganti di TENGAH jendela,
+    jendela itu masih dimenangkan panel yang lama, dan panel yang baru baru
+    muncul di jendela berikutnya. Jadi batasnya selalu terlambat, sampai
+    sepanjang satu jendela penuh.
+
+    Yang dikerjakan di sini hanya menggeser batas yang SUDAH ADA ke kiri.
+    Tidak ada batas yang dibuat, tidak ada yang dibuang, dan tiap sampel tetap
+    memakai panel yang dipilih pemindaian jendela. Itu bedanya dengan percobaan
+    `_tempel_ke_panel` yang dibuang (catatan di bawah): percobaan itu menugaskan
+    ULANG setiap sampel ke panel terdekat, sehingga panel yang sering terlihat
+    menyerap rentang milik panel lain.
+    """
+    letak = {id(h): i for i, h in enumerate(hasil)}
+    for k in range(1, len(ringkas)):
+        kini, dulu = ringkas[k], ringkas[k - 1]
+        i = letak.get(id(kini))
+        if i is None or i == 0:
+            continue
+        sebelum = hasil[i - 1]
+        # Jendela sebelum batas harus memang milik panel yang lama; bila bukan
+        # (ada jendela yang diabaikan di antaranya) tidak ada yang bisa diukur.
+        if not sebelum.get("facecam") or not sama(sebelum["facecam"], dulu["facecam"]):
+            continue
+        det = sebelum["facecam"].get("deteksi") or []
+        n = int(sebelum["facecam"].get("n_sampel") or 0)
+        if not det or n <= 1 or not sebelum.get("_lama"):
+            continue
+        dt = float(sebelum["_lama"]) / n
+        baru = kini["facecam"]
+        lama = dulu["facecam"]
+        # Sampel yang wajahnya ada di panel BARU dan tidak di panel lama.
+        pindah = sorted({int(d[0]) for d in det
+                         if _milik_panel(baru, d[1:]) and not _milik_panel(lama, d[1:])})
+        if not pindah:
+            continue
+        awal = pindah[0]
+        # Sejak sampel itu, mayoritas deteksi harus setuju. Tanpa syarat ini
+        # satu wajah di dalam gambar permainan sudah cukup untuk menarik
+        # batasnya jauh ke belakang.
+        sisa = [d for d in det if int(d[0]) >= awal]
+        setuju = sum(1 for d in sisa if _milik_panel(baru, d[1:]))
+        if not sisa or setuju / len(sisa) < BATAS_SETUJU_MIN:
+            continue
+        # Sampel ke-`awal` adalah yang PERTAMA memperlihatkan panel baru, jadi
+        # perpindahannya terjadi di suatu titik antara sampel sebelumnya dan
+        # sampel itu. Menaruh batas tepat di sampelnya berarti selalu terlambat,
+        # rata-rata setengah jarak sampel — 62 ms pada 8 sampel per detik.
+        # Titik tengahnya taksiran yang tidak berat sebelah.
+        t_baru = float(sebelum["t"]) + (awal - 0.5) * dt
+        # Lalu dimajukan sedikit lagi, dan itu disengaja.
+        #
+        # Terlambat dan terlalu cepat TIDAK sama beratnya di mata penonton.
+        # Bingkai yang berganti sesaat sebelum isinya berganti terbaca sebagai
+        # potongan yang rapi; yang berganti sesudahnya terbaca sebagai telat,
+        # karena mata sempat melihat bingkai lama memuat isi yang baru.
+        # Dilaporkan pemiliknya tiga kali, terakhir 1 Oktober 2026: "meskipun
+        # tidak sampai sedetik dan hanya beberapa milidetik tapi sudah sangat
+        # terasa". Cermin dari `MENDAHULUI` di services/sutradara.py, yang ada
+        # untuk alasan yang sama.
+        t_baru -= BATAS_MENDAHULUI
+        t_baru = max(t_baru, float(dulu["t"]) + BATAS_JARAK_MIN)
+        if t_baru < float(kini["t"]) - 0.05:
+            log.info("Batas facecam ditajamkan: %.2fs -> %.2fs", kini["t"], t_baru)
+            kini["t"] = round(t_baru, 2)
+
+
+# Panjang rentang yang dipakai menghitung gradien tepi panel, dalam detik.
+#
+# Dua detik terukur cukup: tepi panel yang benar naik dari 3,6x ke 8,8x median
+# jalurnya, dan uji garis lurusnya dari 59% ke 75%. Delapan detik tidak lebih
+# baik (4,1x) — gambar permainan yang bergerak jauh membuat seluruh jalur ikut
+# ramai, jadi median pembandingnya naik bersamaan.
+GRAD_RENTANG = 2.0
+
+
+class _BlokGradien:
+    """
+    Membagikan satu gradien rata-rata waktu kepada beberapa jendela berurutan.
+
+    Bingkai dibaca dari aliran yang sama seperti sebelumnya, hanya saja ia
+    ditarik per BLOK selebar `GRAD_RENTANG` detik. Gradien blok dihitung sekali,
+    lalu tiap jendela di dalamnya mengambil bingkainya sendiri dan memakai
+    gradien itu bersama-sama.
+    """
+
+    def __init__(self, milik, aliran, sw: int, sh: int):
+        self._aliran = aliran
+        self._sw, self._sh = sw, sh
+        self._sisa: list = []
+        self._grad = None
+
+    def _isi(self, butuh: int) -> None:
+        """Menarik satu blok baru, sekurangnya `butuh` bingkai."""
+        import numpy as np
+
+        n = max(butuh, int(round(GRAD_RENTANG * SAMPLE_FPS)))
+        self._sisa = list(itertools.islice(self._aliran, n))
+        self._grad = None
+        if len(self._sisa) < 4:
+            return
+        try:
+            import cv2
+        except Exception:                                # noqa: BLE001
+            return
+        gx = gy = None
+        for buf in self._sisa:
+            fr = np.frombuffer(buf, dtype=np.uint8).reshape((self._sh, self._sw, 3))
+            abu = cv2.cvtColor(fr, cv2.COLOR_BGR2GRAY).astype(np.float32)
+            a = np.abs(np.diff(abu, axis=1))
+            b = np.abs(np.diff(abu, axis=0))
+            gx = a if gx is None else gx + a
+            gy = b if gy is None else gy + b
+        self._grad = (gx, gy, len(self._sisa))
+
+    def ambil(self, n: int):
+        """`n` bingkai berikutnya, beserta gradien blok yang memuatnya."""
+        if len(self._sisa) < n:
+            # Sisa blok lama dibuang bersama gradiennya: jendela yang
+            # bingkainya datang dari dua blok akan memakai gradien salah satu
+            # saja, dan itu lebih membingungkan daripada menarik blok baru.
+            self._isi(n)
+        potong = self._sisa[:n]
+        self._sisa = self._sisa[n:]
+        return potong, self._grad
+
+
+# Seberapa besar bagian kotak tebakan yang harus berada di dalam kotak temuan
+# supaya keduanya dianggap panel yang sama.
+TEPI_WARIS_MIN = 0.85
+# Sejauh berapa jendela tetangga temuan tepi boleh dipinjam.
+TEPI_WARIS_JANGKAU = 4
+
+
+def _warisi_tepi(hasil: list[dict]) -> None:
+    """
+    Jendela yang tepi panelnya TIDAK ketemu meminjam kotak tetangga yang ketemu.
+
+    Tepi panel tidak selalu terbaca: bila sebuah sisi kebetulan sewarna dengan
+    gambar di sebelahnya, uji garis lurusnya gagal dan kotaknya jatuh ke tebakan
+    dari awan wajah — yang jauh lebih rapat ke wajahnya. Pada satu bidikan yang
+    sama itu berarti kotak 328 piksel dan kotak 192 piksel berganti-ganti tiap
+    setengah detik: terukur pada klip LaperGang, 18 bidikan untuk klip yang
+    panelnya sebenarnya cuma berpindah belasan kali.
+
+    Dicoba juga meminjam PER SISI, dengan alasan yang masuk akal — kegagalannya
+    memang per sisi. Hasilnya tidak lebih baik dan satu bidikan justru memburuk
+    (162 piksel jadi 120), jadi yang dipakai aturan yang lebih sederhana ini.
+
+    Yang meminjam hanya jendela yang kotaknya MEMANG di dalam kotak tetangga.
+    Kotak yang menonjol keluar berarti facecam yang berpindah, bukan tepi yang
+    gagal terbaca, dan di situ meminjam akan menarik bingkai ke panel yang salah.
+    """
+    n = len(hasil)
+    temuan = [i for i, h in enumerate(hasil)
+              if h.get("facecam") and h["facecam"].get("dari_tepi")]
+    if not temuan or len(temuan) == n:
+        return
+    dipinjam = 0
+    for i, h in enumerate(hasil):
+        f = h.get("facecam")
+        if not f or f.get("dari_tepi"):
+            continue
+        dekat = min(temuan, key=lambda j: abs(j - i))
+        if abs(dekat - i) > TEPI_WARIS_JANGKAU:
+            continue
+        g = hasil[dekat]["facecam"]
+        ix = max(0.0, min(f["x"] + f["w"], g["x"] + g["w"]) - max(f["x"], g["x"]))
+        iy = max(0.0, min(f["y"] + f["h"], g["y"] + g["h"]) - max(f["y"], g["y"]))
+        if (ix * iy) / max(1e-6, f["w"] * f["h"]) < TEPI_WARIS_MIN:
+            continue
+        # Kotaknya yang dipinjam; apa yang diukur jendela ini sendiri tentang
+        # WAJAHNYA — petak, kehadiran, awan — tetap miliknya.
+        h["facecam"] = {**f, "x": g["x"], "y": g["y"], "w": g["w"], "h": g["h"],
+                        "dari_tepi": True, "tepi_pinjam": True}
+        dipinjam += 1
+    if dipinjam:
+        log.info("Tepi panel dipinjamkan ke %d dari %d jendela", dipinjam, n)
 
 
 def deteksi_facecam_waktu(src, segments: list[dict], source_w: int, source_h: int,
@@ -3697,16 +4095,71 @@ def deteksi_facecam_waktu(src, segments: list[dict], source_w: int, source_h: in
         if not milik:
             continue
         aliran = _sample_frames(src, a, b - a, sw, sh)
+        # LETAK dicari per jendela pendek, TEPI PANEL dari rentang yang panjang.
+        #
+        # Dua pekerjaan dengan kebutuhan berlawanan, dan sebelum ini keduanya
+        # memakai jendela yang sama. Jendela 0,5 detik yang membuat LETAK akurat
+        # (64,5% -> 91,6%) justru membuat tepi panel tidak terlihat: dalam
+        # setengah detik gambar permainan hampir tidak bergerak, jadi garis-
+        # garisnya ikut bertahan saat dirata-rata dan tepi panel tidak lagi
+        # menonjol. Terukur pada klip LaperGang detik 3, kolom tepi panel yang
+        # benar (18,6% bingkai):
+        #
+        #   jendela 0,5 dtk :  3,6x median, garis utuh 59%  -> DITOLAK
+        #   jendela 2,0 dtk :  8,8x median, garis utuh 75%  -> diterima
+        #
+        # Yang ditolak itu menjatuhkan hasilnya ke kolom 13,4% — garis di DALAM
+        # gambar kameranya — dan panel selebar 357 piksel dilaporkan 168.
+        # Dilihat pemiliknya sebagai "bingkai hijau pada video raw terlalu
+        # kecil" (1 Oktober 2026).
+        #
+        # Jadi gradiennya dihitung sekali per BLOK beberapa detik, lalu dipakai
+        # bersama oleh semua jendela di dalam blok itu. Satu aliran ffmpeg yang
+        # sama, satu kali hitung gradien, dan letaknya tetap per setengah detik.
+        blok = _BlokGradien(milik, aliran, sw, sh)
         for t, mulai, panjang in milik:
             # Bingkai jendela ini saja. `fps` tetap, jadi jumlahnya bisa
             # dihitung, bukan ditebak.
             n = max(1, int(round(panjang * SAMPLE_FPS)))
-            potong_bingkai = list(itertools.islice(aliran, n))
+            potong_bingkai, grad = blok.ambil(n)
             fc = _facecam_dari_bingkai(iter(potong_bingkai), sw, sh,
-                                       rasio_potongan=rasio_potongan)
-            hasil.append({"t": round(t, 2), "facecam": fc})
+                                       rasio_potongan=rasio_potongan, grad=grad)
+            # Jendela yang isinya BERUBAH dipecah dua, bukan dirata-rata.
+            #
+            # Satu jendela dua detik yang di tengahnya POV berganti menghasilkan
+            # panel gabungan dua letak: bukan yang pertama, bukan yang kedua.
+            # Terukur pada klip LaperGang detik 12-14, dua facecam berbeda di
+            # satu jendela, dan panelnya dilaporkan 0-51% tinggi bingkai padahal
+            # keduanya cuma 30%. Akibatnya bidang wajah memuat sepotong
+            # permainan di atas kepala. Dilaporkan pemiliknya 30 September 2026:
+            # "terkadang bingkai tidak berpindah atau menyesuaikan posisi
+            # facecam dengan presisi".
+            #
+            # Memecah SEMUA jendela akan menggandakan ongkos pemindaian wajah,
+            # jadi yang dipecah hanya yang menunjukkan tandanya: awan wajah jauh
+            # lebih besar daripada satu kepala. Jendela yang tenang tidak
+            # membayar apa pun.
+            if fc and fc.get("awan_besar") and n >= 8:
+                tengah = n // 2
+                kiri = _facecam_dari_bingkai(iter(potong_bingkai[:tengah]), sw, sh,
+                                             rasio_potongan=rasio_potongan, grad=grad)
+                kanan = _facecam_dari_bingkai(iter(potong_bingkai[tengah:]), sw, sh,
+                                              rasio_potongan=rasio_potongan, grad=grad)
+                if kiri and kanan:
+                    hasil.append({"t": round(t, 2), "facecam": kiri,
+                                  "_lama": panjang * tengah / n})
+                    hasil.append({"t": round(t + panjang * tengah / n, 2),
+                                  "facecam": kanan,
+                                  "_lama": panjang * (n - tengah) / n})
+                    continue
+                # Satu paruh saja yang terbaca: itu pun lebih tepat daripada
+                # gabungan dua letak.
+                fc = kiri or kanan or fc
+            hasil.append({"t": round(t, 2), "facecam": fc, "_lama": panjang})
         # Sisa bingkai potongan ini dibuang bersama alirannya.
         aliran.close()
+
+    _warisi_tepi(hasil)
 
     # Isi potongan kosong dari tetangga terdekat (yang sebelumnya dulu).
     ada = [h for h in hasil if h["facecam"]]
@@ -3772,12 +4225,46 @@ def deteksi_facecam_waktu(src, segments: list[dict], source_w: int, source_h: in
                 continue
         ringkas.append(h)
     ringkas[0]["t"] = 0.0
+    _tajamkan_batas(ringkas, hasil, sama)
+    for h in hasil:
+        h.pop("_lama", None)
     if len(ringkas) > 1:
         log.info("Facecam berpindah dalam klip: %s", ", ".join(
             f"{h['t']:.0f}s→({h['facecam']['x']:.0f}%,{h['facecam']['y']:.0f}%)" for h in ringkas))
     return ringkas
 
 
+# ---------------------------------------------------------------------------
+# Catatan: menempelkan tiap sampel ke panel yang paling cocok
+#
+# Dicoba 30 September 2026 dan DIBUANG karena hasilnya lebih buruk. Ditulis di
+# sini supaya percobaan berikutnya berangkat dari sini, bukan dari nol.
+#
+# Alasannya kuat dan masih berlaku. Terukur pada empat klip LaperGang, 1.456
+# sampel berwajah: dari yang melesat, 20,6% punya panel yang BENAR di klip itu
+# juga — hanya saja panel itu aktif di rentang waktu yang lain. Cuma 8,8% yang
+# benar-benar tidak punya panel cocok. Sebabnya jelas: sebuah panel berlaku
+# mulai dari awal JENDELA dua detik tempat ia ditemukan, jadi facecam yang
+# berpindah di tengah jendela selalu terlambat sampai dua detik.
+#
+# Yang dicoba: untuk tiap sampel, pilih panel yang MEMUAT wajah pada sampel itu
+# (yang paling ketat bila ada beberapa), lalu pasang batas di tempat pilihan
+# itu berubah. Hasilnya akurasi TURUN dari 75,1% ke 60,0%, dan satu klip anjlok
+# dari 64,3% ke 34,9%.
+#
+# Sebab kegagalannya, sejauh yang sempat diukur: sampel yang tidak cocok dengan
+# panel MANA PUN dibuang begitu saja, dan batas potongannya lalu ditentukan
+# oleh sisa sampel yang kebetulan cocok. Pada klip multi-POV, panel yang sering
+# terlihat menang jumlah dan menyerap rentang milik panel lain. Dugaan awal
+# bahwa penyebabnya banyak wajah per sampel TIDAK terbukti: terukur satu
+# deteksi per sampel.
+#
+# Yang perlu dikerjakan percobaan berikutnya: memperlakukan sampel tak cocok
+# sebagai "tidak tahu" yang mewarisi tetangganya, bukan sebagai ketiadaan; dan
+# menguji terhadap keempat klip sekaligus, karena klip 1-3 justru membaik
+# sementara klip 4 runtuh. Bahannya sudah tersedia — `_facecam_dari_bingkai`
+# tetap mengembalikan `deteksi` per sampel.
+#
 # ---------------------------------------------------------------------------
 # Catatan: menajamkan kotak facecam jadi batas panel yang sebenarnya
 #

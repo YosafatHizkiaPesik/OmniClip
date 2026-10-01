@@ -102,11 +102,32 @@ class PanelDikelompokkan(unittest.TestCase):
     8 dari 11 jendela tidak terbaca sama sekali.
     """
 
-    def test_jendela_dipersempit(self):
-        """POV video multi-pemain berganti untuk dua detik lalu kembali."""
-        self.assertLessEqual(R.FACECAM_JENDELA, 2.0)
-        # Tapi tidak sampai kehilangan dasar: 16 sampel pada 8 Hz.
-        self.assertGreaterEqual(R.FACECAM_JENDELA * 8, 12)
+    def test_jendela_cukup_pendek_supaya_panel_tidak_basi(self):
+        """
+        Sebuah panel berlaku mulai dari awal jendela tempat ia ditemukan, jadi
+        panjang jendela ADALAH batas atas seberapa basi panel itu bisa jadi.
+        Pada video multi-POV yang facecam-nya berpindah tiap beberapa detik,
+        panel basi tidak meleset sedikit — ia menunjuk bagian layar yang sama
+        sekali lain.
+
+        Versi uji ini dulu juga menuntut MINIMAL 12 sampel per jendela, dengan
+        alasan "jangan sampai kehilangan dasar". Pengukuran 30 September 2026
+        membantah alasan itu, jadi tuntutannya dicabut: pada empat klip
+        LaperGang, 1.456 sampel berwajah,
+
+            jendela 2,0 dtk (16 sampel) -> 75,1% tepat, 363 meleset
+            jendela 1,0 dtk ( 8 sampel) -> 85,2% tepat, 215 meleset
+            jendela 0,5 dtk ( 4 sampel) -> 88,7% tepat, 164 meleset
+
+        Empat sampel memang dasar yang lebih tipis, dan `_tepi_panel` bahkan
+        tidak pernah jalan di jendela sependek itu. Panel yang selalu SEGAR
+        tetap lebih berharga daripada panel yang tepinya lebih rapi tapi
+        terlambat setengah detik.
+        """
+        self.assertLessEqual(R.FACECAM_JENDELA, 1.0)
+        # Satu sampel saja bukan jendela; harus ada beberapa untuk memastikan
+        # panelnya diam, bukan wajah yang kebetulan lewat satu bingkai.
+        self.assertGreaterEqual(R.FACECAM_JENDELA * R.SAMPLE_FPS, 3)
 
     def test_panel_yang_sama_diukur_dari_tumpang_tindih(self):
         with open(R.__file__, encoding="utf-8") as f:
