@@ -67,11 +67,34 @@ class ProfilUbah(BaseModel):
     unggah: Optional[UnggahModel] = None
 
 
+# Akun yang fotonya sudah pernah dicoba diambil pada proses ini. Pengambilan
+# yang gagal (jaringan mati, Google sedang menolak) tidak boleh diulang pada
+# tiap pemuatan halaman Akun.
+_foto_dicoba: set[int] = set()
+
+
+def _foto(p: dict, tersambung: bool) -> str:
+    """
+    Alamat foto akun Google, diambil sekali lalu disimpan di profilnya.
+
+    Diambil DI SINI, bukan hanya saat izin selesai: akun yang sudah tersambung
+    sejak sebelum kolom `foto` ada tidak akan pernah menyambung ulang, dan
+    tanpa pengambilan susulan ia selamanya tinggal berlencana huruf.
+    """
+    ada = (p.get("foto") or "").strip()
+    if ada or not tersambung or p["id"] in _foto_dicoba:
+        return ada
+    _foto_dicoba.add(p["id"])
+    from ..services import google_upload
+    return google_upload.simpan_foto(p["id"])
+
+
 def _lengkap(p: dict) -> dict:
     from ..services import google_upload
     st = google_upload.status(p["id"])
     return {
         **p,
+        "foto": _foto(p, st["connected"]),
         "folder_klip": str(layanan.folder_klip(p["id"])),
         "unggah": layanan.unggah(p["id"]),
         "google": {"connected": st["connected"], "email": st["email"]},

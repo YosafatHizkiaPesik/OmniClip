@@ -297,3 +297,96 @@ class IdentitasBawaan(unittest.TestCase):
 
     def test_status_menyebutkan_asalnya(self):
         self.assertIn("client_bawaan", gu.status())
+
+
+class IdentitasDipulihkanDariToken(unittest.TestCase):
+    """
+    Aplikasi yang sudah pernah didaftarkan tidak boleh lupa pendaftarannya.
+
+    Dilaporkan pemiliknya 1 Oktober 2026: halaman Akun menampilkan "Sebelum
+    akun pertama: daftarkan aplikasinya" — sepuluh menit langkah Google Cloud
+    Console — padahal di kartu sebelahnya tertulis "YouTube tersambung sebagai
+    entertainyhp@gmail.com". Terbukti di penyimpanannya: berkas OAuth client
+    memang tidak ada, sementara tokennya ada dan sah.
+
+    Yang hilang cuma berkasnya. `Credentials.to_json()` menyimpan `client_id`
+    dan `client_secret` di dalam token, jadi identitasnya masih ada di cakram.
+    """
+
+    def setUp(self):
+        import tempfile
+        from pathlib import Path
+
+        from app import config as cfg
+
+        self._id, self._rahasia = cfg.GOOGLE_CLIENT_ID, cfg.GOOGLE_CLIENT_SECRET
+        cfg.GOOGLE_CLIENT_ID = cfg.GOOGLE_CLIENT_SECRET = ""
+        self._simpan = Path(tempfile.mkdtemp()) / "klien.json"
+        self._ada = gu.CLIENT_SECRET_PATH.is_file()
+        if self._ada:
+            import shutil
+            shutil.move(str(gu.CLIENT_SECRET_PATH), str(self._simpan))
+
+    def tearDown(self):
+        from app import config as cfg
+        gu.CLIENT_SECRET_PATH.unlink(missing_ok=True)
+        if self._ada:
+            import shutil
+            shutil.move(str(self._simpan), str(gu.CLIENT_SECRET_PATH))
+        cfg.GOOGLE_CLIENT_ID, cfg.GOOGLE_CLIENT_SECRET = self._id, self._rahasia
+
+    def _token(self, folder="7", **tambahan):
+        import json as _json
+        from app.config import STORAGE_DIR
+        d = STORAGE_DIR / "akun" / folder
+        d.mkdir(parents=True, exist_ok=True)
+        isi = {"token": "x", "refresh_token": "y", "scopes": [],
+               "token_uri": "https://oauth2.googleapis.com/token",
+               "client_id": "pulih.apps.googleusercontent.com",
+               "client_secret": "RAHASIA-PULIH", **tambahan}
+        jalur = d / "google_token.json"
+        jalur.write_text(_json.dumps(isi), encoding="utf-8")
+        self.addCleanup(jalur.unlink, True)
+        return jalur
+
+    def test_tanpa_token_tetap_belum_siap(self):
+        self.assertFalse(gu.client_configured())
+
+    def test_token_memulihkan_identitasnya(self):
+        self._token()
+        self.assertTrue(gu.client_configured())
+        self.assertEqual(gu._client_config()["installed"]["client_id"],
+                         "pulih.apps.googleusercontent.com")
+
+    def test_berkasnya_ditulis_ulang_supaya_sekali_saja(self):
+        self._token()
+        gu.client_configured()
+        self.assertTrue(gu.CLIENT_SECRET_PATH.is_file())
+
+    def test_token_tanpa_rahasia_tidak_dipakai(self):
+        self._token(client_secret="")
+        self.assertFalse(gu.client_configured())
+
+    def test_bawaan_tetap_menang_atas_token(self):
+        """Identitas bawaan lebih dulu: token bisa saja milik project lama."""
+        from app import config as cfg
+        self._token()
+        cfg.GOOGLE_CLIENT_ID = "bawaan.apps.googleusercontent.com"
+        cfg.GOOGLE_CLIENT_SECRET = "RAHASIA-BAWAAN"
+        self.assertEqual(gu._client_config()["installed"]["client_id"],
+                         "bawaan.apps.googleusercontent.com")
+
+    def test_basis_data_tidak_disentuh(self):
+        """
+        Pemeriksaan identitas berjalan juga sebelum migrasi basis data selesai,
+        jadi ia membaca cakram saja. Versi pertama menanyakan tabel `profil`
+        dan melempar "no such table: profil".
+        """
+        import app.repos.profil as pr
+        asli = pr.semua
+        pr.semua = lambda: (_ for _ in ()).throw(AssertionError("basis data disentuh"))
+        try:
+            self._token()
+            self.assertTrue(gu.client_configured())
+        finally:
+            pr.semua = asli

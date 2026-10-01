@@ -75,6 +75,9 @@ async def callback(request: Request, state: str = "", error: str = ""):
         # penamaan pertama: akun yang dulu terlanjur mendapat folder bernomor
         # ikut dirapikan saat masuk lagi.
         profil_svc.folder_untuk_akun(pid, email)
+        # Foto akun untuk lencana profil. Gagalnya tidak menggagalkan apa pun:
+        # lencana huruf tetap ada sebagai jalan mundurnya.
+        google.simpan_foto(pid)
     except AppError as e:
         return _page("Gagal menyambungkan", e.message, ok=False)
     except Exception as e:  # noqa: BLE001, halaman ini tidak boleh 500

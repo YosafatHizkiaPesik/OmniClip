@@ -49,7 +49,7 @@ def sahkan(pid: int) -> None:
 
 def ubah(pid: int, **kolom) -> None:
     sah = {"nama": "nama", "warna": "warna", "folder_klip": "folder_klip",
-           "minat": "minat_json", "unggah": "unggah_json"}
+           "minat": "minat_json", "unggah": "unggah_json", "foto": "foto"}
     pasangan = []
     for k, v in kolom.items():
         if k not in sah or v is None:

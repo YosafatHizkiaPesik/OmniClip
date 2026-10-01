@@ -172,7 +172,7 @@ export default function TambahAkun({ card, sectionTitle, helpText, onSelesai }) 
           <Loader2 size={18} className="animate-spin" style={{ color: 'var(--reh)' }} />
           Menunggu izin dari Google
         </div>
-        <p style={helpText}>
+        <p className="bantu" style={helpText}>
           Pilih akun Google yang ingin Anda tambahkan di tab sebelah, lalu
           izinkan OmniClip mengunggah. Halaman ini akan memperbarui dirinya
           sendiri begitu Google selesai, dan akunnya muncul dengan nama surelnya.
@@ -202,7 +202,7 @@ export default function TambahAkun({ card, sectionTitle, helpText, onSelesai }) 
         <UserPlus size={18} style={{ color: 'var(--reh)' }} />
         Tambah akun
       </div>
-      <p style={helpText}>
+      <p className="bantu" style={helpText}>
         Tiap akun punya folder klip, riwayat pencarian, beranda, dan kanal
         YouTube-nya sendiri. Menambah akun berarti masuk dengan akun Google lain.
       </p>

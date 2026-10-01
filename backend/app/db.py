@@ -349,6 +349,24 @@ MIGRATIONS: list[str] = [
     """
     ALTER TABLE profil ADD COLUMN sementara INTEGER NOT NULL DEFAULT 0;
     """,
+    # Foto akun Google, supaya lencana profil bukan sekadar satu huruf besar.
+    #
+    # Diminta pemiliknya 1 Oktober 2026: "daripada profilenya logonya hanya
+    # huruf kapital saja mengapa tidak ambil informasi foto akun google".
+    #
+    # Tidak butuh izin tambahan. Alamat fotonya ada di `picture` pada jawaban
+    # `oauth2/v3/userinfo`, dan izin yang sudah dipegang OmniClip (`openid` dan
+    # `userinfo.email`) sudah cukup untuk membacanya — terbukti pada akun
+    # pemiliknya. Menambah izin `userinfo.profile` akan menuntut persetujuan
+    # ulang untuk setiap akun yang sudah tersambung, dan sebuah foto tidak
+    # sepadan dengan itu.
+    #
+    # Yang disimpan ALAMATNYA, bukan gambarnya: alamat lh3.googleusercontent.com
+    # bisa dibuka peramban langsung, dan foto yang diganti di akun Google ikut
+    # berganti tanpa OmniClip perlu tahu.
+    """
+    ALTER TABLE profil ADD COLUMN foto TEXT NOT NULL DEFAULT '';
+    """,
 ]
 
 

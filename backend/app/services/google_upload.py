@@ -161,7 +161,83 @@ def _client_config() -> Optional[dict]:
         except (OSError, json.JSONDecodeError) as e:
             log.warning("Berkas OAuth client tidak terbaca: %s", str(e)[:160])
     from ..config import google_bawaan
-    return google_bawaan()
+    bawaan = google_bawaan()
+    if bawaan is not None:
+        return bawaan
+    return _client_dari_token()
+
+
+def _client_dari_token() -> Optional[dict]:
+    """
+    Identitas aplikasi yang DIPULIHKAN dari token akun yang sudah tersambung.
+
+    Dilaporkan pemiliknya 1 Oktober 2026: halaman Akun menampilkan "Sebelum
+    akun pertama: daftarkan aplikasinya" lengkap dengan sepuluh menit langkah
+    Google Cloud Console, padahal di kartu sebelahnya tertulis "YouTube
+    tersambung sebagai entertainyhp@gmail.com". Dua kalimat itu tidak bisa
+    dua-duanya benar.
+
+    Yang hilang memang cuma BERKASNYA. `Credentials.to_json()` milik Google
+    menyimpan `client_id` dan `client_secret` di dalam token, jadi identitas
+    aplikasinya masih ada di cakram, hanya di tempat lain. Tanpa ini aplikasi
+    melupakan pendaftaran yang sudah dikerjakan dan memintanya diulang, dan
+    yang lebih buruk: unggahan berikutnya gagal menyegarkan token tanpa
+    menyebut sebabnya.
+
+    Hasilnya ditulis kembali ke `CLIENT_SECRET_PATH` supaya pemulihannya
+    terjadi sekali, bukan tiap kali halaman dibuka.
+
+    Dicatat sebagai klien "installed", karena token tidak menyimpan jenis
+    kliennya. Itu tidak mengubah alurnya: `redirect_uri()` selalu loopback
+    dengan port yang sedang dipakai, apa pun jenisnya. Yang hilang hanya
+    petunjuk "daftarkan alamat ini di Console" yang khusus untuk klien jenis
+    Web — dan klien Web yang tokennya ada di sini sudah pasti pernah
+    mendaftarkannya.
+    """
+    # Dibaca dari CAKRAM, bukan dari basis data.
+    #
+    # Fungsi ini dipanggil `client_configured()`, dan `client_configured()`
+    # dipanggil dari mana-mana — termasuk dari tempat yang berjalan sebelum
+    # migrasi basis data selesai. Menanyakan tabel `profil` di situ melempar
+    # "no such table: profil", dan pemeriksaan identitas yang MELEMPAR jauh
+    # lebih buruk daripada yang menjawab "belum ada". Nama foldernya sendiri
+    # sudah nomor profilnya, jadi basis datanya memang tidak diperlukan.
+    from ..config import STORAGE_DIR
+
+    akar = STORAGE_DIR / "akun"
+    try:
+        folder = sorted((d for d in akar.iterdir() if d.is_dir()),
+                        key=lambda d: d.name)
+    except OSError:
+        return None
+    for d in folder:
+        for jalur in sorted(d.glob("google_token*.json")):
+            try:
+                t = json.loads(jalur.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            cid, rahasia = t.get("client_id"), t.get("client_secret")
+            if not cid or not rahasia:
+                continue
+            cfg = {"installed": {
+                "client_id": cid,
+                "client_secret": rahasia,
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": t.get("token_uri") or "https://oauth2.googleapis.com/token",
+                "auth_provider_x509_cert_url":
+                    "https://www.googleapis.com/oauth2/v1/certs",
+            }}
+            try:
+                CLIENT_SECRET_PATH.parent.mkdir(parents=True, exist_ok=True)
+                CLIENT_SECRET_PATH.write_text(json.dumps(cfg, indent=2),
+                                              encoding="utf-8")
+                os.chmod(CLIENT_SECRET_PATH, 0o600)
+                log.info("Identitas aplikasi Google dipulihkan dari %s.", jalur.name)
+            except OSError as e:
+                # Tidak bisa ditulis bukan berarti tidak bisa dipakai.
+                log.warning("Identitas Google tidak bisa ditulis ulang: %s", str(e)[:160])
+            return cfg
+    return None
 
 
 def client_bawaan_dipakai() -> bool:
@@ -271,6 +347,47 @@ def _email_akun(creds) -> str:
     except Exception as e:                           # noqa: BLE001
         log.info("Alamat surel akun tidak terbaca: %s", str(e)[:160])
     return ""
+
+
+def foto_akun(pid: Optional[int] = None, layanan: str = "youtube") -> str:
+    """
+    Alamat foto akun Google, dari `picture` pada `oauth2/v3/userinfo`.
+
+    Dipakai untuk lencana profil, menggantikan satu huruf besar. Tidak butuh
+    izin tambahan: `openid` dan `userinfo.email` yang sudah dipegang OmniClip
+    sudah mengembalikan `picture`.
+
+    Mengembalikan "" bila gagal, dan itu bukan kegagalan yang perlu ditampilkan:
+    lencana huruf tetap ada sebagai jalan mundurnya.
+    """
+    creds = _load_credentials(pid, layanan)
+    if not creds:
+        return ""
+    try:
+        import requests
+        r = requests.get("https://www.googleapis.com/oauth2/v3/userinfo",
+                         headers={"Authorization": f"Bearer {creds.token}"},
+                         timeout=15)
+        if r.ok:
+            return str(r.json().get("picture") or "")
+        log.info("userinfo menjawab %s saat mengambil foto", r.status_code)
+    except Exception as e:                           # noqa: BLE001
+        log.info("Foto akun tidak terbaca: %s", str(e)[:160])
+    return ""
+
+
+def simpan_foto(pid: int) -> str:
+    """Mengambil foto akun lalu menyimpannya di profil. Diam bila gagal."""
+    from ..repos import profil as profil_repo
+
+    url = foto_akun(pid)
+    if not url:
+        return ""
+    try:
+        profil_repo.ubah(pid, foto=url)
+    except Exception as e:                           # noqa: BLE001
+        log.info("Foto akun tidak tersimpan: %s", str(e)[:160])
+    return url
 
 
 def _write_token(creds, pid: Optional[int] = None, layanan: str = "youtube") -> None:

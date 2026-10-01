@@ -19,15 +19,43 @@ const masukan = {
 };
 const WARNA = ['#E0473A', '#7C3AED', '#0EA5E9', '#16A34A', '#F59E0B', '#DB2777', '#475569'];
 
-/** Lingkaran berwarna dengan huruf depan nama profil. */
+/**
+ * Lencana profil: foto akun Google-nya, atau huruf depan namanya.
+ *
+ * Diminta pemiliknya 1 Oktober 2026: "daripada profilenya logonya hanya huruf
+ * kapital saja mengapa tidak ambil informasi foto akun google".
+ *
+ * Fotonya dimuat langsung dari lh3.googleusercontent.com, jadi satu permintaan
+ * memang keluar dari mesin ini. Yang dikirim cuma alamat gambarnya sendiri,
+ * tanpa kuki (`referrerPolicy="no-referrer"`), dan hanya untuk akun yang
+ * memang sudah tersambung ke Google atas kemauan pemiliknya.
+ *
+ * Huruf depannya TIDAK dibuang. Gambar yang gagal dimuat — luring, alamat
+ * kedaluwarsa, foto akun dihapus — jatuh kembali ke huruf, bukan ke lingkaran
+ * kosong.
+ */
 export function Lencana({ profil, ukuran = 26 }) {
+  const [gagal, setGagal] = React.useState(false);
+  const foto = (profil?.foto || '').trim();
+  React.useEffect(() => { setGagal(false); }, [foto]);
+  const dasar = {
+    width: ukuran, height: ukuran, borderRadius: '50%', flexShrink: 0,
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+    background: profil?.warna || '#E0473A', color: '#fff',
+    fontSize: ukuran * 0.46, fontWeight: 800, overflow: 'hidden',
+  };
+  if (foto && !gagal) {
+    return (
+      <span aria-hidden style={dasar}>
+        <img src={foto} alt="" width={ukuran} height={ukuran}
+             referrerPolicy="no-referrer" onError={() => setGagal(true)}
+             style={{ width: '100%', height: '100%', objectFit: 'cover',
+                      display: 'block' }} />
+      </span>
+    );
+  }
   return (
-    <span aria-hidden style={{
-      width: ukuran, height: ukuran, borderRadius: '50%', flexShrink: 0,
-      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-      background: profil?.warna || '#E0473A', color: '#fff',
-      fontSize: ukuran * 0.46, fontWeight: 800,
-    }}>
+    <span aria-hidden style={dasar}>
       {(profil?.nama || '?').trim().charAt(0).toUpperCase()}
     </span>
   );
@@ -151,10 +179,24 @@ export default function Profil() {
     }
   };
 
+  // Keterangan panjang dilipat secara BAWAAN.
+  //
+  // Halaman ini punya 2018 kata saat semuanya terbuka, dan hampir semuanya
+  // penjelasan yang hanya perlu dibaca sekali. Yang dipakai tiap hari cuma
+  // sakelar dan kotak isiannya. Pilihannya diingat, jadi yang memang ingin
+  // membaca tidak perlu menekannya berulang kali.
+  const [ringkas, setRingkas] = useState(
+    () => localStorage.getItem('omniclip_setelan_ringkas') !== '0');
+  const ubahRingkas = () => setRingkas((r) => {
+    const n = !r;
+    try { localStorage.setItem('omniclip_setelan_ringkas', n ? '1' : '0'); } catch { /* mode privat */ }
+    return n;
+  });
+
   if (!data) {
     return (
-      <div className="page" style={{ maxWidth: '780px' }}>
-        {galat ? <p style={helpText}>{galat}</p> : <Loader2 className="animate-spin" size={20} />}
+      <div className="page" style={{ maxWidth: '1280px' }}>
+        {galat ? <p className="bantu" style={helpText}>{galat}</p> : <Loader2 className="animate-spin" size={20} />}
       </div>
     );
   }
@@ -163,8 +205,8 @@ export default function Profil() {
   const u = draf?.unggah ?? {};
 
   return (
-    <div className="page" style={{ maxWidth: '780px' }}>
-      <div className="work-block">
+    <div className={`page${ringkas ? ' ringkas' : ''}`} style={{ maxWidth: '1280px' }}>
+      <div className="work-block" style={{ alignItems: 'center' }}>
         <div style={{ minWidth: 0 }}>
           <h1 className="work-title">Akun</h1>
           <div className="sub">
@@ -172,11 +214,16 @@ export default function Profil() {
             unggahannya sendiri, jadi satu akun bisa fokus pada satu jenis konten.
           </div>
         </div>
+        <button className="tombol-ringkas" onClick={ubahRingkas}
+                title={ringkas ? 'Tampilkan penjelasan tiap setelan'
+                               : 'Sembunyikan penjelasan, sisakan setelannya saja'}>
+          {ringkas ? 'Tampilkan penjelasan' : 'Ringkas'}
+        </button>
       </div>
 
-      <div className="plate" style={{ overflow: 'hidden' }}>
+      <div className="petak-setelan">
         {/* --- Semua profil --- */}
-        <div style={card}>
+        <div className="lebar" style={card}>
           <div style={sectionTitle}><UserRound size={18} style={{ color: 'var(--reh)' }} />Akun Anda</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '7px', marginTop: '8px' }}>
             {data.profil.map((p) => (
@@ -285,7 +332,7 @@ export default function Profil() {
             {/* --- Unggah otomatis --- */}
             <div style={card}>
               <div style={sectionTitle}><UploadCloud size={18} style={{ color: 'var(--reh)' }} />Unggah otomatis setelah render</div>
-              <p style={helpText}>
+              <p className="bantu" style={helpText}>
                 Klip yang selesai dirender langsung diantrekan ke akun Google profil ini, tetap
                 berjalan walau halaman Studio sudah ditutup. Unggahan diberi jeda antar video
                 supaya kanal tidak terlihat seperti bot.
@@ -338,12 +385,15 @@ export default function Profil() {
               </p>
             </div>
 
-            <div style={{ ...card, display: 'flex', gap: '10px', alignItems: 'center', borderBottom: 0 }}>
+            {/* Tindakan terakhir halaman ini, jadi ia selebar halaman, bukan
+                sebuah kartu yang kebetulan mendarat di kolom kanan. */}
+            <div className="lebar" style={{ ...card, display: 'flex', gap: '10px',
+                                            alignItems: 'center', borderBottom: 0 }}>
               <button className="btn-primary" onClick={simpanDraf} disabled={sibuk}>
                 {sibuk ? <Loader2 size={14} className="animate-spin" /> : null}
                 Simpan profil
               </button>
-              {simpan && <span style={helpText}>{simpan}</span>}
+              {simpan && <span className="bantu" style={helpText}>{simpan}</span>}
               {galat && <span style={{ ...helpText, color: 'var(--danger)' }}>{galat}</span>}
             </div>
           </>

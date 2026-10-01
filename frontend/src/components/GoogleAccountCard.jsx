@@ -143,7 +143,7 @@ export default function GoogleAccountCard({ card, sectionTitle, helpText }) {
         <UploadCloud size={18} style={{ color: 'var(--reh)' }} />
         Unggah ke Google Drive &amp; YouTube
       </div>
-      <p style={helpText}>
+      <p className="bantu" style={helpText}>
         Klip yang sudah jadi bisa dikirim langsung ke Drive atau naik sebagai
         video di kanal Anda, satu per satu, tidak pernah berombongan.{' '}
         <b>Keduanya disambungkan terpisah</b>, karena Google menolak izin YouTube
@@ -174,7 +174,7 @@ export default function GoogleAccountCard({ card, sectionTitle, helpText }) {
             <input ref={fileRef} type="file" accept="application/json,.json"
                    onChange={pickFile} style={{ display: 'none' }} />
             {!status.client_configured && (
-              <span style={helpText}>
+              <span className="bantu" style={helpText}>
                 Aplikasi Google belum didaftarkan. Lihat kartu <b>Tambah akun</b> di atas.
               </span>
             )}
