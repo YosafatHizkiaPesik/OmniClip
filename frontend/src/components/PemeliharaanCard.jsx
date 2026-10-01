@@ -116,7 +116,7 @@ export default function PemeliharaanCard({ card, sectionTitle, helpText }) {
       </div>
       {ruang ? (
         <>
-          <p style={helpText}>
+          <p className="bantu" style={helpText}>
             Terpakai {gb(ruang.total)}, sisa {gb(ruang.sisa_ruang)} di cakram ini.
           </p>
 
@@ -199,13 +199,13 @@ export default function PemeliharaanCard({ card, sectionTitle, helpText }) {
             Hitung ulang
           </button>
         </div>
-      ) : <p style={helpText}>Menghitung…</p>}
+      ) : <p className="bantu" style={helpText}>Menghitung…</p>}
 
       <div style={{ ...sectionTitle, marginTop: '20px' }}>
         <DatabaseBackup size={18} style={{ color: 'var(--reh)' }} />
         Cadangan basis data
       </div>
-      <p style={helpText}>
+      <p className="bantu" style={helpText}>
         Seluruh pekerjaan Anda (analisis, klip, transkrip, profil, dan setelan) ada
         di satu berkas. Cadangan dibuat dengan cara SQLite sendiri, bukan disalin
         begitu saja, supaya isinya utuh walau dibuat saat aplikasi sedang bekerja.

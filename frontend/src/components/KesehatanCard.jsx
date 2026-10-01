@@ -46,7 +46,7 @@ export default function KesehatanCard({ card, sectionTitle, helpText }) {
           {sibuk ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
         </button>
       </div>
-      <p style={helpText}>
+      <p className="bantu" style={helpText}>
         {data?.galat
           ? `${data.galat} Tekan ikon segarkan di kanan untuk memeriksa lagi.`
           : data

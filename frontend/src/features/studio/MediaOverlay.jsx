@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { beginRectDrag } from './rectDrag';
 
 /**
@@ -61,6 +61,12 @@ const SUDUT = [['nw', 0, 0], ['ne', 1, 0], ['sw', 0, 1], ['se', 1, 1]];
 
 function Lapis({ l, jenis, clipTime, playing, boxW, boxH, terpilih, onRect, onPilih }) {
   const ref = useRef(null);
+  // Pergeseran supaya tulisan tidak keluar kanvas, sama seperti kurungan
+  // `max(0,min(W-text_w,...))` di sisi render. Tanpa ini pratinjau memperlihatkan
+  // tulisan yang terpotong tepi layar untuk hasil render yang sebenarnya utuh,
+  // dan yang dipercaya orang adalah yang terlihat.
+  const teksRef = useRef(null);
+  const [geser, setGeser] = useState({ x: 0, y: 0 });
   const aktif = clipTime >= l.t && clipTime < l.t + (l.dur ?? 0);
   const posisiDalam = clipTime - l.t + (l.mulai_sumber ?? 0);
 
@@ -68,7 +74,7 @@ function Lapis({ l, jenis, clipTime, playing, boxW, boxH, terpilih, onRect, onPi
   // menyetel currentTime tiap bingkai membuat media tersendat terus.
   useEffect(() => {
     const el = ref.current;
-    if (!el || jenis === 'gambar') return;
+    if (!el || jenis === 'gambar' || jenis === 'teks') return;
     if (!aktif) { if (!el.paused) el.pause(); return; }
     // Berkas yang diulang berputar sendiri; tanpa ini pratinjau membeku di
     // bingkai terakhir sementara hasil rendernya berputar.
@@ -86,6 +92,25 @@ function Lapis({ l, jenis, clipTime, playing, boxW, boxH, terpilih, onRect, onPi
   }
 
   const petak = petakSisipan(l, boxW, boxH);
+  useLayoutEffect(() => {
+    if (jenis !== 'teks') return;
+    const el = teksRef.current;
+    if (!el || !boxW || !boxH) return;
+    const px0 = (petak.x / 100) * boxW;
+    const py0 = (petak.y / 100) * boxH;
+    const pw0 = (petak.w / 100) * boxW;
+    const ph0 = (petak.h / 100) * boxH;
+    const tw = el.scrollWidth;
+    const th = el.scrollHeight;
+    const mau_x = px0 + (pw0 - tw) / 2;
+    const mau_y = py0 + (ph0 - th) / 2;
+    const pas_x = Math.max(0, Math.min(boxW - tw, mau_x));
+    const pas_y = Math.max(0, Math.min(boxH - th, mau_y));
+    const dx = Math.round(pas_x - px0);
+    const dy = Math.round(pas_y - py0);
+    setGeser((lama2) => (lama2.x === dx && lama2.y === dy ? lama2 : { x: dx, y: dy }));
+  }, [jenis, boxW, boxH, petak.x, petak.y, petak.w, petak.h,
+      l.teks, l.ukuran, l.keluarga, l.tebal_garis, l.latar]);
   const px = (petak.x / 100) * boxW;
   const py = (petak.y / 100) * boxH;
   const pw = (petak.w / 100) * boxW;
@@ -99,9 +124,33 @@ function Lapis({ l, jenis, clipTime, playing, boxW, boxH, terpilih, onRect, onPi
     opacity: opasitasPada(l, clipTime),
     visibility: aktif ? 'visible' : 'hidden',
   };
-  const media = jenis === 'gambar'
-    ? <img src={url(l.aset)} alt="" style={gaya} />
-    : <video ref={ref} src={url(l.aset)} preload="auto" playsInline style={gaya} />;
+  // Sisipan TULISAN digambar di sini juga, supaya pratinjau menunjukkan apa
+  // yang akan dirender. Ukurannya dalam persen TINGGI kanvas, sama seperti
+  // `drawtext` di sisi render, jadi keduanya sebesar yang sama.
+  const media = jenis === 'teks'
+    ? (
+      <div ref={teksRef} style={{
+        ...gaya,
+        width: 'max-content', height: 'max-content',
+        left: `${px + geser.x}px`, top: `${py + geser.y}px`,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        textAlign: 'center', lineHeight: 1.15, whiteSpace: 'pre-wrap',
+        fontFamily: `'${l.keluarga || 'Archivo Black'}', sans-serif`,
+        fontSize: `${((l.ukuran ?? 4.5) / 100) * boxH}px`,
+        color: l.warna || '#fff',
+        WebkitTextStroke: (l.tebal_garis ?? 0) > 0
+          ? `${Math.max(1, (l.tebal_garis ?? 3) * boxH / 1920)}px ${l.garis || '#000'}`
+          : undefined,
+        paintOrder: 'stroke fill',
+        background: l.latar ? `${l.latar}8C` : 'transparent',
+        padding: l.latar ? '0.18em 0.35em' : 0,
+        borderRadius: l.latar ? '4px' : 0,
+        overflow: 'visible',
+      }}>{l.teks || ''}</div>
+    )
+    : jenis === 'gambar'
+      ? <img src={url(l.aset)} alt="" style={gaya} />
+      : <video ref={ref} src={url(l.aset)} preload="auto" playsInline style={gaya} />;
 
   if (!onRect) return media;
 

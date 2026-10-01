@@ -18,22 +18,28 @@ pembaruan yang sama berulang-ulang, selamanya.
 
 ANGKA MANA YANG DINAIKKAN:
 
-  - angka TENGAH bila ada yang baru bisa dilakukan pengguna — gaya judul baru,
-    rak pustaka baru, pembatas bingkai yang bisa diseret;
-  - angka TERAKHIR bila hanya memperbaiki yang sudah ada.
+  Naik SATU PER SATU di angka terakhir: 1.2.1, 1.2.2, 1.2.3, ... sampai 1.2.9.
+  Angka tengah baru naik sesudah angka terakhir habis, jadi setelah 1.2.9
+  barulah 1.3.0.
 
-Aturan ini ditulis 26 September 2026 sesudah pemiliknya bertanya kenapa versi
-sesudah 1.0.9 adalah 1.0.10 dan bukan 1.1. Pertanyaannya tepat: rilis itu
-membawa sepuluh gaya judul bergerak, tiga rak pustaka, dan pembatas bingkai
-game yang bisa diseret — semuanya hal baru, bukan perbaikan. Menaikkan angka
-terakhir saja mengecilkan isinya, dan orang yang melihat "1.0.8 -> 1.0.10"
-mengira ada dua perbaikan kecil.
+  Besar kecilnya isi rilis TIDAK menentukan. Rilis yang membawa fitur baru dan
+  rilis yang hanya memperbaiki sama-sama menaikkan satu angka terakhir.
+
+Aturan ini ditegaskan pemiliknya 29 September 2026, mengoreksi aturan
+sebelumnya yang ditulis di sini 26 September: "mengapa versi lompat ke 1.3
+bukan ke 1.2.3 dan seterusnya hingga 1.2.9 barulah setelah itu 1.3.0".
+
+Teguran pertamanya (26 September, kenapa sesudah 1.0.9 datang 1.0.10 dan bukan
+1.1) saya tafsirkan sebagai "angka tengah untuk fitur baru". Itu keliru: yang
+ia persoalkan adalah angka terakhir yang melewati sembilan, bukan besarnya isi
+rilis. 1.3.0 sudah telanjur terbit sebelum koreksi ini, jadi hitungan
+berikutnya berjalan dari sana: 1.3.1, 1.3.2, dan seterusnya.
 
 Pembandingnya numerik (lihat `sebagai_tuple`), jadi 1.0.10 memang lebih besar
 daripada 1.0.9 dan tidak ada yang rusak. Yang salah hanya penamaannya.
 """
 
-__version__ = "1.3.0"
+__version__ = "1.3.1"
 
 
 def sebagai_tuple(v: str) -> tuple[int, ...]:

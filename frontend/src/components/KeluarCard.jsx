@@ -37,7 +37,7 @@ export default function KeluarCard({ card, sectionTitle, helpText }) {
           <Power size={18} style={{ color: 'var(--entry)' }} />
           OmniClip berhenti
         </div>
-        <p style={helpText}>
+        <p className="bantu" style={helpText}>
           Tab ini boleh ditutup. Untuk memakainya lagi, buka OmniClip seperti biasa.
         </p>
       </div>
@@ -50,7 +50,7 @@ export default function KeluarCard({ card, sectionTitle, helpText }) {
         <Power size={18} style={{ color: 'var(--reh)' }} />
         Keluar
       </div>
-      <p style={helpText}>
+      <p className="bantu" style={helpText}>
         OmniClip berjalan di latar belakang selama komputer menyala. Itu yang
         membuat render dan unggahan tetap jalan walau tab ini ditutup. Menutup
         tab saja TIDAK mematikannya; tombol inilah yang mematikannya.

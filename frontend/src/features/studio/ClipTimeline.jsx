@@ -2,6 +2,7 @@ import React, {
   useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState,
 } from 'react';
 import { Crosshair, Scissors, Wand2, ZoomIn, ZoomOut } from 'lucide-react';
+import BilahGeser from './BilahGeser';
 import { formatTime, formatTimeFine } from '../../utils/timeFormat';
 import {
   frameInk, MODE_BINGKAI, modeBingkai, personSpans, presentPeople,
@@ -413,12 +414,55 @@ export default function ClipTimeline({
     const el = scrollRef.current;
     if (!el) return undefined;
     const onWheel = (e) => {
-      if (!e.ctrlKey && !e.metaKey) return;
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        zoomStep(e.deltaY < 0 ? 1 : -1);
+        return;
+      }
+      // Roda biasa MENGGESER linimasa ke kiri dan kanan.
+      //
+      // Linimasa hanya bisa digulung mendatar, dan roda tetikus memutar tegak,
+      // jadi tanpa ini roda tidak melakukan apa-apa di sini dan satu-satunya
+      // cara berpindah waktu adalah menyeret bilah gulung setinggi sepuluh
+      // piksel. Pada zoom 8x bilah itu tinggal beberapa piksel lebarnya.
+      // Terlapor pemiliknya 30 September 2026.
+      const maju = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+      if (!maju) return;
       e.preventDefault();
-      zoomStep(e.deltaY < 0 ? 1 : -1);
+      el.scrollLeft += maju;
     };
     el.addEventListener('wheel', onWheel, { passive: false });
-    return () => el.removeEventListener('wheel', onWheel);
+
+    // Menyeret dengan tombol TENGAH menggeser linimasa, seperti tangan di peta.
+    // Berguna pada zoom tinggi, saat jarak yang ingin ditempuh lebih panjang
+    // daripada beberapa putaran roda.
+    let seret = null;
+    const turun = (e) => {
+      if (e.button !== 1) return;
+      e.preventDefault();
+      seret = { x: e.clientX, kiri: el.scrollLeft };
+      el.classList.add('menggeser');
+    };
+    const gerak = (e) => {
+      if (!seret) return;
+      el.scrollLeft = seret.kiri - (e.clientX - seret.x);
+    };
+    const naik = () => { seret = null; el.classList.remove('menggeser'); };
+    el.addEventListener('pointerdown', turun);
+    window.addEventListener('pointermove', gerak);
+    window.addEventListener('pointerup', naik);
+    // Klik tengah di Linux menempelkan teks pilihan; di sini itu bukan yang
+    // dimaksud pengguna.
+    const tanpaAuxClick = (e) => { if (e.button === 1) e.preventDefault(); };
+    el.addEventListener('auxclick', tanpaAuxClick);
+
+    return () => {
+      el.removeEventListener('wheel', onWheel);
+      el.removeEventListener('pointerdown', turun);
+      window.removeEventListener('pointermove', gerak);
+      window.removeEventListener('pointerup', naik);
+      el.removeEventListener('auxclick', tanpaAuxClick);
+    };
   }, [zoomStep]);
 
   /* ── Arah bingkai sebagai potongan ─────────────────────────────────────
@@ -1122,6 +1166,7 @@ export default function ClipTimeline({
             )}
           </div>
         </div>
+        <BilahGeser bagi={scrollRef} penanda={laneW} />
       </div>
 
       {frameAiming && hadir.length <= 1 && (

@@ -51,7 +51,7 @@ export default function WarnaPenuturCard({ card, sectionTitle, helpText }) {
         <Palette size={18} style={{ color: 'var(--reh)' }} />
         Warna subtitle per penutur
       </div>
-      <p style={helpText}>
+      <p className="bantu" style={helpText}>
         Memberi tiap orang di video warna subtitle sendiri. <strong>Mati</strong>{' '}
         sejak 24 September 2026, dan bukan karena belum sempat dikerjakan:
         pemisahan penuturnya sudah diukur dan belum cukup tepat. Pada podcast
@@ -62,7 +62,7 @@ export default function WarnaPenuturCard({ card, sectionTitle, helpText }) {
         yaitu warna yang berganti di tengah kalimat orang yang sama. Satu warna
         yang tidak pernah salah lebih baik daripada itu.
       </p>
-      <p style={helpText}>
+      <p className="bantu" style={helpText}>
         Menyalakannya tetap boleh, misalnya untuk wawancara dua orang dengan
         suara yang jelas berbeda, atau bila Anda bersedia membetulkan sendiri
         label penuturnya di tab Subtitle. Deteksi penutur tetap berjalan meski
@@ -77,7 +77,7 @@ export default function WarnaPenuturCard({ card, sectionTitle, helpText }) {
         <input type="checkbox" checked={aktif === true} disabled={aktif === null || sibuk}
                onChange={(e) => ubah(e.target.checked)}
                style={{ marginTop: '3px', width: '16px', height: '16px', accentColor: 'var(--reh)' }} />
-        <span style={helpText}>
+        <span className="bantu" style={helpText}>
           <strong style={{ color: 'var(--text-primary)' }}>
             Bedakan warna subtitle tiap penutur.
           </strong>{' '}

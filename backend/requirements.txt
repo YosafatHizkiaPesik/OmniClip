@@ -93,3 +93,6 @@ google-auth-oauthlib>=1.2
 # pengganti.
 piper-tts==1.8.0
 edge-tts
+# Menyamar sebagai peramban saat mengambil suara dari papan suara.
+# Tanpa ini Cloudflare menjawab 403, dan services/soundboard.py tidak bekerja.
+curl_cffi>=0.7

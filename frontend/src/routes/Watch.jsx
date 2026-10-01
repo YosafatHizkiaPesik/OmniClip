@@ -50,6 +50,28 @@ export default function Watch() {
 
   const [queueing, setQueueing] = useState(false);
   const [pending, setPending] = useState(null);
+  // Resolusi sumber untuk mengklip. Diingat antar video: yang memilih 4K
+  // sekali biasanya memang menginginkannya lagi.
+  const [mutu, setMutu] = useState(
+    () => localStorage.getItem('omniclip_mutu_klip') || '');
+  const [pilihMutu, setPilihMutu] = useState(null);   // {pilihan, minutes, hasCaptions}
+  const [mutuDipilih, setMutuDipilih] = useState(false);
+
+  /** Memilih resolusi lalu melanjutkan ke pemeriksaan subtitle. */
+  const pakaiMutu = (nilai) => {
+    setMutu(nilai);
+    try { localStorage.setItem('omniclip_mutu_klip', nilai); } catch { /* mode privat */ }
+    const info = pilihMutu;
+    setPilihMutu(null);
+    setMutuDipilih(true);
+    // Video panjang tanpa subtitle tetap ditanyakan sesudah ini.
+    if (info && !info.hasCaptions && info.minutes > 12) {
+      setPending({ minutes: info.minutes, fast: Math.ceil(info.minutes * 0.3) });
+      return;
+    }
+    setQueueing(true);
+    startClip(nilai);
+  };
   const [notice, setNotice] = useState(null);
 
   useEffect(() => { window.scrollTo({ top: 0 }); }, [videoId]);
@@ -87,12 +109,19 @@ export default function Watch() {
     return () => { cancelled = true; };
   }, [video?.title, video?.channel, videoId]);
 
-  const startClip = useCallback(async () => {
+  // `mutuPakai` diberikan saat resolusinya BARU SAJA dipilih: keadaan React
+  // belum tentu terbarui saat pemanggilnya berjalan, dan mengandalkannya
+  // berarti video pertama sesudah memilih tetap memakai resolusi yang lama.
+  const startClip = useCallback(async (mutuPakai) => {
+    const mutuFinal = typeof mutuPakai === 'string' ? mutuPakai : mutu;
     setPending(null);
     setQueueing(true);
     try {
       const res = await apiPost('/auto-clip', {
         video_id: videoId,
+        // Resolusi sumber yang diunduh untuk diklip. Dipilih di kotak sebelum
+        // tombolnya, dan diingat untuk video berikutnya.
+        ...(mutuFinal ? { quality: mutuFinal } : {}),
         // 0 = biarkan server menghitungnya dari durasi video. Angka tetap 8
         // memperlakukan podcast dua jam sama dengan video sepuluh menit.
         max_clips: Number(localStorage.getItem('omniclip_max_clips') || 0),
@@ -111,14 +140,35 @@ export default function Watch() {
     } finally {
       setQueueing(false);
     }
-  }, [videoId]);
+  }, [videoId, mutu]);
 
+  /**
+   * Menanyakan resolusi sumber SEBELUM mengklip.
+   *
+   * Sampai 29 September 2026 resolusinya dipatok 1080p tanpa bisa dipilih.
+   * Angka itu benar untuk kebanyakan klip 9:16 dan jauh lebih murah didekode,
+   * tapi pemiliknya melihat mutunya menurun pada sumber yang aslinya lebih
+   * tinggi. Yang benar bukan mengganti patokannya, melainkan menanyakannya:
+   * klip wajah dari podcast 4K memang pantas diambil dari 4K, dan klip gameplay
+   * 1080p tidak akan membaik walau sumbernya dipaksa lebih tinggi.
+   *
+   * Daftarnya datang dari format yang BENAR-BENAR ditawarkan video itu, jadi
+   * tidak pernah menjanjikan 1080p pada video yang maksimal 480p.
+   */
   const handleClip = async () => {
     if (queueing) return;
     setNotice(null);
     setQueueing(true);
     try {
       const info = await apiGet(`/video-info?url=${encodeURIComponent(videoId)}`);
+      const pilihan = (info.available_resolutions || [])
+        .filter((r) => !/audio/i.test(r));
+      if (pilihan.length > 1 && !mutuDipilih) {
+        setPilihMutu({ pilihan, minutes: (info.duration || 0) / 60,
+                       hasCaptions: info.has_captions });
+        setQueueing(false);
+        return;
+      }
       const minutes = (info.duration || 0) / 60;
       // Video panjang tanpa subtitle harus disalin ucapannya di CPU. Ini satu-
       // satunya pilihan yang tetap ditanyakan di sini, karena hanya muncul saat
@@ -231,6 +281,40 @@ export default function Watch() {
             </div>
 
           </div>
+
+          {pilihMutu && (
+            <div style={{
+              marginTop: '14px', padding: '14px 16px', background: 'var(--bg-card)',
+              border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)',
+            }}>
+              <div style={{ fontSize: '0.92rem', fontWeight: 800, marginBottom: '4px' }}>
+                Ambil sumbernya di resolusi berapa?
+              </div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)',
+                            lineHeight: 1.6, marginBottom: '12px' }}>
+                Klip 9:16 memotong bagian tengah gambar, jadi sumber yang lebih tinggi
+                berarti klip yang lebih tajam. Bayarannya: berkasnya jauh lebih besar,
+                dan di atas 1080p YouTube hampir selalu memakai VP9 atau AV1 yang jauh
+                lebih berat didekode komputer ini.
+              </div>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '10px' }}>
+                {pilihMutu.pilihan.map((r) => {
+                  const bawaan = r === '1080p';
+                  return (
+                    <button key={r} onClick={() => pakaiMutu(r)}
+                            className={bawaan ? 'btn-primary' : 'btn-secondary'}
+                            style={{ fontSize: '0.82rem' }}>
+                      {r}{bawaan ? ' · disarankan' : ''}
+                    </button>
+                  );
+                })}
+              </div>
+              <button className="btn-secondary" style={{ fontSize: '0.78rem' }}
+                      onClick={() => { setPilihMutu(null); setQueueing(false); }}>
+                Batal
+              </button>
+            </div>
+          )}
 
           {pending && (
             <div style={{

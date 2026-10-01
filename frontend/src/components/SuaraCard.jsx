@@ -51,7 +51,7 @@ export default function SuaraCard({ card, sectionTitle, helpText }) {
         <AudioLines size={18} style={{ color: 'var(--reh)' }} />
         Perapian suara
       </div>
-      <p style={helpText}>
+      <p className="bantu" style={helpText}>
         Dikerjakan saat render, pada suara klipnya saja. Berkas sumbernya tidak
         disentuh.
       </p>

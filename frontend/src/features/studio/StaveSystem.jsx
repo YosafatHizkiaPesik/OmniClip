@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ZoomIn, ZoomOut } from 'lucide-react';
+import BilahGeser from './BilahGeser';
 import { formatTime, formatTimeFine } from '../../utils/timeFormat';
 import { contrastRatio } from '../../lib/contrast';
 
@@ -210,29 +211,52 @@ export default function StaveSystem({
   }, [videoRef, duration, span, nSystems]);
 
   /**
-   * Balok dinamika: simpangan dari rata-rata, digambar dari garis tengah.
+   * Dinamika: simpangan dari rata-rata, digambar sebagai gelombang.
    *
-   * Bukan gelombang amplitudo — itu justru timeline gelombang tunggal yang
-   * ditolak layar ini, hanya dipindah ke baris bawah. Yang dibaca konduktor
-   * dari partitur adalah dinamika: di mana suaranya naik di atas kebiasaan,
-   * di mana ia turun. Itu z-skor, dan itulah yang dipakai mesin pemilih klip.
+   * Bukan gelombang amplitudo mentah — yang dibaca dari partitur adalah
+   * dinamika: di mana suaranya naik di atas kebiasaan, di mana ia turun. Itu
+   * z-skor, dan itulah yang dipakai mesin pemilih klip.
+   *
+   * Dulu bentuknya 320 batang untuk SELURUH rekaman, berapa pun perbesarannya.
+   * Pada rekaman 38 menit yang diperbesar 32x, jendelanya memuat sekitar 70
+   * detik — yaitu sepuluh batang yang direntang selebar layar, dan lajurnya
+   * terbaca kosong. Terlapor pemiliknya 30 September 2026: "saya zoom ke detik
+   * tapi dinamika atau suaranya tidak ada".
+   *
+   * Jadi yang disimpan di sini hanya z-skor per bak, satu per satu. Yang
+   * memutuskan berapa banyak yang digambar adalah lebar papan, bukan angka
+   * tetap: makin diperbesar, makin banyak bak yang masuk layar.
    */
   const dynamics = useMemo(() => {
     if (!peaks?.length) return [];
+    // TINGGI = KERAS. Tidak ada arti kedua yang perlu dihafal.
+    //
+    // Versi pertama menggambar z-skor: simpangan dari rata-rata rekaman.
+    // Bacaannya "ke atas berarti lebih keras dari biasanya", dan bagi mata itu
+    // tidak bisa dibedakan dari gelombang suara biasa — apalagi batangnya
+    // digambar simetris ke atas DAN ke bawah, sehingga momen yang lebih SEPI
+    // dari rata-rata tergambar setinggi momen yang keras. Pemiliknya
+    // menangkapnya sendiri, 30 September 2026: "ada yang tinggi tapi saat saya
+    // dengar suaranya biasa saja lalu ada yang rendah tapi suaranya cukup
+    // tinggi". Ia benar, dan lajur yang harus dijelaskan dua kalimat sebelum
+    // bisa dibaca memang gagal sebagai lajur.
+    //
+    // Jadi tingginya sekarang KERAS SUARANYA, seperti di editor video mana pun.
+    // Acuannya persentil ke-98, bukan puncak tertinggi: satu dentuman sesaat
+    // di satu tempat kalau dipakai sebagai acuan membuat seluruh sisa rekaman
+    // tergambar rata di dasar.
+    const urut = [...peaks].sort((a, b) => a - b);
+    const acuan = urut[Math.floor(urut.length * 0.98)] || urut[urut.length - 1] || 1;
     const mean = peaks.reduce((a, b) => a + b, 0) / peaks.length;
-    const sd = Math.sqrt(peaks.reduce((a, b) => a + (b - mean) ** 2, 0) / peaks.length) || 1;
-    const N = 320;
-    const out = [];
-    const chunk = peaks.length / N;
-    for (let i = 0; i < N; i += 1) {
-      let sum = 0;
-      let n = 0;
-      for (let j = Math.floor(i * chunk); j < Math.floor((i + 1) * chunk); j += 1) {
-        sum += peaks[j]; n += 1;
-      }
-      out.push(Math.max(-1, Math.min(1, ((sum / (n || 1)) - mean) / (sd * 2))));
-    }
-    return out;
+    const sd = Math.sqrt(
+      peaks.reduce((a, b) => a + (b - mean) ** 2, 0) / peaks.length) || 1;
+    // `tinggi` menggambar bentuknya; `keras` hanya memilih warnanya, supaya
+    // momen yang benar-benar di atas kebiasaan — yang dicari mesin pemilih
+    // klip — tetap bisa dikenali tanpa mengubah arti tingginya.
+    return peaks.map((v) => ({
+      tinggi: Math.max(0, Math.min(1, v / acuan)),
+      keras: (v - mean) / sd > 0.8,
+    }));
   }, [peaks]);
 
   /**
@@ -385,6 +409,114 @@ export default function StaveSystem({
   // Lebar tergambar per sistem, dalam piksel. Kolom nama tidak ikut memanjang —
   // ia tetap menempel di kiri sementara baloknya yang berjalan di bawahnya.
   const boardW = Math.max(320, width - 4) * zoom;
+
+  /**
+   * Gelombang dinamika digambar di KANVAS SELEBAR LAYAR, bukan selebar papan.
+   *
+   * Dua alasan, dan keduanya muncul saat diperbesar. Pertama, pada perbesaran
+   * tertinggi papannya 85.000 piksel lebar — di atas batas lebar kanvas
+   * peramban, dan yang keluar bukan gambar melainkan galat. Kedua, satu elemen
+   * per bak berarti puluhan ribu simpul DOM yang ditata ulang tiap kali
+   * linimasa digulung.
+   *
+   * Jadi kanvasnya menempel di kiri jendela (`position: sticky`) dan hanya
+   * selebar jendela itu, lalu digambar ulang tiap kali digulung — yang
+   * dilakukan editor video mana pun. Ketajamannya tidak pernah berkurang
+   * seberapa pun diperbesar, karena yang digambar selalu hanya bagian yang
+   * benar-benar terlihat.
+   *
+   * Bentuknya batang penuh yang tumbuh dari garis tengah ke atas dan ke bawah,
+   * bentuk yang sama yang dipakai editor video, jadi ia terbaca tanpa perlu
+   * dijelaskan.
+   */
+  const dynRefs = useRef([]);
+  const gambarDyn = useCallback(() => {
+    dynRefs.current.forEach((cv, sys) => {
+      if (!cv) return;
+      const sc = scrollRefs.current[sys];
+      // Lebarnya disetel dari jendela gulungnya, bukan dari papannya. CSS tidak
+      // bisa menyatakan "selebar induk yang menggulung" untuk anak yang berada
+      // di dalam isi yang jauh lebih lebar.
+      if (sc) cv.style.width = `${Math.round(sc.clientWidth)}px`;
+      const lebar = Math.max(1, Math.round(cv.clientWidth));
+      const tinggi = Math.max(1, Math.round(cv.clientHeight));
+      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      if (cv.width !== Math.round(lebar * dpr)) cv.width = Math.round(lebar * dpr);
+      if (cv.height !== Math.round(tinggi * dpr)) cv.height = Math.round(tinggi * dpr);
+      const g = cv.getContext('2d');
+      if (!g) return;
+      const gaya = getComputedStyle(cv);
+      g.setTransform(dpr, 0, 0, dpr, 0, 0);
+      g.clearRect(0, 0, lebar, tinggi);
+      const tengah = Math.round(tinggi / 2);
+
+      // Garis tengah: rata-rata rekaman ini.
+      g.fillStyle = gaya.getPropertyValue('--dyn-rule') || '#c9c9c9';
+      g.fillRect(0, tengah, lebar, 1);
+      if (!dynamics.length || !sc) return;
+
+      // Jendela waktu yang benar-benar terlihat, dari posisi gulungnya.
+      const papan = Math.max(1, sc.scrollWidth);
+      const kiri = sc.scrollLeft / papan;
+      const kanan = Math.min(1, (sc.scrollLeft + sc.clientWidth) / papan);
+      const awal = (sys * span + kiri * span) / (duration || 1);
+      const akhir = (sys * span + kanan * span) / (duration || 1);
+      const i0 = Math.max(0, Math.floor(awal * dynamics.length));
+      const i1 = Math.min(dynamics.length, Math.max(i0 + 1, Math.ceil(akhir * dynamics.length)));
+
+      const naik = gaya.getPropertyValue('--dyn-naik') || '#3c3c3c';
+      const turun = gaya.getPropertyValue('--dyn-turun') || '#9a9a9a';
+      // Satu batang per PIKSEL. Bila baknya lebih rapat daripada pikselnya,
+      // yang digambar nilai TERKUAT di piksel itu, supaya puncak tidak hilang
+      // karena kebetulan jatuh di antara dua piksel. Bila lebih renggang,
+      // batangnya melebar sendiri mengikuti lebar satu bak.
+      const perPiksel = (i1 - i0) / lebar;
+      let x = 0;
+      while (x < lebar) {
+        const a = i0 + Math.floor(x * perPiksel);
+        const b = Math.max(a + 1, i0 + Math.floor((x + 1) * perPiksel));
+        let tinggi = 0;
+        let keras = false;
+        for (let i = a; i < b && i < dynamics.length; i += 1) {
+          if (dynamics[i].tinggi > tinggi) tinggi = dynamics[i].tinggi;
+          if (dynamics[i].keras) keras = true;
+        }
+        // Lebar satu bak dalam piksel, minimal satu.
+        const w = Math.max(1, Math.round(1 / Math.max(1e-6, perPiksel)));
+        if (tinggi > 0) {
+          const h = Math.max(1, tinggi * (tengah - 1));
+          // Simetris ke atas dan ke bawah, seperti gelombang di editor video.
+          // Di sini simetri itu BENAR, karena yang digambar amplitudo dan
+          // amplitudo memang punya dua sisi — bukan seperti dulu, saat yang
+          // digambar simpangan bertanda dan simetrinya menghapus tandanya.
+          g.fillStyle = keras ? naik : turun;
+          g.fillRect(x, tengah - h, Math.max(1, w - (w > 2 ? 1 : 0)), h * 2);
+        }
+        x += w;
+      }
+    });
+  }, [dynamics, span, duration]);
+
+  useEffect(() => {
+    let raf = 0;
+    const minta = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(gambarDyn);
+    };
+    minta();
+    const lepas = scrollRefs.current.map((sc) => {
+      if (!sc) return null;
+      sc.addEventListener('scroll', minta, { passive: true });
+      return () => sc.removeEventListener('scroll', minta);
+    });
+    window.addEventListener('resize', minta);
+    return () => {
+      cancelAnimationFrame(raf);
+      lepas.forEach((f) => f && f());
+      window.removeEventListener('resize', minta);
+    };
+  }, [gambarDyn, boardW, nSystems]);
+
   const drawW = Math.max(0, boardW - NAME_W(width) - 14);
   const step = TICK_STEPS.find((x) => (x / span) * drawW >= 68) ?? 1800;
   const dec = step >= 1 ? 0 : 1;
@@ -424,13 +556,49 @@ export default function StaveSystem({
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return undefined;
+    const gulung = () => el.querySelector('.stave-scroll');
     const onWheel = (e) => {
-      if (!e.ctrlKey && !e.metaKey) return;
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        zoomRef.current(e.deltaY < 0 ? 1 : -1);
+        return;
+      }
+      // Roda biasa MENGGESER, karena linimasa ini hanya bisa digulung mendatar
+      // sementara roda memutar tegak. Lihat catatan yang sama di ClipTimeline.
+      const sc = gulung();
+      if (!sc || sc.scrollWidth <= sc.clientWidth + 1) return;
+      const maju = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+      if (!maju) return;
       e.preventDefault();
-      zoomRef.current(e.deltaY < 0 ? 1 : -1);
+      sc.scrollLeft += maju;
     };
     el.addEventListener('wheel', onWheel, { passive: false });
-    return () => el.removeEventListener('wheel', onWheel);
+
+    // Seret dengan tombol tengah, seperti tangan di peta.
+    let seret = null;
+    const turun = (e) => {
+      const sc = gulung();
+      if (e.button !== 1 || !sc) return;
+      e.preventDefault();
+      seret = { x: e.clientX, kiri: sc.scrollLeft, sc };
+    };
+    const gerak = (e) => {
+      if (seret) seret.sc.scrollLeft = seret.kiri - (e.clientX - seret.x);
+    };
+    const naik = () => { seret = null; };
+    const tanpaAuxClick = (e) => { if (e.button === 1) e.preventDefault(); };
+    el.addEventListener('pointerdown', turun);
+    window.addEventListener('pointermove', gerak);
+    window.addEventListener('pointerup', naik);
+    el.addEventListener('auxclick', tanpaAuxClick);
+
+    return () => {
+      el.removeEventListener('wheel', onWheel);
+      el.removeEventListener('pointerdown', turun);
+      window.removeEventListener('pointermove', gerak);
+      window.removeEventListener('pointerup', naik);
+      el.removeEventListener('auxclick', tanpaAuxClick);
+    };
   }, []);
 
   return (
@@ -438,7 +606,9 @@ export default function StaveSystem({
       <div className="stave-head">
         <span className="mark" style={{ color: 'var(--ink)' }}>Seluruh rekaman</span>
         <span style={{ fontSize: '.72rem', color: 'var(--ink-3)' }}>
-          {zoom > 1 ? 'geser mendatar untuk menjelajah' : 'satu huruf latihan per klip · warnanya menandai penuturnya'}
+          {'lajur Klip: tiap kotak satu klip · Dinamika: makin tinggi makin keras, '
+           + 'yang gelap di atas kebiasaan rekaman ini'
+           + (zoom > 1 ? ' · seret bilah di bawah, putar roda, atau tombol tengah' : '')}
         </span>
         <span style={{ marginLeft: 'auto', display: 'flex', gap: '5px' }}>
           <button className="btn-secondary tl-zoom" title="Perkecil"
@@ -493,7 +663,6 @@ export default function StaveSystem({
                     <span className="voice-name">Klip</span>
                   </div>
                   <div className="stave">
-                    <div className="stave-lines" />
                     {lettered
                       .filter((x) => x.end > from && x.start < from + span)
                       .map(({ clip, letter, start, end, voice }) => {
@@ -577,20 +746,21 @@ export default function StaveSystem({
                 </div>
               ))}
 
+              {/* Namanya tetap "Dinamika" atas permintaan pemiliknya (30 September
+                  2026), sesudah sempat diganti "Keras suara". Yang kurang memang
+                  bukan namanya melainkan keterangannya — jadi keterangannya yang
+                  ditambahkan, di kepala panel dan di tooltip, bukan namanya yang
+                  diganti. */}
               <div className="stave-row stave-row--dyn">
-                <div className="stave-name"><span>Dinamika</span></div>
+                <div className="stave-name"
+                     title="Keras suaranya sepanjang rekaman: makin tinggi gelombangnya, makin keras. Bagian yang digambar gelap adalah yang di atas kebiasaan rekaman ini (teriakan, tawa, reaksi), dan itulah yang dipakai mesin untuk mencari momen menarik.">
+                  <span>Dinamika</span>
+                </div>
                 <div className="dyn">
-                  <span className="dyn-rule" />
-                  {dynamics.length
-                    ? dynamics.map((z, i) => (
-                      <span key={i} className="dyn-mark" style={{
-                        left: `${(i / dynamics.length) * 100}%`,
-                        height: `${Math.abs(z) * 46}%`,
-                        top: z >= 0 ? `${50 - Math.abs(z) * 46}%` : '50%',
-                        background: z >= 0 ? 'var(--ink-2)' : 'var(--ink-3)',
-                      }} />
-                    ))
-                    : <span className="dyn-empty">Gelombang suara belum dihitung.</span>}
+                  <canvas ref={(el) => { dynRefs.current[sys] = el; }} className="dyn-kanvas" />
+                  {!dynamics.length && (
+                    <span className="dyn-empty">Dinamika belum dihitung untuk rekaman ini.</span>
+                  )}
                 </div>
               </div>
 
@@ -607,6 +777,7 @@ export default function StaveSystem({
             </div>
             </div>
             </div>
+            <BilahGeser bagi={() => scrollRefs.current[sys]} penanda={boardW} />
           </div>
         );
       })}

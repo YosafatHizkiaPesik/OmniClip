@@ -693,6 +693,30 @@ def _font_aksara(st: CaptionStyle, lines: Optional[list[dict]]) -> CaptionStyle:
     return replace(st, **ubah) if ubah else st
 
 
+NAMA_SENSOR = "subtitle.sensor"
+
+
+def sensor_aktif() -> bool:
+    """
+    Apakah kata kasar disensor di subtitle. Bawaannya MENYALA.
+
+    Menyala karena itu yang menguntungkan hampir semua orang: klip yang teksnya
+    memuat umpatan utuh diturunkan jangkauannya oleh YouTube, TikTok, dan
+    Instagram. Yang ingin teksnya apa adanya bisa mematikannya di panel
+    Subtitle atau di Pengaturan.
+    """
+    from ..repos import settings as settings_repo
+    try:
+        return (settings_repo.get(NAMA_SENSOR) or "").strip() != "0"
+    except Exception:                                # noqa: BLE001
+        return True
+
+
+def setel_sensor(aktif: bool) -> None:
+    from ..repos import settings as settings_repo
+    settings_repo.set_value(NAMA_SENSOR, "1" if aktif else "0")
+
+
 def build_ass(
     *,
     lines: list[dict],

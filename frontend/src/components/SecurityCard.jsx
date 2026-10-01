@@ -72,7 +72,7 @@ export default function SecurityCard({ card, sectionTitle, helpText }) {
         <Lock size={18} style={{ color: 'var(--reh)' }} />
         Kata sandi &amp; akses
       </div>
-      <p style={helpText}>
+      <p className="bantu" style={helpText}>
         Kata sandi menjaga seluruh aplikasi: unduhan, klip, API key, dan kanal
         YouTube yang tersambung. Wajib dipasang sebelum OmniClip dibuka lewat
         Cloudflare. Tanpa itu, siapa pun yang tahu alamatnya bisa memakai

@@ -1,5 +1,5 @@
 """
-Aset sisipan: berkas yang diimpor pengguna ke Studio, plus efek suara bawaan.
+Aset sisipan: berkas yang diimpor pengguna ke Studio.
 
 Berkas diterima SEPOTONG-SEPOTONG ke berkas sementara, bukan dibaca utuh ke
 memori: cuplikan pertandingan bisa ratusan megabita, dan `await berkas.read()`
@@ -48,6 +48,45 @@ async def unggah_aset(berkas: UploadFile = File(...)):
         raise AppError(str(e), code="ASET_TIDAK_SAH", status=422) from e
     finally:
         tmp.unlink(missing_ok=True)
+
+
+class SoundboardRequest(BaseModel):
+    url: str = Field(..., max_length=2000)
+    nama: str = Field("", max_length=120)
+
+
+@router.post("/soundboard/cari")
+async def cari_soundboard(req: SoundboardRequest):
+    """
+    Daftar suara pada sebuah halaman papan suara.
+
+    Yang diunduh adalah rekaman MILIK ORANG LAIN; lihat catatan panjang di
+    services/soundboard.py soal kenapa fitur ini berbentuk pengimpor, bukan
+    bundel yang ikut di dalam aplikasi.
+    """
+    from ..services import soundboard
+
+    try:
+        hasil = await asyncio.to_thread(soundboard.cari, req.url)
+    except ValueError as e:
+        raise AppError(str(e), status=400) from e
+    except Exception as e:                           # noqa: BLE001
+        raise AppError(f"Halaman itu tidak bisa dibaca: {str(e)[:160]}",
+                       status=502) from e
+    return {"suara": hasil}
+
+
+@router.post("/soundboard/ambil")
+async def ambil_soundboard(req: SoundboardRequest):
+    """Mengunduh satu suara ke pustaka aset pengguna."""
+    from ..services import soundboard
+
+    try:
+        return await asyncio.to_thread(soundboard.ambil, req.url, req.nama)
+    except ValueError as e:
+        raise AppError(str(e), status=400) from e
+    except Exception as e:                           # noqa: BLE001
+        raise AppError(str(e)[:200], status=502) from e
 
 
 @router.get("/{aset_id}/berkas")

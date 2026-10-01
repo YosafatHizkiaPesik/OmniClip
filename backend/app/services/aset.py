@@ -6,10 +6,8 @@ Dua sumber:
   - BERKAS PENGGUNA, diimpor lewat Studio — cuplikan pertandingan untuk
     podcast bola, musik latar, logo. Disalin ke `aset/` supaya klip tidak rusak
     saat berkas aslinya dipindahkan.
-  - EFEK BAWAAN, disintesis oleh ffmpeg saat pertama dibutuhkan. Daftarnya
-    KOSONG sekarang (lihat `EFEK`), jadi pustaka hanya berisi berkas pengguna.
-    Mesinnya sengaja ditinggal utuh: satu rumus yang ditambahkan ke `EFEK`
-    cukup untuk menghidupkannya lagi.
+  - SOUNDBOARD, diunduh pengguna lewat `soundboard.py` dari tautan yang ia
+    tempel sendiri. Sama seperti berkas pengguna begitu tersimpan.
 
 Klien TIDAK PERNAH menyebut jalur berkas. Ia menyebut `id`, dan jalurnya dicari
 di sini — sama dengan aturan untuk video sumber.
@@ -55,20 +53,26 @@ def kategori_awal(jenis: str, durasi: float) -> str:
         return "media"
     return "musik" if float(durasi or 0.0) >= DETIK_MUSIK else "efek"
 
-# Efek bawaan: nama -> (label, catatan, rumus lavfi, durasi).
+# TIDAK ADA EFEK BAWAAN.
 #
-# Masing-masing didengar dan disetel satu per satu, bukan asal sinus. Yang
-# penting untuk klip vertikal adalah transien yang jelas — efek yang lembek
-# tenggelam di bawah suara orang dan tidak terdengar sama sekali di speaker HP.
-# Kosong sejak 25 September 2026, atas keputusan pemiliknya sesudah
-# mendengarkan keenamnya: "efek suara bawaan, hilangkan, jelek-jelek".
+# Dicoba dua kali dan ditolak pemiliknya dua kali. Percobaan pertama
+# (25 September 2026) memakai satu baris rumus `lavfi` per efek: "efek suara
+# bawaan, hilangkan, jelek-jelek". Percobaan kedua (30 September) menyusunnya
+# dengan numpy — transien, badan, ekor, sapuan nada dan tapis yang bergerak —
+# dan jawabannya sama: "sama sekali tidak ada suara yang saya suka dan akan
+# saya pakai".
 #
-# Yang ditinggalkan hanya isinya, bukan mesinnya. `siapkan_efek` di bawah masih
-# bekerja, jadi menambahkan kembali satu rumus di sini cukup untuk
-# menghidupkannya lagi, tanpa berkas yang perlu diunduh atau dilisensikan.
-# Efek suara yang bagus dibuat dengan telinga, bukan dengan rumus lavfi, dan
-# yang dipasang di sini tidak lolos telinga siapa pun.
-EFEK: dict[str, tuple[str, str, str, float]] = {}
+# Kesimpulannya bukan sintesisnya kurang bagus, melainkan yang dicari memang
+# bukan suara sintetis. Yang dipakai pembuat klip Indonesia adalah potongan
+# soundboard: tawa, teriakan, kutipan acara. Itu rekaman milik orang lain, dan
+# membundelnya ke dalam aplikasi yang DIJUAL berarti memindahkan masalah hak
+# ciptanya ke pemilik aplikasi.
+#
+# Jalan keluarnya ada di `soundboard.py`: pengguna menempel tautan soundboard,
+# dan OmniClip mengunduhnya ke pustaka MILIK PENGGUNA SENDIRI. Suaranya tetap
+# masuk, dipilih pengguna, dan berlaku untuk suara apa pun yang ia temukan
+# nanti — bukan hanya yang kebetulan ikut dibundel.
+EFEK: dict = {}
 
 
 def _probe(path: Path) -> dict:
@@ -113,39 +117,9 @@ def _rekam(path: Path, *, nama: str, jenis: str, bawaan: bool = False,
     return data
 
 
-_EFEK_SIAP: Optional[list[dict]] = None
-
-
 def siapkan_efek() -> list[dict]:
-    """
-    Membangkitkan efek bawaan yang belum ada. Aman dipanggil berulang.
-
-    Hasilnya ditahan di memori begitu keenam berkasnya ada: memeriksanya ulang
-    dengan ffprobe setiap kali pustaka dibuka memakan 1,5 detik, untuk jawaban
-    yang tidak pernah berubah.
-    """
-    global _EFEK_SIAP
-    if _EFEK_SIAP is not None and all(
-            (EFEK_DIR / f"{k}.m4a").is_file() for k in EFEK):
-        return [dict(e) for e in _EFEK_SIAP]
-    EFEK_DIR.mkdir(parents=True, exist_ok=True)
-    hasil = []
-    for kunci, (label, catatan, rumus, _durasi) in EFEK.items():
-        tujuan = EFEK_DIR / f"{kunci}.m4a"
-        if not tujuan.is_file():
-            cmd = ["ffmpeg", "-y", "-hide_banner", "-nostdin", "-loglevel", "error",
-                   "-f", "lavfi", "-i", rumus,
-                   "-af", "alimiter=limit=0.95,aformat=channel_layouts=stereo",
-                   "-c:a", "aac", "-b:a", "160k", str(tujuan)]
-            r = subprocess.run(cmd, capture_output=True, text=True)
-            if r.returncode != 0:
-                log.warning("Efek %s gagal dibuat: %s", kunci, r.stderr[-300:])
-                continue
-        hasil.append(_rekam(tujuan, nama=label, jenis="audio", bawaan=True,
-                            catatan=catatan, kategori="efek"))
-    if len(hasil) == len(EFEK):
-        _EFEK_SIAP = [dict(e) for e in hasil]
-    return hasil
+    """Tidak ada efek bawaan lagi. Lihat catatan EFEK di atas."""
+    return []
 
 
 def daftar() -> list[dict]:
@@ -216,7 +190,7 @@ def info(aset_id: str) -> Optional[dict]:
         return None
     if aset_id.startswith("efek:"):
         k = aset_id[5:]
-        label, catatan, _r, _d = EFEK[k]
+        label, catatan = EFEK[k][:2]
         return _rekam(p, nama=label, jenis="audio", bawaan=True,
                       catatan=catatan, kategori="efek")
     try:

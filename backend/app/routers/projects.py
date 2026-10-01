@@ -8,6 +8,7 @@ antrean, dan kartunya menunjukkan kemajuan masing-masing.
 
 import asyncio
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from fastapi import APIRouter, Query
@@ -50,10 +51,27 @@ def _pratinjau(local, vid: str = "") -> dict:
             "pratinjau_kemajuan": proksi.kemajuan(local)}
 
 
+# Daftar Partitur punya kolam benangnya SENDIRI.
+#
+# `asyncio.to_thread` memakai satu kolam untuk seluruh aplikasi, dan isinya
+# dipakai 109 tempat — termasuk pekerjaan media yang lama. Saat auto bingkai
+# berjalan untuk dua belas klip, kolam itu penuh, dan permintaan daftar
+# project ikut mengantre di belakangnya sampai lewat batas 30 detik di
+# peramban. Yang terlihat pengguna: "Memuat daftar project..." yang tidak
+# pernah selesai tiap kali kembali dari Studio, dan harus menyegarkan halaman.
+# Terlapor 30 September 2026.
+#
+# Isi kolam ini hanya satu pembacaan sqlite yang memakan milidetik, jadi dua
+# benang cukup, dan tidak ada pekerjaan berat yang bisa masuk ke sini.
+_DAFTAR_EXEC = ThreadPoolExecutor(max_workers=2, thread_name_prefix="daftar")
+
+
 @router.get("/projects")
 async def list_projects(limit: int = Query(60, le=200)):
     from ..services import profil
-    return await asyncio.to_thread(projects_repo.list_projects, limit, profil.kini())
+    pid = profil.kini()
+    return await asyncio.get_running_loop().run_in_executor(
+        _DAFTAR_EXEC, projects_repo.list_projects, limit, pid)
 
 
 @router.get("/projects/{video_id}")
@@ -253,7 +271,16 @@ _GELOMBANG_JALAN: dict = {}
 
 
 @router.get("/videos/{video_id}/waveform")
-async def waveform(video_id: str, bins: int = Query(1200, ge=100, le=4000)):
+# Batas atas dinaikkan dari 4.000 ke 16.000 pada 30 September 2026.
+#
+# Pada rekaman 38 menit, 1.200 bak berarti satu batang mewakili 1,9 detik.
+# Diperbesar 32x, jendela linimasa memuat sekitar 70 detik — yaitu 37 batang
+# yang direntang selebar layar, dan yang terlihat pemiliknya adalah lajur yang
+# kosong: "saya zoom ke detik tapi dinamika atau suaranya tidak ada".
+# 16.000 bak memberi 0,14 detik per batang pada rekaman sepanjang itu, cukup
+# untuk digambar sebagai gelombang sampai perbesaran tertinggi. Muatannya
+# sekitar 80 KB sekali, lalu tersimpan.
+async def waveform(video_id: str, bins: int = Query(1200, ge=100, le=16000)):
     """
     Puncak amplitudo untuk digambar di timeline.
 

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Film, Image as ImageIcon, Music, Upload, Loader2, Trash2, Wand2, Play, Square,
-  Crosshair, Sparkles, X, ChevronUp, ChevronDown,
+  Crosshair, Sparkles, X, ChevronUp, ChevronDown, Type,
 } from 'lucide-react';
 import { apiDelete, apiGet, apiPatch, apiPost } from '../../lib/api';
 import { formatTime } from '../../utils/timeFormat';
@@ -25,7 +25,15 @@ const RAK = [
     kosong: 'Belum ada. Contohnya cuplikan pertandingan untuk podcast bola, atau logo kanal.' },
 ];
 
-const IKON = { video: Film, gambar: ImageIcon, audio: Music };
+const IKON = { video: Film, gambar: ImageIcon, audio: Music, teks: Type };
+
+// Font untuk sisipan tulisan. Sama dengan yang dibundel di
+// backend/app/assets/fonts, jadi pratinjau dan hasil render memakai yang sama.
+const FONT_TEKS = [
+  'Archivo Black', 'Anton', 'Bebas Neue', 'Bungee', 'Fjalla One', 'Lilita One',
+  'Luckiest Guy', 'Montserrat', 'Oswald', 'Playfair Display', 'Poppins',
+  'Rubik', 'Teko',
+];
 
 export const POSISI = [
   ['penuh', 'Penuh'],
@@ -154,6 +162,65 @@ export default function MediaPanel({
     }]);
   };
 
+  /**
+   * Tempelan TULISAN, tanpa berkas apa pun.
+   *
+   * Diminta pemiliknya 30 September 2026 dengan alasan yang konkret: ada
+   * kampanye yang mensyaratkan tulisan tertentu muncul di klip, misalnya
+   * "@motionklip" berikut logonya. Itu bukan judul klip — judul punya tema,
+   * animasi, dan tempatnya sendiri di awal — melainkan tempelan yang berdiri
+   * sendiri: bisa ditaruh di mana saja, selama apa saja, dan ketembusannya
+   * diatur seperti tempelan lain.
+   */
+  const tambahTeks = () => {
+    const t = Math.max(0, Math.min(waktuSekarang, Math.max(0, durasiKlip - 0.2)));
+    const id = idBaru();
+    onSorot?.(id);
+    onLayers([...lapisan, {
+      id, jenis: 'teks', nama: 'Tulisan', teks: '@namakanal',
+      t: Number(t.toFixed(2)),
+      // Sepanjang sisa klip: syarat kampanye hampir selalu "sepanjang video".
+      dur: Number(Math.max(0.2, durasiKlip - t).toFixed(2)),
+      posisi: 'sudut', ukuran: 4.5,
+      warna: '#FFFFFF', garis: '#000000', tebal_garis: 3,
+      keluarga: 'Archivo Black', opasitas: 0.85,
+      volume: 0, asal: 'pengguna',
+    }]);
+  };
+
+  /**
+   * Mengambil suara dari papan suara di internet.
+   *
+   * Diminta pemiliknya 30 September 2026 sesudah menolak dua kali usaha
+   * membuat efek suara sendiri: ia menunjuk halaman pencarian Indonesia di
+   * myinstants.com. Yang di sana rekaman milik orang lain, jadi yang dibangun
+   * bukan bundel yang ikut di dalam aplikasi melainkan pengimpor: ia menempel
+   * tautan yang ia pilih, dan berkasnya masuk ke pustakanya sendiri.
+   */
+  const [sbUrl, setSbUrl] = useState('');
+  const [sbHasil, setSbHasil] = useState(null);
+  const [sbSibuk, setSbSibuk] = useState(false);
+  const [sbAmbil, setSbAmbil] = useState(null);
+
+  const cariSoundboard = async () => {
+    if (!sbUrl.trim()) return;
+    setSbSibuk(true); setGalat(null); setSbHasil(null);
+    try {
+      const r = await apiPost('/aset/soundboard/cari', { url: sbUrl.trim() }, { timeout: 60000 });
+      setSbHasil(r?.suara ?? []);
+    } catch (err) { setGalat(err.message); } finally { setSbSibuk(false); }
+  };
+
+  const ambilSoundboard = async (x) => {
+    setSbAmbil(x.url); setGalat(null);
+    try {
+      const baru = await apiPost('/aset/soundboard/ambil',
+                                 { url: x.url, nama: x.nama }, { timeout: 120000 });
+      await muat();
+      tambah(baru);
+    } catch (err) { setGalat(err.message); } finally { setSbAmbil(null); }
+  };
+
   const kirimBerkas = async (e) => {
     const f = e.target.files?.[0];
     e.target.value = '';
@@ -219,12 +286,15 @@ export default function MediaPanel({
         </p>
       )}
       {urut.map((l) => {
-        const a = asetById[l.aset];
+        const teksLayer = l.jenis === 'teks';
+        const a = teksLayer
+          ? { jenis: 'teks', nama: l.nama || 'Tulisan', durasi: l.dur }
+          : asetById[l.aset];
         // Indeks di daftar ASLI, bukan di daftar yang sudah diurut waktu:
         // yang menentukan tumpukan adalah urutan daftarnya.
         const indeks = lapisan.findIndex((x) => x.id === l.id);
         const Ikon = IKON[a?.jenis] ?? Music;
-        const visual = a?.jenis === 'video' || a?.jenis === 'gambar';
+        const visual = a?.jenis === 'video' || a?.jenis === 'gambar' || teksLayer;
         const bersuara = a?.jenis === 'audio' || (a?.jenis === 'video' && a?.punya_suara);
         return (
           <div key={l.id} ref={(el) => { barisRef.current[l.id] = el; }}
@@ -371,8 +441,66 @@ export default function MediaPanel({
                     <label>Tinggi % <input type="number" step="1" style={angka} value={petak.h}
                                            onChange={(e) => setPetak({ h: Number(e.target.value) || 2 })} /></label>
                   </div>
+                  {teksLayer && (
+                    <div style={{ marginTop: '8px', paddingTop: '8px',
+                                  borderTop: '1px solid var(--border-color)' }}>
+                      <textarea
+                        value={l.teks ?? ''}
+                        rows={2}
+                        placeholder="@namakanal"
+                        onChange={(e) => ubah(l.id, { teks: e.target.value })}
+                        style={{ width: '100%', fontSize: '0.8rem', padding: '6px 8px',
+                                 borderRadius: 'var(--r-sm)', border: '1px solid var(--rule-2)',
+                                 background: 'var(--plate-3)', color: 'var(--ink)',
+                                 resize: 'vertical', fontFamily: 'inherit' }} />
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '9px',
+                                    alignItems: 'center', fontSize: '0.72rem', marginTop: '7px' }}>
+                        <label>Font{' '}
+                          <select value={l.keluarga ?? 'Archivo Black'}
+                                  onChange={(e) => ubah(l.id, { keluarga: e.target.value })}
+                                  style={{ ...angka, width: 'auto' }}>
+                            {FONT_TEKS.map((f) => <option key={f} value={f}>{f}</option>)}
+                          </select>
+                        </label>
+                        <label title="Tinggi huruf, dalam persen tinggi layar">
+                          Ukuran %{' '}
+                          <input type="number" step="0.5" min="1" max="40" style={angka}
+                                 value={l.ukuran ?? 4.5}
+                                 onChange={(e) => ubah(l.id, { ukuran: Number(e.target.value) || 4.5 })} />
+                        </label>
+                        <label>Warna{' '}
+                          <input type="color" value={l.warna ?? '#FFFFFF'}
+                                 onChange={(e) => ubah(l.id, { warna: e.target.value })}
+                                 style={{ width: '32px', height: '22px', padding: 0, border: 'none',
+                                          background: 'none', verticalAlign: 'middle' }} />
+                        </label>
+                        <label title="Garis luar huruf. Nol berarti tanpa garis.">
+                          Garis{' '}
+                          <input type="color" value={l.garis ?? '#000000'}
+                                 onChange={(e) => ubah(l.id, { garis: e.target.value })}
+                                 style={{ width: '32px', height: '22px', padding: 0, border: 'none',
+                                          background: 'none', verticalAlign: 'middle' }} />
+                          <input type="number" step="1" min="0" max="12" style={{ ...angka, marginLeft: '4px' }}
+                                 value={l.tebal_garis ?? 3}
+                                 onChange={(e) => ubah(l.id, { tebal_garis: Number(e.target.value) || 0 })} />
+                        </label>
+                        <label title="Kotak di belakang tulisan. Kosongkan untuk tanpa kotak.">
+                          <input type="checkbox" checked={!!l.latar}
+                                 onChange={(e) => ubah(l.id, { latar: e.target.checked ? '#000000' : '' })} />
+                          {' '}Kotak latar
+                          {l.latar ? (
+                            <input type="color" value={l.latar}
+                                   onChange={(e) => ubah(l.id, { latar: e.target.value })}
+                                   style={{ width: '32px', height: '22px', padding: 0, border: 'none',
+                                            background: 'none', verticalAlign: 'middle', marginLeft: '4px' }} />
+                          ) : null}
+                        </label>
+                      </div>
+                    </div>
+                  )}
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center',
                                 marginTop: '7px', fontSize: '0.72rem' }}>
+                    {!teksLayer && (
                     <label title="Penuh memotong sisi yang kelebihan; Muat memuat semuanya dengan ruang kosong di sisanya">
                       Isi petak{' '}
                       <select value={l.isi ?? (a?.jenis === 'gambar' ? 'muat' : 'penuh')}
@@ -382,6 +510,7 @@ export default function MediaPanel({
                         <option value="muat">Muat utuh</option>
                       </select>
                     </label>
+                    )}
                     <label style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
                       Ketembusan
                       <input type="range" min="0.05" max="1" step="0.05"
@@ -415,6 +544,78 @@ export default function MediaPanel({
       </button>
       <input ref={berkasRef} type="file" hidden onChange={kirimBerkas}
              accept="video/*,audio/*,image/png,image/jpeg,image/webp,image/gif" />
+      <button className="btn-secondary" onClick={tambahTeks}
+              title="Tulisan yang menempel di atas video, terpisah dari judul klip"
+              style={{ fontSize: '0.8rem', display: 'inline-flex', gap: '6px',
+                       alignItems: 'center', marginBottom: '9px', marginLeft: '7px' }}>
+        <Type size={14} /> Tambah tulisan
+      </button>
+      {/* Papan suara. Ditaruh sebelum daftar rak karena inilah cara pustaka
+          suara terisi sekarang: tidak ada lagi efek bawaan. */}
+      <div style={{ ...kartu, padding: '10px 11px', marginBottom: '10px' }}>
+        <div style={{ fontSize: '0.78rem', fontWeight: 800, marginBottom: '5px' }}>
+          Ambil dari papan suara
+        </div>
+        <p style={{ ...kecil, margin: '0 0 7px', lineHeight: 1.55 }}>
+          Tempel tautan halaman papan suara (misalnya hasil pencarian di
+          myinstants.com) atau tautan langsung ke berkas mp3. Berkasnya diunduh
+          ke pustaka Anda sendiri di komputer ini.
+        </p>
+        <div style={{ display: 'flex', gap: '6px' }}>
+          <input
+            value={sbUrl}
+            onChange={(e) => setSbUrl(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') cariSoundboard(); }}
+            placeholder="https://www.myinstants.com/en/search/?name=indonesia"
+            style={{ flex: 1, minWidth: 0, fontSize: '0.76rem', padding: '6px 8px',
+                     borderRadius: 'var(--r-sm)', border: '1px solid var(--rule-2)',
+                     background: 'var(--plate-3)', color: 'var(--ink)' }} />
+          <button className="btn-secondary" onClick={cariSoundboard} disabled={sbSibuk}
+                  style={{ fontSize: '0.76rem', padding: '5px 10px', flex: 'none' }}>
+            {sbSibuk ? <Loader2 size={13} className="animate-spin" /> : 'Cari'}
+          </button>
+        </div>
+        {sbHasil && sbHasil.length === 0 && (
+          <p style={{ ...kecil, margin: '7px 0 0' }}>
+            Tidak ada berkas suara yang terbaca di halaman itu.
+          </p>
+        )}
+        {sbHasil && sbHasil.length > 0 && (
+          <>
+            <p style={{ ...kecil, margin: '8px 0 5px' }}>
+              {sbHasil.length} suara. Tekan untuk mengunduhnya dan langsung
+              menaruhnya di klip ini.
+            </p>
+            <div style={{ maxHeight: '190px', overflowY: 'auto', display: 'flex',
+                          flexDirection: 'column', gap: '3px' }}>
+              {sbHasil.map((x) => (
+                <button key={x.url} className="btn-secondary"
+                        onClick={() => ambilSoundboard(x)}
+                        disabled={sbAmbil === x.url}
+                        title={x.url}
+                        style={{ fontSize: '0.74rem', padding: '5px 8px',
+                                 textAlign: 'left', display: 'flex',
+                                 alignItems: 'center', gap: '6px' }}>
+                  {sbAmbil === x.url
+                    ? <Loader2 size={12} className="animate-spin" />
+                    : <Music size={12} style={{ flex: 'none' }} />}
+                  <span style={{ flex: 1, minWidth: 0, overflow: 'hidden',
+                                 textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {x.nama}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+
+      <p style={{ ...kecil, margin: '0 0 10px', lineHeight: 1.55 }}>
+        Tulisan di sini BUKAN judul klip. Judul punya tema dan animasinya
+        sendiri di panel Judul; yang ini tempelan biasa yang bisa ditaruh di
+        mana saja dan selama apa saja, misalnya nama kanal yang diminta sebuah
+        kampanye. Ketembusannya diatur seperti sisipan lain.
+      </p>
       {aset === null && <p style={kecil}><Loader2 size={12} className="animate-spin" /> Memuat…</p>}
 
       {/* Tiga rak. Selalu tergambar, juga saat kosong: rak yang hilang karena

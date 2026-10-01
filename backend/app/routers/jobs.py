@@ -93,13 +93,33 @@ async def list_active_jobs(video_id: str | None = None, type: str | None = None)
     Ada supaya pemantau kemajuan di layar tidak perlu menarik seluruh isi
     tabel job hanya untuk tahu apakah ada yang sedang berjalan.
     """
+    # Judul videonya ikut. Tanpa itu, pekerjaan yang ANTRE hanya bisa berkata
+    # "menunggu giliran", dan yang ingin diketahui pengguna justru menunggu
+    # siapa: "saya tidak tahu auto bingkai sedang memproses video yang mana".
+    # Terlapor 30 September 2026. Dibaca sekali per video, bukan per pekerjaan.
+    from ..repos import media as media_repo
+
+    judul: dict[str, str] = {}
+
+    def judul_video(vid: str) -> str:
+        if vid not in judul:
+            try:
+                v = media_repo.get_video(vid)
+            except Exception:                       # noqa: BLE001
+                v = None
+            judul[vid] = ((v or {}).get("title") or "").strip()
+        return judul[vid]
+
     hasil = []
     for j in repo.active():
         if video_id and j.get("video_id") != video_id:
             continue
         if type and j.get("type") != type:
             continue
-        hasil.append({k: j.get(k) for k in RINGKAS})
+        ringkas = {k: j.get(k) for k in RINGKAS}
+        if j.get("video_id"):
+            ringkas["video_title"] = judul_video(j["video_id"])
+        hasil.append(ringkas)
     return {"jobs": hasil}
 
 

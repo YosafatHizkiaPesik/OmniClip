@@ -17,6 +17,9 @@ import BilahProses from '../../components/BilahProses';
  */
 
 const POLL_MS = 2500;
+// Jeda mencoba lagi sesudah permintaan gagal: lebih panjang, karena yang
+// membuatnya gagal biasanya server yang sedang sibuk.
+const POLL_ULANG_MS = 5000;
 
 const STATUS_META = {
   queued: { label: 'Menunggu antrean', color: 'var(--text-secondary)', Icon: Clock },
@@ -55,10 +58,19 @@ export default function StudioHome({ onOpen, onFindVideos }) {
       const data = await apiGet('/projects');
       setProjects(data);
       setError(null);
-      return data;
+      return { data, gagal: false };
     } catch (err) {
+      // Gagal memuat TIDAK boleh terlihat seperti sedang memuat.
+      //
+      // Dulu `projects` dibiarkan null di sini, dan null itulah yang membuat
+      // layar menampilkan "Memuat daftar project…". Jadi permintaan yang habis
+      // waktunya berubah jadi lingkaran berputar selamanya: tanpa pesan, tanpa
+      // tombol coba lagi, dan satu-satunya jalan keluar menyegarkan halaman.
+      // Terlapor pemiliknya 30 September 2026, terjadi tiap kali kembali dari
+      // Studio saat auto bingkai berjalan.
       setError(err);
-      return [];
+      setProjects((prev) => prev ?? []);
+      return { data: [], gagal: true };
     }
   }, []);
 
@@ -68,10 +80,14 @@ export default function StudioHome({ onOpen, onFindVideos }) {
   useEffect(() => {
     let alive = true;
     const tick = async () => {
-      const data = await load();
+      const { data, gagal } = await load();
       if (!alive) return;
       const busy = (data || []).some((p) => p.status === 'running' || p.status === 'queued');
-      if (busy) timerRef.current = setTimeout(tick, POLL_MS);
+      // Sesudah gagal, coba lagi sendiri. Permintaan yang kehabisan waktu
+      // karena server sedang sibuk hampir selalu berhasil pada percobaan
+      // berikutnya, dan menyuruh pengguna menekan tombol untuk itu cuma
+      // memindahkan pekerjaan server ke tangan pengguna.
+      if (busy || gagal) timerRef.current = setTimeout(tick, gagal ? POLL_ULANG_MS : POLL_MS);
     };
     tick();
     return () => { alive = false; clearTimeout(timerRef.current); };
@@ -177,7 +193,22 @@ export default function StudioHome({ onOpen, onFindVideos }) {
           borderRadius: 'var(--radius-md)', color: 'var(--accent-red, var(--danger))',
           background: 'color-mix(in srgb, var(--danger) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--danger) 30%, transparent)',
         }}>
-          {error.message}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ flex: 1 }}>
+              {error.name === 'TimeoutError'
+                ? 'Daftar project belum terjawab. Server sedang sibuk, biasanya '
+                  + 'karena auto bingkai berjalan. Dicoba lagi sendiri.'
+                : error.message}
+            </span>
+            <button
+              type="button"
+              className="btn btn-sm"
+              onClick={() => setPutaran((n) => n + 1)}
+              style={{ flex: 'none' }}
+            >
+              <RotateCw size={13} /> Coba lagi
+            </button>
+          </div>
         </div>
       )}
 

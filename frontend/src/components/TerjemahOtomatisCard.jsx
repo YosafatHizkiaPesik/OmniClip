@@ -37,7 +37,7 @@ export default function TerjemahOtomatisCard({ card, sectionTitle, helpText }) {
         <Languages size={18} style={{ color: 'var(--reh)' }} />
         Terjemahan otomatis
       </div>
-      <p style={helpText}>
+      <p className="bantu" style={helpText}>
         Video yang bahasanya berbeda, misalnya anime berbahasa Jepang, langsung
         diberi subtitle terjemahan di bawah subtitle aslinya saat dianalisis. Tanpa
         kunci Gemini pun tetap jalan (lewat Google Terjemahan).
@@ -50,7 +50,7 @@ export default function TerjemahOtomatisCard({ card, sectionTitle, helpText }) {
           <option value="">Mati (hanya subtitle asli)</option>
           {pilihan.map((b) => <option key={b.code} value={b.code}>Terjemahkan ke {b.label}</option>)}
         </select>
-        {simpan && <span style={helpText}>{simpan}</span>}
+        {simpan && <span className="bantu" style={helpText}>{simpan}</span>}
       </div>
     </div>
   );

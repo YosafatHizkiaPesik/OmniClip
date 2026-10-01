@@ -123,7 +123,7 @@ export default function StorageCard({ card, sectionTitle, helpText }) {
   return (
     <div style={card}>
       <h3 style={sectionTitle}><HardDrive size={15} /> Tempat penyimpanan</h3>
-      <p style={helpText}>
+      <p className="bantu" style={helpText}>
         Semua unduhan, klip jadi, dan basis data tinggal di satu folder ini.
       </p>
 

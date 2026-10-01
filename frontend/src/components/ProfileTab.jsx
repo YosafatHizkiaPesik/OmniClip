@@ -2,10 +2,11 @@ import React, { useState, useEffect } from 'react';
 import {
   KeyRound, Loader2, Sun, Moon, Eye, EyeOff, Info,
   CheckCircle2, AlertTriangle, Sparkles, Scissors, Mic,
-  Trash2, Languages, UploadCloud,
+  Trash2, Languages, UploadCloud, ShieldAlert,
 } from 'lucide-react';
 import { apiDelete, apiGet, apiPost } from '../lib/api';
 import { Link } from 'react-router-dom';
+import SakelarSensor from './SakelarSensor';
 import SecurityCard from './SecurityCard';
 import StorageCard from './StorageCard';
 import PemeliharaanCard from './PemeliharaanCard';
@@ -222,23 +223,42 @@ export default function ProfileTab() {
     || { id: 'gemini', label: 'Google Gemini',
          key_url: 'https://aistudio.google.com/app/apikey' };
 
+  // Keterangan panjang dilipat secara BAWAAN.
+  //
+  // Halaman ini punya 2018 kata saat semuanya terbuka, dan hampir semuanya
+  // penjelasan yang hanya perlu dibaca sekali. Yang dipakai tiap hari cuma
+  // sakelar dan kotak isiannya. Pilihannya diingat, jadi yang memang ingin
+  // membaca tidak perlu menekannya berulang kali.
+  const [ringkas, setRingkas] = useState(
+    () => localStorage.getItem('omniclip_setelan_ringkas') !== '0');
+  const ubahRingkas = () => setRingkas((r) => {
+    const n = !r;
+    try { localStorage.setItem('omniclip_setelan_ringkas', n ? '1' : '0'); } catch { /* mode privat */ }
+    return n;
+  });
+
   return (
-    <div className="page" style={{ maxWidth: '780px' }}>
-      <div className="work-block">
+    <div className={`page${ringkas ? ' ringkas' : ''}`} style={{ maxWidth: '1280px' }}>
+      <div className="work-block" style={{ alignItems: 'center' }}>
         <div style={{ minWidth: 0 }}>
           <h1 className="work-title">Catatan main</h1>
           <div className="sub">Setelan yang berlaku untuk seluruh partitur.</div>
         </div>
+        <button className="tombol-ringkas" onClick={ubahRingkas}
+                title={ringkas ? 'Tampilkan penjelasan tiap setelan'
+                               : 'Sembunyikan penjelasan, sisakan setelannya saja'}>
+          {ringkas ? 'Tampilkan penjelasan' : 'Ringkas'}
+        </button>
       </div>
 
-      <div className="plate" style={{ overflow: 'hidden' }}>
+      <div className="petak-setelan">
 
       {settingsError && (
         <div style={{ ...card, borderColor: 'var(--accent-red)', display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
           <AlertTriangle size={18} style={{ color: 'var(--danger)', flexShrink: 0, marginTop: '2px' }} />
           <div>
             <div style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-primary)' }}>Backend tidak terhubung</div>
-            <div style={helpText}>{settingsError}</div>
+            <div className="bantu" style={helpText}>{settingsError}</div>
           </div>
         </div>
       )}
@@ -249,7 +269,7 @@ export default function ProfileTab() {
           {theme === 'dark' ? <Moon size={18} style={{ color: 'var(--reh)' }} /> : <Sun size={18} style={{ color: 'var(--reh)' }} />}
           Tampilan
         </div>
-        <p style={helpText}>Pilih tema terang atau gelap untuk seluruh aplikasi.</p>
+        <p className="bantu" style={helpText}>Pilih tema terang atau gelap untuk seluruh aplikasi.</p>
         <div style={{ display: 'flex', gap: '10px', marginTop: '14px' }}>
           {[
             { id: 'dark', label: 'Gelap', Icon: Moon },
@@ -285,7 +305,7 @@ export default function ProfileTab() {
           <Scissors size={18} style={{ color: 'var(--reh)' }} />
           Jumlah klip per video
         </div>
-        <p style={helpText}>
+        <p className="bantu" style={helpText}>
           Berapa banyak momen yang ditawarkan dari satu video. Pada mode otomatis
           jatahnya tumbuh mengikuti durasi (kira-kira satu klip tiap empat menit)
           sehingga podcast dua jam tidak lagi diperlakukan sama dengan video
@@ -324,7 +344,7 @@ export default function ProfileTab() {
           <Mic size={18} style={{ color: 'var(--reh)' }} />
           Ketelitian transkrip
         </div>
-        <p style={helpText}>
+        <p className="bantu" style={helpText}>
           Hanya berlaku untuk video yang belum punya subtitle di YouTube dan harus
           disalin ucapannya di komputer ini. Video yang sudah bersubtitle tidak
           terpengaruh dan tetap selesai dalam hitungan detik.
@@ -357,7 +377,7 @@ export default function ProfileTab() {
           <Languages size={18} style={{ color: 'var(--reh)' }} />
           Bahasa subtitle
         </div>
-        <p style={helpText}>
+        <p className="bantu" style={helpText}>
           Urutan bahasa yang <strong>dicoba lebih dulu</strong> saat mengambil
           subtitle dari YouTube. Ini bukan batas: kalau video tidak punya satu pun
           bahasa di sini, sistem tetap memakai bahasa yang benar-benar ada di video
@@ -419,7 +439,7 @@ export default function ProfileTab() {
           <Sparkles size={18} style={{ color: 'var(--reh)' }} />
           Model AI pemilih klip
         </div>
-        <p style={helpText}>
+        <p className="bantu" style={helpText}>
           Model yang membaca transkrip lalu memutuskan bagian mana yang layak jadi
           klip. Model yang lebih besar biasanya lebih paham konteks pembahasan,
           tapi lebih lambat dan memakai lebih banyak kuota.
@@ -486,7 +506,7 @@ export default function ProfileTab() {
           <KeyRound size={18} style={{ color: 'var(--reh)' }} />
           API key AI
         </div>
-        <p style={helpText}>
+        <p className="bantu" style={helpText}>
           Opsional. Tanpa API key, OmniClip tetap memotong klip memakai mesin heuristik
           lokal berbasis transkrip asli. Dengan API key, {provider.label} ikut menyusun
           ulang peringkat dan judul klip. Ambil kunci gratis di{' '}
@@ -618,6 +638,16 @@ export default function ProfileTab() {
         )}
       </div>
 
+      {/* Sakelar yang sama dengan yang ada di panel Subtitle Studio. Satu
+          setelan, dua pintu: yang diubah di sini langsung berlaku di sana. */}
+      <div style={card}>
+        <div style={sectionTitle}>
+          <ShieldAlert size={18} style={{ color: 'var(--reh)' }} />
+          Subtitle
+        </div>
+        <SakelarSensor />
+      </div>
+
       <OpenRouterCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
 
       <CookiesCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
@@ -650,7 +680,7 @@ export default function ProfileTab() {
           <UploadCloud size={18} style={{ color: 'var(--reh)' }} />
           Akun Google, Drive, dan YouTube
         </div>
-        <p style={helpText}>
+        <p className="bantu" style={helpText}>
           Setiap profil menyambungkan akun Google-nya sendiri, beserta setelan unggah
           otomatisnya. Atur di <Link to="/profil" style={{ color: 'var(--reh)', fontWeight: 700 }}>halaman Profil</Link>.
         </p>

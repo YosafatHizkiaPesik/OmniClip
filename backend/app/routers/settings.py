@@ -86,6 +86,7 @@ async def get_settings():
         "render_suara": (settings_repo.get("render.suara") or "seimbang"),
         "warna_penutur": subtitles.warna_penutur_aktif(),
         "pemanasan_bingkai": _pemanasan_bingkai(),
+        "sensor_kata_kasar": _sensor_kata_kasar(),
         **_openrouter_ringkas(),
     }
 
@@ -204,6 +205,14 @@ async def set_bingkai_otomatis(req: SakelarRequest):
     return {"status": "ok", "aktif": req.aktif}
 
 
+def _sensor_kata_kasar() -> bool:
+    try:
+        from ..services.subtitles import sensor_aktif
+        return sensor_aktif()
+    except Exception:                                # noqa: BLE001
+        return True
+
+
 def _pemanasan_bingkai() -> bool:
     try:
         from ..services.pipeline import pemanasan_bingkai
@@ -283,6 +292,19 @@ def _lanjutkan_pemanasan(video_id: str) -> int:
     except Exception as e:                           # noqa: BLE001
         log.warning("Penyiapan bingkai tidak bisa dilanjutkan: %s", str(e)[:160])
         return 0
+
+
+@router.post("/sensor-kata-kasar")
+async def set_sensor_kata_kasar(req: SakelarRequest):
+    """
+    Menyensor kata kasar di subtitle, untuk seluruh aplikasi.
+
+    Berlaku pada teks yang terbakar ke MP4 dan pada pratinjaunya, tidak pada
+    suaranya. Bawaannya menyala; lihat `subtitles.sensor_aktif`.
+    """
+    from ..services.subtitles import setel_sensor
+    setel_sensor(req.aktif)
+    return {"status": "ok", "aktif": req.aktif}
 
 
 @router.post("/warna-penutur")

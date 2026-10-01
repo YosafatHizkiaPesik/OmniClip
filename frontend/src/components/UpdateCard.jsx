@@ -49,7 +49,7 @@ export default function UpdateCard({ card, sectionTitle, helpText }) {
         Pembaruan aplikasi
       </div>
 
-      <p style={helpText}>
+      <p className="bantu" style={helpText}>
         OmniClip yang sudah terpasang tidak berubah sendiri saat kodenya
         diperbaiki, versinya dibekukan saat dibangun. Di sini ia menanyakan ke
         GitHub apakah ada versi yang lebih baru.

@@ -47,10 +47,10 @@ export default function PemakaianAiCard({ card, sectionTitle, helpText }) {
       </div>
 
       {!data ? (
-        <p style={helpText}>Menghitung…</p>
+        <p className="bantu" style={helpText}>Menghitung…</p>
       ) : (
         <>
-          <p style={helpText}>
+          <p className="bantu" style={helpText}>
             Hari ini <b>{hari.panggilan}</b> panggilan
             {hari.token > 0 && <> · <b>{hari.token.toLocaleString('id-ID')}</b> token</>}.
             Jatah gratis Google <b>{data.jatah_per_model} panggilan per model per hari</b>,

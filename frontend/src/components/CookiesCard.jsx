@@ -82,7 +82,7 @@ export default function CookiesCard({ card, sectionTitle, helpText }) {
         <Cookie size={18} style={{ color: 'var(--reh)' }} />
         Cookies YouTube
       </div>
-      <p style={helpText}>
+      <p className="bantu" style={helpText}>
         Biasanya tidak perlu. Nyalakan bila YouTube terus meminta &ldquo;confirm
         you&rsquo;re not a bot&rdquo; untuk banyak video. Tandanya jaringan Anda
         sedang ditandai, dan sesi login adalah jalan keluarnya.
