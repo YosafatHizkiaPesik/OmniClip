@@ -344,7 +344,7 @@ tapi bidang yang lebih sempit dari itu jadi pita kurus di tengah layar.
 
 | | |
 |---|---|
-| **C1** | **Unggah ke YouTube dan Drive.** Alurnya berjalan, tapi belum pernah ada video yang benar-benar naik. |
+| **C1** | ~~Unggah ke YouTube dan Drive.~~ **SELESAI.** Pemiliknya sudah mengunggah beberapa video lewat fitur ini. Keluhan yang tersisa bukan soal alurnya melainkan MUTU video di YouTube — dan sebabnya ditemukan 2 Oktober 2026: render selalu mengeluarkan 30 fps (`render.py`, `fps=30`) dari sumber 60 fps. Resolusi dan bitrate justru baik: 1080x1920, 13,7 Mbps. |
 | **C2** | **Windows.** Bundelnya terbangun tiap rilis, tapi belum pernah dijalankan di Windows sungguhan. Termasuk unduhan Deno, server PO Token, dan encoder GPU. |
 | **C3** | **Render GPU pada Linux.** Ffmpeg statis yang dibundel belum diuji dengan VAAPI atau NVENC. |
 | **C4** | **Pemulihan cadangan.** Membuatnya sudah diuji, memulihkannya belum. |
@@ -354,9 +354,9 @@ tapi bidang yang lebih sempit dari itu jadi pita kurus di tengah layar.
 | | |
 |---|---|
 | **D1** | **Kode unggah TikTok, Facebook, Instagram.** Menunggu izin, karena ketiganya tidak bisa diuji sebelum aplikasinya disetujui. Begitu kuncinya ada: `target` di `routers/uploads.py` ditambah, `run_upload` di `services/pipeline.py` diarahkan. |
-| **D2a** | Musik latar bawaan. Efek suara sudah ada 17 buah yang dibangkitkan sendiri (`services/efek_suara.py`), tapi MUSIK tidak bisa dibangkitkan begitu saja dan yang beredar hampir semuanya berhak cipta. Jalan yang tersisa: mengunduh sekali dari pustaka CC0 saat pengguna memintanya, bukan membundelnya. |
+| **D2a** | Musik latar bawaan. Catatan lama di sini menyebut 17 efek suara buatan sendiri di `services/efek_suara.py`; keduanya sudah tidak ada — efeknya ditolak pemiliknya dua kali dan digantikan pengimpor papan suara (`services/soundboard.py`). Untuk MUSIK jalannya sama: mengunduh sekali dari pustaka CC0 saat pengguna memintanya, bukan membundelnya. |
 | **D2** | Suara baca judul: pilihannya masih sedikit. Hanya dua suara Indonesia dari Microsoft (Ardi dan Gadis) plus satu Piper lokal; sisanya cuma ubahan laju dan nada. Tidak ada layanan gratis lain yang punya banyak suara INDONESIA — lihat catatan di bawah. |
-| **D3** | Statistik sesudah unggah: berapa tayangan tiap klip. |
+| **D3** | ~~Statistik sesudah unggah.~~ **SELESAI 2 Oktober 2026.** Tayangan, suka, dan komentar tampil di Klip jadi, dibaca dengan kunci YouTube Data API yang disetel di Pengaturan. Kunci API, bukan izin akun: token unggah menjawab 403 untuk `videos.list`, dan menambah izin baca akan menuntut tiap akun menyambung ulang. Harganya hanya video PUBLIK yang terbaca. |
 | **D4** | Pola reaksi otomatis untuk kartun. |
 | **D5** | Tanda tangan digital Windows. Alur build sudah siap memakainya (rahasia `WINDOWS_PFX_BASE64` dan `WINDOWS_PFX_PASSWORD`), tinggal sertifikatnya, 200-400 dolar per tahun. |
 

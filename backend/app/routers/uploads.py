@@ -165,7 +165,34 @@ async def start_upload(req: UploadRequest):
 
 
 @router.get("")
-async def list_uploads(clip_name: Optional[str] = None, limit: int = 60):
+async def list_uploads(clip_name: Optional[str] = None, limit: int = 60,
+                       statistik: bool = False):
+    """
+    Riwayat unggahan profil ini. `statistik=true` ikut membawa tayangannya.
+
+    Tayangan diminta HANYA bila ditanya, dan selalu di utas lain: ia menembak
+    YouTube, dan halaman yang menampilkan riwayat tidak boleh ikut menunggu
+    jaringan yang lambat untuk angka yang sifatnya tambahan.
+    """
+    import asyncio
+
     from ..services import profil
-    return {"uploads": uploads_repo.list_recent(min(limit, 200), clip_name,
-                                                profil_id=profil.kini())}
+    daftar = uploads_repo.list_recent(min(limit, 200), clip_name,
+                                      profil_id=profil.kini())
+    if not statistik:
+        return {"uploads": daftar}
+
+    from ..services import statistik as stat_svc
+    ids = [u["remote_id"] for u in daftar
+           if u.get("target") == "youtube" and u.get("status") == "done"
+           and u.get("remote_id")]
+    angka = await asyncio.to_thread(stat_svc.tayangan, ids)
+    for u in daftar:
+        s = angka.get(u.get("remote_id") or "")
+        if s:
+            u["statistik"] = s
+    return {"uploads": daftar,
+            # Supaya antarmuka bisa membedakan "belum disetel" dari "disetel
+            # tapi videonya privat", dan mengatakan yang benar untuk keduanya.
+            "statistik_siap": bool(stat_svc.kunci_api()),
+            "statistik_terbaca": len(angka)}

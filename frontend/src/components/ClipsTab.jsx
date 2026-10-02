@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Film, Download, Trash2, RefreshCw, Loader2, AlertTriangle, Layers, X, UploadCloud, Send, Check
+  Film, Download, Trash2, RefreshCw, Loader2, AlertTriangle, Layers, X, UploadCloud, Send, Check, Eye
 } from 'lucide-react';
 import { apiGet, apiPost, apiDelete, downloadToDisk, mediaUrl, kategoriKlip } from '../lib/api';
 import { formatTime } from '../utils/timeFormat';
@@ -178,7 +178,10 @@ export default function ClipsTab() {
 
   const loadUploads = async () => {
     try {
-      const { uploads } = await apiGet('/uploads?limit=200');
+      // `statistik=true`: tayangan ikut diminta. Server mengambilnya di utas
+      // lain dan mengembalikan daftar yang sama tanpa angka bila kuncinya
+      // belum disetel, jadi halaman ini tidak perlu tahu apakah kuncinya ada.
+      const { uploads } = await apiGet('/uploads?limit=200&statistik=true');
       const map = {};
       for (const u of uploads) {
         // Yang GAGAL ikut, dan itu perbaikan, bukan kelalaian.
@@ -346,6 +349,30 @@ export default function ClipsTab() {
                   <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
                     {meta.aspect_ratio || '9:16'} · {formatBytes(clip.file_size)}
                   </div>
+                  {/* Tayangan, kalau kuncinya disetel dan videonya publik.
+                      Tidak ditampilkan sebagai nol saat tidak terbaca: nol pada
+                      klip yang sebenarnya ditonton ribuan orang adalah angka
+                      yang langsung dipakai orang untuk mengambil keputusan. */}
+                  {(() => {
+                    const stat = (sent[clip.file_name] || [])
+                      .map((u) => u.statistik).find((x) => x && x.tayangan != null);
+                    if (!stat) return null;
+                    return (
+                      <div title="Tayangan di YouTube, disegarkan tiap 15 menit"
+                           style={{ fontSize: '0.7rem', color: 'var(--ink-2)',
+                                    display: 'flex', alignItems: 'center', gap: '5px' }}>
+                        <Eye size={12} style={{ flex: 'none' }} />
+                        <b style={{ fontVariantNumeric: 'tabular-nums' }}>
+                          {stat.tayangan.toLocaleString('id-ID')}
+                        </b>
+                        {stat.suka != null && (
+                          <span style={{ color: 'var(--text-muted)' }}>
+                            · {stat.suka.toLocaleString('id-ID')} suka
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })()}
                   {/* Sudah diterbitkan ke platform mana, ditandai tangan.
                       Penandanya dulu hanya ada DI DALAM jendela "Siapkan
                       terbit", jadi menjawab "yang mana yang sudah naik?" berarti

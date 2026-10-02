@@ -69,6 +69,9 @@ async def get_settings():
     return {
         "providers": list(PROVIDERS.values()),
         "ai_provider": settings_repo.get("ai.provider", "gemini"),
+        # Kunci YouTube Data API: yang dikirim hanya ADA atau TIDAK, tidak
+        # pernah kuncinya sendiri. Sama seperti kunci lain di halaman ini.
+        "youtube_api_key_set": bool((settings_repo.get("youtube.api_key") or "").strip()),
         # Hanya 4 karakter terakhir: cukup untuk mengenali kunci, tidak cukup
         # untuk membocorkannya. Versi lama mengembalikan 8 karakter PERTAMA.
         "gemini_api_key_set": bool(key),
@@ -127,6 +130,51 @@ async def openrouter_models():
                for m in openrouter.urutkan(semua)]
     return {"tersedia": pilihan, "terkuat": (urut or [{}])[0].get("id"),
             **_openrouter_ringkas()}
+
+
+class KunciYoutubeRequest(BaseModel):
+    # Kosong berarti MENGHAPUS kuncinya; itu satu-satunya cara mencabutnya
+    # lewat antarmuka, jadi panjang minimumnya nol.
+    api_key: str = Field("", max_length=200)
+
+
+@router.post("/youtube-key")
+async def set_youtube_key(req: KunciYoutubeRequest):
+    """
+    Kunci YouTube Data API, untuk membaca tayangan klip yang sudah diunggah.
+
+    Bukan kunci OAuth dan bukan pengganti izin akun: ia hanya membaca angka
+    video PUBLIK, dan tidak bisa mengunggah, mengubah, atau membaca apa pun
+    yang privat. Itu sebabnya ia dipilih — menambah izin baca ke akun akan
+    menuntut setiap akun yang sudah tersambung menyambung ulang.
+
+    Diuji sebelum disimpan. Kunci yang salah ketik akan terlihat sebagai
+    "tayangan tidak terbaca" berbulan-bulan kemudian, di tempat yang jauh dari
+    sini, dan tidak ada yang akan menghubungkannya dengan kolom ini.
+    """
+    import asyncio
+
+    from ..services import statistik as stat_svc
+
+    key = req.api_key.strip()
+    if not key:
+        settings_repo.set_value("youtube.api_key", "")
+        return {"status": "ok", "terpasang": False}
+    if any(c.isspace() for c in key):
+        raise AppError("Kunci tidak boleh memuat spasi atau baris baru.",
+                       code="YT_KEY_INVALID", status=422)
+
+    # Satu video publik yang pasti ada: video pertama YouTube. Yang diuji
+    # kuncinya, bukan videonya.
+    terbaca = await asyncio.to_thread(stat_svc.tayangan, ["jNQXAC9IVRw"], kunci=key)
+    if not terbaca:
+        raise AppError(
+            "Kunci itu tidak bisa membaca YouTube Data API. Periksa apakah "
+            "YouTube Data API v3 sudah dinyalakan di project yang sama, dan "
+            "kunci ini tidak dibatasi ke API lain.",
+            code="YT_KEY_INVALID", status=422)
+    settings_repo.set_value("youtube.api_key", key)
+    return {"status": "ok", "terpasang": True}
 
 
 @router.post("/openrouter-key")

@@ -17,6 +17,7 @@ import SuaraCard from './SuaraCard';
 import CookiesCard from './CookiesCard';
 import TerjemahOtomatisCard from './TerjemahOtomatisCard';
 import OpenRouterCard from './OpenRouterCard';
+import StatistikCard from './StatistikCard';
 import WarnaPenuturCard from './WarnaPenuturCard';
 import UpdateCard from './UpdateCard';
 
@@ -649,6 +650,7 @@ export default function ProfileTab() {
       </div>
 
       <OpenRouterCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
+      <StatistikCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
 
       <CookiesCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
 
