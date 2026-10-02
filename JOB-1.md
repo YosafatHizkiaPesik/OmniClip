@@ -1,6 +1,10 @@
 # Job 1 — Mengurus izin unggah, dan daftar pekerjaan yang belum selesai
 
-Ditulis 29 September 2026, versi 1.3.0.
+Ditulis 29 September 2026, versi 1.3.0. Diperbarui 2 Oktober 2026, versi 1.3.1.
+
+> **Dua berkas catatan.** `CATATAN.md` berisi sebagian hal yang sama, dan
+> keduanya mengaku berkas tunggal. Keduanya sudah diperbarui 2 Oktober 2026;
+> yang belum diputuskan pemiliknya adalah mana yang dipertahankan.
 
 Isinya dua hal:
 1. **Langkah demi langkah mengurus izin** supaya unggah otomatis bisa jalan.

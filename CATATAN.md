@@ -4,7 +4,13 @@ Satu berkas, menggantikan sebelas berkas MD yang tersebar. Isinya tiga hal:
 apa yang **belum selesai**, **langkah mengurus izin unggah**, dan **acuan teknis**
 yang masih dipakai.
 
-Ditulis 29 September 2026, versi 1.2.1.
+Ditulis 29 September 2026, versi 1.2.1. Diperbarui 2 Oktober 2026, versi 1.3.1.
+
+> **Dua berkas catatan, dan itu memang membingungkan.** `JOB-1.md` ditulis
+> belakangan dengan isi yang sebagian sama persis dengan di sini. Keduanya
+> mengaku "satu berkas yang menggantikan sisanya", dan tidak ada yang benar
+> selama keduanya berdiri. Keduanya sudah diperbarui 2 Oktober 2026; yang
+> belum diputuskan pemiliknya adalah mana yang dipertahankan.
 
 ---
 
@@ -19,34 +25,47 @@ tengah, mengikuti facecam yang berpindah antar POV, memecah klip jadi bagian
 "permainan saja", "permainan + wajah", dan "wajah penuh", serta memotong
 linimasa di tiap pergantian supaya bisa disetel tangan.
 
-**Yang masih meleset**, diukur pada klip LaperGang 85 detik dengan menjalankan
-detektor wajah di tiap sampel lalu membandingkannya dengan kotak yang dipakai:
+**Angka terakhir**, 2 Oktober 2026, diukur pada empat klip LaperGang (1.528
+sampel berwajah) dengan menjalankan detektor wajah di tiap sampel lalu
+membandingkannya dengan panel yang berlaku saat itu: **93,1% tepat, 106
+meleset.** Sempat 94,1% sebelum deteksi tepi panel diperbaiki; satu poin itu
+dibayar dengan sadar untuk kotak panel yang jauh lebih tepat ukurannya (lebar
+nilai tengah 192 piksel -> 290).
 
-| | |
-|---|---|
-| Tepat | 605 sampel (88,7%) |
-| Meleset | 60 sampel (8,8%) |
-| Tanpa wajah tepi | 17 sampel (2,5%) |
+**Yang sudah dikerjakan sejak catatan ini ditulis:**
 
-Melesetnya berkumpul di lima rentang, semuanya **di sekitar pergantian POV**:
-klip detik 24,0-24,6 / 32,5-33,4 / 36,8-38,8 / 70,0-70,6 / 80,5-81,9.
+- Menggeser titik pergantian supaya MENDAHULUI, bukan mengikuti. Batas
+  sekarang maju ~190 ms: setengah jarak sampel (menaruh batas tepat di
+  sampelnya selalu terlambat) plus satu sampel lagi, karena telat dan terlalu
+  cepat tidak sama beratnya di mata penonton.
+- Penajaman tepi panel, yang ternyata MATI sejak jendela pemindaian
+  dipersempit: ia menuntut empat bingkai gradien sementara jendela 0,5 detik
+  hanya memberi dua. Gradien sekarang dihitung per blok dua detik, terpisah
+  dari jendela letak yang tetap setengah detik.
 
-**Yang belum dikerjakan:** menggeser titik pergantian kotak supaya MENDAHULUI
-peralihan POV sedikit, bukan mengikutinya. Itu yang akan memangkas 8,8% itu.
+**Yang masih meleset:** sebagian bidikan masih mendapat kotak panel yang lebih
+kecil daripada panel sebenarnya, saat satu sisinya kebetulan sewarna dengan
+gambar di sebelahnya. Empat percobaan terakhir menukar satu kesalahan dengan
+kesalahan lain; yang tersisa di situ bukan penyetelan angka melainkan
+pendekatan yang berbeda.
 
 ## 1.2 Ukuran bidang wajah pada klip game
 
-Wajah mengisi 20-24% luas potongan, naik dari 16-18% sesudah potongannya
-diukur dari wajah dan bukan dari seluruh panel.
+**Aturannya dibalik 1 Oktober 2026.** Dulu potongan diukur dari KEPALA; itu
+menghasilkan potongan yang lebih kecil daripada panelnya di kedua sisi
+sekaligus — terukur 240x136 dari panel 386x303. Sekarang ukurannya ditentukan
+PANEL: kotak terbesar berasio bidang yang muat di dalam kotak facecam,
+diletakkan pada kepalanya, disusutkan 2% tiap sisi sebagai marjin aman.
 
-**Batasnya sekarang geometri:** potongan wajib berbentuk sama dengan bidangnya.
-Bidang wajah setinggi 40% pada kanvas 9:16 itu melebar (rasio 1,4), sementara
-kepala orang tegak. Untuk memuat kepala, potongannya terpaksa melebar dan ikut
-membawa ruangan di kiri-kanannya.
+Aturan pemiliknya satu arah, dan itu yang menentukan rancangannya: **tidak
+boleh LEBIH dari kotak facecam, kurang sedikit tidak apa-apa.** Terukur pada
+236 potongan tersimpan: seluruhnya di dalam kotaknya, dan satu sisinya pas
+dengan sisi panel.
 
-**Jalan keluarnya** menaikkan batas tinggi bidang wajah dari 40% ke sekitar
-55%, di `render.GAMING_WAJAH_MAKS`. Belum dikerjakan karena itu memakan jatah
-bidang permainan di semua klip game, dan itu keputusan rasa pemiliknya.
+**Batasnya sekarang bahannya, bukan geometrinya.** Bidang wajah selebar 1080
+piksel sementara kotak facecam di sumber 1080p hanya 192-806 piksel: rata-rata
+3,5 kali perbesaran, 5,6 kali pada yang terkecil. Satu-satunya jalan menaikkan
+ketajamannya ada di hulu — sumber 1440p atau 4K.
 
 ## 1.3 Sisipan
 
@@ -59,24 +78,34 @@ bidang permainan di semua klip game, dan itu keputusan rasa pemiliknya.
 
 ## 1.4 Belum pernah diuji sungguhan
 
-- **Unggah ke YouTube dan Drive.** Berkas OAuth sudah terpasang dan alurnya
-  berjalan, tapi belum pernah ada video yang benar-benar naik.
+- ~~Unggah ke YouTube dan Drive.~~ **Sudah teruji.** Pemiliknya sudah
+  mengunggah beberapa video lewat fitur ini. Keluhan yang tersisa bukan soal
+  alurnya melainkan MUTU video di YouTube, dan sebabnya ditemukan 2 Oktober
+  2026: render selalu mengeluarkan **30 fps** dari sumber 60 fps (`render.py`,
+  `fps=30`). Resolusi dan bitrate justru baik: 1080x1920, 13,7 Mbps. Mengubahnya
+  kira-kira menggandakan kerja filter, jadi itu keputusan pemiliknya.
 - **Windows.** Bundelnya terbangun tiap rilis, tapi tidak ada yang pernah
   menjalankannya di Windows sungguhan. Termasuk unduhan Deno, server PO Token,
   dan encoder GPU.
-- **Render GPU pada Linux.** Ffmpeg statis yang dibundel belum diuji dengan
-  VAAPI/NVENC di mesin yang punya kartu grafis.
+- **Render GPU pada Linux.** Pada mesin pemiliknya VAAPI terpilih dan dipakai
+  (`h264_vaapi (low power)`, terlihat di log tiap kali aplikasi mulai). Yang
+  belum diuji: ffmpeg STATIS yang dibundel ke rilis, dan NVENC.
 - **Pemulihan cadangan sampai tuntas.** Membuat cadangan sudah diuji;
   memulihkannya belum.
 
 ## 1.5 Lainnya
 
 - **Pola reaksi otomatis untuk kartun** belum ada.
-- **Statistik sesudah unggah** (berapa tayangan tiap klip) belum ada.
+- ~~Statistik sesudah unggah.~~ **Selesai 2 Oktober 2026.** Tayangan dan suka
+  tampil di kartu Klip jadi. Dibaca dengan kunci YouTube Data API yang disetel
+  di Pengaturan > Tayangan klip — kunci API, bukan izin akun, karena token
+  unggah menjawab 403 untuk `videos.list` dan menambah izin baca akan menuntut
+  tiap akun menyambung ulang. Harganya: hanya video PUBLIK yang terbaca, dan
+  yang tidak terbaca hilang dari daftar, bukan jadi nol.
 - **Sutradara AI** memakai kuota Gemini; jatah gratisnya bisa habis seharian
   penuh, dan saat itu terjadi jalur heuristik lokal yang dipakai.
-- **Sakelar sensor kata kasar** belum ada di Pengaturan. Bagian dalamnya sudah
-  menerima pilihan (`build_ass(sensor=...)`), tinggal tombolnya.
+- ~~Sakelar sensor kata kasar.~~ **Selesai**, ada di Pengaturan > Subtitle
+  (`components/SakelarSensor.jsx`).
 
 ---
 
