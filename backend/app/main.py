@@ -128,7 +128,9 @@ async def lifespan(app: FastAPI):
     # Menghitung jejak wajah tiap klip sebelum ada yang membukanya. Prioritas
     # terendah: tidak ada yang menunggunya.
     from .services.bingkai_awal import run_bingkai_awal
-    queue.register("bingkai_awal", run_bingkai_awal, lane="cpu")
+    # Lajur `latar`, bukan `cpu`: tidak ada yang menunggu pemanasan bingkai,
+    # jadi ia tidak boleh berdiri di antrean yang sama dengan Render.
+    queue.register("bingkai_awal", run_bingkai_awal, lane="latar")
     queue.start()
 
     # Smart reframe bersifat opsional dan gagal dengan anggun, jadi ketiadaannya

@@ -312,6 +312,19 @@ LANE_LIMITS = {
     # ke satu kanal dalam satu ledakan adalah persis pola yang membuat YouTube
     # menandai sebuah kanal. Satu per satu, berurutan, selalu.
     "upload": 1,
+    # Pekerjaan latar yang TIDAK ADA yang menunggunya: pemanasan bingkai.
+    #
+    # Sebelum lajur ini ada, ia memakai lajur `cpu` yang lebarnya satu — lajur
+    # yang sama dengan RENDER. Pemanasan dua belas klip berjalan sembilan
+    # sampai dua belas menit, dan selama itu menekan tombol Render berarti
+    # menunggu di belakang pekerjaan yang tidak diminta siapa pun.
+    #
+    # Memberinya lajur sendiri tidak membuat mesin mengerjakan dua hal berat
+    # sekaligus: yang menjaga itu `jobs.gerbang_cpu`, yang tetap satu per satu,
+    # dan pemanasan sudah minggir di sela tiap klip (`mengalah_cpu`). Yang
+    # berubah hanya siapa yang boleh BERDIRI di antrean, bukan siapa yang boleh
+    # bekerja.
+    "latar": int(os.getenv("OMNICLIP_LANE_LATAR", "1")),
 }
 
 # Unduhan yang boleh berjalan bersamaan, lintas jenis pekerjaan. Dua: tiap
