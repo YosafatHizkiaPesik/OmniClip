@@ -740,6 +740,9 @@ export function bidangPermainan(src, wajah, srcAspek, outAspek) {
 
 // Cermin konstanta render.py: ruang kepala di sekitar petak wajah YuNet.
 const KEPALA_ATAS = 0.35;
+// Bagian ruang sisa yang ditaruh di ATAS kepala; sisanya di bawah.
+// Cermin `ATAS_KEPALA_SISA` di backend/app/services/render.py.
+const ATAS_KEPALA_SISA = 0.25;
 const KEPALA_BAWAH = 0.22;
 const KEPALA_SAMPING = 0.25;
 const PERMAINAN_GESER_MAKS = 3.0;
@@ -766,22 +769,34 @@ function pilihDalam(lo, hi, plo, phi, ingin) {
 }
 
 /**
- * Cermin `render.kotak_reaksi`: potongan bidang reaksi yang memuat SELURUH
- * kepala dan sebisanya tetap di dalam panel facecam.
+ * Cermin `render.kotak_reaksi`: potongan bidang reaksi SEBESAR MUNGKIN di
+ * dalam kotak facecam, berasio bidangnya, diletakkan pada kepalanya.
+ *
+ * Ukurannya ditentukan PANEL, bukan kepala. Aturan lama mengambil sebesar
+ * kepala berikut ruangnya; hasilnya potongan yang lebih kecil daripada
+ * panelnya di kedua sisi sekaligus — terukur 240x136 dari panel 386x303 — dan
+ * yang lebih buruk, ia bisa menjulur KELUAR panel saat kepalanya di tepi.
+ * Aturan pemiliknya satu arah: tidak boleh lebih, kurang sedikit tidak apa-apa.
+ *
+ * Yang dipilih kepala tinggal LETAKNYA. Panel yang bentuknya berbeda dari
+ * bidangnya tetap harus dipangkas pada satu sisi, dan di mana memangkasnya
+ * ditentukan di mana kepalanya.
  */
 export function kotakReaksi(kotak, muka, rasioPx, srcAspek) {
   const dasar = pasRasio(kotak, rasioPx, srcAspek, { dalam: true });
   const butuh = ruangWajah(muka);
   if (!butuh) return dasar;
-  const k = rasioPx / Math.max(1e-6, srcAspek);
-  let h = Math.max(dasar.h, butuh.h, butuh.w / k);
-  let w = h * k;
-  if (w > 100) { w = 100; h = 100 / k; }
-  if (h > 100) { h = 100; w = 100 * k; }
-  let x = pilihDalam(butuh.x + butuh.w - w, butuh.x, kotak.x, kotak.x + kotak.w - w,
-    butuh.x + butuh.w / 2 - w / 2);
-  let y = pilihDalam(butuh.y + butuh.h - h, butuh.y, kotak.y, kotak.y + kotak.h - h,
-    butuh.y + butuh.h / 2 - h / 2);
+  const w = dasar.w;
+  const h = dasar.h;
+  // Panel syarat KERAS, kepala syarat lunak — kebalikan dari aturan lama.
+  // Apa pun yang di luar panel isinya permainan.
+  let x = pilihDalam(kotak.x, kotak.x + kotak.w - w,
+    butuh.x + butuh.w - w, butuh.x, butuh.x + butuh.w / 2 - w / 2);
+  // Ruang sisa ditaruh sebagian besar DI BAWAH kepala: tepi atas panel sering
+  // ditaksir terlalu tinggi, dan ruang di atas itu terisi gambar permainan.
+  const sisa = Math.max(0, h - butuh.h);
+  let y = pilihDalam(kotak.y, kotak.y + kotak.h - h,
+    butuh.y + butuh.h - h, butuh.y, butuh.y - sisa * ATAS_KEPALA_SISA);
   x = Math.min(Math.max(0, x), 100 - w);
   y = Math.min(Math.max(0, y), 100 - h);
   const bulat = (v) => Math.round(v * 100) / 100;
