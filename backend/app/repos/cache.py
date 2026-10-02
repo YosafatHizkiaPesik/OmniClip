@@ -72,4 +72,57 @@ def bersihkan(maks_umur: float = 24 * 3600) -> int:
         "AND cache_key NOT LIKE 'facecam:%' AND cache_key NOT LIKE 'tema:%'",
         (time.time() - maks_umur,),
     )
-    return cur.rowcount
+    return cur.rowcount + pangkas_abadi()
+
+
+# Entri yang tidak pernah kedaluwarsa: isinya menjelaskan isi sebuah potongan
+# video, dan itu tidak berubah. Lihat `bersihkan`.
+ABADI = ("jenis:", "sutradara:", "bingkai:", "facecam:", "tema:")
+
+# Plafon isi keempatnya, dalam bita.
+#
+# Tidak pernah kedaluwarsa BUKAN berarti tidak pernah dibuang. Terukur pada
+# penyimpanan pemiliknya 2 Oktober 2026: basis data 25 MB, dan 14,3 MB-nya
+# simpanan ini — `bingkai:` sendiri 143 baris untuk 9,0 MB, sekitar 63 KB per
+# klip yang pernah dibuka. Tidak ada satu pun aturan yang menghentikannya
+# tumbuh, termasuk untuk video yang berkasnya sudah lama dihapus.
+#
+# 40 MB kira-kira enam ratus klip jejak wajah: jauh di atas berapa pun yang
+# dikerjakan orang dalam satu masa, dan tetap memberi basis data batas atas
+# yang bisa disebut. Yang dibuang paling lama ditulis, dan membuangnya hanya
+# berarti klip lama yang dibuka lagi menghitung ulang — bukan kehilangan.
+PLAFON_ABADI = 40 * 1024 * 1024
+
+
+def pangkas_abadi(plafon: int = PLAFON_ABADI) -> int:
+    """
+    Membuang entri abadi yang paling lama ditulis sampai isinya muat plafon.
+
+    "Paling lama ditulis", bukan "paling lama tidak dipakai": tabel ini tidak
+    mencatat kapan sebuah baris DIBACA, dan menambahkan catatan itu berarti
+    tiap pembacaan menulis — mahal, dan merusak arti `created_at` yang dipakai
+    TTL di atas.
+    """
+    conn = get_conn()
+    pola = " OR ".join("cache_key LIKE ?" for _ in ABADI)
+    arg = [p + "%" for p in ABADI]
+    baris = conn.execute(
+        f"SELECT cache_key, LENGTH(payload_json) AS n FROM search_cache "
+        f"WHERE {pola} ORDER BY created_at DESC", arg,
+    ).fetchall()
+    jumlah = 0
+    buang: list[str] = []
+    for r in baris:
+        jumlah += int(r["n"] or 0)
+        if jumlah > plafon:
+            buang.append(r["cache_key"])
+    if not buang:
+        return 0
+    # Dipotong per seribu: SQLite membatasi jumlah parameter satu pernyataan.
+    for i in range(0, len(buang), 1000):
+        potong = buang[i:i + 1000]
+        conn.execute(
+            f"DELETE FROM search_cache WHERE cache_key IN ({','.join('?' * len(potong))})",
+            potong,
+        )
+    return len(buang)
