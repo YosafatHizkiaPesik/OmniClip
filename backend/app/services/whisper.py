@@ -58,6 +58,28 @@ MIN_FREE_RAM_MB = 900
 # jadi salah satu huruf mengubah seluruh kalimat.
 AKSARA_SULIT = {"ja", "ko", "zh", "yue", "th", "ar", "he", "fa", "hi", "bn",
                 "ta", "te", "ru", "uk", "el", "ka", "am", "my", "km"}
+
+# Bahasa beraksara Latin yang model "base" tetap kerjakan dengan buruk.
+#
+# INDONESIA MASUK DI SINI, dan buktinya tidak tanggung. Diukur 5 Oktober 2026
+# pada 45 detik audio gameplay pemiliknya sendiri, model dimuat lebih dulu
+# supaya waktunya adil:
+#
+#   base  beam 1   7,9 dtk   "Oh eh, tunggu sebuah dia tikai ke lu mati loh
+#                              Oke, lapar, uju Sama, apa, apa..."
+#   small beam 1   6,2 dtk   "oh eh tunggu 10 detik lagi ya tunggu 10 detik
+#                              lagi lo mati lo oke 8 7 6 5 4 3 2 1..."
+#   small beam 5   7,4 dtk   sama, tanpa pengulangan "anjing anjing anjing"
+#
+# Yang diucapkan memang hitungan mundur sepuluh detik, dan hanya `small` yang
+# mendengarnya. Dan ia LEBIH CEPAT daripada `base` — bukan meski lebih besar,
+# melainkan karena `base` yang salah dengar jatuh ke pengulangan dan mendekode
+# jauh lebih banyak token untuk audio yang sama.
+#
+# Itu juga menjelaskan kenapa pemiliknya "sering harus edit manual subtitle":
+# yang dipakai selama ini model yang tidak cukup untuk bahasanya.
+BAHASA_SULIT = {"id", "ms", "jv", "su", "tl", "vi"}
+
 NAIK_KE = "small"
 
 
@@ -71,7 +93,7 @@ def model_untuk(bahasa: str, pilihan: str) -> tuple[str, str]:
     transkrip yang kurang tepat.
     """
     bahasa = (bahasa or "").split("-")[0].lower()
-    if not bahasa or bahasa not in AKSARA_SULIT:
+    if not bahasa or bahasa not in (AKSARA_SULIT | BAHASA_SULIT):
         return pilihan, ""
     if pilihan not in ("tiny", "base"):
         return pilihan, ""
@@ -80,8 +102,7 @@ def model_untuk(bahasa: str, pilihan: str) -> tuple[str, str]:
         return pilihan, (f"Bahasa ini butuh model Whisper yang lebih besar, tapi RAM "
                          f"tersisa {bebas} MB, tetap memakai \"{pilihan}\".")
     return NAIK_KE, (f"Bahasa \"{bahasa}\" sulit untuk model \"{pilihan}\", "
-                     f"memakai \"{NAIK_KE}\" supaya salinannya benar. Lebih lama, "
-                     "sekitar dua kali.")
+                     f"memakai \"{NAIK_KE}\" supaya salinannya benar.")
 
 
 def available_ram_mb() -> int:
@@ -210,10 +231,21 @@ def _transcribe_file(model, path: str, language: Optional[str],
                      on_segment: Optional[Callable[[float], None]],
                      should_cancel: Optional[Callable[[], bool]]) -> tuple[list[dict], str]:
     """Menyalin satu file audio dan menggeser semua waktunya dengan `time_offset`."""
+    # Beam 5 untuk model `small` ke atas, beam 1 untuk yang lebih kecil.
+    #
+    # Bukan "lebih besar lebih baik" begitu saja — terukur 5 Oktober 2026 pada
+    # audio yang sama, beam 5 pada `base` justru LEBIH BURUK daripada beam 1:
+    # ia jatuh ke pengulangan ("di jodh, di jodh, di jodh...") selama belasan
+    # detik. Model yang salah dengar diberi lebih banyak jalan hanya menemukan
+    # lebih banyak jalan yang salah.
+    #
+    # Pada `small` arahnya terbalik dan ongkosnya kecil: 7,4 lawan 6,2 detik
+    # untuk 45 detik audio, dan pengulangan "anjing anjing anjing" hilang.
+    beam = 5 if _MODEL_SIZE in ("small", "medium", "large") else 1
     segments, info = model.transcribe(
         path,
         language=language,
-        beam_size=1,
+        beam_size=beam,
         word_timestamps=True,
         vad_filter=True,
         vad_parameters={"min_silence_duration_ms": 400},

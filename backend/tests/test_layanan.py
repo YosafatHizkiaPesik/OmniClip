@@ -139,9 +139,25 @@ class ModelWhisper(unittest.TestCase):
     def test_pilihan_yang_lebih_besar_tidak_pernah_diturunkan(self):
         self.assertEqual(model_untuk("ja", "medium"), ("medium", ""))
 
-    def test_bahasa_latin_tidak_diubah(self):
-        self.assertEqual(model_untuk("id", "base"), ("base", ""))
+    def test_yang_tidak_terbukti_bermasalah_tidak_diubah(self):
+        """
+        Bukan "aksara Latin aman" — itu asumsi yang terbukti salah.
+        Yang menentukan bukti, bukan jenis aksaranya.
+
+        Uji ini dulu berbunyi `model_untuk("id", "base") == ("base", "")`, dan
+        itu benar sampai diukur: pada 45 detik audio Indonesia, `base`
+        mengeluarkan "Oh eh, tunggu sebuah dia tikai ke lu mati loh" untuk
+        kalimat yang sebenarnya hitungan mundur sepuluh detik. Lihat
+        test_akurasi_subtitle.py.
+        """
+        self.assertEqual(model_untuk("en", "base"), ("base", ""))
+        self.assertEqual(model_untuk("es", "base"), ("base", ""))
         self.assertEqual(model_untuk("", "base"), ("base", ""))
+
+    def test_indonesia_dinaikkan_karena_terukur(self):
+        model, alasan = model_untuk("id", "base")
+        self.assertEqual(model, "small")
+        self.assertTrue(alasan)
 
     def test_kode_wilayah_diabaikan(self):
         self.assertEqual(model_untuk("zh-CN", "base")[0], "small")
