@@ -18,6 +18,7 @@ import CookiesCard from './CookiesCard';
 import TerjemahOtomatisCard from './TerjemahOtomatisCard';
 import OpenRouterCard from './OpenRouterCard';
 import StatistikCard from './StatistikCard';
+import LajuRenderCard from './LajuRenderCard';
 import WarnaPenuturCard from './WarnaPenuturCard';
 import UpdateCard from './UpdateCard';
 
@@ -661,6 +662,7 @@ export default function ProfileTab() {
       <TerjemahOtomatisCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
 
       <SuaraCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
+      <LajuRenderCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
 
       <PemakaianAiCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
 

@@ -87,6 +87,8 @@ async def get_settings():
         "cookies_aktif": _cookies_aktif(),
         "gemini_models": GEMINI_MODELS,
         "render_suara": (settings_repo.get("render.suara") or "seimbang"),
+        # "sumber" (bawaan) atau "30". Lihat `render.laju_render`.
+        "render_fps": (settings_repo.get("render.fps") or "sumber"),
         "warna_penutur": subtitles.warna_penutur_aktif(),
         "pemanasan_bingkai": _pemanasan_bingkai(),
         "sensor_kata_kasar": _sensor_kata_kasar(),
@@ -648,6 +650,26 @@ async def set_bahasa(req: BahasaRequest):
     else:
         settings_repo.delete("transcript.langs")
     return {"status": "ok", "langs": list(get_caption_langs())}
+
+
+class LajuRequest(BaseModel):
+    nilai: str
+
+
+@router.post("/render-fps")
+async def set_render_fps(req: LajuRequest):
+    """
+    Laju bingkai hasil render: ikut sumber, atau dipatok 30.
+
+    Sampai 5 Oktober 2026 selalu 30, dan itu yang membuat klip gameplay 60 fps
+    terlihat buruk di YouTube sementara resolusi dan bitrate-nya baik.
+    """
+    nilai = req.nilai.strip().lower()
+    if nilai not in ("sumber", "30"):
+        raise AppError("Pilihan laju bingkai harus 'sumber' atau '30'.",
+                       code="FPS_TIDAK_DIKENAL", status=422)
+    settings_repo.set_value("render.fps", nilai)
+    return {"status": "ok", "nilai": nilai}
 
 
 class SuaraRequest(BaseModel):

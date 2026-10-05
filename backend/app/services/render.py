@@ -143,7 +143,65 @@ def _run_ffmpeg(cmd: list[str], *, duration: float,
     return (proc.returncode if proc.returncode is not None else -1), stderr_text
 
 
-def _build_segment_graph(segments: list[dict]) -> tuple[list[str], str, str]:
+# Laju bingkai hasil render.
+#
+# Sampai 5 Oktober 2026 angkanya dipatok 30, dan alasannya masuk akal: sumber
+# 60 fps membawa dua kali bingkai yang dibutuhkan melewati setiap crop, scale,
+# dan blur, lalu separuhnya dibuang begitu sampai ke pengode. Pada mesin 15 watt
+# itu bukan penghematan kecil.
+#
+# Yang tidak ikut dihitung: apa yang hilang. Untuk klip GAMEPLAY, separuh laju
+# bingkai adalah kehilangan mutu yang paling kelihatan di layar — jauh lebih
+# terasa daripada bitrate. Dilaporkan pemiliknya sesudah mengunggah beberapa
+# video: "kualitasnya jelek meskipun sudah ada tulisan SD dan HD". Terukur pada
+# klip jadinya: 1080x1920, 13,7 Mbps — resolusi dan bitrate justru baik — tapi
+# 30 fps dari sumber 60 fps.
+#
+# Jadi sekarang laju sumber yang diikuti, dan 30 tetap bisa dipilih di
+# Pengaturan untuk render yang harus cepat.
+#
+# Ongkosnya ternyata jauh lebih kecil daripada dugaan. Terukur 5 Oktober 2026 di
+# mesin pemiliknya (i5-8250U, VAAPI), klip 6 detik dari sumber 60 fps:
+#
+#   60 fps  11,4 detik
+#   30 fps  10,3 detik
+#
+# Sebelas persen, bukan dua kali lipat. Yang menanggung beban berat adalah
+# pengode GPU, dan ia tidak peduli berapa bingkai yang masuk; yang berlipat
+# hanya kerja filter, dan filter di mode blur ringan. Susunan gaming dengan
+# linimasa bingkai lebih berat daripada ini, jadi angkanya akan berbeda — tapi
+# dugaan "dua kali lipat" yang dipakai sebagai alasan mematok 30 selama ini
+# tidak pernah diukur.
+LAJU_MAKS = 60          # di atas ini tidak ada platform pendek yang peduli
+LAJU_MIN = 24           # sumber yang lebih lambat dari ini dinaikkan ke sini
+
+
+def laju_render(src_fps: Optional[float] = None) -> int:
+    """
+    Laju bingkai keluaran: ikut sumber (bawaan) atau dipatok 30.
+
+    Sumber yang lajunya tidak terbaca memakai 30, bukan menebak: menebak
+    terlalu tinggi berarti ffmpeg menggandakan bingkai dan berkasnya membesar
+    tanpa satu pun gambar baru.
+    """
+    try:
+        from ..repos import settings as settings_repo
+        pilihan = (settings_repo.get("render.fps") or "").strip().lower()
+    except Exception:                                    # noqa: BLE001
+        pilihan = ""
+    if pilihan == "30":
+        return 30
+    try:
+        n = int(round(float(src_fps)))
+    except (TypeError, ValueError):
+        return 30
+    if n <= 0:
+        return 30
+    return max(LAJU_MIN, min(LAJU_MAKS, n))
+
+
+def _build_segment_graph(segments: list[dict],
+                         fps: int = 30) -> tuple[list[str], str, str]:
     """
     Menyusun input dan filtergraph untuk memotong lalu menyambung segmen.
 
@@ -170,17 +228,13 @@ def _build_segment_graph(segments: list[dict]) -> tuple[list[str], str, str]:
         # `-ss` melompat cepat ke keyframe terdekat, lalu trim memotong presisi.
         inputs += ["-ss", f"{start - pre:.3f}", "-t", f"{pre + dur:.3f}", "-i", "SRC"]
 
-        # `fps=30` LANGSUNG sesudah pemotongan, untuk semua mode:
-        #   - sumber 60 fps (rekaman game) membawa dua kali bingkai yang
-        #     dibutuhkan hasil 30 fps melewati setiap crop, scale, dan blur di
-        #     belakangnya — pada susunan gaming dan linimasa bingkai, itu
-        #     beberapa filter berat per bingkai yang separuhnya dibuang begitu
-        #     sampai ke pengode;
-        #   - celah di sumber yang berlubang (unduhan yang kehilangan potongan)
-        #     diisi bingkai terakhir, jadi gambar dan suara tetap sinkron.
+        # `fps` LANGSUNG sesudah pemotongan, untuk semua mode: celah di sumber
+        # yang berlubang (unduhan yang kehilangan potongan) diisi bingkai
+        # terakhir, jadi gambar dan suara tetap sinkron. Angkanya dari
+        # `laju_render` — ikut sumber kecuali Pengaturan memintanya 30.
         parts.append(
             f"[{i}:v]trim=start={pre:.3f}:duration={dur:.3f},setpts=PTS-STARTPTS,"
-            f"fps=30[v{i}]"
+            f"fps={fps}[v{i}]"
         )
         parts.append(
             f"[{i}:a]atrim=start={pre:.3f}:duration={dur:.3f},asetpts=PTS-STARTPTS[a{i}]"
@@ -910,7 +964,8 @@ def build_frame_keys_graph(keys: list, in_label: str, out_label: str, *,
                            plan=None, workdir=None,
                            layout_gaming: Optional[dict] = None,
                            plan_gerak=None, frame_zoom: float = 1.0,
-                           frame_geser_y: float = 0.0) -> tuple[str, list]:
+                           frame_geser_y: float = 0.0,
+                           fps: int = 30) -> tuple[str, list]:
     """
     Graf untuk daftar kunci pembingkaian. Mengembalikan (graf, kunci_terpakai).
 
@@ -943,7 +998,7 @@ def build_frame_keys_graph(keys: list, in_label: str, out_label: str, *,
     # terakhir sebelum celahnya. Tanpa ini, sumber yang berlubang — unduhan
     # yang kehilangan potongan — membuat potongan yang tersambung lebih pendek
     # daripada jendelanya, dan video berakhir jauh sebelum audionya.
-    bagian = [f"{in_label}fps=30,split={n}" + "".join(f"[fsrc{i}]" for i in range(n))]
+    bagian = [f"{in_label}fps={fps},split={n}" + "".join(f"[fsrc{i}]" for i in range(n))]
     for i, k in enumerate(dipakai):
         t0, t1 = k["t"], k["akhir"]
         # `trim` TANPA mengatur ulang cap waktu: berkas perintah `sendcmd`
@@ -1630,7 +1685,19 @@ def render_clip(
 
     workdir = Path(tempfile.mkdtemp(prefix="omniclip_render_"))
     try:
-        inputs, seg_graph, labels = _build_segment_graph(segments)
+        # Laju bingkai keluaran, ditentukan SEKALI di sini lalu dipakai semua
+        # tahap: pemotongan, linimasa bingkai, dan pengode. Tiga tempat yang
+        # dulu masing-masing menulis 30 sendiri.
+        from .media import probe as _probe_laju
+        try:
+            _fps_sumber = float((_probe_laju(src) or {}).get("fps") or 0) or None
+        except Exception:                                # noqa: BLE001
+            _fps_sumber = None
+        fps_keluar = laju_render(_fps_sumber)
+        log.info("Laju bingkai render: %s fps (sumber %s)", fps_keluar,
+                 f"{_fps_sumber:.0f}" if _fps_sumber else "tidak terbaca")
+
+        inputs, seg_graph, labels = _build_segment_graph(segments, fps_keluar)
         inputs = [str(src) if x == "SRC" else x for x in inputs]
         vlabel, alabel = labels.split("|")
 
@@ -1739,7 +1806,8 @@ def render_clip(
                 durasi=durasi_klip, aspect_ratio=aspect_ratio,
                 plan=kunci_plan, workdir=workdir, layout_gaming=tata_gaming,
                 plan_gerak=kunci_plan_gerak,
-                frame_zoom=frame_zoom, frame_geser_y=frame_geser_y)
+                frame_zoom=frame_zoom, frame_geser_y=frame_geser_y,
+                fps=fps_keluar)
             if kunci_graf:
                 frame_used = "keys"
                 log.info("Linimasa bingkai: %s",
@@ -2034,7 +2102,8 @@ def render_clip(
                     # services/enkoder.py. x264 tanpa `-threads`: ia memilih
                     # sendiri, terukur 10% lebih cepat daripada patokan 4.
                     *enc["video"],
-                    "-r", "30", "-g", "60",
+                    # Keyframe tiap dua detik, apa pun lajunya.
+                    "-r", str(fps_keluar), "-g", str(fps_keluar * 2),
                     "-c:a", "aac", "-b:a", "128k", "-ar", "48000", "-ac", "2",
                     "-movflags", "+faststart",
                     str(out_path)]
