@@ -1509,6 +1509,37 @@ async def clip_keterangan(req: KeteranganRequest):
     return {**hasil, "dari_simpanan": False}
 
 
+class PeriksaFypRequest(BaseModel):
+    clip_name: str = Field(..., max_length=400)
+
+
+@router.post("/clip-periksa")
+async def clip_periksa(req: PeriksaFypRequest):
+    """
+    Daftar periksa sebelum unggah: hal-hal yang diketahui membuat penonton pergi.
+
+    Bukan ramalan jangkauan, dan jawabannya mengatakan itu sendiri. Dihitung
+    dari sidecar klipnya, tanpa model dan tanpa jaringan — jadi ia tidak
+    memakan kuota dan tidak pernah membuat orang menunggu.
+    """
+    import json as _json
+
+    from ..services import fyp
+    from ..services import profil
+    from ..services.paths import safe_media_path
+
+    jalur = safe_media_path(profil.kategori_klip(profil.kini()), req.clip_name)
+    sidecar = jalur.with_suffix(".json")
+    if not sidecar.is_file():
+        raise NotFound("Klip ini tidak punya catatan isinya, jadi tidak ada yang "
+                       "bisa diperiksa.")
+    try:
+        meta = _json.loads(sidecar.read_text(encoding="utf-8"))
+    except (OSError, _json.JSONDecodeError) as e:
+        raise NotFound("Catatan klip ini tidak terbaca.") from e
+    return fyp.periksa(meta)
+
+
 @router.post("/render-clip", status_code=202)
 async def render_clip(req: RenderClipRequest):
     """Mengantrekan render dan mengembalikan job_id untuk dipantau lewat SSE."""

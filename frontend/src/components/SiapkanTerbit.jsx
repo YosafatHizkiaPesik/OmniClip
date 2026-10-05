@@ -58,6 +58,15 @@ export default function SiapkanTerbit({ clip, onClose, onSelesai }) {
   };
   useEffect(() => { muat(); /* eslint-disable-next-line */ }, [clip.file_name]);
 
+  // Daftar periksa sebelum unggah. Dihitung dari sidecar klipnya — tanpa model,
+  // tanpa jaringan — jadi ia tidak pernah membuat orang menunggu dan tidak
+  // memakan kuota apa pun.
+  const [periksa, setPeriksa] = useState(null);
+  useEffect(() => {
+    apiPost('/clip-periksa', { clip_name: clip.file_name })
+      .then(setPeriksa).catch(() => setPeriksa(null));
+  }, [clip.file_name]);
+
   // Caption yang tampil mengikuti platform yang dipilih, tapi suntingan tangan
   // dipertahankan sampai pengguna berpindah platform.
   const paket = data?.platform?.find((p) => p.platform === aktif);
@@ -206,6 +215,45 @@ export default function SiapkanTerbit({ clip, onClose, onSelesai }) {
                      style={{ accentColor: 'var(--accent-cyan)', width: '16px', height: '16px' }} />
               Sudah saya terbitkan ke {paket.label}
             </label>
+
+            {periksa?.catatan && (
+              <div style={{ marginTop: '14px', borderTop: '1px solid var(--border-color)',
+                            paddingTop: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px',
+                              fontSize: '0.78rem', fontWeight: 800 }}>
+                  <span>Sebelum diunggah</span>
+                  <span style={{
+                    marginLeft: 'auto', fontVariantNumeric: 'tabular-nums',
+                    color: periksa.skor >= 85 ? 'var(--entry)'
+                      : periksa.skor >= 60 ? 'var(--reh)' : 'var(--accent-red)',
+                  }}>{periksa.skor}/100</span>
+                </div>
+                {periksa.catatan.length === 0 ? (
+                  <p style={{ fontSize: '0.74rem', color: 'var(--text-secondary)',
+                              margin: '8px 0 0', lineHeight: 1.6 }}>
+                    Tidak ada yang mencurigakan di daftar ini.
+                  </p>
+                ) : (
+                  <ul style={{ margin: '8px 0 0', paddingLeft: '16px',
+                               fontSize: '0.74rem', lineHeight: 1.65,
+                               color: 'var(--text-secondary)' }}>
+                    {periksa.catatan.map((c, i) => (
+                      <li key={i} style={{ marginBottom: '6px' }}>
+                        <b style={{ color: c.berat === 'berat' ? 'var(--accent-red)'
+                          : c.berat === 'sedang' ? 'var(--reh)' : 'var(--ink-2)' }}>
+                          {c.judul}
+                        </b>
+                        <span style={{ display: 'block' }}>{c.saran}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <p style={{ fontSize: '0.68rem', color: 'var(--text-muted)',
+                            margin: '10px 0 0', lineHeight: 1.55 }}>
+                  {periksa.catatan_kaki}
+                </p>
+              </div>
+            )}
 
             {data?.sumber && (
               <p style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: '10px' }}>
