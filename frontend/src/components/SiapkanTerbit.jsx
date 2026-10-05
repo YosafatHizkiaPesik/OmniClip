@@ -29,12 +29,25 @@ export default function SiapkanTerbit({ clip, onClose, onSelesai }) {
   const [sibuk, setSibuk] = useState(false);
   const [terbit, setTerbit] = useState(clip.metadata?.terbit ?? []);
 
-  const muat = async (segarkan = false) => {
+  /**
+   * Caption dan tagar untuk klip ini.
+   *
+   * TANPA AI saat dibuka. Judul dan tagar klipnya sudah ada di sidecar — dibuat
+   * saat auto-klip — jadi memanggil model lagi hanya untuk merangkainya berarti
+   * menunggu lama dan membakar kuota untuk hal yang sudah ada di cakram.
+   * Dilaporkan pemiliknya 5 Oktober 2026: "saat saya klik masih loading lama
+   * sedangkan judul, hastag bukannya sudah langsung tersedia".
+   *
+   * AI tetap ada, tapi atas permintaan: tombol "Tulis ulang dengan AI" di
+   * bawah. Yang membedakan keduanya terlihat di label sumber, jadi tidak ada
+   * yang perlu menebak caption ini datang dari mana.
+   */
+  const muat = async (pakaiAi = false) => {
     setSibuk(true);
     setGalat(null);
     try {
       const r = await apiPost('/clip-keterangan', {
-        clip_name: clip.file_name, pakai_ai: true, segarkan,
+        clip_name: clip.file_name, pakai_ai: pakaiAi, segarkan: pakaiAi,
       }, { timeout: 240000 });
       setData(r);
     } catch (e) {
@@ -171,8 +184,10 @@ export default function SiapkanTerbit({ clip, onClose, onSelesai }) {
                 <ExternalLink size={14} /> Buka {paket.label}
               </a>
               <button className="btn-secondary" onClick={() => muat(true)} disabled={sibuk}
-                      title="Tulis ulang captionnya">
+                      title="Menulis ulang captionnya dengan AI. Memakai kuota model."
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
                 {sibuk ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                Tulis ulang dengan AI
               </button>
             </div>
 
