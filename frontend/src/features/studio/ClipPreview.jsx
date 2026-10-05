@@ -97,6 +97,10 @@ export default function ClipPreview({
   selectedFrameId = null,
   onSelectFrame = null,
   onStyleChange = null,    // menggeser/mengubah ukuran subtitle di atas gambar
+  // Memindahkan SATU baris subtitle ke tempatnya sendiri di kanvas.
+  // Dipanggil dengan {x, y} dalam persen; null berarti baris tidak bisa
+  // dipindah sendiri-sendiri (mis. pratinjau di luar Studio).
+  onLinePos = null,
   onCardChange = null,     // menggeser/mengubah ukuran JUDUL kartu di atas gambar
   onJudulVideoChange = null,  // sama, untuk judul yang menempel di dalam video
   // Sisipan: yang sedang dipilih, cara menyimpan petak barunya, dan cara
@@ -1161,6 +1165,13 @@ export default function ClipPreview({
     const startPosX = gaya?.pos_x ?? 50;
     const startSize = gaya?.size ?? 96;
     const startBoxW = gaya?.box_w ?? 84;
+    // Letak baris yang sedang diseret, bila ia memang punya letaknya sendiri.
+    // Yang belum punya mulai dari tempat ia tampil sekarang, bukan dari nol —
+    // kalau tidak, seretan pertama melemparkannya ke pojok kiri atas.
+    const startLineX = Number.isFinite(shownLine?.x)
+      ? shownLine.x : (gaya?.pos_x ?? 50);
+    const startLineY = Number.isFinite(shownLine?.y) ? shownLine.y
+      : (gaya?.position === 'top' ? 15 : gaya?.position === 'middle' ? 50 : 85);
     const anchorTop = gaya?.position === 'top';
     const perPx = CANVAS_H / boxH;      // piksel layar -> satuan kanvas
 
@@ -1185,6 +1196,25 @@ export default function ClipPreview({
         ubah({
           wm_x: Math.round(Math.max(1, Math.min(99, startWmX + dx)) * 10) / 10,
           wm_y: Math.round(Math.max(1, Math.min(99, startWmY + dyPct)) * 10) / 10,
+        });
+        return;
+      }
+
+      if (mode === 'baris-move') {
+        // Memindahkan BARIS INI SAJA, dalam persen kedua sumbu.
+        //
+        // Diminta pemiliknya 5 Oktober 2026: "buat agar tiap baris subtitle itu
+        // kita dapat pindahkan lokasinya di kanvas agar lebih menarik".
+        // Satuannya sama dengan yang dikirim ke ffmpeg (`\pos` pada file ASS),
+        // jadi yang terlihat di sini benar-benar yang akan dirender.
+        //
+        // Dijepit 2% dari tiap tepi: teks yang bisa diseret sampai keluar
+        // bingkai hanya menghilang, dan tidak ada cara mengembalikannya selain
+        // menebak.
+        const dyPct = ((ev.clientY - y0) / boxH) * 100;
+        onLinePos?.({
+          x: Math.round(Math.max(2, Math.min(98, startLineX + dx)) * 10) / 10,
+          y: Math.round(Math.max(2, Math.min(98, startLineY + dyPct)) * 10) / 10,
         });
         return;
       }
@@ -1257,6 +1287,11 @@ export default function ClipPreview({
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
   };
+  // Baris yang SUDAH punya letaknya sendiri diseret sendiri; sisanya menggeser
+  // gaya klip seperti dulu. Jadi perilaku lama tidak berubah sampai sebuah
+  // baris benar-benar dilepaskan dari gaya klipnya lewat panel Subtitle.
+  const barisPunyaLetak = Boolean(onLinePos)
+    && Number.isFinite(shownLine?.x) && Number.isFinite(shownLine?.y);
   const startDrag = seret(style, onStyleChange);
   const startDragKedua = seret(gayaKedua, onKeduaStyleChange, 'kedua-');
 
@@ -1933,7 +1968,7 @@ export default function ClipPreview({
                           ghost={!activeLine}
                           draggable={Boolean(onStyleChange)}
                           dragging={dragging?.startsWith?.('kedua-') ? null : dragging}
-                          onMoveStart={startDrag('move')}
+                          onMoveStart={startDrag(barisPunyaLetak ? 'baris-move' : 'move')}
                           onSizeStart={startDrag('size')}
                           onScaleStart={startDrag('scale')}
                           onWidthLeftStart={startDrag('width-left')}
@@ -2111,19 +2146,29 @@ export function CaptionOverlay({
   const anchorTop = style?.position === 'top';
   const anchorMiddle = style?.position === 'middle';
 
-  const place = anchorMiddle
-    ? { top: '50%' } : anchorTop ? { top: `${marginPx}px` } : { bottom: `${marginPx}px` };
+  // LETAK BEBAS PER BARIS.
+  //
+  // Baris yang punya `x`/`y` sendiri (persen kanvas) ditaruh di situ, dan
+  // mengabaikan alignment serta margin gaya klipnya. Cermin dari `pos_tag` di
+  // backend/app/services/subtitles.py, yang mengeluarkan `\an5\pos(x,y)`:
+  // jangkarnya PUSAT teks, jadi (50, 50) selalu berarti tengah layar apa pun
+  // panjang kalimatnya.
+  const bebas = Number.isFinite(line?.x) && Number.isFinite(line?.y);
+  const place = bebas
+    ? { top: `${line.y}%` }
+    : anchorMiddle
+      ? { top: '50%' } : anchorTop ? { top: `${marginPx}px` } : { bottom: `${marginPx}px` };
 
   // Penempatan mendatar memakai satuan yang sama dengan MarginL/MarginR pada
   // file ASS: titik tengah kotak dan lebarnya, keduanya dalam persen lebar
   // kanvas. Jadi apa yang terlihat di sini benar-benar nilai yang dikirim.
   const boxWidth = style?.box_w ?? 84;
-  const posX = style?.pos_x ?? 50;
+  const posX = bebas ? line.x : (style?.pos_x ?? 50);
   // Posisi tengah dan animasi masuk sama-sama memakai `transform`, jadi
   // keduanya digabung — bukan saling menimpa, yang membuat baris melompat ke
   // bawah tiap kali animasi menyala.
-  const transform = [anchorMiddle ? 'translateY(-50%)' : '', entry.transform || '']
-    .filter(Boolean).join(' ');
+  const transform = [(anchorMiddle || bebas) ? 'translateY(-50%)' : '',
+                     entry.transform || ''].filter(Boolean).join(' ');
 
   // Sorotan per kata adalah saklarnya SENDIRI, terpisah dari animasi masuk.
   // Gaya bersih berpelat memakai animasi masuk tanpa sorotan; tanpa pemisahan

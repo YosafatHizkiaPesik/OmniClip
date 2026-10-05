@@ -336,6 +336,55 @@ export function useClipEditor() {
     updateClip(id, { subtitles });
   }, [clips, updateClip]);
 
+  /**
+   * Memecah satu baris subtitle jadi dua, pada batas kata ke-`kata`.
+   *
+   * Diminta pemiliknya 5 Oktober 2026: "buat agar tiap kalimat atau kata di
+   * subtitle bisa kita pecah-pecah". Gunanya bukan merapikan teks melainkan
+   * MEMBEBASKAN tiap potongan: baris yang terpisah punya waktunya sendiri,
+   * warnanya sendiri, dan letaknya sendiri di kanvas.
+   *
+   * Waktunya diambil dari kata, bukan dibagi rata. Daftar `words` membawa
+   * detik tiap kata dari Whisper, jadi titik pecahnya bisa jatuh persis di
+   * jeda yang sebenarnya. Tanpa itu, dua baris hasil pecahan akan menampilkan
+   * teks yang tidak sinkron dengan suaranya — dan itu lebih buruk daripada
+   * satu baris panjang.
+   */
+  const splitSubtitle = useCallback((id, lineIndex, kata) => {
+    const clip = clips.find((c) => c.clip_id === id);
+    const line = clip?.subtitles?.[lineIndex];
+    if (!line) return;
+
+    const kataSemua = (line.words?.length
+      ? line.words.map((w) => w.w)
+      : String(line.text || '').trim().split(/\s+/)).filter(Boolean);
+    // Pecahan di ujung tidak menghasilkan dua baris, hanya satu baris kosong.
+    const n = Math.max(1, Math.min(kataSemua.length - 1, Math.round(kata)));
+    if (kataSemua.length < 2) return;
+
+    const s0 = Number(line.start) || 0;
+    const e0 = Math.max(Number(line.end) || s0, s0 + 0.2);
+    // Batas waktunya: awal kata pertama baris kedua, bila waktunya diketahui.
+    const w = line.words ?? [];
+    const batas = Number.isFinite(w[n]?.s) ? Number(w[n].s)
+      : s0 + ((e0 - s0) * n) / kataSemua.length;
+    const potong = Math.min(Math.max(batas, s0 + 0.1), e0 - 0.1);
+
+    const buat = (kataPotong, mulai, selesai, asalKata) => ({
+      ...line,
+      text: kataPotong.join(' '),
+      start: round3(mulai),
+      end: round3(selesai),
+      words: asalKata.length ? asalKata.map((x) => ({ ...x })) : undefined,
+    });
+
+    const kiri = buat(kataSemua.slice(0, n), s0, potong, w.slice(0, n));
+    const kanan = buat(kataSemua.slice(n), potong, e0, w.slice(n));
+    const subtitles = [...clip.subtitles];
+    subtitles.splice(lineIndex, 1, kiri, kanan);
+    updateClip(id, { subtitles });
+  }, [clips, updateClip]);
+
   const removeSubtitle = useCallback((id, lineIndex) => {
     const clip = clips.find((c) => c.clip_id === id);
     if (!clip) return;
@@ -446,7 +495,7 @@ export function useClipEditor() {
     undo, redo, canUndo, canRedo, historyTick,
     load, setSelectedId, updateClip, createClip, saveClips,
     nudgeSegment, setSegmentBounds, addSegment, removeSegment, recomputeSubtitles,
-    updateSubtitle, moveSubtitle, removeSubtitle, autoSpeakers,
+    updateSubtitle, moveSubtitle, splitSubtitle, removeSubtitle, autoSpeakers,
     toggleChecked, setAllChecked, removeClip,
   };
 }

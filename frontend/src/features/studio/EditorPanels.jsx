@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Plus, Trash2, Loader2, Star, ChevronRight, Users, Palette, Sparkles, AlertTriangle } from 'lucide-react';
+import { Plus, Trash2, Loader2, Star, ChevronRight, Users, Palette, Sparkles, AlertTriangle, Scissors, Move } from 'lucide-react';
 import { apiGet, apiPost } from '../../lib/api';
 import { formatTime, parseTimeString } from '../../utils/timeFormat';
 import { inkSafe } from '../../lib/contrast';
@@ -199,7 +199,8 @@ export function TrimPanel({ clip, videoDuration, busy, onNudge, onSetBounds, onA
 }
 
 /** Panel penyuntingan subtitle per baris. */
-export function SubtitlePanel({ clip, onUpdate, onRemove, style, onStyle = null, onAutoSpeakers,
+export function SubtitlePanel({ clip, onUpdate, onRemove, onSplit = null,
+                               style, onStyle = null, onAutoSpeakers,
                                speakerCount = 2, speakerConfident = null,
                                onRedetect = null, redetecting = false,
                                // Baris yang sedang disorot di linimasa. Dua
@@ -427,6 +428,7 @@ export function SubtitlePanel({ clip, onUpdate, onRemove, style, onStyle = null,
         {lines.map((line, i) => {
           const speaker = line.speaker || 0;
           const on = selectedLine === i;
+          const bebas = Number.isFinite(line.x) && Number.isFinite(line.y);
           return (
             <div key={i}
                  ref={(el) => {
@@ -499,6 +501,48 @@ export function SubtitlePanel({ clip, onUpdate, onRemove, style, onStyle = null,
                   fontWeight: speaker ? 700 : 400,
                 }}
               />
+              {/* Memecah baris tepat di tempat kursor berada.
+                  Kursor, bukan tengah: yang tahu di mana kalimatnya patah
+                  adalah orang yang sedang membacanya, dan ia sudah menaruh
+                  kursornya di situ untuk mengetik. Tanpa kursor — tombolnya
+                  ditekan tanpa menyentuh teksnya dulu — dipakai tengahnya. */}
+              {/* Melepaskan baris ini dari gaya klip: ia dapat letaknya
+                  sendiri di kanvas, dan sejak itu bisa diseret di pratinjau.
+                  Ditekan lagi, ia kembali mengikuti gaya klipnya. */}
+              <button onClick={() => onUpdate(clip.clip_id, i, bebas
+                        ? { x: null, y: null }
+                        : { x: style?.pos_x ?? 50,
+                            y: style?.position === 'top' ? 15
+                               : style?.position === 'middle' ? 50 : 85 })}
+                      aria-label={bebas ? 'Kembalikan ke gaya klip' : 'Beri letak sendiri'}
+                      title={bebas
+                        ? 'Baris ini punya letaknya sendiri. Klik untuk mengembalikannya ke gaya klip.'
+                        : 'Beri baris ini letaknya sendiri, lalu seret di pratinjau.'}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer',
+                               color: bebas ? 'var(--reh)' : 'var(--text-muted)',
+                               display: 'flex' }}>
+                <Move size={14} />
+              </button>
+              {onSplit && (
+                <button onClick={(e) => {
+                          const ta = e.currentTarget.parentElement
+                            ?.querySelector('textarea');
+                          const teks = line.text || '';
+                          const pos = (ta && ta.selectionStart > 0
+                                       && ta.selectionStart < teks.length)
+                            ? ta.selectionStart : Math.floor(teks.length / 2);
+                          // Posisi huruf -> nomor kata.
+                          const kata = teks.slice(0, pos).trim().split(/\s+/)
+                            .filter(Boolean).length;
+                          onSplit(clip.clip_id, i, kata);
+                        }}
+                        aria-label="Pecah baris di posisi kursor"
+                        title="Pecah baris di posisi kursor. Tiap pecahan punya waktu, warna, dan letaknya sendiri."
+                        style={{ background: 'none', border: 'none', cursor: 'pointer',
+                                 color: 'var(--text-muted)', display: 'flex' }}>
+                  <Scissors size={14} />
+                </button>
+              )}
               <button onClick={() => onRemove(clip.clip_id, i)} aria-label="Hapus baris"
                       style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}>
                 <Trash2 size={14} />

@@ -1957,6 +1957,16 @@ export default function Editor({ project, onBack }) {
                            boxRect={kunciBingkaiAktif?.rect ?? null}
                            reframe={reframe} reframeLoading={reframeLoading}
                            onStyleChange={patchStyle} onCardChange={patchCard}
+                           onLinePos={(pos) => {
+                             // Baris yang sedang tampil di pratinjau, dicari
+                             // dengan aturan yang sama dengan yang dipakai
+                             // pratinjau sendiri — kalau tidak, yang bergerak
+                             // bisa baris lain.
+                             const ls = selected?.subtitles ?? [];
+                             const t = tKlip;
+                             const i = ls.findIndex((l) => t >= l.start && t <= l.end);
+                             if (i >= 0) editor.updateSubtitle(selected.clip_id, i, pos);
+                           }}
                            onJudulVideoChange={patchJudulVideo}
                            layout={susunanTampil} onLayoutChange={setSusunanEfektif}
                            onGamingWajah={(wajah) => setelGaming({ wajah })}
@@ -2039,7 +2049,9 @@ export default function Editor({ project, onBack }) {
               )}
               {tab === 'subtitle' && (
                 <SubtitlePanel clip={selected} onUpdate={editor.updateSubtitle}
-                               onRemove={editor.removeSubtitle} style={style} onStyle={setStyle}
+                               onRemove={editor.removeSubtitle}
+                               onSplit={editor.splitSubtitle}
+                               style={style} onStyle={setStyle}
                                selectedLine={selectedLine} onSelectLine={setSelectedLine}
                                onSeekLine={seekClip}
                                onAutoSpeakers={editor.autoSpeakers}

@@ -884,6 +884,27 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 else primary)
         base_tag = "" if base == primary else f"{{\\c{base}}}"
 
+        # LETAK BEBAS PER BARIS.
+        #
+        # Diminta pemiliknya 5 Oktober 2026: "buat agar tiap baris subtitle itu
+        # kita dapat pindahkan lokasinya di kanvas agar lebih menarik". Baris
+        # yang punya `x`/`y` sendiri (persen kanvas) ditaruh di situ, dan
+        # sisanya tetap mengikuti alignment serta margin gayanya.
+        #
+        # `\an5` ikut, dan itu yang membuat angkanya berarti sama di mana pun:
+        # titik jangkarnya jadi PUSAT teks, jadi (50, 50) selalu berarti tengah
+        # layar — bukan "kiri bawah teks ada di tengah layar", yang bergeser
+        # mengikuti panjang kalimatnya.
+        pos_tag = ""
+        if line.get("x") is not None and line.get("y") is not None:
+            try:
+                px = int(round(max(0.0, min(100.0, float(line["x"]))) / 100.0 * w))
+                py = int(round(max(0.0, min(100.0, float(line["y"]))) / 100.0 * h))
+                pos_tag = rf"{{\an5\pos({px},{py})}}"
+            except (TypeError, ValueError):
+                pos_tag = ""
+        base_tag = pos_tag + base_tag
+
         # Sorotan per kata TIDAK lagi terikat pada animasi masuk.
         #
         # Dulu hanya mode `karaoke_*` yang menyorot kata, sedangkan pratinjau
