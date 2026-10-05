@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Plus, Trash2, Loader2, Star, ChevronRight, Users, Palette, Sparkles, AlertTriangle } from 'lucide-react';
 import { apiGet, apiPost } from '../../lib/api';
 import { formatTime, parseTimeString } from '../../utils/timeFormat';
@@ -244,6 +244,71 @@ export function SubtitlePanel({ clip, onUpdate, onRemove, style, onStyle = null,
    * "saat saya mengklik subtitle, tampilan langsung lompat ke subtitle
    * bawahnya, jadi saya harus menggulir lagi ke atas".
    */
+  /**
+   * POSISI GULIR DAFTAR DIPERTAHANKAN SELAMA MENYUNTING.
+   *
+   * Dilaporkan pemiliknya 5 Oktober 2026: "saat saya mengedit subtitle selalu
+   * terscroll ke bawah, jadi saya harus scroll lagi ke atas untuk melihat
+   * subtitle yang saya edit". Dicoba ditiru di Firefox — video berjalan,
+   * mengetik di baris paling atas — dan TIDAK tereproduksi: `scrollTop` tetap
+   * nol. Jadi sebabnya belum diketahui pasti.
+   *
+   * Yang tidak perlu menunggu sebabnya diketahui: posisi gulirnya sendiri.
+   * Selama ada yang diketik di dalam daftar ini, posisi itu milik orang yang
+   * mengetik — bukan milik efek mana pun, bukan milik peramban yang menjepit
+   * `scrollTop` saat tinggi isinya berubah sesaat. Nilainya dicatat tiap kali
+   * orangnya menggulir sendiri, dan dikembalikan sesudah tiap penggambaran
+   * ulang yang bukan ulahnya.
+   *
+   * `useLayoutEffect`, bukan `useEffect`: pengembaliannya harus terjadi sebelum
+   * peramban menggambar, kalau tidak yang terlihat tetap satu kedipan lompat.
+   */
+  /**
+   * Tinggi textarea menyesuaikan isinya — SEKALI saat dipasang, lalu tiap kali
+   * isinya berubah lewat `onChange`.
+   *
+   * Dulu dikerjakan dari ref callback, yang React jalankan ulang pada SETIAP
+   * penggambaran: dua puluh empat textarea masing-masing disetel `height:auto`
+   * lalu dibaca `scrollHeight`-nya, dua puluh empat kali memaksa peramban
+   * menghitung ulang tata letak. Dan di antara "auto" dan tinggi yang baru,
+   * seluruh isi daftar memendek sesaat — saat itulah peramban berhak menjepit
+   * `scrollTop`, dan posisi guliran orang yang sedang mengetik hilang.
+   */
+  const pasangTinggi = useCallback((el) => {
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, []);
+
+  // Berganti klip memakai elemen textarea yang SAMA dengan isi yang berbeda,
+  // jadi tinggi yang dipasang saat elemennya lahir sudah tidak cocok lagi.
+  // Dipasang ulang di sini, sekali per pergantian — bukan tiap penggambaran.
+  useLayoutEffect(() => {
+    const kotak = listRef.current;
+    if (!kotak) return;
+    for (const t of kotak.querySelectorAll('textarea')) {
+      t.style.height = 'auto';
+      t.style.height = `${t.scrollHeight}px`;
+    }
+  }, [clip?.clip_id, (clip?.subtitles ?? []).length]);
+
+  const gulirRef = useRef(0);
+  const padaGulir = useCallback(() => {
+    const kotak = listRef.current;
+    if (kotak) gulirRef.current = kotak.scrollTop;
+  }, []);
+
+  useLayoutEffect(() => {
+    const kotak = listRef.current;
+    if (!kotak) return;
+    const menyunting = kotak.contains(document.activeElement)
+      && document.activeElement !== document.body;
+    if (!menyunting) return;
+    if (Math.abs(kotak.scrollTop - gulirRef.current) > 1) {
+      kotak.scrollTop = gulirRef.current;
+    }
+  });
+
   useEffect(() => {
     const kotak = listRef.current;
     const baris = selectedLine == null ? null : rowsRef.current.get(selectedLine);
@@ -357,6 +422,7 @@ export function SubtitlePanel({ clip, onUpdate, onRemove, style, onStyle = null,
         tally={tally} palette={palette} style={style} onStyle={onStyle} />
 
       <div ref={listRef}
+           onScroll={padaGulir}
            style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '380px', overflowY: 'auto' }}>
         {lines.map((line, i) => {
           const speaker = line.speaker || 0;
@@ -413,8 +479,7 @@ export function SubtitlePanel({ clip, onUpdate, onRemove, style, onStyle = null,
               <textarea
                 value={line.text}
                 rows={1}
-                ref={(el) => { if (el) { el.style.height = 'auto';
-                                         el.style.height = `${el.scrollHeight}px`; } }}
+                ref={pasangTinggi}
                 onChange={(e) => {
                   e.target.style.height = 'auto';
                   e.target.style.height = `${e.target.scrollHeight}px`;
