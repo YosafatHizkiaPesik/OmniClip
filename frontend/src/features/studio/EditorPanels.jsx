@@ -317,8 +317,24 @@ export function SubtitlePanel({ clip, onUpdate, onRemove, onSplit = null,
     // Ada yang sedang diketik di dalam daftar ini: jangan disentuh.
     if (kotak.contains(document.activeElement)
         && document.activeElement !== document.body) return;
-    const atas = baris.offsetTop;
-    const bawah = atas + baris.offsetHeight;
+    // DIUKUR DARI KOTAKNYA, bukan dari `offsetTop`.
+    //
+    // Inilah sebab lompatan yang dua kali gagal saya tiru, dan baru tertangkap
+    // 6 Oktober 2026 dengan menirukan KLIKNYA: digulir ke 420, klik baris yang
+    // sedang terlihat, dan daftarnya melompat ke 1328.
+    //
+    // `offsetTop` diukur dari leluhur ber-`position` terdekat. Kotak daftar ini
+    // tidak punya `position`, jadi angkanya datang dari suatu tempat jauh di
+    // atas halaman — jauh lebih besar daripada jangkauan gulir kotaknya
+    // sendiri. Menggulir ke angka itu berarti menggulir sampai mentok ke bawah,
+    // dan baris yang baru saja diklik justru hilang dari pandangan.
+    //
+    // `getBoundingClientRect` tidak peduli siapa leluhurnya: selisih dua tepi
+    // ditambah posisi gulir sekarang selalu memberi jarak yang benar.
+    const kotakRect = kotak.getBoundingClientRect();
+    const barisRect = baris.getBoundingClientRect();
+    const atas = kotak.scrollTop + (barisRect.top - kotakRect.top);
+    const bawah = atas + barisRect.height;
     // Yang sudah terlihat seluruhnya dibiarkan: menggulir ke tempat yang sama
     // tidak menambah apa pun, dan tiap gulir adalah kesempatan untuk salah.
     if (atas >= kotak.scrollTop && bawah <= kotak.scrollTop + kotak.clientHeight) return;
@@ -424,7 +440,8 @@ export function SubtitlePanel({ clip, onUpdate, onRemove, onSplit = null,
 
       <div ref={listRef}
            onScroll={padaGulir}
-           style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '380px', overflowY: 'auto' }}>
+           style={{ position: 'relative', display: 'flex', flexDirection: 'column',
+                    gap: '8px', maxHeight: '380px', overflowY: 'auto' }}>
         {lines.map((line, i) => {
           const speaker = line.speaker || 0;
           const on = selectedLine === i;

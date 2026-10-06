@@ -101,6 +101,8 @@ export default function ClipPreview({
   // Dipanggil dengan {x, y} dalam persen; null berarti baris tidak bisa
   // dipindah sendiri-sendiri (mis. pratinjau di luar Studio).
   onLinePos = null,
+  // Melepaskan baris yang sedang tampil dari gaya klip, atau mengembalikannya.
+  onLepasBaris = null,
   onCardChange = null,     // menggeser/mengubah ukuran JUDUL kartu di atas gambar
   onJudulVideoChange = null,  // sama, untuk judul yang menempel di dalam video
   // Sisipan: yang sedang dipilih, cara menyimpan petak barunya, dan cara
@@ -1968,6 +1970,7 @@ export default function ClipPreview({
                           ghost={!activeLine}
                           draggable={Boolean(onStyleChange)}
                           dragging={dragging?.startsWith?.('kedua-') ? null : dragging}
+                          onLepasBaris={onLepasBaris}
                           onMoveStart={startDrag(barisPunyaLetak ? 'baris-move' : 'move')}
                           onSizeStart={startDrag('size')}
                           onScaleStart={startDrag('scale')}
@@ -2075,6 +2078,9 @@ export function CaptionOverlay({
   line, activeWordIndex, style, clipTime, boxH, ghost,
   draggable, dragging, onMoveStart, onSizeStart, onScaleStart,
   onWidthLeftStart, onWidthRightStart,
+  // Melepaskan baris ini dari gaya klip, atau mengembalikannya. Null berarti
+  // pilihan itu tidak berlaku di sini (pratinjau di luar Studio).
+  onLepasBaris = null,
 }) {
   const [hover, setHover] = useState(false);
   // Baris tanpa waktu per kata — subtitle kedua (terjemahan) — tetap dipecah
@@ -2201,6 +2207,36 @@ export function CaptionOverlay({
       }
     : { display: 'inline' };
 
+  /* PILIHANNYA DI TEMPAT PERBUATANNYA.
+     Tombol "beri letak sendiri" sudah ada sejak 5 Oktober 2026 — di daftar
+     baris panel Subtitle, yang harus digulir jauh ke bawah untuk dilihat.
+     Pemiliknya tidak menemukannya: ia mencoba langsung menyeret di kanvas,
+     seluruh baris ikut pindah, dan kesimpulannya "belum ada pemisah".
+     Kesimpulan itu wajar — sebuah pilihan yang tidak terlihat di tempat orang
+     mengambil keputusan sama saja dengan tidak ada.
+     Jadi chip ini duduk di kotak subtitlenya sendiri, menyebut apa yang akan
+     dipindahkan oleh seretan berikutnya, dan menggantinya dengan satu klik. */
+  const chip = draggable && onLepasBaris && (hover || dragging) ? (
+    <button
+      type="button"
+      onPointerDown={(e) => { e.stopPropagation(); }}
+      onClick={(e) => { e.stopPropagation(); onLepasBaris(!bebas); }}
+      title={bebas
+        ? 'Baris ini punya letaknya sendiri. Klik untuk mengembalikannya mengikuti gaya klip.'
+        : 'Klik untuk memindahkan baris INI saja, tanpa memindahkan yang lain.'}
+      style={{
+        position: 'absolute', left: '50%', transform: 'translate(-50%, -130%)',
+        top: 0, whiteSpace: 'nowrap', cursor: 'pointer',
+        font: '700 10px/1 Inter, system-ui, sans-serif', letterSpacing: '.04em',
+        padding: '5px 9px', borderRadius: '99px',
+        border: '1px solid rgba(255,255,255,.35)',
+        background: bebas ? 'rgba(0,229,255,.92)' : 'rgba(17,17,17,.82)',
+        color: bebas ? '#06202a' : '#fff',
+      }}>
+      {bebas ? 'baris ini saja' : 'semua baris'}
+    </button>
+  ) : null;
+
   return (
     <div
       onPointerDown={draggable ? onMoveStart : undefined}
@@ -2244,6 +2280,7 @@ export function CaptionOverlay({
         ...(transform ? { transform } : {}),
       }}
     >
+      {chip}
       {/* Pelat digambar sebagai latar SPAN, bukan latar kotak luarnya: kotak
           luar selebar `box_w` sementara pelatnya harus sepanjang teksnya saja.
           Sama seperti BorderStyle 3 di libass, yang juga memeluk barisnya. */}

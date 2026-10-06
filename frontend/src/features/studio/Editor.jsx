@@ -1957,6 +1957,22 @@ export default function Editor({ project, onBack }) {
                            boxRect={kunciBingkaiAktif?.rect ?? null}
                            reframe={reframe} reframeLoading={reframeLoading}
                            onStyleChange={patchStyle} onCardChange={patchCard}
+                           onLepasBaris={(bebas) => {
+                             // Chip di kotak subtitle: melepaskan baris yang
+                             // sedang tampil dari gaya klip, atau
+                             // mengembalikannya. Letak awalnya diambil dari
+                             // tempat ia tampil SEKARANG, bukan dari nol —
+                             // kalau tidak, seretan pertama melemparkannya ke
+                             // pojok kiri atas.
+                             const ls = selected?.subtitles ?? [];
+                             const i = ls.findIndex((l) => tKlip >= l.start && tKlip <= l.end);
+                             if (i < 0) return;
+                             editor.updateSubtitle(selected.clip_id, i, bebas
+                               ? { x: style?.pos_x ?? 50,
+                                   y: style?.position === 'top' ? 15
+                                      : style?.position === 'middle' ? 50 : 85 }
+                               : { x: null, y: null });
+                           }}
                            onLinePos={(pos) => {
                              // Baris yang sedang tampil di pratinjau, dicari
                              // dengan aturan yang sama dengan yang dipakai
