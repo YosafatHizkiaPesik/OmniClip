@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
-  Search, Download, SlidersHorizontal, Film, Music4, Menu, X, ArrowDownToLine, UserRound, Gauge
+  Search, Download, SlidersHorizontal, Film, Music4, Menu, X, ArrowDownToLine, UserRound, Gauge,
+  BarChart3
 } from 'lucide-react';
 import ErrorBoundary from './components/ErrorBoundary';
 import ProfilPemilih from './components/ProfilPemilih';
@@ -15,6 +16,7 @@ const NAV = [
   { to: '/', label: 'Cari video', Icon: Search, end: true },
   { to: '/studio', label: 'Partitur', Icon: Music4 },
   { to: '/clips', label: 'Klip jadi', Icon: Film },
+  { to: '/analitik', label: 'Analitik', Icon: BarChart3 },
   { to: '/downloads', label: 'Unduhan', Icon: Download },
   { to: '/profil', label: 'Akun', Icon: UserRound },
   { to: '/settings', label: 'Pengaturan', Icon: SlidersHorizontal },

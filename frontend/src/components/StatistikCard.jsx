@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
   AlertTriangle, BarChart3, CheckCircle2, ExternalLink, Eye, EyeOff, Loader2, Trash2,
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { apiGet, apiPost } from '../lib/api';
 
 /**
@@ -59,6 +60,7 @@ export default function StatistikCard({ card, sectionTitle, helpText }) {
       </p>
 
       {adaKunci === null ? null : adaKunci ? (
+        <>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px',
                       fontSize: '0.8rem' }}>
           <CheckCircle2 size={15} style={{ color: 'var(--entry)' }} />
@@ -70,6 +72,17 @@ export default function StatistikCard({ card, sectionTitle, helpText }) {
             Hapus
           </button>
         </div>
+        {/* Kunci yang terpasang tanpa tempat melihat hasilnya adalah persis
+            keluhan pemiliknya: "OmniClip hanya menunjukkan kunci terpasang
+            saja". Tautannya ada di sini supaya jalannya terlihat dari tempat
+            kuncinya dipasang. */}
+        <p className="bantu" style={{ ...helpText, marginTop: '8px' }}>
+          Angkanya terbaca di{' '}
+          <Link to="/analitik" style={{ color: 'var(--reh)' }}>Analitik</Link>:
+          tayangan tiap klip, mana yang paling jalan, dan apa yang masih kurang
+          dari klip yang sudah naik.
+        </p>
+        </>
       ) : (
         <>
           <ol style={{ ...helpText, margin: '10px 0 0', paddingLeft: '18px', lineHeight: 1.75 }}>

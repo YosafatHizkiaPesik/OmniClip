@@ -11,6 +11,7 @@ import Studio from './routes/Studio.jsx';
 import EditorRoute from './routes/EditorRoute.jsx';
 import Profil from './routes/Profil.jsx';
 import ClipsTab from './components/ClipsTab.jsx';
+import AnalitikTab from './components/AnalitikTab.jsx';
 import DownloadsTab from './components/DownloadsTab.jsx';
 import ProfileTab from './components/ProfileTab.jsx';
 import MesinTab from './components/MesinTab';
@@ -33,6 +34,7 @@ createRoot(document.getElementById('root')).render(
               langsung lewat tautan dan tombol back kembali ke daftar kartu. */}
           <Route path="studio/:videoId" element={<EditorRoute />} />
           <Route path="clips" element={<ClipsTab />} />
+          <Route path="analitik" element={<AnalitikTab />} />
           <Route path="downloads" element={<DownloadsTab />} />
           <Route path="profil" element={<Profil />} />
           <Route path="settings" element={<ProfileTab />} />

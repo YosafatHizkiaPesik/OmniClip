@@ -40,13 +40,25 @@ class Pemanasan(unittest.TestCase):
         self.asli = ba.__dict__.get("_uji_hitung")
 
     def jalankan(self, ctx, hitung):
+        # Pemilihan tema DITUTUP, dan itu bukan kemalasan.
+        #
+        # `run_bingkai_awal` diakhiri `_tema_untuk_semua`, yang memanggil
+        # Gemini sungguhan dengan kunci dari `backend/.env` — kunci itu dibaca
+        # dari berkas, bukan dari OMNICLIP_STORAGE, jadi penyimpanan uji yang
+        # bersih pun tidak menghentikannya. Terjadi 6 Oktober 2026: seluruh
+        # rangkaian uji berhenti di sini selama berpuluh menit karena satu
+        # panggilan jaringan yang mencoba ulang sendiri. Yang diuji kelas ini
+        # berapa klip yang dihitung, bukan tema subtitle.
         import app.routers.clips as clips
         asli = clips.hitung_reframe
+        asli_tema = ba._tema_untuk_semua
         clips.hitung_reframe = hitung
+        ba._tema_untuk_semua = lambda *a, **kv: 0
         try:
             return ba.run_bingkai_awal(ctx)
         finally:
             clips.hitung_reframe = asli
+            ba._tema_untuk_semua = asli_tema
 
     def klip(self, n):
         return [{"segments": [{"start": i * 10.0, "end": i * 10.0 + 8.0}],

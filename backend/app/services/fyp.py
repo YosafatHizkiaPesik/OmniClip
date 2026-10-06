@@ -88,7 +88,7 @@ def periksa(meta: dict) -> dict:
     # --- Panjang ---------------------------------------------------------------
     if durasi and durasi < DURASI_MIN:
         catatan.append({
-            "berat": "berat", "judul": f"Terlalu pendek ({durasi:.0f} detik)",
+            "kode": "durasi_pendek", "berat": "berat", "judul": f"Terlalu pendek ({durasi:.0f} detik)",
             "saran": "Di bawah delapan detik, penonton belum sempat mengerti apa "
                      "yang terjadi sebelum videonya mengulang. Panjangkan ke "
                      "sekitar lima belas detik dengan menambah detik sebelum "
@@ -96,7 +96,7 @@ def periksa(meta: dict) -> dict:
         })
     elif durasi > DURASI_MAKS:
         catatan.append({
-            "berat": "berat", "judul": f"Terlalu panjang ({durasi:.0f} detik)",
+            "kode": "durasi_panjang", "berat": "berat", "judul": f"Terlalu panjang ({durasi:.0f} detik)",
             "saran": "Yang menentukan jangkauan video pendek adalah berapa banyak "
                      "yang menontonnya sampai habis. Potong ke bagian yang paling "
                      "ramai saja; satu momen utuh lebih baik daripada tiga momen "
@@ -104,7 +104,7 @@ def periksa(meta: dict) -> dict:
         })
     elif durasi and not (DURASI_IDEAL[0] <= durasi <= DURASI_IDEAL[1]):
         catatan.append({
-            "berat": "ringan", "judul": f"Panjangnya {durasi:.0f} detik",
+            "kode": "durasi_luar", "berat": "ringan", "judul": f"Panjangnya {durasi:.0f} detik",
             "saran": f"Yang paling sering tuntas ditonton ada di "
                      f"{DURASI_IDEAL[0]:.0f}-{DURASI_IDEAL[1]:.0f} detik. Ini bukan "
                      "aturan keras, hanya bentuk yang paling sering berhasil.",
@@ -115,7 +115,7 @@ def periksa(meta: dict) -> dict:
     teks_awal = " ".join((b.get("text") or "") for b in awal).strip()
     if baris and not teks_awal:
         catatan.append({
-            "berat": "berat", "judul": "Tiga detik pertama tanpa suara",
+            "kode": "awal_sunyi", "berat": "berat", "judul": "Tiga detik pertama tanpa suara",
             "saran": "Tidak ada yang diucapkan di awal, jadi tidak ada alasan untuk "
                      "bertahan. Mulai klipnya tepat di kalimat yang membuat orang "
                      "ingin tahu kelanjutannya.",
@@ -124,7 +124,7 @@ def periksa(meta: dict) -> dict:
         bersih = _GUMAM.sub("", teks_awal).strip().lower()
         if any(bersih.startswith(p) for p in PEMBUKA_HAMPA):
             catatan.append({
-                "berat": "sedang", "judul": "Dibuka dengan basa-basi",
+                "kode": "basa_basi", "berat": "sedang", "judul": "Dibuka dengan basa-basi",
                 "saran": f"Kalimat pertamanya mulai dengan sapaan. Tiga detik "
                          f"pertama adalah satu-satunya kesempatan; pakai untuk "
                          f"mengatakan apa yang terjadi, bukan untuk menyapa.",
@@ -133,7 +133,7 @@ def periksa(meta: dict) -> dict:
     if hook and len(_kata(hook)) > HOOK_KATA_MAKS:
         catatan.append({
             "berat": "sedang",
-            "judul": f"Teks hook {len(_kata(hook))} kata",
+            "kode": "hook_panjang", "judul": f"Teks hook {len(_kata(hook))} kata",
             "saran": f"Di atas {HOOK_KATA_MAKS} kata, hook-nya belum selesai dibaca "
                      "saat penonton sudah memutuskan. Potong jadi satu kalimat "
                      "pendek yang menimbulkan pertanyaan.",
@@ -147,13 +147,13 @@ def periksa(meta: dict) -> dict:
         if porsi < TEKS_LIPUT_MIN:
             catatan.append({
                 "berat": "sedang",
-                "judul": f"Hanya {porsi * 100:.0f}% klip bertulisan",
+                "kode": "teks_kurang", "judul": f"Hanya {porsi * 100:.0f}% klip bertulisan",
                 "saran": "Sebagian besar penonton video pendek menonton tanpa suara. "
                          "Bagian tanpa tulisan praktis bisu bagi mereka.",
             })
     elif durasi and not baris:
         catatan.append({
-            "berat": "berat", "judul": "Tidak ada subtitle sama sekali",
+            "kode": "tanpa_teks", "berat": "berat", "judul": "Tidak ada subtitle sama sekali",
             "saran": "Tanpa tulisan, klip ini hanya bisa dinikmati penonton yang "
                      "menyalakan suaranya — dan sebagian besar tidak.",
         })
@@ -161,14 +161,14 @@ def periksa(meta: dict) -> dict:
     # --- Judul dan tagar -------------------------------------------------------
     if not judul:
         catatan.append({
-            "berat": "sedang", "judul": "Belum ada judul",
+            "kode": "tanpa_judul", "berat": "sedang", "judul": "Belum ada judul",
             "saran": "Judul ikut dibaca mesin pencari dan ikut ditampilkan di "
                      "sebagian tempat. Klip tanpa judul kehilangan satu pintu masuk.",
         })
     tagar = [t for t in (meta.get("hashtags") or []) if str(t).strip()]
     if len(tagar) < 3:
         catatan.append({
-            "berat": "ringan", "judul": f"Tagar baru {len(tagar)}",
+            "kode": "tagar_kurang", "berat": "ringan", "judul": f"Tagar baru {len(tagar)}",
             "saran": "Tiga sampai lima tagar yang benar-benar menggambarkan isinya. "
                      "Lebih dari itu tidak menambah apa-apa, dan tagar yang tidak "
                      "nyambung justru mendatangkan penonton yang langsung pergi.",

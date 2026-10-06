@@ -196,3 +196,22 @@ async def list_uploads(clip_name: Optional[str] = None, limit: int = 60,
             # tapi videonya privat", dan mengatakan yang benar untuk keduanya.
             "statistik_siap": bool(stat_svc.kunci_api()),
             "statistik_terbaca": len(angka)}
+
+
+@router.get("/analitik")
+async def analitik_kanal(limit: int = 200):
+    """
+    Performa klip yang sudah diunggah, dan apa yang bisa dibaca darinya.
+
+    Semuanya dikerjakan di utas lain: ia membaca sidecar tiap klip dari cakram
+    dan menembak YouTube sekali. Jawabannya selalu mengatakan berapa klip yang
+    terbaca dan berapa yang tidak, supaya halaman di depannya tidak perlu
+    menebak kenapa angkanya sedikit.
+    """
+    import asyncio
+
+    from ..services import analitik as analitik_svc
+    from ..services import profil
+
+    return await asyncio.to_thread(analitik_svc.laporan, profil.kini(),
+                                   batas=min(limit, 500))
