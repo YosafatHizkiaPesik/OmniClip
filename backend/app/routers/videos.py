@@ -28,6 +28,7 @@ from ..services.media import poster_frame, probe
 from ..services.jobs import queue
 from ..services.paths import (extract_id_from_filename, extract_youtube_id,
                              find_local_video, safe_media_path, url_sumber)
+from ..services import beranda as beranda_svc
 from ..services.ytdlp import (
     SEARCH_SORTS,
     YtdlpError,
@@ -532,9 +533,21 @@ async def trending(limit: int = 20, refresh: int = 0):
         # lama menunggu, dan panggilan pertama saja sudah terukur 38 detik —
         # lewat dari batas 30 detik di sisi layar, yang tampil sebagai
         # "Pencarian gagal".
+        #
+        # URUTANNYA TAYANGAN, BUKAN RELEVANSI. Relevansi menjawab "paling cocok
+        # dengan katanya", dan itulah yang membawa kuliah teknik wawancara 216
+        # tayangan ke beranda: ia memang sangat cocok dengan kata "wawancara
+        # mendalam". Separuh kueri dibatasi sebulan terakhir supaya yang sedang
+        # ramai ikut terbawa, separuhnya tanpa batas waktu supaya podcast lama
+        # yang memang banyak ditonton tidak hilang.
         kolam_hasil = await asyncio.gather(*[
-            asyncio.to_thread(search_youtube_videos, q, per_kueri) for q in kueri
+            asyncio.to_thread(search_youtube_videos, q, per_kueri, "terpopuler",
+                              None, "bulan" if i % 2 == 0 else None)
+            for i, q in enumerate(kueri)
         ], return_exceptions=True)
+        # Daftar populer YouTube untuk Indonesia, kalau kuncinya terpasang.
+        # Gagalnya tidak menjatuhkan beranda: yang hilang hanya lapis ini.
+        panas = await asyncio.to_thread(beranda_svc.ramai)
     except YtdlpError as e:
         raise _as_app_error(e) from e
     galat = [x for x in kolam_hasil if isinstance(x, Exception)]
@@ -544,9 +557,22 @@ async def trending(limit: int = 20, refresh: int = 0):
             raise _as_app_error(galat[0]) from galat[0]
         raise AppError("Pencarian tidak menghasilkan apa pun.", status_code=502)
 
-    hasil = _selang_seling(daftar, acak)
-    log.info("Beranda: %d kueri, %d hasil mentah, %d sesudah diselang-seling",
-             len(kueri), sum(len(d) for d in daftar), len(hasil))
+    mentah = _selang_seling(daftar, acak)
+    # Saringan mutu berlaku untuk hasil pencarian: panjang yang masuk akal
+    # untuk diklip, dan tayangan yang menunjukkan ada yang menontonnya. Daftar
+    # ramai tidak perlu disaring tayangannya — ia memang daftar yang ramai —
+    # tapi panjangnya tetap diperiksa.
+    dicari = beranda_svc.saring(mentah, want)
+    panas = [v for v in panas if beranda_svc.layak(v, 0)]
+    acak.shuffle(panas)
+    # Yang paling dekat dengan yang dicari pemiliknya naik ke atas. Tidak ada
+    # yang dibuang: daftar ramai juga tugasnya memperkenalkan yang belum pernah
+    # dicari, jadi yang tidak nyambung cuma turun ke bawah daftar.
+    panas = beranda_svc.urut_dekat(panas, kolam)
+    hasil = beranda_svc.gabung(panas, dicari, max(want, 100))
+    log.info("Beranda: %d kueri, %d mentah, %d lolos saringan, %d sedang ramai, "
+             "%d disusun", len(kueri), sum(len(d) for d in daftar), len(dicari),
+             len(panas), len(hasil))
     if hasil:
         await asyncio.to_thread(cache_repo.simpan, kunci,
                                 {"items": hasil, "diminta": ambil})
@@ -561,12 +587,17 @@ async def trending(limit: int = 20, refresh: int = 0):
                 r.choice(kolam)
                 _kueri_beranda(kolam, r)
                 lebih = []
-                for q in kueri:
+                for i, q in enumerate(kueri):
                     try:
-                        lebih.append(search_youtube_videos(q, 60))
+                        lebih.append(search_youtube_videos(
+                            q, 60, "terpopuler", None,
+                            "bulan" if i % 2 == 0 else None))
                     except Exception:               # noqa: BLE001
                         continue
-                return _selang_seling(lebih, r) if lebih else []
+                if not lebih:
+                    return []
+                return beranda_svc.gabung(
+                    panas, beranda_svc.saring(_selang_seling(lebih, r), 100), 100)
 
             _lengkapi_di_latar(kunci, penuh, 100, hasil,
                                gabung=lambda d: _batasi_kanal(d))

@@ -95,10 +95,28 @@ ketajamannya ada di hulu — sumber 1440p atau 4K.
 
 ## 1.5 Lainnya
 
+- ~~Beranda menyarankan video yang tidak layak diklip.~~ **Selesai 6 Oktober
+  2026** (`services/beranda.py`). Dilaporkan sambil menunjukkan layarnya: vlog
+  23 detik 3 tayangan, dan kuliah teknik wawancara 216 tayangan enam tahun
+  lalu. Sebabnya beranda memakai urutan RELEVANSI pencarian apa adanya, tanpa
+  satu pun saringan. Sekarang: kueri beranda diurutkan menurut TAYANGAN
+  (separuhnya dibatasi sebulan terakhir), ditambah lapis "sedang ramai" dari
+  `videos.list?chart=mostPopular&regionCode=ID` kategori Gaming, Hiburan, dan
+  Komedi, dan saringan mutu bersama (3 menit sampai 4 jam, bukan siaran
+  langsung, bukan video musik, tayangan minimal yang mengalah bertahap supaya
+  beranda tidak pernah kosong). Lapis ramai memakai kunci YouTube Data API yang
+  sama dengan Analitik, disimpan tiga jam.
+
 - **Pola reaksi otomatis untuk kartun** belum ada.
-- ~~Statistik sesudah unggah.~~ **Selesai 2 Oktober 2026.** Tayangan dan suka
-  tampil di kartu Klip jadi. Dibaca dengan kunci YouTube Data API yang disetel
-  di Pengaturan > Tayangan klip — kunci API, bukan izin akun, karena token
+- ~~Statistik sesudah unggah.~~ **Selesai 2 Oktober 2026**, dan sejak
+  6 Oktober 2026 punya halamannya sendiri: **Analitik**
+  (`components/AnalitikTab.jsx` + `services/analitik.py`). Angka kecil di kartu
+  Klip jadi tetap ada, tapi yang menjawab "klip mana yang jalan dan apa yang
+  harus diubah" halaman itu: total dan median tayangan, tabel per klip, dan
+  daftar periksa `fyp.py` yang digabung dari semua klip terunggah. Di bawah
+  delapan klip terbaca ia TIDAK membandingkan apa pun dan mengatakan alasannya;
+  di atas itu baru median klip yang kena sebuah temuan dibandingkan dengan yang
+  tidak. Kuncinya dipasang di Akun > Tayangan klip — kunci API, bukan izin akun, karena token
   unggah menjawab 403 untuk `videos.list` dan menambah izin baca akan menuntut
   tiap akun menyambung ulang. Harganya: hanya video PUBLIK yang terbaca, dan
   yang tidak terbaca hilang dari daftar, bukan jadi nol.

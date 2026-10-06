@@ -83,6 +83,20 @@ export function VideoCard({ video, isSelected, onClick }) {
           style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
           loading="lazy"
         />
+        {/* Kenapa video ini ada di beranda.
+            Tanpa penanda ini, isi beranda terasa seperti nasib: pemiliknya
+            melaporkan "entah mengapa selalu saja video video ini yang tampil".
+            Yang dari daftar populer YouTube Indonesia mengatakannya sendiri. */}
+        {video.sebab === 'ramai' && (
+          <span style={{
+            /* Kanan atas: pojok kiri sudah ditempati kotak centang
+               pemilihan, dan lencana di bawahnya terpotong separuh. */
+            position: 'absolute', top: '6px', right: '6px',
+            background: 'var(--reh)', color: '#fff',
+            fontSize: '0.66rem', fontWeight: 800, padding: '2px 7px',
+            borderRadius: '99px', letterSpacing: '0.02em',
+          }}>SEDANG RAMAI</span>
+        )}
         {/* Duration badge */}
         {video.duration > 0 && (
           <span style={{
