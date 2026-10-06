@@ -7,6 +7,7 @@ import {
 import { apiDelete, apiGet, apiPost } from '../lib/api';
 import { Link } from 'react-router-dom';
 import SakelarSensor from './SakelarSensor';
+import SakelarGumam from './SakelarGumam';
 import SecurityCard from './SecurityCard';
 import StorageCard from './StorageCard';
 import PemeliharaanCard from './PemeliharaanCard';
@@ -45,6 +46,27 @@ const helpText = {
   color: 'var(--text-secondary)',
   lineHeight: 1.6,
 };
+
+/**
+ * Satu kelompok setelan: judul kecil, lalu kartunya mengalir di bawahnya.
+ *
+ * Tiga belas kartu berderet tanpa kelompok menuntut orang membaca semuanya
+ * untuk menemukan satu. Dikelompokkan, matanya berhenti di satu judul dulu.
+ * Keterangan kelompok ikut tersembunyi di mode Ringkas, seperti keterangan
+ * setelan lainnya.
+ */
+function Kelompok({ judul, nota, children }) {
+  return (
+    <section className="setelan-kelompok">
+      <div className="setelan-kelompok-kepala">
+        <h2>{judul}</h2>
+        {nota && <p className="bantu">{nota}</p>}
+      </div>
+      <div className="petak-setelan">{children}</div>
+    </section>
+  );
+}
+
 
 export default function ProfileTab() {
   const [theme, setTheme] = useState(() => localStorage.getItem('omniclip_theme') || 'light');
@@ -253,7 +275,6 @@ export default function ProfileTab() {
         </button>
       </div>
 
-      <div className="petak-setelan">
 
       {settingsError && (
         <div style={{ ...card, borderColor: 'var(--accent-red)', display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
@@ -265,417 +286,425 @@ export default function ProfileTab() {
         </div>
       )}
 
-      {/* --- Tampilan --- */}
-      <div style={card}>
-        <div style={sectionTitle}>
-          {theme === 'dark' ? <Moon size={18} style={{ color: 'var(--reh)' }} /> : <Sun size={18} style={{ color: 'var(--reh)' }} />}
-          Tampilan
-        </div>
-        <p className="bantu" style={helpText}>Pilih tema terang atau gelap untuk seluruh aplikasi.</p>
-        <div style={{ display: 'flex', gap: '10px', marginTop: '14px' }}>
-          {[
-            { id: 'dark', label: 'Gelap', Icon: Moon },
-            { id: 'light', label: 'Terang', Icon: Sun },
-          ].map(({ id, label, Icon }) => (
-            <button
-              key={id}
-              onClick={() => setTheme(id)}
-              style={{
-                flex: 1,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-                padding: '12px',
-                borderRadius: 'var(--radius-md)',
-                cursor: 'pointer',
-                fontWeight: 700,
-                fontSize: '0.85rem',
-                color: theme === id ? 'var(--accent-cyan)' : 'var(--text-secondary)',
-                background: theme === id ? 'var(--hl-wash)' : 'transparent',
-                border: theme === id ? '1px solid var(--border-active)' : '1px solid var(--border-color)',
-                transition: 'all 0.2s ease',
-              }}
-            >
-              <Icon size={16} />
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* --- Jumlah klip --- */}
-      <div style={card}>
-        <div style={sectionTitle}>
-          <Scissors size={18} style={{ color: 'var(--reh)' }} />
-          Jumlah klip per video
-        </div>
-        <p className="bantu" style={helpText}>
-          Berapa banyak momen yang ditawarkan dari satu video. Pada mode otomatis
-          jatahnya tumbuh mengikuti durasi (kira-kira satu klip tiap empat menit)
-          sehingga podcast dua jam tidak lagi diperlakukan sama dengan video
-          sepuluh menit.
-        </p>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', marginTop: '13px' }}>
-          {[
-            [0, 'Otomatis', 'ikut durasi'],
-            [8, '8 klip', 'ringkas'],
-            [16, '16 klip', 'banyak'],
-            [30, '30 klip', 'maksimal'],
-          ].map(([v, title, hint]) => (
-            <button key={v} onClick={() => chooseMaxClips(v)} style={{
-              textAlign: 'center', padding: '11px 6px', cursor: 'pointer',
-              borderRadius: 'var(--radius-md)',
-              border: maxClips === v ? '2px solid var(--accent-cyan)' : '1px solid var(--border-color)',
-              background: maxClips === v ? 'var(--hl-wash)' : 'transparent',
-            }}>
-              <div style={{
-                fontSize: '0.84rem', fontWeight: 800, marginBottom: '2px',
-                color: maxClips === v ? 'var(--accent-cyan)' : 'var(--text-primary)',
-              }}>{title}</div>
-              <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{hint}</div>
-            </button>
-          ))}
-        </div>
-        <p style={{ ...helpText, marginTop: '11px' }}>
-          Video yang sudah pernah dianalisis dengan jatah lebih kecil akan
-          dianalisis ulang saat jatahnya dinaikkan.
-        </p>
-      </div>
-
-      {/* --- Ketelitian transkrip --- */}
-      <div style={card}>
-        <div style={sectionTitle}>
-          <Mic size={18} style={{ color: 'var(--reh)' }} />
-          Ketelitian transkrip
-        </div>
-        <p className="bantu" style={helpText}>
-          Hanya berlaku untuk video yang belum punya subtitle di YouTube dan harus
-          disalin ucapannya di komputer ini. Video yang sudah bersubtitle tidak
-          terpengaruh dan tetap selesai dalam hitungan detik.
-        </p>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '13px' }}>
-          {[
-            ['base', 'Cepat', '± 5x lebih cepat', 'Cukup untuk bicara jelas dan pelan.'],
-            ['small', 'Akurat', '± 5x lebih lama', 'Jauh lebih baik untuk percakapan cepat dan bahasa gaul.'],
-          ].map(([v, title, speed, hint]) => (
-            <button key={v} onClick={() => chooseWhisper(v)} style={{
-              textAlign: 'left', padding: '11px 13px', cursor: 'pointer',
-              borderRadius: 'var(--radius-md)',
-              border: whisperModel === v ? '2px solid var(--accent-cyan)' : '1px solid var(--border-color)',
-              background: whisperModel === v ? 'var(--hl-wash)' : 'transparent',
-            }}>
-              <div style={{
-                fontSize: '0.88rem', fontWeight: 800, marginBottom: '3px',
-                color: whisperModel === v ? 'var(--accent-cyan)' : 'var(--text-primary)',
-              }}>{title}</div>
-              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '3px' }}>{speed}</div>
-              <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', lineHeight: 1.45 }}>{hint}</div>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* --- Bahasa subtitle --- */}
-      <div style={card}>
-        <div style={sectionTitle}>
-          <Languages size={18} style={{ color: 'var(--reh)' }} />
-          Bahasa subtitle
-        </div>
-        <p className="bantu" style={helpText}>
-          Urutan bahasa yang <strong>dicoba lebih dulu</strong> saat mengambil
-          subtitle dari YouTube. Ini bukan batas: kalau video tidak punya satu pun
-          bahasa di sini, sistem tetap memakai bahasa yang benar-benar ada di video
-          itu. Untuk video tanpa subtitle sama sekali, bahasanya dikenali sendiri
-          dari suaranya.
-        </p>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '13px' }}>
-          {(bahasaUmum ?? []).map(({ code, label: nama }) => {
-            const urutan = langs.indexOf(code);
-            const on = urutan >= 0;
-            return (
-              <button key={code} onClick={() => toggleLang(code)} style={{
-                display: 'inline-flex', alignItems: 'center', gap: '6px',
-                padding: '7px 11px', fontSize: '0.76rem', fontWeight: 700,
-                cursor: 'pointer', borderRadius: 'var(--radius-sm)',
-                border: on ? '2px solid var(--accent-cyan)' : '1px solid var(--border-color)',
-                background: on ? 'var(--hl-wash)' : 'transparent',
-                color: on ? 'var(--accent-cyan)' : 'var(--text-secondary)',
-              }}>
-                {on && (
-                  <span style={{
-                    minWidth: '17px', height: '17px', borderRadius: '50%',
-                    background: 'var(--accent-cyan)', color: '#04121a',
-                    fontSize: '0.66rem', fontWeight: 900,
-                    display: 'grid', placeItems: 'center',
-                  }}>{urutan + 1}</span>
-                )}
-                {nama}
-              </button>
-            );
-          })}
-        </div>
-        <div style={{ display: 'flex', gap: '7px', marginTop: '11px', flexWrap: 'wrap' }}>
-          <input value={langDraft} onChange={(e) => setLangDraft(e.target.value)}
-                 placeholder="Kode lain, mis. pt-BR"
-                 onKeyDown={(e) => { if (e.key === 'Enter') tambahLang(); }}
-                 style={{
-                   flex: '1 1 150px', padding: '8px 10px', fontSize: '0.78rem',
-                   fontFamily: 'inherit', borderRadius: 'var(--radius-sm)',
-                   border: '1px solid var(--border-color)', background: 'transparent',
-                   color: 'var(--text-primary)',
-                 }} />
-          <button onClick={tambahLang} className="btn-secondary"
-                  style={{ fontSize: '0.78rem' }}>Tambah</button>
-          <button onClick={() => simpanLangs([])} className="btn-secondary"
-                  style={{ fontSize: '0.78rem' }}>Kembalikan bawaan</button>
-        </div>
-        {langError && (
-          <p style={{ fontSize: '0.75rem', color: 'var(--danger)', margin: '9px 0 0' }}>{langError}</p>
-        )}
-        <p style={{ ...helpText, marginTop: '11px' }}>
-          Urutan sekarang: <strong>{langs.join(' → ') || 'bawaan'}</strong>
-        </p>
-      </div>
-
-      {/* --- Model AI --- */}
-      <div style={card}>
-        <div style={sectionTitle}>
-          <Sparkles size={18} style={{ color: 'var(--reh)' }} />
-          Model AI pemilih klip
-        </div>
-        <p className="bantu" style={helpText}>
-          Model yang membaca transkrip lalu memutuskan bagian mana yang layak jadi
-          klip. Model yang lebih besar biasanya lebih paham konteks pembahasan,
-          tapi lebih lambat dan memakai lebih banyak kuota.
-        </p>
-        {models === null && !modelsError && (
-          <p style={{ ...helpText, marginTop: '10px' }}>Memuat daftar model…</p>
-        )}
-        {modelsError && (
-          <p style={{ ...helpText, marginTop: '10px', color: 'var(--accent-red, var(--danger))' }}>
-            Tidak bisa mengambil daftar model: {modelsError}
+      <Kelompok judul="Klip dan transkrip"
+                nota="Berapa klip yang dicari, seberapa teliti suaranya disalin, dan ke bahasa apa.">
+        {/* --- Jumlah klip --- */}
+        <div style={card}>
+          <div style={sectionTitle}>
+            <Scissors size={18} style={{ color: 'var(--reh)' }} />
+            Jumlah klip per video
+          </div>
+          <p className="bantu" style={helpText}>
+            Berapa banyak momen yang ditawarkan dari satu video. Pada mode otomatis
+            jatahnya tumbuh mengikuti durasi (kira-kira satu klip tiap empat menit)
+            sehingga podcast dua jam tidak lagi diperlakukan sama dengan video
+            sepuluh menit.
           </p>
-        )}
-        {models?.length > 0 && (
-          <>
-            <select value={model} onChange={(e) => chooseModel(e.target.value)}
-                    style={{
-                      width: '100%', marginTop: '12px', padding: '11px 12px',
-                      borderRadius: 'var(--radius-md)', fontSize: '0.86rem',
-                      border: '1px solid var(--border-color)',
-                      background: 'var(--bg-glass)', color: 'var(--text-primary)',
-                    }}>
-              <option value="">
-                Otomatis{modelInfo.terkuat ? ` (mencoba ${modelInfo.terkuat} lebih dulu)` : ''}
-              </option>
-              {models.map((m) => (
-                <option key={m} value={m}>
-                  {m}{modelInfo.habisHarian.includes(m) ? ' (jatah hari ini habis)' : ''}
-                </option>
-              ))}
-            </select>
-            <p style={{ ...helpText, marginTop: '10px' }}>
-              Urut dari yang terkuat. <strong>Otomatis</strong> mencoba yang teratas
-              lebih dulu, dan pindah ke berikutnya bila model itu sedang sibuk atau
-              jatah hariannya sudah habis. Jadi model yang tertulis di atas bukan
-              selalu yang terkuat, melainkan yang akan dicoba pertama hari ini.
-              Model <strong>lite</strong> hanya dipakai paling akhir, saat semua
-              model penuh kehabisan jatah, karena jatah hariannya dihitung
-              terpisah.
-            </p>
-            {modelInfo.habisHarian.length > 0 && (
-              <p style={{ ...helpText, marginTop: '8px' }}>
-                {modelInfo.habisHarian.length} model sudah memakai jatah hariannya
-                dan kembali sendiri
-                {modelInfo.jamKePutaran !== null
-                  ? ` sekitar ${modelInfo.jamKePutaran} jam lagi` : ' setelah jatahnya berputar'}
-                : {modelInfo.habisHarian.join(', ')}.
-              </p>
-            )}
-            {modelTersembunyi > 0 && (
-              <p style={{ ...helpText, marginTop: '8px' }}>
-                {modelTersembunyi} model tidak ditampilkan karena kunci ini tidak
-                punya aksesnya. Seri <strong>pro</strong> memang di luar kuota
-                gratis Gemini; ia muncul sendiri di daftar ini begitu kunci Anda
-                mendapatkannya.
-              </p>
-            )}
-          </>
-        )}
-      </div>
-
-      {/* --- Gemini API Key --- */}
-      <div style={card}>
-        <div style={sectionTitle}>
-          <KeyRound size={18} style={{ color: 'var(--reh)' }} />
-          API key AI
-        </div>
-        <p className="bantu" style={helpText}>
-          Opsional. Tanpa API key, OmniClip tetap memotong klip memakai mesin heuristik
-          lokal berbasis transkrip asli. Dengan API key, {provider.label} ikut menyusun
-          ulang peringkat dan judul klip. Ambil kunci gratis di{' '}
-          <a href={provider.key_url} target="_blank" rel="noreferrer"
-             style={{ color: 'var(--reh)' }}>
-            {new URL(provider.key_url).host}
-          </a>.
-        </p>
-        <p style={{ ...helpText, marginTop: '8px' }}>
-          Kunci disimpan di basis data komputer ini dan tetap ada setelah backend
-          dimulai ulang, jadi tidak perlu lagi menyunting <code>backend/.env</code>
-          lewat terminal, yang memang tidak bisa dilakukan dari HP. Kunci tidak
-          pernah dikirim ke mana pun selain {provider.label}.
-        </p>
-        <p style={{ ...helpText, marginTop: '8px' }}>
-          <strong style={{ color: 'var(--text-primary)' }}>Boleh lebih dari satu
-          kunci</strong>, satu per baris. OmniClip pindah sendiri ke kunci
-          berikutnya saat satu kunci kehabisan jatah atau ditolak.{' '}
-          <strong style={{ color: 'var(--text-primary)' }}>Tapi kunci keduanya
-          harus dari PROJECT Google yang berbeda</strong>: Google menghitung
-          kuota per project, bukan per kunci, jadi dua kunci dari project yang
-          sama berbagi jatah yang sama persis dan tidak menambah apa-apa. Buat
-          project baru di{' '}
-          <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer"
-             style={{ color: 'var(--reh)' }}>aistudio.google.com/apikey</a>{' '}
-          lalu ambil kuncinya dari sana.
-        </p>
-
-        {settings && (
-          <div style={{ ...helpText, marginTop: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            {settings.gemini_api_key_set ? (
-              <>
-                <CheckCircle2 size={15} style={{ color: 'var(--entry)' }} />
-                {(settings.gemini_api_key_count ?? 1) > 1
-                  ? `${settings.gemini_api_key_count} kunci tersimpan`
-                  : <>Tersimpan (berakhiran <code>{settings.gemini_api_key_last4}</code>)</>}
-                {settings.gemini_api_key_source === 'env' && (
-                  <span style={{ color: 'var(--text-muted)' }}>
-                    dari <code>backend/.env</code>
-                  </span>
-                )}
-              </>
-            ) : (
-              <>
-                <Info size={15} style={{ color: 'var(--text-muted)' }} />
-                Belum dikonfigurasi. Klip dipilih mesin lokal.
-              </>
-            )}
-          </div>
-        )}
-
-        <div style={{ display: 'flex', gap: '8px', marginTop: '14px' }}>
-          <div style={{ position: 'relative', flex: 1 }}>
-            {/* Kotak bertingkat, bukan satu baris: kolom yang tingginya satu
-                baris mengatakan "satu kunci saja" tanpa sepatah kata pun, dan
-                menempel dua kunci ke dalamnya terasa seperti melawan alat. */}
-            <textarea
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleSaveApiKey();
-              }}
-              rows={apiKey.includes('\n') ? 3 : 1}
-              spellCheck={false}
-              placeholder="Tempel API key di sini. Punya lebih dari satu? Satu per baris."
-              style={{
-                width: '100%',
-                padding: '11px 40px 11px 14px',
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', marginTop: '13px' }}>
+            {[
+              [0, 'Otomatis', 'ikut durasi'],
+              [8, '8 klip', 'ringkas'],
+              [16, '16 klip', 'banyak'],
+              [30, '30 klip', 'maksimal'],
+            ].map(([v, title, hint]) => (
+              <button key={v} onClick={() => chooseMaxClips(v)} style={{
+                textAlign: 'center', padding: '11px 6px', cursor: 'pointer',
                 borderRadius: 'var(--radius-md)',
-                border: '1px solid var(--border-color)',
-                background: 'var(--bg-glass)',
-                color: 'var(--text-primary)',
-                fontSize: '0.85rem',
-                fontFamily: 'inherit',
-                resize: 'vertical',
-                lineHeight: 1.5,
-                WebkitTextSecurity: showApiKey ? 'none' : 'disc',
-              }}
-            />
+                border: maxClips === v ? '2px solid var(--accent-cyan)' : '1px solid var(--border-color)',
+                background: maxClips === v ? 'var(--hl-wash)' : 'transparent',
+              }}>
+                <div style={{
+                  fontSize: '0.84rem', fontWeight: 800, marginBottom: '2px',
+                  color: maxClips === v ? 'var(--accent-cyan)' : 'var(--text-primary)',
+                }}>{title}</div>
+                <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{hint}</div>
+              </button>
+            ))}
+          </div>
+          <p style={{ ...helpText, marginTop: '11px' }}>
+            Video yang sudah pernah dianalisis dengan jatah lebih kecil akan
+            dianalisis ulang saat jatahnya dinaikkan.
+          </p>
+        </div>
+
+        {/* --- Ketelitian transkrip --- */}
+        <div style={card}>
+          <div style={sectionTitle}>
+            <Mic size={18} style={{ color: 'var(--reh)' }} />
+            Ketelitian transkrip
+          </div>
+          <p className="bantu" style={helpText}>
+            Hanya berlaku untuk video yang belum punya subtitle di YouTube dan harus
+            disalin ucapannya di komputer ini. Video yang sudah bersubtitle tidak
+            terpengaruh dan tetap selesai dalam hitungan detik.
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '13px' }}>
+            {[
+              ['base', 'Cepat', '± 5x lebih cepat', 'Cukup untuk bicara jelas dan pelan.'],
+              ['small', 'Akurat', '± 5x lebih lama', 'Jauh lebih baik untuk percakapan cepat dan bahasa gaul.'],
+            ].map(([v, title, speed, hint]) => (
+              <button key={v} onClick={() => chooseWhisper(v)} style={{
+                textAlign: 'left', padding: '11px 13px', cursor: 'pointer',
+                borderRadius: 'var(--radius-md)',
+                border: whisperModel === v ? '2px solid var(--accent-cyan)' : '1px solid var(--border-color)',
+                background: whisperModel === v ? 'var(--hl-wash)' : 'transparent',
+              }}>
+                <div style={{
+                  fontSize: '0.88rem', fontWeight: 800, marginBottom: '3px',
+                  color: whisperModel === v ? 'var(--accent-cyan)' : 'var(--text-primary)',
+                }}>{title}</div>
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '3px' }}>{speed}</div>
+                <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', lineHeight: 1.45 }}>{hint}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* --- Bahasa subtitle --- */}
+        <div style={card}>
+          <div style={sectionTitle}>
+            <Languages size={18} style={{ color: 'var(--reh)' }} />
+            Bahasa subtitle
+          </div>
+          <p className="bantu" style={helpText}>
+            Urutan bahasa yang <strong>dicoba lebih dulu</strong> saat mengambil
+            subtitle dari YouTube. Ini bukan batas: kalau video tidak punya satu pun
+            bahasa di sini, sistem tetap memakai bahasa yang benar-benar ada di video
+            itu. Untuk video tanpa subtitle sama sekali, bahasanya dikenali sendiri
+            dari suaranya.
+          </p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '13px' }}>
+            {(bahasaUmum ?? []).map(({ code, label: nama }) => {
+              const urutan = langs.indexOf(code);
+              const on = urutan >= 0;
+              return (
+                <button key={code} onClick={() => toggleLang(code)} style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '6px',
+                  padding: '7px 11px', fontSize: '0.76rem', fontWeight: 700,
+                  cursor: 'pointer', borderRadius: 'var(--radius-sm)',
+                  border: on ? '2px solid var(--accent-cyan)' : '1px solid var(--border-color)',
+                  background: on ? 'var(--hl-wash)' : 'transparent',
+                  color: on ? 'var(--accent-cyan)' : 'var(--text-secondary)',
+                }}>
+                  {on && (
+                    <span style={{
+                      minWidth: '17px', height: '17px', borderRadius: '50%',
+                      background: 'var(--accent-cyan)', color: '#04121a',
+                      fontSize: '0.66rem', fontWeight: 900,
+                      display: 'grid', placeItems: 'center',
+                    }}>{urutan + 1}</span>
+                  )}
+                  {nama}
+                </button>
+              );
+            })}
+          </div>
+          <div style={{ display: 'flex', gap: '7px', marginTop: '11px', flexWrap: 'wrap' }}>
+            <input value={langDraft} onChange={(e) => setLangDraft(e.target.value)}
+                   placeholder="Kode lain, mis. pt-BR"
+                   onKeyDown={(e) => { if (e.key === 'Enter') tambahLang(); }}
+                   style={{
+                     flex: '1 1 150px', padding: '8px 10px', fontSize: '0.78rem',
+                     fontFamily: 'inherit', borderRadius: 'var(--radius-sm)',
+                     border: '1px solid var(--border-color)', background: 'transparent',
+                     color: 'var(--text-primary)',
+                   }} />
+            <button onClick={tambahLang} className="btn-secondary"
+                    style={{ fontSize: '0.78rem' }}>Tambah</button>
+            <button onClick={() => simpanLangs([])} className="btn-secondary"
+                    style={{ fontSize: '0.78rem' }}>Kembalikan bawaan</button>
+          </div>
+          {langError && (
+            <p style={{ fontSize: '0.75rem', color: 'var(--danger)', margin: '9px 0 0' }}>{langError}</p>
+          )}
+          <p style={{ ...helpText, marginTop: '11px' }}>
+            Urutan sekarang: <strong>{langs.join(' → ') || 'bawaan'}</strong>
+          </p>
+        </div>
+
+        <CookiesCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
+      </Kelompok>
+
+      <Kelompok judul="Subtitle"
+                nota="Apa yang ditulis di layar, dan bagaimana rupanya.">
+        <div style={card}>
+          <div style={sectionTitle}>
+            <ShieldAlert size={18} style={{ color: 'var(--reh)' }} />
+            Kata yang ditulis
+          </div>
+          <SakelarSensor />
+          <SakelarGumam helpText={helpText} />
+        </div>
+        <WarnaPenuturCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
+        <TerjemahOtomatisCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
+      </Kelompok>
+
+      <Kelompok judul="Suara dan gambar"
+                nota="Berlaku untuk semua render berikutnya.">
+        <SuaraCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
+        <LajuRenderCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
+        {/* --- Tampilan --- */}
+        <div style={card}>
+          <div style={sectionTitle}>
+            {theme === 'dark' ? <Moon size={18} style={{ color: 'var(--reh)' }} /> : <Sun size={18} style={{ color: 'var(--reh)' }} />}
+            Tampilan
+          </div>
+          <p className="bantu" style={helpText}>Pilih tema terang atau gelap untuk seluruh aplikasi.</p>
+          <div style={{ display: 'flex', gap: '10px', marginTop: '14px' }}>
+            {[
+              { id: 'dark', label: 'Gelap', Icon: Moon },
+              { id: 'light', label: 'Terang', Icon: Sun },
+            ].map(({ id, label, Icon }) => (
+              <button
+                key={id}
+                onClick={() => setTheme(id)}
+                style={{
+                  flex: 1,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                  padding: '12px',
+                  borderRadius: 'var(--radius-md)',
+                  cursor: 'pointer',
+                  fontWeight: 700,
+                  fontSize: '0.85rem',
+                  color: theme === id ? 'var(--accent-cyan)' : 'var(--text-secondary)',
+                  background: theme === id ? 'var(--hl-wash)' : 'transparent',
+                  border: theme === id ? '1px solid var(--border-active)' : '1px solid var(--border-color)',
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                <Icon size={16} />
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+      </Kelompok>
+
+      <Kelompok judul="Mesin AI"
+                nota="Model yang memilih klip dan menulis caption, beserta kuncinya.">
+        {/* --- Model AI --- */}
+        <div style={card}>
+          <div style={sectionTitle}>
+            <Sparkles size={18} style={{ color: 'var(--reh)' }} />
+            Model AI pemilih klip
+          </div>
+          <p className="bantu" style={helpText}>
+            Model yang membaca transkrip lalu memutuskan bagian mana yang layak jadi
+            klip. Model yang lebih besar biasanya lebih paham konteks pembahasan,
+            tapi lebih lambat dan memakai lebih banyak kuota.
+          </p>
+          {models === null && !modelsError && (
+            <p style={{ ...helpText, marginTop: '10px' }}>Memuat daftar model…</p>
+          )}
+          {modelsError && (
+            <p style={{ ...helpText, marginTop: '10px', color: 'var(--accent-red, var(--danger))' }}>
+              Tidak bisa mengambil daftar model: {modelsError}
+            </p>
+          )}
+          {models?.length > 0 && (
+            <>
+              <select value={model} onChange={(e) => chooseModel(e.target.value)}
+                      style={{
+                        width: '100%', marginTop: '12px', padding: '11px 12px',
+                        borderRadius: 'var(--radius-md)', fontSize: '0.86rem',
+                        border: '1px solid var(--border-color)',
+                        background: 'var(--bg-glass)', color: 'var(--text-primary)',
+                      }}>
+                <option value="">
+                  Otomatis{modelInfo.terkuat ? ` (mencoba ${modelInfo.terkuat} lebih dulu)` : ''}
+                </option>
+                {models.map((m) => (
+                  <option key={m} value={m}>
+                    {m}{modelInfo.habisHarian.includes(m) ? ' (jatah hari ini habis)' : ''}
+                  </option>
+                ))}
+              </select>
+              <p style={{ ...helpText, marginTop: '10px' }}>
+                Urut dari yang terkuat. <strong>Otomatis</strong> mencoba yang teratas
+                lebih dulu, dan pindah ke berikutnya bila model itu sedang sibuk atau
+                jatah hariannya sudah habis. Jadi model yang tertulis di atas bukan
+                selalu yang terkuat, melainkan yang akan dicoba pertama hari ini.
+                Model <strong>lite</strong> hanya dipakai paling akhir, saat semua
+                model penuh kehabisan jatah, karena jatah hariannya dihitung
+                terpisah.
+              </p>
+              {modelInfo.habisHarian.length > 0 && (
+                <p style={{ ...helpText, marginTop: '8px' }}>
+                  {modelInfo.habisHarian.length} model sudah memakai jatah hariannya
+                  dan kembali sendiri
+                  {modelInfo.jamKePutaran !== null
+                    ? ` sekitar ${modelInfo.jamKePutaran} jam lagi` : ' setelah jatahnya berputar'}
+                  : {modelInfo.habisHarian.join(', ')}.
+                </p>
+              )}
+              {modelTersembunyi > 0 && (
+                <p style={{ ...helpText, marginTop: '8px' }}>
+                  {modelTersembunyi} model tidak ditampilkan karena kunci ini tidak
+                  punya aksesnya. Seri <strong>pro</strong> memang di luar kuota
+                  gratis Gemini; ia muncul sendiri di daftar ini begitu kunci Anda
+                  mendapatkannya.
+                </p>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* --- Gemini API Key --- */}
+        <div style={card}>
+          <div style={sectionTitle}>
+            <KeyRound size={18} style={{ color: 'var(--reh)' }} />
+            API key AI
+          </div>
+          <p className="bantu" style={helpText}>
+            Opsional. Tanpa API key, OmniClip tetap memotong klip memakai mesin heuristik
+            lokal berbasis transkrip asli. Dengan API key, {provider.label} ikut menyusun
+            ulang peringkat dan judul klip. Ambil kunci gratis di{' '}
+            <a href={provider.key_url} target="_blank" rel="noreferrer"
+               style={{ color: 'var(--reh)' }}>
+              {new URL(provider.key_url).host}
+            </a>.
+          </p>
+          <p style={{ ...helpText, marginTop: '8px' }}>
+            Kunci disimpan di basis data komputer ini dan tetap ada setelah backend
+            dimulai ulang, jadi tidak perlu lagi menyunting <code>backend/.env</code>
+            lewat terminal, yang memang tidak bisa dilakukan dari HP. Kunci tidak
+            pernah dikirim ke mana pun selain {provider.label}.
+          </p>
+          <p style={{ ...helpText, marginTop: '8px' }}>
+            <strong style={{ color: 'var(--text-primary)' }}>Boleh lebih dari satu
+            kunci</strong>, satu per baris. OmniClip pindah sendiri ke kunci
+            berikutnya saat satu kunci kehabisan jatah atau ditolak.{' '}
+            <strong style={{ color: 'var(--text-primary)' }}>Tapi kunci keduanya
+            harus dari PROJECT Google yang berbeda</strong>: Google menghitung
+            kuota per project, bukan per kunci, jadi dua kunci dari project yang
+            sama berbagi jatah yang sama persis dan tidak menambah apa-apa. Buat
+            project baru di{' '}
+            <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer"
+               style={{ color: 'var(--reh)' }}>aistudio.google.com/apikey</a>{' '}
+            lalu ambil kuncinya dari sana.
+          </p>
+
+          {settings && (
+            <div style={{ ...helpText, marginTop: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {settings.gemini_api_key_set ? (
+                <>
+                  <CheckCircle2 size={15} style={{ color: 'var(--entry)' }} />
+                  {(settings.gemini_api_key_count ?? 1) > 1
+                    ? `${settings.gemini_api_key_count} kunci tersimpan`
+                    : <>Tersimpan (berakhiran <code>{settings.gemini_api_key_last4}</code>)</>}
+                  {settings.gemini_api_key_source === 'env' && (
+                    <span style={{ color: 'var(--text-muted)' }}>
+                      dari <code>backend/.env</code>
+                    </span>
+                  )}
+                </>
+              ) : (
+                <>
+                  <Info size={15} style={{ color: 'var(--text-muted)' }} />
+                  Belum dikonfigurasi. Klip dipilih mesin lokal.
+                </>
+              )}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: '8px', marginTop: '14px' }}>
+            <div style={{ position: 'relative', flex: 1 }}>
+              {/* Kotak bertingkat, bukan satu baris: kolom yang tingginya satu
+                  baris mengatakan "satu kunci saja" tanpa sepatah kata pun, dan
+                  menempel dua kunci ke dalamnya terasa seperti melawan alat. */}
+              <textarea
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleSaveApiKey();
+                }}
+                rows={apiKey.includes('\n') ? 3 : 1}
+                spellCheck={false}
+                placeholder="Tempel API key di sini. Punya lebih dari satu? Satu per baris."
+                style={{
+                  width: '100%',
+                  padding: '11px 40px 11px 14px',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid var(--border-color)',
+                  background: 'var(--bg-glass)',
+                  color: 'var(--text-primary)',
+                  fontSize: '0.85rem',
+                  fontFamily: 'inherit',
+                  resize: 'vertical',
+                  lineHeight: 1.5,
+                  WebkitTextSecurity: showApiKey ? 'none' : 'disc',
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowApiKey((v) => !v)}
+                aria-label={showApiKey ? 'Sembunyikan API key' : 'Tampilkan API key'}
+                style={{
+                  position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)',
+                  background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)',
+                  display: 'flex', alignItems: 'center',
+                }}
+              >
+                {showApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
             <button
-              type="button"
-              onClick={() => setShowApiKey((v) => !v)}
-              aria-label={showApiKey ? 'Sembunyikan API key' : 'Tampilkan API key'}
-              style={{
-                position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)',
-                background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)',
-                display: 'flex', alignItems: 'center',
-              }}
+              className="btn-primary"
+              onClick={handleSaveApiKey}
+              disabled={savingKey || !apiKey.trim()}
+              style={{ opacity: savingKey || !apiKey.trim() ? 0.5 : 1, whiteSpace: 'nowrap' }}
             >
-              {showApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
+              {savingKey ? <Loader2 size={15} className="animate-spin" /> : 'Simpan'}
             </button>
           </div>
-          <button
-            className="btn-primary"
-            onClick={handleSaveApiKey}
-            disabled={savingKey || !apiKey.trim()}
-            style={{ opacity: savingKey || !apiKey.trim() ? 0.5 : 1, whiteSpace: 'nowrap' }}
-          >
-            {savingKey ? <Loader2 size={15} className="animate-spin" /> : 'Simpan'}
-          </button>
+
+          {settings?.gemini_api_key_set && settings.gemini_api_key_source !== 'env' && (
+            <button
+              onClick={handleDeleteApiKey}
+              disabled={deletingKey}
+              style={{
+                marginTop: '10px', display: 'flex', alignItems: 'center', gap: '7px',
+                background: 'none', border: 'none', padding: '4px 0', cursor: 'pointer',
+                fontSize: '0.78rem', fontWeight: 700, fontFamily: 'inherit',
+                color: 'var(--danger)', opacity: deletingKey ? 0.5 : 1,
+              }}
+            >
+              {deletingKey ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+              Hapus kunci ini
+            </button>
+          )}
+
+          {feedback && (
+            <div style={{
+              ...helpText,
+              marginTop: '10px',
+              color: feedback.kind === 'ok' ? 'var(--entry)' : 'var(--accent-red)',
+              display: 'flex', alignItems: 'center', gap: '7px',
+            }}>
+              {feedback.kind === 'ok' ? <CheckCircle2 size={15} /> : <AlertTriangle size={15} />}
+              {feedback.text}
+            </div>
+          )}
         </div>
+        <OpenRouterCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
+      </Kelompok>
 
-        {settings?.gemini_api_key_set && settings.gemini_api_key_source !== 'env' && (
-          <button
-            onClick={handleDeleteApiKey}
-            disabled={deletingKey}
-            style={{
-              marginTop: '10px', display: 'flex', alignItems: 'center', gap: '7px',
-              background: 'none', border: 'none', padding: '4px 0', cursor: 'pointer',
-              fontSize: '0.78rem', fontWeight: 700, fontFamily: 'inherit',
-              color: 'var(--danger)', opacity: deletingKey ? 0.5 : 1,
-            }}
-          >
-            {deletingKey ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-            Hapus kunci ini
-          </button>
-        )}
 
-        {feedback && (
-          <div style={{
-            ...helpText,
-            marginTop: '10px',
-            color: feedback.kind === 'ok' ? 'var(--entry)' : 'var(--accent-red)',
-            display: 'flex', alignItems: 'center', gap: '7px',
-          }}>
-            {feedback.kind === 'ok' ? <CheckCircle2 size={15} /> : <AlertTriangle size={15} />}
-            {feedback.text}
-          </div>
-        )}
-      </div>
 
-      {/* Sakelar yang sama dengan yang ada di panel Subtitle Studio. Satu
-          setelan, dua pintu: yang diubah di sini langsung berlaku di sana. */}
-      <div style={card}>
-        <div style={sectionTitle}>
-          <ShieldAlert size={18} style={{ color: 'var(--reh)' }} />
-          Subtitle
-        </div>
-        <SakelarSensor />
-      </div>
 
-      <OpenRouterCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
-      <StatistikCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
 
-      <CookiesCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
 
-      <UpdateCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
 
-      <WarnaPenuturCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
 
-      <TerjemahOtomatisCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
 
-      <SuaraCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
-      <LajuRenderCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
 
-      <PemakaianAiCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
 
-      <KesehatanCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
 
-      <KeluarCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
 
-      <StorageCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
 
-      <PemeliharaanCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
-
-      <SecurityCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
-
+      <Kelompok judul="Lainnya"
+                nota="Akun, dan keterangan pemasangan ini.">
       {/* Akun Google kini milik TIAP PROFIL (Drive dan kanal YouTube sendiri),
           jadi menyambungkannya dari sini, tanpa tahu profil mana yang aktif,
           adalah cara tercepat mengunggah ke kanal yang salah. */}
@@ -684,9 +713,16 @@ export default function ProfileTab() {
           <UploadCloud size={18} style={{ color: 'var(--reh)' }} />
           Akun Google, Drive, dan YouTube
         </div>
-        <p className="bantu" style={helpText}>
-          Setiap profil menyambungkan akun Google-nya sendiri, beserta setelan unggah
-          otomatisnya. Atur di <Link to="/profil" style={{ color: 'var(--reh)', fontWeight: 700 }}>halaman Profil</Link>.
+        {/* Tautannya DI LUAR `.bantu`: di mode Ringkas kartu ini dulu tinggal
+            judul tanpa satu pun jalan keluar, dan sebuah kartu yang hanya
+            memberi tahu "ini ada di tempat lain" tanpa menunjukkan tempatnya
+            tidak mengerjakan apa pun. */}
+        <p style={helpText}>
+          <span className="bantu">
+            Setiap profil menyambungkan akun Google-nya sendiri, beserta setelan
+            unggah otomatisnya.{' '}
+          </span>
+          Atur di <Link to="/profil" style={{ color: 'var(--reh)', fontWeight: 700 }}>halaman Akun</Link>.
         </p>
       </div>
 
@@ -702,7 +738,7 @@ export default function ProfileTab() {
           <span style={{ color: 'var(--text-muted)' }}>Penyimpanan</span><span><code>OmniClip_Storage/</code></span>
         </div>
       </div>
-      </div>
+      </Kelompok>
     </div>
   );
 }

@@ -4,6 +4,7 @@ import {
 } from 'lucide-react';
 import { apiDelete, apiGet, apiPatch, apiPost, pilihProfil, profilAktif } from '../lib/api';
 import GoogleAccountCard from '../components/GoogleAccountCard';
+import StatistikCard from '../components/StatistikCard';
 import TambahAkun from '../components/TambahAkun';
 
 const card = { padding: '18px 20px', borderBottom: '1px solid var(--rule-2)' };
@@ -328,6 +329,14 @@ export default function Profil() {
 
             {/* --- Akun Google profil aktif --- */}
             <GoogleAccountCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
+
+            {/* Kunci pembaca tayangan tinggal di sini, bukan di Pengaturan.
+                Ia bukan setelan sistem melainkan kunci untuk AKUN YouTube ini,
+                dan di Pengaturan ia duduk di antara hal-hal yang mengubah cara
+                klip dibuat — tempat yang membuat orang mencarinya di tempat
+                yang salah. Dipindahkan 6 Oktober 2026 atas permintaan
+                pemiliknya. */}
+            <StatistikCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
 
             {/* --- Unggah otomatis --- */}
             <div style={card}>

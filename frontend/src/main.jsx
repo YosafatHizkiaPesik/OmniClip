@@ -13,6 +13,7 @@ import Profil from './routes/Profil.jsx';
 import ClipsTab from './components/ClipsTab.jsx';
 import DownloadsTab from './components/DownloadsTab.jsx';
 import ProfileTab from './components/ProfileTab.jsx';
+import MesinTab from './components/MesinTab';
 
 // Profil terakhir diambil dari server SEBELUM apa pun digambar. Setiap
 // permintaan membawa nomor profil di headernya, jadi menggambar dulu lalu
@@ -35,6 +36,7 @@ createRoot(document.getElementById('root')).render(
           <Route path="downloads" element={<DownloadsTab />} />
           <Route path="profil" element={<Profil />} />
           <Route path="settings" element={<ProfileTab />} />
+          <Route path="mesin" element={<MesinTab />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

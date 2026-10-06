@@ -187,12 +187,14 @@ export default function OpenRouterCard({ card, sectionTitle, helpText }) {
         <input type="checkbox" checked={!!info?.bingkai_otomatis}
                onChange={(e) => sakelarBingkai(e.target.checked)}
                style={{ marginTop: '3px', width: '16px', height: '16px', accentColor: 'var(--reh)' }} />
-        <span className="bantu" style={helpText}>
-          <strong style={{ color: 'var(--text-primary)' }}>Susun bingkai sendiri sesudah mengklip.</strong>{' '}
+        <span style={{ ...helpText, color: 'var(--text-primary)' }}>
+          <strong>Susun bingkai sendiri sesudah mengklip.</strong>
+          <span className="bantu">{' '}
           Tanpa ini, bingkai reaksi baru disusun saat Anda menekan tombolnya di Studio.
           Dengan ini, 6 klip pertama tiap video sudah berbingkai saat dibuka. Sengaja
           mati sejak awal: tiap klip memakai satu panggilan model, dari kuota harian
           yang sama dengan yang dipakai untuk memilih klip video berikutnya.
+          </span>
         </span>
       </label>
 

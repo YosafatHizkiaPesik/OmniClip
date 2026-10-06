@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
-  Search, Download, SlidersHorizontal, Film, Music4, Menu, X, ArrowDownToLine, UserRound,
+  Search, Download, SlidersHorizontal, Film, Music4, Menu, X, ArrowDownToLine, UserRound, Gauge
 } from 'lucide-react';
 import ErrorBoundary from './components/ErrorBoundary';
 import ProfilPemilih from './components/ProfilPemilih';
@@ -18,6 +18,7 @@ const NAV = [
   { to: '/downloads', label: 'Unduhan', Icon: Download },
   { to: '/profil', label: 'Akun', Icon: UserRound },
   { to: '/settings', label: 'Pengaturan', Icon: SlidersHorizontal },
+  { to: '/mesin', label: 'Mesin', Icon: Gauge },
 ];
 
 /** Editor satu project: /studio/<videoId>. Bukan /studio yang berisi kartu. */

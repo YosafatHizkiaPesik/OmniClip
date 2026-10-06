@@ -1525,28 +1525,57 @@ body.is-studio .app-viewport,
 
    Kartu-kartunya berdiri sendiri-sendiri, jadi ia memang petak, bukan daftar.
    Di layar lebar mereka berjajar dan tingginya tinggal separuh. */
+/* KOLOM YANG MENGALIR, BUKAN KISI.
+   Dengan `grid`, tiap baris setinggi kartu tertingginya: "Tampilan" yang cuma
+   dua tombol berdiri di sebelah "Jumlah klip per video" yang tiga kali lebih
+   tinggi, dan sisa ruang di bawahnya kosong sampai baris berikutnya mulai.
+   Dilaporkan pemiliknya 5 Oktober 2026 sebagai "setting yang banyak ruang
+   kosong", dan itu memang bukan selera melainkan akibat mekanis dari kisi.
+
+   `columns` membuat kartunya mengalir: yang pendek diikuti yang berikutnya
+   tanpa menunggu tetangganya selesai. `break-inside: avoid` menjaga satu kartu
+   tidak terbelah di antara dua kolom. */
 .petak-setelan {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(430px, 1fr));
-  gap: 14px;
-  align-items: start;
+  columns: 2;
+  column-gap: 14px;
   background: none;
   border: none;
   overflow: visible;
 }
 .petak-setelan > * {
+  break-inside: avoid;
+  -webkit-column-break-inside: avoid;
+  page-break-inside: avoid;
+  margin-bottom: 14px;
+  display: block;
+}
+.petak-setelan > * {
   background: var(--plate);
   border: 1px solid var(--rule-2);
   border-radius: var(--r-md, 12px);
-  border-bottom: 1px solid var(--rule-2);
   min-width: 0;
 }
-/* Kartu yang isinya panjang (daftar akun, unggah otomatis) memakai dua kolom
-   supaya tidak jadi lajur sempit yang tinggi sendirian. */
-.petak-setelan > .lebar { grid-column: 1 / -1; }
 
-@media (max-width: 900px) {
-  .petak-setelan { grid-template-columns: 1fr; }
+/* Kelompok setelan: judul kecil di atas, kartunya mengalir di bawahnya.
+   Tiga belas kartu berderet tanpa kelompok menuntut orang membaca semuanya
+   untuk menemukan satu; dikelompokkan, matanya berhenti di satu judul. */
+.setelan-kelompok { margin-bottom: 26px; }
+.setelan-kelompok:last-child { margin-bottom: 0; }
+.setelan-kelompok-kepala { margin-bottom: 11px; }
+.setelan-kelompok-kepala h2 {
+  font-family: 'Archivo', sans-serif;
+  font-size: .68rem; font-weight: 700; font-stretch: 80%;
+  letter-spacing: .1em; text-transform: uppercase;
+  color: var(--ink-2); margin: 0;
+}
+.setelan-kelompok-kepala p {
+  font-size: .76rem; color: var(--text-secondary);
+  line-height: 1.5; margin: 3px 0 0;
+}
+.ringkas .setelan-kelompok-kepala p { display: none; }
+
+@media (max-width: 1040px) {
+  .petak-setelan { columns: 1; }
 }
 
 /* Keterangan panjang bisa disembunyikan seluruhnya. Teksnya tidak dibuang,

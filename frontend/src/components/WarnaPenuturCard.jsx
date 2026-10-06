@@ -77,12 +77,17 @@ export default function WarnaPenuturCard({ card, sectionTitle, helpText }) {
         <input type="checkbox" checked={aktif === true} disabled={aktif === null || sibuk}
                onChange={(e) => ubah(e.target.checked)}
                style={{ marginTop: '3px', width: '16px', height: '16px', accentColor: 'var(--reh)' }} />
-        <span className="bantu" style={helpText}>
-          <strong style={{ color: 'var(--text-primary)' }}>
-            Bedakan warna subtitle tiap penutur.
-          </strong>{' '}
-          Saat mati, setiap baris memakai warna teks yang dipilih di Studio, apa
-          pun tebakan penuturnya.
+        {/* Nama sakelarnya DI LUAR `.bantu`.
+            Mode Ringkas melipat `.bantu`, dan sampai 6 Oktober 2026 nama ini
+            ikut terlipat — yang tersisa di layar sebuah kotak centang telanjang
+            tanpa satu kata pun yang mengatakan apa yang dinyalakannya. Yang
+            boleh disembunyikan penjelasannya, tidak pernah namanya. */}
+        <span style={{ ...helpText, color: 'var(--text-primary)' }}>
+          <strong>Bedakan warna subtitle tiap penutur.</strong>
+          <span className="bantu">{' '}
+            Saat mati, setiap baris memakai warna teks yang dipilih di Studio, apa
+            pun tebakan penuturnya.
+          </span>
         </span>
         {sibuk && <Loader2 size={15} className="animate-spin" style={{ marginTop: '3px' }} />}
       </label>
