@@ -92,6 +92,7 @@ async def get_settings():
         "warna_penutur": subtitles.warna_penutur_aktif(),
         "pemanasan_bingkai": _pemanasan_bingkai(),
         "sensor_kata_kasar": _sensor_kata_kasar(),
+        "buang_gumam": (settings_repo.get("subtitle.buang_gumam") or "1").strip() != "0",
         **_openrouter_ringkas(),
     }
 
@@ -650,6 +651,23 @@ async def set_bahasa(req: BahasaRequest):
     else:
         settings_repo.delete("transcript.langs")
     return {"status": "ok", "langs": list(get_caption_langs())}
+
+
+class SakelarRequest(BaseModel):
+    aktif: bool
+
+
+@router.post("/buang-gumam")
+async def set_buang_gumam(req: SakelarRequest):
+    """
+    Membuang bunyi ragu ("ee", "eh", "mmm", "h") dari subtitle klip berikutnya.
+
+    Tidak menyentuh transkrip aslinya — yang diucapkan memang itu, dan transkrip
+    yang berbohong akan merusak pencarian momen. Yang disaring hanya baris yang
+    ditulis ke layar.
+    """
+    settings_repo.set_value("subtitle.buang_gumam", "1" if req.aktif else "0")
+    return {"status": "ok", "aktif": req.aktif}
 
 
 class LajuRequest(BaseModel):

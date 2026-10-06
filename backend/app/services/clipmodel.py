@@ -263,9 +263,88 @@ def repair_caption_timing(lines: list[dict], *, max_words: int = 5,
     return _apply_dwell(out, limit)
 
 
+# --- Kata gumam ----------------------------------------------------------------
+# Bunyi ragu yang diucapkan orang sambil berpikir, dan yang Whisper salin apa
+# adanya: "ee", "eh", "mmm", "h". Di transkrip penuh itu benar — yang diucapkan
+# memang itu. Di subtitle klip vertikal ia hanya memakan baris dan membuat
+# tulisannya terlihat seperti salah ketik.
+#
+# Dilaporkan pemiliknya 5 Oktober 2026: "saya sering menemukan kata ee h dan
+# lain lain yang mana saya rasa tidak perlu dimasukkan ke dalam subtitle".
+#
+# YANG SENGAJA TIDAK DIBUANG, dan ini bagian yang paling menentukan: "ah", "oh",
+# "nah", "ya", "lah", "dong", "sih", "kok", "deh". Semuanya terdengar seperti
+# gumam bagi telinga yang tidak terbiasa, tapi di bahasa Indonesia semuanya
+# membawa makna — "ya kan", "nah ini", "oh gitu". Membuangnya mengubah kalimat,
+# dan subtitle yang berubah artinya jauh lebih buruk daripada subtitle yang
+# memuat satu "ee".
+GUMAM = {
+    "e", "ee", "eee", "eeee", "eh", "ehh", "ehhh", "eeh", "eehh",
+    "em", "emm", "emmm", "eu", "euh",
+    "m", "mm", "mmm", "mmmm", "hm", "hmm", "hmmm", "hmmmm",
+    "h", "hh", "uh", "uhh", "uhm", "umm", "um",
+    "a", "aa", "aaa", "aaaa", "anu",
+}
+
+# Tanda baca yang menempel pada kata gumam ikut dibuang bersamanya.
+_PINGGIR = " \t.,!?;:…\"'`“”‘’-–—"
+
+
+def _gumam_dibuang() -> bool:
+    """
+    Sakelar di Pengaturan, bawaannya NYALA.
+
+    Dibaca lewat fungsi, bukan konstanta, supaya mengubahnya berlaku untuk klip
+    berikutnya tanpa menyalakan ulang aplikasi. Setelan yang tidak terbaca —
+    basis data belum siap, misalnya — dianggap nyala: itu perilaku yang diminta,
+    dan sebuah kegagalan membaca setelan tidak boleh diam-diam mengubahnya.
+    """
+    try:
+        from ..repos import settings as settings_repo
+        return (settings_repo.get("subtitle.buang_gumam") or "1").strip() != "0"
+    except Exception:                                    # noqa: BLE001
+        return True
+
+
+def buang_gumam(words: list[Word]) -> list[Word]:
+    """
+    Membuang kata gumam dari deretan kata subtitle.
+
+    CELAHNYA DITUTUP, bukan ditinggalkan. Ini bagian yang tidak kelihatan
+    sampai diuji: `words_to_caption_lines` memecah baris pada JEDA BICARA, dan
+    kata yang dibuang meninggalkan lubang waktu yang persis terlihat seperti
+    jeda. Terukur pada "Oh ee tunggu h sepuluh detik lagi": tanpa penutupan
+    celah, hasilnya tiga baris — "Oh", "tunggu", "sepuluh detik lagi" — padahal
+    di suaranya tidak ada satu pun jeda di situ. Lubangnya justru diisi
+    gumamannya sendiri.
+
+    Jadi kata sebelum gumam dipanjangkan sampai gumam itu habis. Ia tetap di
+    layar selama orangnya berpikir, yang memang yang terjadi.
+    """
+    keluar: list[Word] = []
+    tertunda: Optional[float] = None       # akhir gumam yang belum ditutup
+    for w in words:
+        token = (w.get("w") or "").strip().strip(_PINGGIR).lower()
+        if token and token in GUMAM:
+            akhir = w.get("e")
+            if keluar and isinstance(akhir, (int, float)):
+                # Kata sebelumnya menutupi gumamnya.
+                keluar[-1] = {**keluar[-1], "e": max(keluar[-1].get("e") or 0, akhir)}
+            elif isinstance(w.get("s"), (int, float)):
+                # Gumam di awal: yang menutup kata SESUDAHNYA.
+                tertunda = w["s"] if tertunda is None else min(tertunda, w["s"])
+            continue
+        if tertunda is not None and isinstance(w.get("s"), (int, float)):
+            w = {**w, "s": min(w["s"], tertunda)}
+            tertunda = None
+        keluar.append(w)
+    return keluar
+
+
 def words_to_caption_lines(words: list[Word], *, max_words: int = 5,
                            max_chars: int = 30, max_gap: float = 0.45,
-                           limit: float = float("inf")) -> list[dict]:
+                           limit: float = float("inf"),
+                           buang_gumam_aktif: Optional[bool] = None) -> list[dict]:
     """
     Mengelompokkan kata menjadi baris subtitle pendek ala klip vertikal.
 
@@ -274,6 +353,10 @@ def words_to_caption_lines(words: list[Word], *, max_words: int = 5,
     tampilnya dipanjangkan ke dalam jeda — lihat catatan di atas.
     """
     words = strip_non_speech(words)
+    if buang_gumam_aktif is None:
+        buang_gumam_aktif = _gumam_dibuang()
+    if buang_gumam_aktif:
+        words = buang_gumam(words)
     lines: list[dict] = []
     buf: list[Word] = []
 
