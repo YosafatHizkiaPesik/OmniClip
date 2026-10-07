@@ -58,9 +58,13 @@ function _lepasGiliran() {
  * video pada versi sebelumnya, dan itu memperlambat SELURUH tab OmniClip yang
  * lain tanpa satu pun tanda dari mana asalnya.
  */
-function PratinjauKlip({ src, onClick, children }) {
+function PratinjauKlip({ src, onClick, children, lepas = false }) {
   const wadah = useRef(null);
   const [muat, setMuat] = useState(false);
+  // `lepas` dinyalakan tepat sebelum klipnya dihapus. Lihat catatan di
+  // `deleteClip`: selama <video> ini masih memegang berkasnya, Windows menolak
+  // menghapusnya.
+  const tampil = muat && !lepas;
 
   useEffect(() => {
     if (muat) return undefined;
@@ -95,7 +99,7 @@ function PratinjauKlip({ src, onClick, children }) {
       position: 'relative', aspectRatio: '9 / 16', background: 'var(--stage)',
       cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
     }}>
-      {muat ? (
+      {tampil ? (
         <video src={src} preload="metadata" muted style={gaya}
                onLoadedMetadata={_lepasGiliran} onError={_lepasGiliran} />
       ) : (
@@ -226,7 +230,15 @@ export default function ClipsTab() {
 
   const deleteClip = async (name) => {
     if (!window.confirm(`Hapus klip "${name}"?`)) return;
+    // PEMUTARNYA DILEPAS DULU, baru berkasnya dihapus.
+    //
+    // Tiap kartu memasang <video> yang menarik berkasnya lewat /api/media, dan
+    // selama itu berkasnya terbuka. Di Windows, berkas yang terbuka tidak bisa
+    // dihapus sama sekali. Dilaporkan pemiliknya 7 Oktober 2026: menghapus
+    // klip jadi menjawab "tidak bisa terhubung ke server" di komputernya,
+    // sementara di laptop ini tidak pernah terjadi.
     setSibukBaris({ nama: name, apa: 'hapus' });
+    await new Promise((lanjut) => { setTimeout(lanjut, 120); });
     try {
       await apiDelete(`/clips/${encodeURIComponent(name)}`);
       setSelected((prev) => { const n = new Set(prev); n.delete(name); return n; });
@@ -321,6 +333,8 @@ export default function ClipsTab() {
               }}>
                 <PratinjauKlip
                   src={mediaUrl(kategoriKlip(), clip.file_name)}
+                  lepas={sibukBaris?.nama === clip.file_name
+                         && sibukBaris.apa === 'hapus'}
                   onClick={() => setPlaying(clip)}
                 >
                   <div style={{

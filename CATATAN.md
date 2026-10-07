@@ -106,6 +106,30 @@ ketajamannya ada di hulu — sumber 1440p atau 4K.
   dua detik yang disebar merata (`_facecam_cuplikan`). Klip dua belas menit
   pemiliknya: **43 detik**, satu panel, dan batas waktu permintaannya dinaikkan
   jadi sepuluh menit.
+- ~~Klip game panjang dibingkai sebagai sorot wajah padahal layarnya
+  permainan.~~ **Selesai 7 Oktober 2026.** Diukur pada video Dwiwoi 17 menit
+  yang dipakai pemiliknya menguji: 136 detik (13% durasi) dibingkai sebagai
+  sorot wajah, padahal di layar permainan biasa dengan facecam kecil di pojok.
+  Dua sumber kesalahan, keduanya terbukti dari datanya sendiri:
+  1. Pemindai tepi melaporkan "panel" 48x95% bingkai, dan panel sebesar itu
+     diperlakukan sebagai kamera yang sengaja dibesarkan. Wajah di dalamnya
+     tetap 5% lebar — sama persis dengan sepanjang sisa klip. Sekarang panel
+     besar hanya dipercaya bila WAJAHNYA ikut besar (`PANEL_BESAR_WAJAH_MIN`).
+  2. Pelacak wajah menangkap gambar pahlawan pada spanduk "Epic Outplay" dan
+     potret papan skor sebagai wajah, 8-12% lebar di tengah layar. Sekarang,
+     pada klip yang panel facecam-nya jelas ada, wajah di LUAR panel yang lebih
+     kecil dari sepersepuluh lebar bingkai diabaikan (`WAJAH_LUAR_PANEL_MIN`).
+  Hasilnya pada video itu: 15 potongan jadi 7, dan salah bingkai 136 detik jadi
+  8,7 detik. Momen wajah yang BENAR pada video Mobile Legends lain (93,8-97,4
+  detik) tetap terdeteksi, jadi penyaringnya tidak sekadar mematikan semuanya.
+- ~~Menghapus klip jadi menjawab "tidak bisa terhubung ke server".~~
+  **Selesai 7 Oktober 2026.** Tiap kartu di Klip jadi memasang `<video>` yang
+  menarik berkasnya lewat /api/media, dan di Windows berkas yang sedang dibuka
+  tidak bisa dihapus sama sekali. Sekarang pemutarnya dilepas dulu sebelum
+  permintaan hapus dikirim, penghapusannya dikerjakan di utas lain (agar
+  cakram lambat tidak membekukan seluruh server, yang persis terbaca sebagai
+  "tidak bisa terhubung"), dicoba ulang beberapa kali, dan bila tetap terkunci
+  sebabnya disebutkan apa adanya.
 - ~~Bingkai tidak ikut berganti saat video beralih ke wajah penuh.~~
   **Selesai 7 Oktober 2026.** Dilaporkan dengan tangkapan layar: pada detik 96
   klip Mobile Legends, video beralih ke wajah satu layar penuh tapi bingkainya

@@ -672,13 +672,45 @@ def _lebar_wajah_per_sampel(plan) -> list[float]:
     return keluar
 
 
-def _label_per_sampel(plan) -> list[str]:
-    """'game' / 'wajah' / 'gerak' untuk tiap sampel rencana wajah."""
+# Lebar wajah minimum (pecahan lebar bingkai) untuk dipercaya sebagai BIDIKAN
+# WAJAH pada klip yang panel facecam-nya jelas ada.
+#
+# Terukur pada video Dwiwoi, 7 Oktober 2026. Pelacak sesekali melaporkan satu
+# wajah di tengah gambar permainan — 8,1%, 8,2%, 9,1%, 12,4% lebar bingkai, di
+# tempat yang berbeda-beda tiap kali — dan di layar saat itu tidak ada wajah
+# sama sekali: yang ada gambar pahlawan pada spanduk "Epic Outplay" dan potret
+# di papan skor. Facecam sungguhannya tetap di pojok, 5% lebar, sepanjang klip.
+#
+# Jadi pada klip yang panelnya jelas ada, wajah DI LUAR panel baru dipercaya
+# bila ia besar. Angkanya sama dengan WAJAH_BESAR_MIN, yang sudah diukur
+# terpisah pada klip LaperGang: wajah di bawah sepersepuluh lebar bingkai
+# adalah kamera pemain atau gambar, bukan bidikan wajah.
+WAJAH_LUAR_PANEL_MIN = 0.10
+
+
+def _di_dalam(x: float, cy: float, panel: dict, sw: int, sh: int) -> bool:
+    """Apakah titik wajah ini berada di dalam panel facecam (dalam persen)."""
+    fx, fy = x / max(1, sw) * 100.0, cy / max(1, sh) * 100.0
+    return (panel["x"] - 2.0 <= fx <= panel["x"] + panel["w"] + 2.0
+            and panel["y"] - 2.0 <= fy <= panel["y"] + panel["h"] + 2.0)
+
+
+def _label_per_sampel(plan, panel_pada=None) -> list[str]:
+    """
+    'game' / 'wajah' / 'gerak' untuk tiap sampel rencana wajah.
+
+    `panel_pada(t)` memberi panel facecam KECIL yang berlaku pada detik itu,
+    atau None. Bila ada, wajah di luar panel yang kecil-kecil diabaikan: pada
+    klip permainan, wajah seperti itu adalah gambar di dalam permainannya.
+    """
+    from .reframe import SAMPLE_FPS
+
     sw, sh = plan.source_w, plan.source_h
     n = min((len(s) for s in plan.people_seen), default=0)
     label = []
     for i in range(n):
         ada_pojok = ada_tengah = False
+        panel = panel_pada(i / SAMPLE_FPS) if panel_pada else None
         for p in range(len(plan.people)):
             if not plan.people_seen[p][i]:
                 continue
@@ -686,10 +718,23 @@ def _label_per_sampel(plan) -> list[str]:
             x = plan.people[p][i]
             if kotak is None or x is None:
                 continue
+            lebar = float(kotak[1]) / max(1, sw)
+            if panel is not None and _di_dalam(float(x), float(kotak[0]), panel, sw, sh):
+                # Wajah di dalam panel kamera pemain: itu memang pemainnya.
+                ada_pojok = True
+                continue
+            if panel is not None and lebar < WAJAH_LUAR_PANEL_MIN:
+                # Wajah kecil di luar panel pada klip permainan: gambar, bukan
+                # orang. Diabaikan, dan panelnya sendiri yang menentukan.
+                continue
             if _wajah_pojok(float(x), float(kotak[0]), float(kotak[1]), sw, sh):
                 ada_pojok = True
             else:
                 ada_tengah = True
+        if panel is not None and not ada_tengah:
+            # Panelnya ada di layar: ini potongan permainan, walau wajah
+            # pemainnya kebetulan tidak terbaca pada sampel ini.
+            ada_pojok = True
         # "game" hanya bila wajah di pojok itu SATU-SATUNYA wajah.
         #
         # Sebelumnya cukup ada wajah di pojok, dan itu keliru pada percakapan:
@@ -839,24 +884,60 @@ def _buang_game_sekilas(runs: list[list], durasi: float) -> list[list]:
 PANEL_BESAR_MIN = 0.095
 
 
-def _tandai_panel_besar(runs: list[list], facecam_waktu) -> tuple[list[list], set]:
+# Panel besar HANYA dipercaya bila wajah di dalamnya ikut besar.
+#
+# Terukur pada video Dwiwoi 17 menit, 7 Oktober 2026. Pemindai tepi melaporkan
+# tiga "panel" raksasa — 48x95%, 42x42%, 46x95% bingkai — dan ketiganya palsu:
+# di layar saat itu permainan biasa dengan facecam kecil di pojok kiri bawah.
+# Akibatnya 136 detik klip (13% durasinya) dibingkai sebagai sorot wajah,
+# padahal wajahnya cuma 5% lebar bingkai di sudut.
+#
+# Yang membedakan panel yang BENAR-BENAR dibesarkan dari salah baca bukan
+# ukuran panelnya melainkan WAJAH DI DALAMNYA. Streamer yang membesarkan
+# kameranya membuat wajahnya ikut besar; pembacaan tepi yang meleset
+# meninggalkan wajah sekecil sebelumnya di tempat yang sama. Terukur pada
+# jendela palsu itu: wajah 4,8-5,2% lebar bingkai, persis sama dengan sepanjang
+# sisa klip.
+PANEL_BESAR_WAJAH_MIN = 0.075
+
+
+def _tandai_panel_besar(runs: list[list], facecam_waktu,
+                        lebar_wajah: Optional[list[float]] = None
+                        ) -> tuple[list[list], set]:
     """
     Potongan "game" yang panelnya besar diubah jadi "wajah", dipecah tepat di
     tempat panelnya berubah besar atau mengecil lagi.
 
     Tanpa `facecam_waktu` tidak ada yang bisa dinilai, dan runs dikembalikan
     apa adanya — itu jalur yang dipakai pemanggil yang belum memindai panel.
+
+    `lebar_wajah` (lebar wajah per sampel, pecahan lebar bingkai) dipakai untuk
+    memeriksa bahwa panel yang mengaku besar memang berisi wajah yang besar.
     """
+    from .reframe import SAMPLE_FPS
+
     pos = sorted((float(p["t"]), p["facecam"]) for p in (facecam_waktu or []))
     if not pos:
         return runs, set()
 
-    def besar_pada(t: float) -> bool:
+    def wajah_besar_antara(a: float, b: float) -> bool:
+        """Apakah wajahnya sendiri ikut besar di rentang ini?"""
+        if not lebar_wajah:
+            return True                      # tidak ada data: seperti dulu
+        i0 = max(0, int(a * SAMPLE_FPS))
+        i1 = min(len(lebar_wajah), max(i0 + 1, int(b * SAMPLE_FPS)))
+        petak = sorted(w for w in lebar_wajah[i0:i1] if w)
+        if not petak:
+            return False
+        return petak[len(petak) // 2] >= PANEL_BESAR_WAJAH_MIN
+
+    def besar_pada(t: float, sampai: float) -> bool:
         f = pos[0][1]
         for tt, ff in pos:
             if tt <= t + 1e-6:
                 f = ff
-        return (float(f["w"]) * float(f["h"]) / 10000.0) >= PANEL_BESAR_MIN
+        luas = float(f["w"]) * float(f["h"]) / 10000.0
+        return luas >= PANEL_BESAR_MIN and wajah_besar_antara(t, sampai)
 
     # Batas waktu yang perlu diperiksa: awal tiap potongan, plus tiap saat
     # panelnya berganti.
@@ -871,7 +952,7 @@ def _tandai_panel_besar(runs: list[list], facecam_waktu) -> tuple[list[list], se
             x, y = titik[i], titik[i + 1]
             if y - x <= 1e-6:
                 continue
-            nama = "wajah" if besar_pada(x) else "game"
+            nama = "wajah" if besar_pada(x, y) else "game"
             if keluar and keluar[-1][0] == nama and abs(keluar[-1][2] - x) < 1e-6:
                 keluar[-1][2] = y
             else:
@@ -898,7 +979,23 @@ def _dasar_per_waktu(plan, src: Path, segments: list[dict], durasi: float,
 
     if plan is None or not getattr(plan, "people_seen", None):
         return None
-    label = _haluskan(_label_per_sampel(plan))
+    # Panel facecam KECIL yang berlaku pada tiap detik, bila klip ini memang
+    # punya satu. Dipakai penggolong untuk mengabaikan wajah gambar di dalam
+    # permainan; lihat `WAJAH_LUAR_PANEL_MIN`.
+    kecil = sorted((float(q["t"]), q["facecam"]) for q in (facecam_waktu or [])
+                   if q.get("facecam"))
+
+    def panel_kecil(t: float) -> Optional[dict]:
+        if not kecil:
+            return None
+        f = kecil[0][1]
+        for tt, ff in kecil:
+            if tt <= t + 1e-6:
+                f = ff
+        luas = float(f["w"]) * float(f["h"]) / 10000.0
+        return f if luas < PANEL_BESAR_MIN else None
+
+    label = _haluskan(_label_per_sampel(plan, panel_kecil))
     if not label:
         return None
     runs: list[list] = []
@@ -924,7 +1021,8 @@ def _dasar_per_waktu(plan, src: Path, segments: list[dict], durasi: float,
     #   panel biasa :  8,9   7,4   7,1   6,9   6,9   6,8 ... 1,4 %
     #
     # 9,5% duduk di tengah jurang itu. Panel sebesar itu lebarnya 27-40% layar.
-    runs, panel_besar = _tandai_panel_besar(runs, facecam_waktu)
+    runs, panel_besar = _tandai_panel_besar(runs, facecam_waktu,
+                                            _lebar_wajah_per_sampel(plan))
     # Batas ditarik ke potongan adegan SEBELUM yang pendek dilebur: batas yang
     # sudah benar membuat potongan pendek yang sah jadi terlihat sah.
     adegan = [float(c) for c in (getattr(plan, "cut_times", None) or [])]

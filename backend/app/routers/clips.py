@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Literal, Optional
 from fastapi import APIRouter
 from pydantic import BaseModel, Field, field_validator
 
-from ..errors import InvalidInput, NotFound
+from ..errors import AppError, InvalidInput, NotFound
 from ..repos import analyses as analyses_repo
 from ..repos import media as media_repo
 from ..services.jobs import queue
@@ -1625,14 +1625,62 @@ async def get_clips():
     return {"local_clips": clips}
 
 
+# Berapa kali penghapusan dicoba ulang, dan jedanya.
+#
+# Windows menolak menghapus berkas yang MASIH DIBUKA siapa pun, dan di sini
+# yang membukanya hampir selalu aplikasi ini sendiri: tiap kartu di Klip jadi
+# memasang sebuah <video> yang menarik berkasnya lewat /api/media, dan
+# pemindai antivirus memegangnya beberapa detik lagi sesudah itu ditutup.
+# Jedanya pendek dan beberapa kali, karena pegangan seperti itu lepas sendiri.
+HAPUS_PERCOBAAN = 6
+HAPUS_JEDA = 0.4
+
+
+def _buang_berkas(path) -> None:
+    """Menghapus klip beserta catatannya, sabar terhadap kuncian sesaat."""
+    import time as _time
+
+    galat = None
+    for i in range(HAPUS_PERCOBAAN):
+        try:
+            path.unlink(missing_ok=True)
+            galat = None
+            break
+        except PermissionError as e:              # Windows: berkas sedang dibuka
+            galat = e
+            _time.sleep(HAPUS_JEDA * (i + 1))
+        except OSError as e:
+            galat = e
+            break
+    if galat is not None:
+        raise AppError(
+            "Berkas klip ini sedang dipakai program lain, jadi belum bisa "
+            "dihapus. Biasanya pemutar video di halaman ini sendiri atau "
+            "pemindai antivirus. Tutup pratinjaunya, tunggu sebentar, lalu "
+            "coba lagi.",
+            code="KLIP_TERKUNCI", status=409) from galat
+    try:
+        path.with_suffix(".json").unlink(missing_ok=True)
+    except OSError:
+        # Catatan yang tertinggal tidak merugikan siapa pun; videonya sudah
+        # hilang, dan itu yang diminta.
+        pass
+
+
 @router.delete("/clips/{filename}")
 async def delete_clip(filename: str):
+    """
+    Menghapus satu klip jadi.
+
+    DI UTAS LAIN, dan itu bukan kerapian: `unlink` pada cakram luar yang sedang
+    sibuk melayani pemutar video bisa menahan gelung peristiwa beberapa detik,
+    dan selama itu SELURUH server berhenti menjawab. Yang dilihat pengguna lalu
+    "tidak bisa terhubung ke server" — dilaporkan pemiliknya 7 Oktober 2026 —
+    padahal yang terjadi cuma satu berkas yang lambat dihapus.
+    """
     from ..services import profil
     path = safe_media_path(profil.kategori_klip(profil.kini()), filename)
-    path.unlink()
-    sidecar = path.with_suffix(".json")
-    if sidecar.exists():
-        sidecar.unlink()
+    await asyncio.to_thread(_buang_berkas, path)
     return {"success": True, "file_name": path.name}
 
 
