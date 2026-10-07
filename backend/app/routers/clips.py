@@ -22,7 +22,7 @@ from ..services.paths import (
     extract_youtube_id,
     safe_media_path,
 )
-from ..services.render import list_local_clips
+from ..services.render import REAKSI_MAKS, list_local_clips
 
 from ..services.ytdlp import RESOLUSI_BAWAAN
 
@@ -178,13 +178,23 @@ class ReaksiModel(BaseModel):
     """Main game: letak kotak wajah mulai detik klip `t`."""
     t: float = Field(0.0, ge=0)
     src: FrameRectModel = FrameRectModel()
+    # Potongan PERMAINAN yang berlaku bersama letak wajah ini. Ada sejak
+    # 7 Oktober 2026; klip lama tanpa medan ini memakai potongan tetap seperti
+    # sebelumnya.
+    main: Optional[FrameRectModel] = None
+    # Panel facecam dan petak wajah di dalamnya, apa adanya dari pemindaian.
+    # Editor memakainya untuk menghitung ulang potongan saat tinggi bidang
+    # wajah digeser; tanpa dibawa di sini, keduanya hilang pada perjalanan
+    # pulang-pergi lewat API dan editor kehilangan dasar hitungannya.
+    kotak: Optional[FrameRectModel] = None
+    muka: Optional[List[float]] = Field(None, max_length=4)
 
 
 class FrameLayoutModel(BaseModel):
     background: str = "blur"
     # Main game: kotak wajah yang berpindah mengikuti facecam sepanjang klip,
     # dan setelan susunannya. Diabaikan oleh susunan biasa.
-    reaksi: List[ReaksiModel] = Field(default_factory=list, max_length=64)
+    reaksi: List[ReaksiModel] = Field(default_factory=list, max_length=REAKSI_MAKS)
     gaming: Optional[Dict[str, Any]] = None
     # Delapan bingkai sudah jauh melewati apa pun yang masih terbaca di layar
     # ponsel, dan tiap bingkai menambah satu cabang skala di filtergraph.
@@ -1734,7 +1744,10 @@ async def clip_jenis(req: FacecamRequest):
 # hasilnya ikut membawa `potongan` — bagian klip yang bingkainya berbeda
 # (29 September 2026). Tanpa naik ke v3, hasil lama yang tidak punya
 # `potongan` tetap dipakai dan Studio tidak pernah melihat pemecahannya.
-FACECAM_VERSI = 9
+# v10 (7 Oktober 2026): klip panjang dipindai dengan cuplikan, panel
+# distabilkan terhadap dirinya sendiri, dan potongan "hanya wajah" dibidik dari
+# ukuran wajahnya, bukan setinggi bingkai penuh.
+FACECAM_VERSI = 10
 
 
 def _kunci_facecam(video_id: str, segments: list[dict]) -> str:

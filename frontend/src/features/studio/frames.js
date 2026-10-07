@@ -243,7 +243,11 @@ export function serializeLayout(layout) {
     })),
     // Main game: letak wajah per detik klip, dan setelan susunannya.
     ...(layout.reaksi?.length
-      ? { reaksi: layout.reaksi.map((r) => ({ t: Math.max(0, Number(r.t) || 0), src: { ...r.src } })) }
+      ? { reaksi: layout.reaksi.map((r) => ({
+          t: Math.max(0, Number(r.t) || 0), src: { ...r.src },
+          ...(r.kotak ? { kotak: { ...r.kotak } } : {}),
+          ...(r.muka ? { muka: [...r.muka] } : {}),
+          ...(r.main ? { main: { ...r.main } } : {}) })) }
       : {}),
     ...(layout.gaming ? { gaming: { ...layout.gaming } } : {}),
   };
@@ -868,6 +872,15 @@ export function susunGaming(lama, { wajah, permainan = 'isi', srcAspek, outAspek
     mainSrc = permainanTanpaWajah(reaksi.map((r) => r.kotak),
       rasioBidang(mainDst, outAspek), srcAspek,
       reaksi.map((r) => ruangWajah(r.muka) ?? r.kotak));
+    // Dan satu potongan permainan untuk TIAP letak wajah, menghindari facecam
+    // yang benar-benar ada pada saat itu saja. Cermin `render.susun_layout_gaming`:
+    // pada klip panjang, menghindari gabungan semua letak sekaligus membuang
+    // bagian tengah permainannya.
+    const rasioMain = rasioBidang(mainDst, outAspek);
+    reaksi.forEach((r) => {
+      r.main = permainanTanpaWajah([r.kotak], rasioMain, srcAspek,
+        [ruangWajah(r.muka) ?? r.kotak]);
+    });
   }
   return {
     ...lama,
@@ -893,7 +906,14 @@ export function gamingPadaWaktu(layout, t) {
   if (!layout?.frames?.length || !(layout.reaksi?.length > 1)) return layout;
   const r = layout.reaksi[reaksiAktif(layout, t)];
   return { ...layout,
-           frames: layout.frames.map((f, i) => (i === 1 ? { ...f, src: r.src } : f)) };
+           frames: layout.frames.map((f, i) => {
+             if (i === 1) return { ...f, src: r.src };
+             // Potongan permainan ikut berganti bersama letak wajahnya, kalau
+             // susunannya membawanya. Klip yang disusun sebelum 7 Oktober 2026
+             // tidak punya medan ini dan memakai potongan tetap seperti dulu.
+             if (i === 0 && r.main) return { ...f, src: r.main };
+             return f;
+           }) };
 }
 
 /** Susunan dari server (tanpa id) -> susunan editor. */
@@ -940,6 +960,10 @@ export function susunanDariServer(l) {
     reaksi: (l.reaksi ?? []).map((r) => ({
       t: Number(r.t) || 0, src: { ...r.src }, ...(r.kotak ? { kotak: { ...r.kotak } } : {}),
       ...(Array.isArray(r.muka) ? { muka: [...r.muka] } : {}),
+      // Potongan permainan milik letak ini. Tanpa dibawa di sini, pratinjau
+      // kembali memakai satu potongan untuk seluruh klip sementara hasil
+      // rendernya berganti, dan keduanya tidak lagi menunjukkan hal yang sama.
+      ...(r.main ? { main: { ...r.main } } : {}),
     })),
     frames: l.frames.map((f, i) => ({
       ...makeFrame(f.label || (i === 0 ? 'Permainan' : 'Reaksi'), f.src, f.dst),

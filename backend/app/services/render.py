@@ -721,6 +721,23 @@ def susun_layout_gaming(facecam, *, src_w: int = 1920, src_h: int = 1080,
     # tanpa pernah keluar dari panelnya.
     wajah_dst = {"x": 0, "y": 0, "w": 100, "h": round(wajah, 2)}
     rasio_wajah = (out_w * wajah_dst["w"]) / (out_h * wajah_dst["h"])
+    # POTONGAN PERMAINAN DIHITUNG PER LETAK, bukan sekali untuk seluruh klip.
+    #
+    # `main_src` di atas menghindari SEMUA facecam yang pernah muncul di klip
+    # ini. Pada klip pendek itu benar dan murah: facecamnya satu tempat saja.
+    # Pada klip panjang ia runtuh — pemiliknya memasukkan satu video 12 menit
+    # utuh sebagai satu klip, 7 Oktober 2026, dan melaporkan "akurasi bingkai
+    # menurun di video klip yang panjang". Sebabnya mekanis: streamer
+    # memindahkan kameranya beberapa kali, jadi yang harus dihindari adalah
+    # GABUNGAN semua letak itu, dan tidak ada potongan yang bisa menghindari
+    # kiri-bawah dan kanan-bawah sekaligus tanpa membuang bagian tengah
+    # permainannya.
+    #
+    # Tiap letak wajah sudah menjadi potongan waktunya sendiri saat dirender
+    # (`pecah_reaksi`), jadi potongan permainannya ikut berganti di batas yang
+    # sama: yang dihindari hanya facecam yang BENAR-BENAR ada pada saat itu.
+    rasio_main = ((out_w * main_dst["w"]) / (out_h * main_dst["h"])
+                  if permainan != "utuh" else None)
     reaksi = []
     for p in posisi:
         kotak = {k: round(float(p["facecam"][k]), 2) for k in ("x", "y", "w", "h")}
@@ -732,7 +749,12 @@ def susun_layout_gaming(facecam, *, src_w: int = 1920, src_h: int = 1080,
             # Disimpan supaya editor menghitung ulang potongan yang sama saat
             # tinggi bidang wajah digeser.
             r["muka"] = muka
+        if rasio_main is not None:
+            ruang = _ruang_wajah(muka, p["facecam"]) or p["facecam"]
+            r["main"] = _permainan_tanpa_wajah([p["facecam"]], rasio_main, src_aspek,
+                                               wajah_saja=[ruang])
         reaksi.append(r)
+    reaksi = _rapikan_reaksi(reaksi)
     return {
         "background": "blur",
         # Setelan susunan, supaya editor bisa menampilkan dan mengubahnya.
@@ -815,6 +837,55 @@ def _bidang_permainan(src: dict, wajah: float, src_aspek: float, out_aspek: floa
     return {"x": 0, "y": round(wajah, 2), "w": 100, "h": round(h, 2)}
 
 
+# Berapa banyak letak facecam yang boleh dibawa satu klip.
+#
+# Dulu 64, dipatok di model permintaan tanpa pernah diuji pada klip panjang.
+# Terbukti salah 7 Oktober 2026: pemiliknya memasukkan satu video 17 menit utuh
+# sebagai SATU klip, facecamnya berpindah 68 kali, dan seluruh render ditolak
+# sebelum dimulai — "List should have at most 64 items after validation, not
+# 68". Yang ia lihat di Studio cuma dinding JSON.
+#
+# Batasnya bukan selera melainkan ongkos: tiap letak jadi satu potongan `trim`
+# di filtergraph. Pada klip 17 menit, 68 potongan masih wajar; 512 memberi
+# ruang untuk video satu jam tanpa pernah menolak pekerjaan orang.
+REAKSI_MAKS = 512
+
+# Letak yang berlaku lebih pendek dari ini digabung ke tetangganya.
+#
+# Setengah detik bingkai di tempat lain lalu kembali tidak terbaca sebagai
+# "kamera pindah"; yang terlihat cuma kedipan. Menggabungkannya juga yang
+# menjaga jumlah potongan tetap masuk akal pada klip panjang.
+REAKSI_JARAK_MIN = 0.8
+
+
+def _rapikan_reaksi(reaksi: list, maks: int = REAKSI_MAKS) -> list:
+    """
+    Letak facecam yang terlalu rapat digabung, lalu jumlahnya dibatasi.
+
+    Yang dibuang saat masih terlalu banyak adalah yang paling SEBENTAR
+    berlakunya: letak yang cuma sedetik lebih mudah dikorbankan daripada letak
+    yang memayungi dua menit klip.
+    """
+    urut = sorted((r for r in reaksi or [] if isinstance(r, dict)),
+                  key=lambda r: float(r.get("t") or 0))
+    if len(urut) <= 1:
+        return urut
+    rapat = [urut[0]]
+    for r in urut[1:]:
+        if float(r.get("t") or 0) - float(rapat[-1].get("t") or 0) < REAKSI_JARAK_MIN:
+            continue
+        rapat.append(r)
+    if len(rapat) <= maks:
+        return rapat
+    # Lama berlakunya tiap letak, untuk memilih yang dibuang.
+    def lama(i: int) -> float:
+        t = float(rapat[i].get("t") or 0)
+        return (float(rapat[i + 1].get("t") or 0) - t) if i + 1 < len(rapat) else float("inf")
+    urutan_buang = sorted(range(1, len(rapat)), key=lama)[:len(rapat) - maks]
+    buang = set(urutan_buang)
+    return [r for i, r in enumerate(rapat) if i not in buang]
+
+
 def pecah_reaksi(keys: list, durasi: float, bawaan: Optional[dict]) -> list:
     """
     Kunci "gaming" yang wajahnya berpindah -> beberapa kunci "layout", satu per
@@ -841,6 +912,12 @@ def pecah_reaksi(keys: list, durasi: float, bawaan: Optional[dict]) -> list:
                 continue
             frames = [dict(f) for f in tata["frames"]]
             frames[1]["src"] = dict(r["src"])
+            # Potongan permainan ikut berganti bersama letak wajahnya, kalau
+            # pemindaian menyertakannya. Klip yang disimpan sebelum
+            # 7 Oktober 2026 tidak punya medan ini dan tetap memakai potongan
+            # tetap seperti dulu.
+            if r.get("main"):
+                frames[0]["src"] = dict(r["main"])
             keluar.append({**k, "t": round(a, 3), "mode": "layout",
                            "layout": {**tata, "frames": frames}})
     return keluar

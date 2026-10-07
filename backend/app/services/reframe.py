@@ -3827,6 +3827,37 @@ def _facecam_dari_bingkai(bingkai, sw: int, sh: int,
 # 16 sampel pada 8 Hz, dan syarat kehadirannya dinaikkan (FACECAM_SENDIRI_MIN)
 # supaya jendela yang lebih pendek tidak berubah jadi bingkai yang gelisah.
 FACECAM_JENDELA = 0.5
+
+# Klip yang lebih panjang dari ini dipindai dengan CUPLIKAN, bukan utuh.
+#
+# Diukur, bukan ditebak. Pemiliknya memasukkan video dua belas menit utuh
+# sebagai satu klip, dan Studio menjawab "pencarian kamera wajah gagal, coba
+# lagi" setiap kali. Pemindaiannya tidak gagal: ia memakan ±370 detik
+# sementara permintaan di sisi layar menyerah pada detik ke-30.
+#
+# Yang memakan waktu bukan pencarian wajahnya melainkan MEMBACA VIDEONYA.
+# Terukur pada klip 293 detik: seluruh pemindaian 150 detik, dan 125 detik di
+# antaranya cuma ffmpeg membongkar bingkai — sumber 60 fps harus dibongkar
+# seluruhnya walau yang diambil delapan bingkai per detik. Melangkahi jendela
+# tidak menolong sama sekali (150 jadi 150 detik): bingkainya tetap dibongkar.
+# Dekoder GPU juga tidak (19,6 melawan 13,9 detik untuk satu menit; ia memang
+# memakai CPU jauh lebih sedikit, tapi lebih lambat di mesin ini).
+#
+# Yang menolong cuma satu: TIDAK MEMBACA sebagian besar videonya. ffmpeg bisa
+# melompat ke detik mana pun dengan ongkos tetap ±1,3 detik per lompatan,
+# termasuk membongkar dua detik di tempat tujuannya. Jadi klip panjang dipindai
+# dengan cuplikan dua detik yang disebar merata.
+#
+# Harganya dikatakan apa adanya: perpindahan panel ketahuan dalam belasan
+# detik, bukan setengah detik. Untuk panel yang dipaku di sudut layar selama
+# berjam-jam, itu pertukaran yang jelas — dan jauh lebih baik daripada keadaan
+# sebelumnya, yaitu tidak ada hasil sama sekali.
+PINDAI_PENUH = 180.0
+# Berapa cuplikan yang disebar pada klip panjang, dan panjang tiap cuplikan.
+CUPLIK_JUMLAH = 40
+CUPLIK_PANJANG = 2.0
+# Jarak antar cuplikan dijepit ke rentang ini.
+CUPLIK_JARAK = (5.0, 30.0)
 # Berapa bagian dua kotak harus bertindih untuk disebut panel yang SAMA.
 # 0,45 memisahkan kiri dari kanan dengan telak (tindihnya nol) sambil
 # memaafkan panel yang sama yang kotaknya bergeser beberapa persen.
@@ -4049,6 +4080,284 @@ def _warisi_tepi(hasil: list[dict]) -> None:
         log.info("Tepi panel dipinjamkan ke %d dari %d jendela", dipinjam, n)
 
 
+# --- Panel yang ukurannya berhenti berkedip pada klip panjang -----------------
+#
+# Dilaporkan pemiliknya 7 Oktober 2026, sesudah memasukkan satu video dua belas
+# menit utuh sebagai SATU klip: "akurasi bingkai menurun di video klip yang
+# panjang". Benar, dan terukur pada klip gameplay dua belas menit: 28,2% dari
+# durasinya dibingkai memakai panel yang BUKAN panel sebenarnya.
+#
+# Yang menarik: hampir semuanya bukan panel di tempat lain melainkan panel yang
+# SAMA dengan ukuran yang salah. Facecam sungguhannya 14x27% bingkai di pojok
+# kiri bawah selama 517 detik; di sela-selanya `_tepi_panel` sesekali menangkap
+# persegi yang lebih besar — 11x51%, 25x37%, 20x42% — masing-masing berlaku
+# setengah sampai tiga detik lalu kembali. Pada klip tiga puluh detik kesalahan
+# seperti ini muncul nol sampai satu kali dan tidak terlihat; pada klip dua
+# belas menit ia muncul dua puluh kali, dan itulah "akurasi yang menurun".
+#
+# Jadi panel distabilkan terhadap dirinya sendiri sepanjang klip: ukuran yang
+# PALING LAMA berlaku jadi acuan, dan jendela yang pusatnya ada di situ juga
+# tapi ukurannya menyimpang dipaksa memakai ukuran acuan itu. Letak yang
+# benar-benar berpindah tidak disentuh — yang dipaksa hanya UKURAN, dan hanya
+# untuk panel di tempat yang sama.
+#
+# Hanya untuk klip panjang. Pada klip pendek tidak ada cukup waktu untuk tahu
+# mana ukuran yang "paling lama berlaku", dan memaksakan tebakan di situ
+# merusak hal yang selama ini sudah benar.
+PANEL_KLIP_MIN = 90.0
+# Jarak pusat yang masih dianggap "panel yang sama di tempat yang sama",
+# dalam persen bingkai.
+PANEL_PUSAT_DEKAT = 8.0
+# Selisih ukuran yang dianggap menyimpang.
+PANEL_UKURAN_BEDA = 0.25
+# Perpindahan tempat yang berlaku lebih sebentar dari ini dibuang.
+#
+# Terukur pada klip yang sama: sepuluh lompatan ke seberang bingkai, masing-
+# masing berlaku setengah detik lalu kembali — wajah di dalam gambar permainan,
+# bukan facecam yang pindah. Facecam yang benar-benar dipindahkan streamer
+# tinggal di tempat barunya jauh lebih lama daripada ini.
+PANEL_TAHAN_MIN = 1.5
+# Bagian waktu klip yang harus dikuasai satu ukuran sebelum ia boleh jadi acuan.
+PANEL_DOMINAN_MIN = 0.4
+
+
+def _median_berbobot(nilai: list[tuple[float, float]]) -> float:
+    """Nilai tengah yang ditimbang LAMANYA berlaku, bukan banyaknya."""
+    total = sum(b for _, b in nilai)
+    jalan = 0.0
+    for v, b in sorted(nilai, key=lambda t: t[0]):
+        jalan += b
+        if jalan >= total / 2:
+            return v
+    return nilai[-1][0]
+
+
+def _stabilkan_panel(ringkas: list[dict], durasi: float, sama) -> list[dict]:
+    """Ukuran panel yang berkedip disamakan, lompatan sekejap dibuang."""
+    if len(ringkas) < 3 or durasi < PANEL_KLIP_MIN:
+        return ringkas
+
+    def lama(daftar: list[dict], i: int) -> float:
+        habis = daftar[i + 1]["t"] if i + 1 < len(daftar) else durasi
+        return max(0.0, float(habis) - float(daftar[i]["t"]))
+
+    def pusat(f: dict) -> tuple[float, float]:
+        return f["x"] + f["w"] / 2, f["y"] + f["h"] / 2
+
+    bobot = [(h["facecam"], lama(ringkas, i)) for i, h in enumerate(ringkas)]
+    w_acu = _median_berbobot([(f["w"], b) for f, b in bobot])
+    h_acu = _median_berbobot([(f["h"], b) for f, b in bobot])
+    x_acu = _median_berbobot([(pusat(f)[0], b) for f, b in bobot])
+    y_acu = _median_berbobot([(pusat(f)[1], b) for f, b in bobot])
+
+    # Acuan hanya dipercaya kalau ia memang menguasai klipnya. Video yang
+    # facecamnya benar-benar berganti-ganti ukuran sepanjang waktu tidak punya
+    # "ukuran yang paling lama berlaku", dan di situ memaksakan satu ukuran
+    # berarti mengarang.
+    dekat_acu = sum(b for f, b in bobot
+                    if abs(f["w"] - w_acu) / max(1e-6, w_acu) <= PANEL_UKURAN_BEDA
+                    and abs(f["h"] - h_acu) / max(1e-6, h_acu) <= PANEL_UKURAN_BEDA)
+    if dekat_acu < PANEL_DOMINAN_MIN * durasi:
+        return ringkas
+
+    # SUDUT, BUKAN TITIK TENGAH, yang menentukan "panel yang sama".
+    #
+    # Facecam dipaku di salah satu sudut layar, dan kesalahan pembacaan tepi
+    # selalu MEMANJANGKANNYA ke dalam: panel 14x27% di kiri bawah terbaca
+    # 12x48% — sisi kiri dan sisi bawahnya tetap di tempat yang sama, yang
+    # tumbuh cuma sisi atasnya. Titik tengahnya ikut naik dua belas persen,
+    # jadi aturan "pusatnya berdekatan" justru melewatkan kesalahan yang
+    # paling sering terjadi. Terukur pada klip dua belas menit: enam kotak
+    # setinggi dua kali lipat, 53 detik seluruhnya, semuanya lolos.
+    #
+    # Dan saat ukurannya dibetulkan, yang dipertahankan juga sudut itu, bukan
+    # titik tengahnya: panel yang dipaksa mengecil dari tengahnya akan melayang
+    # ke atas, meninggalkan sudut tempat ia sebenarnya menempel.
+    kiri = x_acu < 50.0
+    atas = y_acu < 50.0
+
+    def sudut(f: dict) -> tuple[float, float]:
+        """Titik sudut panel yang menempel ke tepi bingkai."""
+        return (f["x"] if kiri else f["x"] + f["w"],
+                f["y"] if atas else f["y"] + f["h"])
+
+    sx_acu = x_acu - w_acu / 2 if kiri else x_acu + w_acu / 2
+    sy_acu = y_acu - h_acu / 2 if atas else y_acu + h_acu / 2
+
+    disamakan = 0
+    seragam: list[dict] = []
+    for i, h in enumerate(ringkas):
+        f = h["facecam"]
+        sx, sy = sudut(f)
+        di_tempat_sama = (abs(sx - sx_acu) <= PANEL_PUSAT_DEKAT
+                          and abs(sy - sy_acu) <= PANEL_PUSAT_DEKAT)
+        if di_tempat_sama:
+            # Panel yang menempel di sudut yang sama DISAMAKAN SELURUHNYA,
+            # bukan hanya ukurannya.
+            #
+            # Goyangan beberapa persen juga bukan kamera yang pindah: terukur
+            # pada klip yang sama, panel yang sama dilaporkan di x=0,3 lalu
+            # x=7,1 lalu x=3,2 bergantian tiap beberapa detik. Tiap pergantian
+            # jadi satu potongan di render, dan tiap potongan adalah bingkai
+            # yang bergeser di mata penonton tanpa ada yang bergerak di
+            # videonya. Perpindahan yang sungguhan jauh lebih besar daripada
+            # ambang ini — pada klip itu, dari x=3,7 ke x=73,8.
+            x = sx_acu if kiri else sx_acu - w_acu
+            y = sy_acu if atas else sy_acu - h_acu
+            x = min(max(0.0, x), max(0.0, 100.0 - w_acu))
+            y = min(max(0.0, y), max(0.0, 100.0 - h_acu))
+            baku = {"x": round(x, 2), "y": round(y, 2),
+                    "w": round(w_acu, 2), "h": round(h_acu, 2)}
+            if any(abs(baku[k] - f[k]) > 0.5 for k in ("x", "y", "w", "h")):
+                disamakan += 1
+            f = {**f, **baku, "ukuran_acuan": True}
+        seragam.append({**h, "facecam": f})
+
+    # Lompatan ke tempat lain yang cuma sekejap: dibuang, panel sebelumnya
+    # berlanjut melewatinya.
+    tinggal: list[dict] = []
+    dibuang = 0
+    for i, h in enumerate(seragam):
+        sx, sy = sudut(h["facecam"])
+        pindah = (abs(sx - sx_acu) > PANEL_PUSAT_DEKAT
+                  or abs(sy - sy_acu) > PANEL_PUSAT_DEKAT)
+        if pindah and lama(seragam, i) < PANEL_TAHAN_MIN and tinggal:
+            dibuang += 1
+            continue
+        tinggal.append(h)
+
+    # Yang jadi kembar sesudah ukurannya disamakan digabung: dua potongan
+    # berurutan dengan kotak yang sama hanya menambah potongan di render.
+    hasil = [tinggal[0]]
+    for h in tinggal[1:]:
+        if sama(hasil[-1]["facecam"], h["facecam"]):
+            continue
+        hasil.append(h)
+    hasil[0]["t"] = 0.0
+    if disamakan or dibuang:
+        log.info("Panel distabilkan: %d ukuran disamakan ke %.0fx%.0f%%, "
+                 "%d lompatan sekejap dibuang, %d -> %d letak",
+                 disamakan, w_acu, h_acu, dibuang, len(ringkas), len(hasil))
+    return hasil
+
+
+def _rapikan_facecam(hasil: list[dict], durasi_total: float) -> list[dict]:
+    """
+    Dari hasil pemindaian mentah ke daftar letak yang dipakai render.
+
+    Dipisahkan supaya dua cara memindai — utuh untuk klip pendek, cuplikan
+    untuk klip panjang — melewati perapian yang SAMA PERSIS. Dua jalur dengan
+    perapian masing-masing adalah dua perilaku yang bisa berbeda diam-diam,
+    dan yang satu tidak akan pernah diuji.
+    """
+    _warisi_tepi(hasil)
+
+    # Isi potongan kosong dari tetangga terdekat (yang sebelumnya dulu).
+    ada = [h for h in hasil if h["facecam"]]
+    if not ada:
+        return []
+    terakhir = None
+    for h in hasil:
+        if h["facecam"]:
+            terakhir = h["facecam"]
+        elif terakhir is not None:
+            h["facecam"] = terakhir
+    pertama = ada[0]["facecam"]
+    for h in hasil:
+        if h["facecam"] is None:
+            h["facecam"] = pertama
+
+    def pusat(f):
+        return (f["x"] + f["w"] / 2) / 100.0, (f["y"] + f["h"] / 2) / 100.0
+
+    def sama(f, g):
+        """
+        Panel yang sama, diukur dari seberapa besar kedua kotaknya bertindih.
+
+        Dulu jarak pusat dan perbandingan luas diperiksa terpisah, dan itu
+        goyah: panel kiri yang sama persis dilaporkan dengan kotak 0-21% lalu
+        3,4-21,1% saat wajahnya bergeser sedikit di dalam panelnya, dan aturan
+        lama menyebutnya PINDAH. Tiap "pindah" jadi satu potongan di hasil
+        render, jadi panel yang diam pun membuat bingkainya berkedip.
+        Tumpang tindih mengurus geseran dan perubahan bentuk sekaligus.
+        """
+        x1 = max(f["x"], g["x"])
+        y1 = max(f["y"], g["y"])
+        x2 = min(f["x"] + f["w"], g["x"] + g["w"])
+        y2 = min(f["y"] + f["h"], g["y"] + g["h"])
+        tindih = max(0.0, x2 - x1) * max(0.0, y2 - y1)
+        gabung = f["w"] * f["h"] + g["w"] * g["h"] - tindih
+        return tindih / max(1e-6, gabung) >= FACECAM_TINDIH_MIN
+
+    ringkas: list[dict] = []
+    for i, h in enumerate(hasil):
+        if ringkas:
+            if sama(ringkas[-1]["facecam"], h["facecam"]):
+                continue
+            # Pindah tempat harus DIBENARKAN potongan berikutnya. Satu potongan
+            # yang menyimpang sendirian hampir selalu salah baca — wajah di
+            # dalam permainan, atau orang yang bersandar pada facecam tanpa
+            # bingkai. Terukur pada Devour: satu potongan 8 detik melompat ke
+            # kotak 42x68% lalu kembali. Potongan terakhir tidak punya saksi,
+            # jadi ia hanya dipercaya bila wajahnya hadir hampir di semua sampel.
+            #
+            # Kecuali bila buktinya sendiri sudah kuat. Video multi-POV memang
+            # berganti facecam untuk satu jendela saja lalu kembali: pada klip
+            # LaperGang pemiliknya, POV kanan-bawah hadir di 55% sampel jendela
+            # detik ke-64, lalu POV berikutnya kembali ke kiri. Menuntut saksi
+            # membuang perpindahan yang benar-benar terjadi, dan delapan detik
+            # bingkai yang salah tempat jelas terlihat.
+            nanti = hasil[i + 1]["facecam"] if i + 1 < len(hasil) else None
+            kuat = float(h["facecam"].get("kehadiran") or 0) >= FACECAM_SENDIRI_MIN
+            if nanti is not None:
+                if not sama(h["facecam"], nanti) and not kuat:
+                    continue
+            elif float(h["facecam"].get("kehadiran") or 0) < 0.8:
+                continue
+        ringkas.append(h)
+    ringkas[0]["t"] = 0.0
+    _tajamkan_batas(ringkas, hasil, sama)
+    for h in hasil:
+        h.pop("_lama", None)
+    ringkas = _stabilkan_panel(ringkas, durasi_total, sama)
+    if len(ringkas) > 1:
+        log.info("Facecam berpindah dalam klip: %s", ", ".join(
+            f"{h['t']:.0f}s→({h['facecam']['x']:.0f}%,{h['facecam']['y']:.0f}%)" for h in ringkas))
+    return ringkas
+
+
+def _facecam_cuplikan(src, segments: list[dict], source_w: int, source_h: int,
+                      rasio_potongan: float, durasi: float) -> list[dict]:
+    """
+    Letak facecam pada klip PANJANG, dari cuplikan yang disebar merata.
+
+    Bentuk hasilnya sama persis dengan pemindaian utuh, jadi semua yang
+    sesudahnya — pewarisan letak, peringkasan, penajaman batas, penstabilan
+    panel — tidak tahu bedanya.
+    """
+    jarak = min(CUPLIK_JARAK[1], max(CUPLIK_JARAK[0], durasi / CUPLIK_JUMLAH))
+    sw = SAMPLE_WIDTH
+    sh = _even(SAMPLE_WIDTH * source_h / source_w)
+
+    hasil: list[dict] = []
+    t_klip = 0.0
+    for sg in segments or []:
+        a, b = float(sg["start"]), float(sg["end"])
+        pos = a
+        while pos < b - 0.5:
+            panjang = min(CUPLIK_PANJANG, b - pos)
+            fc = _facecam_dari_bingkai(
+                _sample_frames(src, pos, panjang, sw, sh), sw, sh,
+                rasio_potongan=rasio_potongan)
+            hasil.append({"t": round(t_klip + (pos - a), 2), "facecam": fc,
+                          "_lama": min(jarak, b - pos)})
+            pos += jarak
+        t_klip += b - a
+    log.info("Facecam dipindai dengan %d cuplikan %.0f detik tiap %.0f detik "
+             "(klip %.0f detik)", len(hasil), CUPLIK_PANJANG, jarak, durasi)
+    return _rapikan_facecam(hasil, durasi)
+
+
 def deteksi_facecam_waktu(src, segments: list[dict], source_w: int, source_h: int,
                           rasio_potongan: float = 1080 / 768) -> list[dict]:
     """
@@ -4062,6 +4371,11 @@ def deteksi_facecam_waktu(src, segments: list[dict], source_w: int, source_h: in
     pusatnya bergeser jelas. Potongan tanpa wajah (pemain menutup muka saat
     jumpscare, kamera tertutup notifikasi) mewarisi letak sebelumnya.
     """
+    durasi_total = sum(float(sg["end"]) - float(sg["start"]) for sg in segments or [])
+    if durasi_total > PINDAI_PENUH:
+        return _facecam_cuplikan(src, segments, source_w, source_h,
+                                 rasio_potongan, durasi_total)
+
     potongan: list[tuple[float, float, float]] = []   # (detik klip, mulai sumber, panjang)
     t_klip = 0.0
     for sg in segments or []:
@@ -4159,79 +4473,7 @@ def deteksi_facecam_waktu(src, segments: list[dict], source_w: int, source_h: in
         # Sisa bingkai potongan ini dibuang bersama alirannya.
         aliran.close()
 
-    _warisi_tepi(hasil)
-
-    # Isi potongan kosong dari tetangga terdekat (yang sebelumnya dulu).
-    ada = [h for h in hasil if h["facecam"]]
-    if not ada:
-        return []
-    terakhir = None
-    for h in hasil:
-        if h["facecam"]:
-            terakhir = h["facecam"]
-        elif terakhir is not None:
-            h["facecam"] = terakhir
-    pertama = ada[0]["facecam"]
-    for h in hasil:
-        if h["facecam"] is None:
-            h["facecam"] = pertama
-
-    def pusat(f):
-        return (f["x"] + f["w"] / 2) / 100.0, (f["y"] + f["h"] / 2) / 100.0
-
-    def sama(f, g):
-        """
-        Panel yang sama, diukur dari seberapa besar kedua kotaknya bertindih.
-
-        Dulu jarak pusat dan perbandingan luas diperiksa terpisah, dan itu
-        goyah: panel kiri yang sama persis dilaporkan dengan kotak 0-21% lalu
-        3,4-21,1% saat wajahnya bergeser sedikit di dalam panelnya, dan aturan
-        lama menyebutnya PINDAH. Tiap "pindah" jadi satu potongan di hasil
-        render, jadi panel yang diam pun membuat bingkainya berkedip.
-        Tumpang tindih mengurus geseran dan perubahan bentuk sekaligus.
-        """
-        x1 = max(f["x"], g["x"])
-        y1 = max(f["y"], g["y"])
-        x2 = min(f["x"] + f["w"], g["x"] + g["w"])
-        y2 = min(f["y"] + f["h"], g["y"] + g["h"])
-        tindih = max(0.0, x2 - x1) * max(0.0, y2 - y1)
-        gabung = f["w"] * f["h"] + g["w"] * g["h"] - tindih
-        return tindih / max(1e-6, gabung) >= FACECAM_TINDIH_MIN
-
-    ringkas: list[dict] = []
-    for i, h in enumerate(hasil):
-        if ringkas:
-            if sama(ringkas[-1]["facecam"], h["facecam"]):
-                continue
-            # Pindah tempat harus DIBENARKAN potongan berikutnya. Satu potongan
-            # yang menyimpang sendirian hampir selalu salah baca — wajah di
-            # dalam permainan, atau orang yang bersandar pada facecam tanpa
-            # bingkai. Terukur pada Devour: satu potongan 8 detik melompat ke
-            # kotak 42x68% lalu kembali. Potongan terakhir tidak punya saksi,
-            # jadi ia hanya dipercaya bila wajahnya hadir hampir di semua sampel.
-            #
-            # Kecuali bila buktinya sendiri sudah kuat. Video multi-POV memang
-            # berganti facecam untuk satu jendela saja lalu kembali: pada klip
-            # LaperGang pemiliknya, POV kanan-bawah hadir di 55% sampel jendela
-            # detik ke-64, lalu POV berikutnya kembali ke kiri. Menuntut saksi
-            # membuang perpindahan yang benar-benar terjadi, dan delapan detik
-            # bingkai yang salah tempat jelas terlihat.
-            nanti = hasil[i + 1]["facecam"] if i + 1 < len(hasil) else None
-            kuat = float(h["facecam"].get("kehadiran") or 0) >= FACECAM_SENDIRI_MIN
-            if nanti is not None:
-                if not sama(h["facecam"], nanti) and not kuat:
-                    continue
-            elif float(h["facecam"].get("kehadiran") or 0) < 0.8:
-                continue
-        ringkas.append(h)
-    ringkas[0]["t"] = 0.0
-    _tajamkan_batas(ringkas, hasil, sama)
-    for h in hasil:
-        h.pop("_lama", None)
-    if len(ringkas) > 1:
-        log.info("Facecam berpindah dalam klip: %s", ", ".join(
-            f"{h['t']:.0f}s→({h['facecam']['x']:.0f}%,{h['facecam']['y']:.0f}%)" for h in ringkas))
-    return ringkas
+    return _rapikan_facecam(hasil, durasi_total)
 
 
 # ---------------------------------------------------------------------------
