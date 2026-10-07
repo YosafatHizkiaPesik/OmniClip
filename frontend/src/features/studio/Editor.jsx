@@ -6,10 +6,10 @@ import {
 } from 'lucide-react';
 import { apiGet, apiPost, dijalankanDiKomputerIni, downloadToDisk, kategoriKlip } from '../../lib/api';
 import { loadFonts } from '../../lib/fonts';
-import { formatTime } from '../../utils/timeFormat';
+import { formatDurationHuman, formatTime } from '../../utils/timeFormat';
 import { useClipEditor } from './useClipEditor';
 import ClipPreview from './ClipPreview';
-import StaveSystem, { rehearsalLetter } from './StaveSystem';
+import StaveSystem, { nomorKlip } from './StaveSystem';
 import { TrimPanel, SubtitlePanel, StylePanel } from './EditorPanels';
 import FrameStage from './FrameStage';
 import BilahBingkaiAwal from './BilahBingkaiAwal';
@@ -459,7 +459,16 @@ export default function Editor({ project, onBack }) {
     let batal = false;
     setGamingSibuk(true);
     setGamingKabar(null);
-    apiPost('/clip-facecam', { video_id: videoId, segments: selected.segments })
+    // Batas waktunya sendiri, jauh di atas tiga puluh detik bawaan.
+    //
+    // Pemindaian kamera wajah membaca videonya, dan membaca video butuh waktu:
+    // terukur 42 detik untuk klip lima menit sesudah pemindaiannya dipercepat,
+    // dan sebelum itu 150 detik. Dengan batas bawaan, klip panjang SELALU
+    // dijawab "pencarian kamera wajah gagal" walau server masih bekerja dan
+    // beberapa detik lagi selesai — persis yang dilihat pemiliknya pada klip
+    // dua belas menitnya, 7 Oktober 2026.
+    apiPost('/clip-facecam', { video_id: videoId, segments: selected.segments },
+            { timeout: 10 * 60 * 1000 })
       .then((r) => {
         if (batal) return;
         const l = susunanDariServer(r?.layout);
@@ -486,8 +495,28 @@ export default function Editor({ project, onBack }) {
         //
         // Hanya bila lajur Bingkai masih kosong: kunci buatan pengguna tidak
         // pernah ditimpa.
+        // KAPAN PEMECAHAN ITU BOLEH DIPASANG.
+        //
+        // Dulu: hanya bila lajur Bingkai benar-benar kosong. Terdengar aman,
+        // dan justru itu yang membuat auto-bingkai terlihat rusak. Memilih
+        // "Game" lewat chip di lajur Bingkai MENULIS satu kunci di detik nol —
+        // jadi begitu pemiliknya memilih mode itu sendiri, lajurnya tidak lagi
+        // kosong, dan pemecahan menurut isi klip tidak pernah dipasang.
+        //
+        // Terlihat pada klip Mobile Legends dua belas menitnya, 7 Oktober 2026:
+        // di detik 96 videonya beralih ke wajah satu layar penuh, server sudah
+        // memecahnya dengan benar ("93,8-97,4 detik: hanya wajah, mengikuti
+        // wajah"), tapi Studio tetap memakai susunan main game — bidang wajah
+        // menyorot sudut ruangan yang kosong.
+        //
+        // Satu kunci di detik nol berarti "seluruh klip pakai cara ini", bukan
+        // susunan yang dirakit tangan. Di situ pemecahan dipasang. Dua kunci
+        // atau lebih, atau kunci yang tidak di detik nol, tidak disentuh.
+        const kunciAda = selected.frame_keys ?? [];
+        const sendirianDiNol = kunciAda.length === 1 && (kunciAda[0].t ?? 0) < 0.25
+                               && (kunciAda[0].mode || '') === 'gaming';
         const potongan = r?.potongan ?? [];
-        if (potongan.length > 1 && !(selected.frame_keys ?? []).length) {
+        if (potongan.length > 1 && (!kunciAda.length || sendirianDiNol)) {
           setFrameKeys(potongan.map((q) => {
             const dasar = { id: newFrameId(), t: q.t, mode: q.mode,
                             asal: 'otomatis', alasan: q.alasan };
@@ -695,14 +724,14 @@ export default function Editor({ project, onBack }) {
    * terjadi tanpa sengaja, dan yang dihapus bisa jadi klip yang subtitlenya
    * sudah disunting berjam-jam.
    */
-  const hapusKlip = useCallback((clipId, huruf) => {
+  const hapusKlip = useCallback((clipId, nomor) => {
     const klip = clips.find((c) => c.clip_id === clipId);
     if (!klip) return;
     const nama = (klip.title || klip.hook_text || '').trim().slice(0, 48);
     // eslint-disable-next-line no-alert
     if (!window.confirm(
-      `Hapus klip ${huruf}${nama ? ` "${nama}"` : ''}?\n\n`
-      + `${formatTime(klip.segments[0].start)} · ${Math.round(klip.duration || 0)} detik`)) {
+      `Hapus klip ${nomor}${nama ? ` "${nama}"` : ''}?\n\n`
+      + `${formatTime(klip.segments[0].start)} · ${formatDurationHuman(klip.duration || 0)}`)) {
       return;
     }
     editor.removeClip(clipId);
@@ -1649,7 +1678,7 @@ export default function Editor({ project, onBack }) {
     );
   }
 
-  const letter = selected ? rehearsalLetter(clips.indexOf(selected)) : '·';
+  const letter = selected ? nomorKlip(clips.indexOf(selected)) : '·';
 
   return (
     /* ── Studio sebagai RUANG, bukan halaman ────────────────────────────────
@@ -1792,11 +1821,11 @@ export default function Editor({ project, onBack }) {
                            onChange={() => editor.toggleChecked(clip.clip_id)}
                            style={{ width: '14px', height: '14px', marginTop: '3px' }} />
                     <span className={`reh${clip.source === 'manual' ? ' reh--manual' : ''}`}>
-                      {rehearsalLetter(i)}
+                      {nomorKlip(i)}
                     </span>
                     <div style={{ minWidth: 0 }}>
                       <div className="tc" style={{ fontSize: '.7rem', color: 'var(--ink-3)' }}>
-                        {formatTime(clip.segments[0].start)} · {Math.round(clip.duration || 0)}s
+                        {formatTime(clip.segments[0].start)} · {formatDurationHuman(clip.duration || 0)}
                         {clip.score != null && ` · ${Math.round(clip.score)}`}
                         {clip.source === 'manual' && ' · tangan'}
                       </div>
@@ -1811,10 +1840,10 @@ export default function Editor({ project, onBack }) {
                         klip yang tidak diinginkannya — dan di sini ia tidak
                         ada sama sekali. Diminta pemiliknya. */}
                     <button type="button" className="studio-row-x"
-                            aria-label={`Hapus klip ${rehearsalLetter(i)}`}
-                            title={`Hapus klip ${rehearsalLetter(i)}`}
+                            aria-label={`Hapus klip ${nomorKlip(i)}`}
+                            title={`Hapus klip ${nomorKlip(i)}`}
                             onClick={(e) => { e.stopPropagation();
-                                              hapusKlip(clip.clip_id, rehearsalLetter(i)); }}>
+                                              hapusKlip(clip.clip_id, nomorKlip(i)); }}>
                       <Trash2 size={13} />
                     </button>
                   </div>

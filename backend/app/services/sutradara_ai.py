@@ -1030,7 +1030,12 @@ def _dasar_per_waktu(plan, src: Path, segments: list[dict], durasi: float,
             keluar.append((a, b, {"mode": "gaming", "layout": tata,
                                   "alasan": "Permainan dan wajah pemain, bingkai game"}))
         elif l == "wajah":
-            keluar.append((a, b, {"mode": "smart", "alasan": "Hanya wajah, mengikuti wajah"}))
+            bidik = _bidikan_wajah(plan, a, b, out_w, out_h)
+            if bidik is not None:
+                keluar.append((a, b, {"mode": "box", "rect": bidik,
+                                      "alasan": "Hanya wajah, dibidik dari ukuran wajahnya"}))
+            else:
+                keluar.append((a, b, {"mode": "smart", "alasan": "Hanya wajah, mengikuti wajah"}))
         elif ada_game:
             # Klip permainan yang sedang TIDAK memperlihatkan wajah pemainnya.
             #
@@ -1159,6 +1164,76 @@ def jenis_klip_tersimpan(video_id: str, src: Path, segments: list[dict]) -> dict
     except Exception as e:
         log.info("Jenis klip tidak tersimpan: %s", e)
     return hasil
+
+
+# Potongan "hanya wajah": seberapa tinggi bidikannya terhadap tinggi wajahnya.
+#
+# Wajah setinggi w piksel diberi bidikan setinggi 3,6w. Angka itu bukan selera:
+# di bawah 3 kepala hampir menyentuh tepi atas, di atas 4,5 ruang kosong di
+# sekeliling kepala lebih besar daripada kepalanya sendiri.
+WAJAH_BIDIK_TINGGI = 3.6
+# Mata duduk sedikit di atas tengah bidikan, seperti pada potret.
+#
+# 0,42 menyisakan sejalur tipis gambar di atas kepala pada sumber yang wajahnya
+# berupa kotak di tengah gambar lain — terlihat di render uji sebagai pita
+# hijau setinggi 4% di tepi atas. 0,36 menurunkan bidikannya sedikit tanpa
+# memotong rambut.
+WAJAH_BIDIK_ATAS = 0.36
+# Bidikan tidak pernah lebih pendek dari ini terhadap tinggi bingkai sumber.
+#
+# Memperbesar berarti memperbesar pula setiap piksel yang sudah ada. Potongan
+# setinggi 60% bingkai sumber sudah diperbesar 1,67 kali lipat lebih banyak
+# daripada potongan setinggi bingkai penuh, dan di bawah itu wajahnya mulai
+# terlihat lembek di layar ponsel.
+WAJAH_BIDIK_PENDEK_MAKS = 0.60
+
+
+def _bidikan_wajah(plan, a: float, b: float, out_w: int, out_h: int) -> Optional[dict]:
+    """
+    Bidikan untuk potongan "hanya wajah" yang wajahnya TIDAK memenuhi layar.
+
+    Dibuat 7 Oktober 2026 sesudah pemiliknya mengirim satu kasus yang jelas:
+    pada klip Mobile Legends-nya, video beralih ke gaya "webcam diperbesar di
+    atas permainan yang diburamkan". Penggolong sudah benar menandainya "hanya
+    wajah", tapi `smart` memotong satu kolom SETINGGI BINGKAI PENUH — dan di
+    gambar seperti itu, separuh kolomnya berisi permainan buram di atas kepala.
+    Terlihat di hasil render: wajahnya di bawah, latar hijau buram di atas.
+
+    Jadi untuk potongan semacam ini bidikannya dihitung dari UKURAN WAJAHNYA,
+    bukan dari tinggi bingkai. Bila wajahnya memang sudah besar — bidikan yang
+    keluar setinggi bingkai — None dikembalikan dan `smart` tetap dipakai,
+    karena di situ mengikuti wajah lebih baik daripada kotak yang diam.
+    """
+    from .reframe import SAMPLE_FPS
+
+    sw, sh = plan.source_w, plan.source_h
+    i0, i1 = int(a * SAMPLE_FPS), int(b * SAMPLE_FPS)
+    titik: list[tuple[float, float, float]] = []
+    for pi in range(len(plan.people)):
+        for i in range(i0, min(i1, len(plan.people_seen[pi]))):
+            kotak = plan.people_box[pi][i] if i < len(plan.people_box[pi]) else None
+            x = plan.people[pi][i]
+            if plan.people_seen[pi][i] and kotak and x is not None:
+                titik.append((float(x), float(kotak[0]), float(kotak[1])))
+    if len(titik) < 3:
+        return None
+    titik.sort(key=lambda t: t[2])
+    x, cy, w = titik[len(titik) // 2]
+
+    tinggi = WAJAH_BIDIK_TINGGI * w
+    if tinggi >= sh * 0.92:
+        # Wajahnya sudah memenuhi layar: tidak ada yang bisa diperbaiki dengan
+        # memotong, dan mengikuti wajah lebih tahan terhadap gerakannya.
+        return None
+    tinggi = max(tinggi, sh * WAJAH_BIDIK_PENDEK_MAKS)
+    lebar = tinggi * (out_w / max(1, out_h)) * (1.0)
+    if lebar > sw:
+        lebar = sw
+        tinggi = min(sh, lebar * out_h / max(1, out_w))
+    x0 = min(max(0.0, x - lebar / 2), max(0.0, sw - lebar))
+    y0 = min(max(0.0, cy - tinggi * WAJAH_BIDIK_ATAS), max(0.0, sh - tinggi))
+    return {"x": round(x0 / sw * 100, 2), "y": round(y0 / sh * 100, 2),
+            "w": round(lebar / sw * 100, 2), "h": round(tinggi / sh * 100, 2)}
 
 
 def _kotak_dari_wajah(plan, a: float, b: float) -> Optional[dict]:

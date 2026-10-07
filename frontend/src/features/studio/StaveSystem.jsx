@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ZoomIn, ZoomOut } from 'lucide-react';
 import BilahGeser from './BilahGeser';
-import { formatTime, formatTimeFine } from '../../utils/timeFormat';
+import { formatDurationHuman, formatTime, formatTimeFine } from '../../utils/timeFormat';
 import { contrastRatio } from '../../lib/contrast';
 
 /**
@@ -26,9 +26,18 @@ import { contrastRatio } from '../../lib/contrast';
  * ulang pohon komponen tiap denyut adalah persis yang membuat editor berat.
  */
 
-const HUR = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-export const rehearsalLetter = (i) =>
-  (i < 26 ? HUR[i] : HUR[Math.floor(i / 26) - 1] + HUR[i % 26]);
+/**
+ * Tanda klip: NOMOR, bukan huruf.
+ *
+ * Dulu huruf latihan partitur (A, B, C…), karena seluruh layar ini memakai
+ * metafora partitur dan di partitur huruf latihan memang penanda bagian.
+ * Dilaporkan pemiliknya 7 Oktober 2026: "ubah saja huruf huruf pada klip
+ * karena saya tidak tahu juga fungsi huruf pada klip tersebut". Ia benar, dan
+ * metaforanya tidak boleh menang atas tugasnya: huruf itu tidak menjawab satu
+ * pun pertanyaan yang dipunyai orang di depan daftar klip — klip ini yang
+ * keberapa, dan ada berapa semuanya. Nomor menjawab keduanya sekaligus.
+ */
+export const nomorKlip = (i) => String(i + 1);
 
 /** Berapa sistem yang muat, dari lebar yang benar-benar tersedia. */
 function systemCountFor(width, duration) {
@@ -129,7 +138,7 @@ export default function StaveSystem({
   const lettered = useMemo(
     () => clips.map((clip, i) => ({
       clip,
-      letter: rehearsalLetter(i),
+      letter: nomorKlip(i),
       voice: Math.min(voiceOf(clip), voices - 1),
       start: clip.segments[0].start,
       end: clip.segments[clip.segments.length - 1].end,
@@ -345,7 +354,7 @@ export default function StaveSystem({
       phrase.style.width = `${Math.max(0.6, ((b - a) / span) * 100)}%`;
       if (jam) {
         jam.textContent =
-          `${formatTime(s)} → ${formatTime(en)} · ${Math.round(en - s)} dtk`;
+          `${formatTime(s)} → ${formatTime(en)} · ${formatDurationHuman(en - s)}`;
       }
     };
 
@@ -704,7 +713,7 @@ export default function StaveSystem({
                                  ev.stopPropagation();
                                  onRemoveClip?.(clip.clip_id, letter);
                                }}
-                               title={`${letter} · ${formatTime(start)} · ${Math.round(end - start)} dtk`
+                               title={`Klip ${letter} · ${formatTime(start)} · ${formatDurationHuman(end - start)}`
                                  + (onRemoveClip ? ', klik kanan untuk menghapus' : '')}
                                style={{
                                  left: `${left}%`, width: `${w}%`,

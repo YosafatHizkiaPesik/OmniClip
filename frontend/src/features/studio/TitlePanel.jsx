@@ -106,7 +106,7 @@ export default function TitlePanel({
   if (!clip) {
     return (
       <p style={{ fontSize: '.8rem', color: 'var(--ink-3)', margin: 0 }}>
-        Pilih satu huruf latihan dulu.
+        Pilih satu klip dulu.
       </p>
     );
   }

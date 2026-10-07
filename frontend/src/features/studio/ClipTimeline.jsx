@@ -898,8 +898,22 @@ export default function ClipTimeline({
                   // memang harus diperbesar dulu sebelum bisa disunting tepat.
                   // Tombol berisi kata, jadi ruang yang dibutuhkan jauh lebih
                   // besar daripada lajur di sebelahnya yang memakai angka.
-                  const muat = (r.end - r.start) * pxPerSec
+                  const lebarPx = (r.end - r.start) * pxPerSec;
+                  const muat = lebarPx
                     > MODE_BINGKAI.length * 50 + (cut.keyIndex >= 0 ? 24 : 0) + 30;
+                  // MENGHAPUS BATAS TIDAK IKUT MENUNGGU RUANG ITU.
+                  //
+                  // Dilaporkan pemiliknya 7 Oktober 2026: "pada timeline bingkai
+                  // saya tidak bisa menghapus bingkai pada waktu yang saya mau
+                  // karena saya harus menghapus berurutan dari yang paling
+                  // belakang". Sebabnya satu syarat yang dipakai bersama: tombol
+                  // × hanya tergambar bila SELURUH deretan tujuh tombol mode
+                  // muat, yaitu sekitar 400 piksel. Pada klip dua belas menit,
+                  // 400 piksel berarti empat menit, jadi hampir tidak ada
+                  // potongan yang punya tombol hapusnya — dan satu-satunya cara
+                  // tersisa adalah menghapus dari belakang sampai potongannya
+                  // cukup lebar. Tombol × sendiri cuma butuh dua puluh piksel.
+                  const muatHapus = cut.keyIndex >= 0 && lebarPx > 22;
                   return (
                     <div key={`f${cut.keyIndex}:${ci}`} className="tl-block tl-block--aim"
                          style={{
@@ -952,7 +966,17 @@ export default function ClipTimeline({
                           )}
                         </span>
                       ) : (
-                        <span className="tl-block-text">{m.nama}</span>
+                        <>
+                          <span className="tl-block-text">{m.nama}</span>
+                          {muatHapus && (
+                            <span className="tl-aim-pick tl-aim-pick--mini">
+                              <button type="button" className="tl-aim-btn tl-aim-btn--x"
+                                      title="Hapus batas ini dan sambung dengan potongan sebelumnya"
+                                      onPointerDown={(e) => e.stopPropagation()}
+                                      onClick={() => gabungBingkai(cut)}>×</button>
+                            </span>
+                          )}
+                        </>
                       )}
                     </div>
                   );
@@ -1049,8 +1073,12 @@ export default function ClipTimeline({
                   // menampilkannya sama sekali: tombol yang tumpah menutupi
                   // potongan tetangga, dan rentang sesempit itu memang harus
                   // diperbesar dulu sebelum bisa disunting dengan tepat.
-                  const muat = (r.end - r.start) * pxPerSec
+                  const lebarPx = (r.end - r.start) * pxPerSec;
+                  const muat = lebarPx
                     > (hadir.length + (cut.keyIndex >= 0 ? 2 : 1)) * 22 + 74;
+                  // Sama seperti lajur Bingkai: menghapus batas tidak boleh
+                  // menunggu ruang untuk seluruh deretan nomor orang.
+                  const muatHapus = cut.keyIndex >= 0 && lebarPx > 22;
                   const ink = auto ? 'var(--ink-3)' : frameInk(cut.person);
                   return (
                     <div key={`${cut.keyIndex}:${ci}`} className="tl-block tl-block--aim"
@@ -1105,6 +1133,14 @@ export default function ClipTimeline({
                           {auto ? 'otomatis' : `wajah ${cut.person + 1}`}
                         </span>
                       </span>
+                      )}
+                      {!muat && muatHapus && (
+                        <span className="tl-aim-pick tl-aim-pick--mini">
+                          <button type="button" className="tl-aim-btn tl-aim-btn--x"
+                                  title="Hapus batas ini dan sambung dengan potongan sebelumnya"
+                                  onPointerDown={(e) => e.stopPropagation()}
+                                  onClick={() => mergeCut(cut)}>×</button>
+                        </span>
                       )}
                     </div>
                   );
