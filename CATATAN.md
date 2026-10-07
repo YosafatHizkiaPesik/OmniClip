@@ -95,6 +95,70 @@ ketajamannya ada di hulu — sumber 1440p atau 4K.
 
 ## 1.5 Lainnya
 
+- ~~"Pencarian kamera wajah gagal" pada klip panjang.~~ **Selesai 7 Oktober
+  2026.** Pemindaiannya tidak gagal: ia memakan ±370 detik untuk klip dua belas
+  menit, sementara permintaan di sisi layar menyerah pada detik ke-30. Yang
+  memakan waktu bukan pencarian wajahnya melainkan MEMBACA videonya — terukur
+  pada klip 293 detik: 150 detik seluruhnya, 125 detik di antaranya cuma ffmpeg
+  membongkar bingkai. Melangkahi jendela tidak menolong (bingkainya tetap
+  dibongkar), dekoder GPU juga tidak (19,6 melawan 13,9 detik untuk satu
+  menit). Yang menolong: klip di atas tiga menit dipindai dengan 40 cuplikan
+  dua detik yang disebar merata (`_facecam_cuplikan`). Klip dua belas menit
+  pemiliknya: **43 detik**, satu panel, dan batas waktu permintaannya dinaikkan
+  jadi sepuluh menit.
+- ~~Bingkai tidak ikut berganti saat video beralih ke wajah penuh.~~
+  **Selesai 7 Oktober 2026.** Dilaporkan dengan tangkapan layar: pada detik 96
+  klip Mobile Legends, video beralih ke wajah satu layar penuh tapi bingkainya
+  tetap susunan main game, bidang wajahnya menyorot sudut ruangan yang kosong.
+  DUA sebab, keduanya terbukti:
+  1. Memilih "Main game" sendiri lewat chip di lajur Bingkai menulis satu kunci
+     di detik nol, dan Studio hanya memasang pemecahan menurut isi klip bila
+     lajurnya BENAR-BENAR kosong. Jadi memilih modenya sendiri justru
+     membatalkan pemecahannya. Kini satu kunci "gaming" di detik nol dianggap
+     "seluruh klip pakai cara ini", dan pemecahan tetap dipasang.
+  2. Potongan "hanya wajah" dirender dengan `smart`, yang memotong satu kolom
+     SETINGGI BINGKAI PENUH. Pada sumber yang wajahnya berupa kotak webcam di
+     atas permainan yang diburamkan, separuh kolom itu berisi permainan buram
+     di atas kepala — terlihat jelas di render uji. Kini bidikannya dihitung
+     dari UKURAN WAJAHNYA (`sutradara_ai._bidikan_wajah`), dan wajahnya mengisi
+     layar. Dibuktikan dengan render sungguhan pada klip pemiliknya, bukan
+     angka: detik 93,8-97,4 dari wajah-di-bawah-permainan jadi potret penuh.
+- ~~Kunci bingkai di tengah linimasa tidak bisa dihapus.~~ **Selesai 7 Oktober
+  2026.** "Saya harus menghapus berurutan dari yang paling belakang". Sebabnya
+  satu syarat yang dipakai bersama: tombol × hanya tergambar bila SELURUH
+  deretan tujuh tombol mode muat, yaitu ±400 piksel. Pada klip dua belas menit
+  itu berarti empat menit per potongan. Tombol × kini butuh 22 piksel saja,
+  terpisah dari deretan modenya. Berlaku juga di lajur Arah bingkai.
+- ~~Huruf A, B, C pada daftar klip.~~ **Diganti nomor 7 Oktober 2026** atas
+  permintaan pemiliknya: "saya tidak tahu juga fungsi huruf pada klip
+  tersebut". Panjang klip juga tidak lagi ditulis "713s" melainkan "11 mnt 53
+  dtk".
+- ~~Bingkai meleset pada klip panjang.~~ **Selesai 7 Oktober 2026**
+  (`reframe._stabilkan_panel`). Dilaporkan sesudah memasukkan satu video dua
+  belas menit utuh sebagai SATU klip. Terukur pada klip gameplay dua belas
+  menit: 28,2% durasinya dibingkai memakai panel yang bukan panel sebenarnya,
+  dan hampir semuanya bukan panel di tempat lain melainkan panel yang SAMA
+  dengan ukuran salah — facecam 14x27% di pojok kiri bawah sesekali terbaca
+  12x48% selama satu-dua detik lalu kembali. Pada klip tiga puluh detik itu
+  muncul nol sampai satu kali dan tidak terlihat; pada klip dua belas menit,
+  dua puluh kali. Sekarang panel distabilkan terhadap dirinya sendiri: ukuran
+  yang paling lama berlaku jadi acuan, dan panel yang menempel di SUDUT yang
+  sama disamakan kepadanya; lompatan ke seberang yang berlaku di bawah 1,5
+  detik dibuang. Hanya untuk klip 90 detik ke atas, dan hanya bila satu ukuran
+  menguasai 40% durasinya. Sesudahnya: 70 letak jadi 3, waktu salah panel
+  28,2% jadi **0,5%**.
+- ~~Render ditolak pada klip panjang.~~ **Selesai 7 Oktober 2026.** Batas 64
+  letak facecam per klip (`FrameLayoutModel.reaksi`) menolak klip 17 menit yang
+  punya 68 letak, dengan dinding JSON di layar Studio. Batasnya kini 512, dan
+  letak yang jaraknya di bawah 0,8 detik digabung di hulu.
+- ~~Pembaruan Windows yang "selalu gagal".~~ **Selesai 7 Oktober 2026.**
+  Pemasangan memang selesai di luar aplikasi: penolong menukar folder SESUDAH
+  prosesnya mati, jadi yang terakhir dilihat layar hanyalah sambungan yang
+  terputus. Sekarang niat pemasangan dicatat sebelum keluar, versi berikutnya
+  yang menjawab berhasil atau tidak (dengan ekor `pasang.log` bila gagal),
+  halaman menunggu server hidup lagi lalu memuat ulang sendiri, dan panggung
+  pembaruan yang tertinggal (±300 MB per percobaan gagal) disapu.
+
 - ~~Beranda menyarankan video yang tidak layak diklip.~~ **Selesai 6 Oktober
   2026** (`services/beranda.py`). Dilaporkan sambil menunjukkan layarnya: vlog
   23 detik 3 tayangan, dan kuliah teknik wawancara 216 tayangan enam tahun

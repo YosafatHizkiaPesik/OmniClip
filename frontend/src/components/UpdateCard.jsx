@@ -19,6 +19,10 @@ export default function UpdateCard({ card, sectionTitle, helpText }) {
   const [memeriksa, setMemeriksa] = useState(false);
   const [galat, setGalat] = useState(null);
   const pekerjaan = useJobRunner();
+  // Pemasangan selesai DI LUAR aplikasi ini: penolong menukar foldernya
+  // sesudah prosesnya mati. Jadi mulai tahap "siap", sambungan yang terputus
+  // adalah hal yang memang harus terjadi, bukan kegagalan.
+  const [menunggu, setMenunggu] = useState(false);
 
   const muat = useCallback(async (paksa = false) => {
     setMemeriksa(true);
@@ -33,6 +37,35 @@ export default function UpdateCard({ card, sectionTitle, helpText }) {
   }, []);
 
   useEffect(() => { muat(); }, [muat]);
+
+  // Begitu berkasnya siap, aplikasi ini akan menutup diri. Yang ditunggu
+  // sesudahnya bukan jawaban pekerjaan melainkan server yang hidup kembali
+  // pada versi baru.
+  const tahap = pekerjaan.job?.stage;
+  useEffect(() => {
+    if (tahap === 'siap' || tahap === 'selesai') setMenunggu(true);
+  }, [tahap]);
+
+  useEffect(() => {
+    if (!menunggu) return undefined;
+    let batal = false;
+    let hidupLagi = false;
+    const ketuk = async () => {
+      try {
+        const r = await fetch('/api/update', { cache: 'no-store' });
+        if (!r.ok) return;
+        // Server menjawab lagi. Kalau ia sempat benar-benar mati, yang
+        // menjawab sekarang adalah versi barunya: muat ulang halaman supaya
+        // seluruh layar ikut berganti, bukan cuma kartu ini.
+        if (hidupLagi && !batal) window.location.reload();
+      } catch {
+        // Mati: inilah saat penukaran folder berlangsung.
+        hidupLagi = true;
+      }
+    };
+    const jam = setInterval(ketuk, 2000);
+    return () => { batal = true; clearInterval(jam); };
+  }, [menunggu]);
 
   const pasang = () => {
     setGalat(null);
@@ -109,10 +142,12 @@ export default function UpdateCard({ card, sectionTitle, helpText }) {
               background: 'var(--reh)', transition: 'width 0.3s ease',
             }} />
           </div>
-          {pekerjaan.job?.stage === 'selesai' && (
+          {menunggu && (
             <p style={{ ...helpText, marginTop: '9px' }}>
-              Jendela OmniClip akan menutup sendiri, lalu terbuka kembali pada
-              versi baru. Klip dan setelan Anda tidak tersentuh.
+              OmniClip menutup sebentar untuk menukar berkasnya, lalu terbuka
+              kembali pada versi baru. Halaman ini memuat ulang sendiri begitu
+              servernya hidup lagi; sambungan yang terputus di antaranya memang
+              harus terjadi. Klip dan setelan Anda tidak tersentuh.
             </p>
           )}
         </div>
@@ -149,7 +184,7 @@ export default function UpdateCard({ card, sectionTitle, helpText }) {
         </p>
       )}
 
-      {(galat || pekerjaan.error) && (
+      {(galat || (pekerjaan.error && !menunggu)) && (
         <p style={{ ...helpText, marginTop: '11px', display: 'flex', gap: '7px',
                     alignItems: 'flex-start',
                     color: 'var(--accent-red, var(--danger))' }}>
@@ -158,7 +193,53 @@ export default function UpdateCard({ card, sectionTitle, helpText }) {
         </p>
       )}
 
+      {info?.pemasangan_terakhir && (
+        <KabarPemasangan hasil={info.pemasangan_terakhir} helpText={helpText} />
+      )}
+
       <PustakaOtomatis helpText={helpText} />
+    </div>
+  );
+}
+
+/**
+ * Apa yang terjadi pada pemasangan terakhir.
+ *
+ * Hanya versi yang hidup SEKARANG yang bisa menjawabnya: penukaran foldernya
+ * dikerjakan penolong sesudah aplikasi mati, jadi aplikasi yang memulainya
+ * tidak pernah melihat hasilnya. Yang gagal membawa ekor `pasang.log` —
+ * satu-satunya keterangan tentang apa yang ditolak Windows, dan tanpa dibawa
+ * ke sini ia tinggal di folder sementara yang tidak akan dibuka siapa pun.
+ */
+function KabarPemasangan({ hasil, helpText }) {
+  const ok = hasil.berhasil;
+  return (
+    <div style={{
+      marginTop: '12px', padding: '10px 12px', borderRadius: 'var(--radius-md)',
+      border: `1px solid ${ok ? 'var(--entry)' : 'var(--accent-red, var(--danger))'}`,
+    }}>
+      <div style={{ ...helpText, display: 'flex', gap: '8px', alignItems: 'flex-start',
+                    color: ok ? 'var(--entry)' : 'var(--accent-red, var(--danger))' }}>
+        {ok ? <CheckCircle2 size={15} style={{ flexShrink: 0, marginTop: '2px' }} />
+            : <AlertTriangle size={15} style={{ flexShrink: 0, marginTop: '2px' }} />}
+        <span>
+          {ok
+            ? `Pembaruan ke ${hasil.versi} berhasil dipasang.`
+            : `Pemasangan ${hasil.versi} tidak jadi: yang berjalan sekarang masih `
+              + `${hasil.sekarang}.`}
+        </span>
+      </div>
+      {!ok && hasil.ekor && (
+        <pre style={{ ...helpText, marginTop: '8px', whiteSpace: 'pre-wrap',
+                      fontFamily: 'inherit', maxHeight: '160px', overflow: 'auto' }}>
+          {hasil.ekor}
+        </pre>
+      )}
+      {!ok && hasil.log && (
+        <p style={{ ...helpText, marginTop: '6px' }}>
+          Catatan lengkapnya ada di <code>{hasil.log}</code>
+        </p>
+      )}
     </div>
   );
 }

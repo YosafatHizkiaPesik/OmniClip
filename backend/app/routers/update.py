@@ -24,7 +24,20 @@ async def status(paksa: bool = False):
 
     info = await asyncio.to_thread(updater.cek, paksa)
     bisa, alasan = updater.bisa_memasang()
-    return {**info, "bisa_pasang_sendiri": bisa, "alasan_tidak_bisa": alasan}
+    # Kabar dari pemasangan sebelumnya, bila ada. Hanya versi yang HIDUP
+    # SEKARANG yang bisa menjawab apakah penukaran foldernya berhasil, karena
+    # yang mengerjakannya sudah mati sebelum selesai.
+    hasil = await asyncio.to_thread(updater.hasil_pemasangan)
+    # Pemasangan yang berhenti di tengah meninggalkan hasil bongkarannya di
+    # sebelah aplikasi, dan tidak ada yang menyapunya seperti %TEMP% disapu
+    # Windows. Dibereskan di sini, sekalian saat halaman ini dibuka.
+    await asyncio.to_thread(updater.bersihkan_sisa)
+    return {**info, "bisa_pasang_sendiri": bisa, "alasan_tidak_bisa": alasan,
+            "pemasangan_terakhir": hasil,
+            # Folder versi lama dibuang sendiri begitu pemasangan terbukti
+            # berhasil (`hasil_pemasangan`). Yang masih tersisa di sini berarti
+            # pemasangan yang belum terbukti, dan itu dilaporkan apa adanya.
+            "cadangan_tertinggal": await asyncio.to_thread(updater.cadangan_tertinggal)}
 
 
 @router.post("/pasang", status_code=202)

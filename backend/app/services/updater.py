@@ -40,6 +40,7 @@ import time
 import urllib.request
 import zipfile
 from pathlib import Path
+from typing import Optional
 
 from ..config import FROZEN
 from ..version import __version__, sebagai_tuple
@@ -95,7 +96,192 @@ def bisa_memasang() -> tuple[bool, str]:
     return True, ""
 
 
+# --- Hasil pemasangan, dibaca sesudah aplikasi hidup lagi ----------------------
+#
+# Pemasangan selesai di luar aplikasi ini: penolong menukar folder SESUDAH
+# prosesnya mati. Akibatnya yang terakhir dilihat pengguna hanyalah sambungan
+# yang terputus, dan di layar itu terbaca sebagai "pembaruan gagal" — persis
+# yang dilaporkan pemiliknya 7 Oktober 2026: "setiap kali update versi baru di
+# windows selalu gagal tapi saat omniclip dibuka kembali versinya sudah
+# berubah".
+#
+# Jadi niatnya dicatat sebelum keluar, dan versi yang hidup berikutnya yang
+# menjawab apakah pemasangannya berhasil. Yang gagal membawa serta jalur
+# `pasang.log` dan ekornya, supaya sebabnya bisa dibaca alih-alih ditebak.
+
+NIAT_KUNCI = "update.menunggu"
+# Berapa baris terakhir `pasang.log` yang ikut dilaporkan saat gagal.
+LOG_EKOR = 12
+
+
+def _simpan(kunci: str, nilai: str) -> None:
+    try:
+        from ..repos import settings as settings_repo
+        settings_repo.set_value(kunci, nilai)
+    except Exception as e:                               # noqa: BLE001
+        log.info("Niat pembaruan tidak bisa dicatat: %s", str(e)[:120])
+
+
+def _baca(kunci: str) -> str:
+    try:
+        from ..repos import settings as settings_repo
+        return settings_repo.get(kunci) or ""
+    except Exception:                                    # noqa: BLE001
+        return ""
+
+
+def catat_niat(versi: str, log_pasang: Path, dari: str) -> None:
+    """Dipanggil tepat sebelum aplikasi menutup diri untuk dipasang."""
+    _simpan(NIAT_KUNCI, json.dumps(
+        {"versi": versi, "dari": dari, "log": str(log_pasang), "pada": time.time()}))
+
+
+def hasil_pemasangan(*, bersihkan: bool = True) -> Optional[dict]:
+    """
+    Apa yang terjadi pada pemasangan terakhir, atau None kalau tidak ada.
+
+    {"berhasil", "versi", "dari", "sekarang", "log", "ekor"}. Dibaca sekali:
+    sesudah dilaporkan ke layar, catatannya dihapus supaya kabar lama tidak
+    terus muncul tiap kali halaman dibuka.
+    """
+    mentah = _baca(NIAT_KUNCI)
+    if not mentah:
+        return None
+    try:
+        niat = json.loads(mentah)
+    except (TypeError, ValueError):
+        if bersihkan:
+            _simpan(NIAT_KUNCI, "")
+        return None
+
+    berhasil = str(niat.get("versi") or "") == __version__
+    hasil = {
+        "berhasil": berhasil,
+        "versi": niat.get("versi") or "",
+        "dari": niat.get("dari") or "",
+        "sekarang": __version__,
+        "log": niat.get("log") or "",
+        "ekor": "",
+    }
+    if not berhasil:
+        # Ekor lognya ikut. Inilah satu-satunya keterangan tentang apa yang
+        # ditolak Windows, dan tanpa dibawa ke layar ia tinggal di folder
+        # sementara yang tidak akan pernah dibuka siapa pun.
+        try:
+            baris = Path(hasil["log"]).read_text(
+                encoding="utf-8", errors="replace").splitlines()
+            hasil["ekor"] = "\n".join(b for b in baris[-LOG_EKOR:] if b.strip())
+        except OSError:
+            hasil["ekor"] = ""
+    if berhasil:
+        # Versi yang dipasang sudah terbukti berjalan — ini dia yang menjawab.
+        # Folder lamanya tidak punya tugas lagi, dan tiap pembaruan
+        # meninggalkan satu salinan 300 MB kalau dibiarkan.
+        n, besar = buang_cadangan()
+        hasil["cadangan_dibuang"] = n
+        hasil["ruang_bebas"] = besar
+    if bersihkan:
+        _simpan(NIAT_KUNCI, "")
+    return hasil
+
+
 # --- Mengecek -----------------------------------------------------------------
+
+# Sisa pemasangan yang gagal, dan kenapa ia harus dibereskan sendiri.
+#
+# Panggung pembaruan (`.omniclip-pembaruan-<pid>`) dibuat DI SEBELAH folder
+# aplikasi, bukan di %TEMP% — `move` di cmd tidak bisa memindahkan direktori
+# lintas cakram. Harganya: kalau pemasangan berhenti di tengah, 300 MB hasil
+# bongkaran tertinggal di situ, dan tidak ada yang menyapunya seperti %TEMP%
+# disapu Windows. Pemiliknya melaporkan pemasangan yang "selalu gagal"
+# 7 Oktober 2026; kalau benar gagal berulang kali, di sebelah aplikasinya ada
+# beberapa gigabyte yang tidak dipakai siapa pun.
+#
+# Yang disapu HANYA panggung, dan hanya yang lebih tua dari sehari: panggung
+# yang sedang dipakai pemasangan yang berjalan sekarang tidak boleh disentuh.
+# Folder cadangan versi lama (`-lama-<waktu>`) TIDAK dihapus di sini — itu
+# satu-satunya jalan kembali bila versi barunya bermasalah, dan membuangnya
+# tanpa diminta bukan keputusan yang boleh diambil berkas ini.
+SISA_UMUR = 24 * 3600
+
+
+def bersihkan_sisa() -> int:
+    """Menyapu panggung pembaruan yang tertinggal. Mengembalikan berapa yang dibuang."""
+    folder = folder_aplikasi()
+    if folder is None:
+        return 0
+    dibuang = 0
+    sekarang = time.time()
+    try:
+        tetangga = list(folder.parent.iterdir())
+    except OSError:
+        return 0
+    for d in tetangga:
+        if not d.is_dir() or not d.name.startswith(".omniclip-pembaruan-"):
+            continue
+        try:
+            if sekarang - d.stat().st_mtime < SISA_UMUR:
+                continue
+            shutil.rmtree(d, ignore_errors=True)
+            dibuang += 1
+        except OSError:
+            continue
+    if dibuang:
+        log.info("Sisa pemasangan yang tertinggal dibuang: %d folder", dibuang)
+    return dibuang
+
+
+def buang_cadangan() -> tuple[int, int]:
+    """
+    Membuang folder versi LAMA. (berapa folder, berapa byte).
+
+    Dipanggil hanya sesudah pemasangan terbukti berhasil — yaitu versi yang
+    sedang berjalan sudah sama dengan yang dipasang. Sebelum bukti itu ada,
+    folder lama adalah satu-satunya jalan kembali, dan membuangnya lebih awal
+    berarti kegagalan pemasangan meninggalkan komputer tanpa OmniClip sama
+    sekali.
+
+    Diminta pemiliknya 7 Oktober 2026: "untuk apa folder omniclip yang lama,
+    mengapa tidak kita hapus saja versi sebelumnya dan hanya menggunakan versi
+    terbaru". Ia benar bahwa menyimpannya selamanya tidak ada gunanya — tiap
+    pembaruan meninggalkan satu salinan 300 MB lagi.
+    """
+    jumlah = besar = 0
+    for c in cadangan_tertinggal():
+        try:
+            shutil.rmtree(c["jalur"], ignore_errors=True)
+        except OSError:
+            continue
+        if not Path(c["jalur"]).exists():
+            jumlah += 1
+            besar += int(c.get("ukuran") or 0)
+    if jumlah:
+        log.info("Folder versi lama dibuang: %d folder, %.0f MB",
+                 jumlah, besar / 1e6)
+    return jumlah, besar
+
+
+def cadangan_tertinggal() -> list[dict]:
+    """
+    Folder versi lama yang masih ada di sebelah aplikasi.
+
+    Dilaporkan apa adanya; yang membuangnya `buang_cadangan`, dan hanya
+    sesudah versi barunya terbukti berjalan.
+    """
+    folder = folder_aplikasi()
+    if folder is None:
+        return []
+    hasil = []
+    for d in sorted(folder.parent.glob(folder.name + "-lama-*")):
+        if not d.is_dir():
+            continue
+        try:
+            besar = sum(f.stat().st_size for f in d.rglob("*") if f.is_file())
+        except OSError:
+            besar = 0
+        hasil.append({"jalur": str(d), "ukuran": besar})
+    return hasil
+
 
 def cek(paksa: bool = False) -> dict:
     """
@@ -237,9 +423,12 @@ for /l %%i in (1,1,120) do (
   timeout /t 1 /nobreak >nul
 )
 echo GAGAL: proses {pid} tidak menutup dalam 120 detik. >>"%LOG%"
-echo OmniClip tidak menutup. Pemasangan dibatalkan.
-echo Rincian: %LOG%
-pause
+rem Tidak ada jendela yang menunggu tombol di sini.
+rem
+rem Aplikasinya masih hidup, jadi yang dilihat pengguna seharusnya OmniClip,
+rem bukan konsol hitam bertuliskan "Press any key". Kegagalannya tetap
+rem tercatat, dan versi yang berjalan akan melaporkannya sendiri di kartu
+rem Pembaruan - lengkap dengan ekor berkas catatan ini.
 exit /b 1
 
 :tenang
@@ -294,11 +483,11 @@ echo Memasang di tempat (menyalin menimpa folder lama)... >>"%LOG%"
 robocopy "{baru}" "{lama}" /E /IS /R:2 /W:2 /NFL /NDL /NJH /NJS /NP >>"%LOG%" 2>&1
 if errorlevel 8 (
   echo GAGAL: memasang di tempat juga ditolak. >>"%LOG%"
-  echo.
-  echo Pemasangan gagal. Versi lama masih utuh dan bisa dipakai seperti biasa.
-  echo Ada program lain yang memegang folder aplikasi.
-  echo Rincian lengkap ada di: %LOG%
-  pause
+  rem Versi lama masih utuh. Dijalankan lagi, dan IA yang memberi tahu
+  rem pemiliknya apa yang terjadi, di dalam aplikasi, lengkap dengan ekor
+  rem catatan ini. Konsol hitam yang menunggu tombol bukan tempat orang
+  rem membaca kabar buruk.
+  start "" "{lama}\\{exe}"
   exit /b 1
 )
 echo Selesai lewat pemasangan di tempat. >>"%LOG%"
@@ -321,9 +510,9 @@ if errorlevel 8 (
   echo GAGAL: versi baru tidak bisa dipasang. Mengembalikan yang lama. >>"%LOG%"
   rmdir /s /q "{lama}" >nul 2>&1
   move "{cadangan}" "{lama}" >>"%LOG%" 2>&1
-  echo Pemasangan gagal. Versi lama sudah dikembalikan.
-  echo Rincian: %LOG%
-  pause
+  rem Dikembalikan lalu dijalankan lagi; aplikasinya sendiri yang melaporkan
+  rem kegagalan ini kepada pemiliknya.
+  start "" "{lama}\\{exe}"
   exit /b 1
 )
 
@@ -575,6 +764,10 @@ def _jalankan_penolong(ctx, info: dict, temp: Path, penolong: Path) -> dict:
     """Menyalakan skrip penukar folder, lalu menutup aplikasi ini."""
     log.info("Pembaruan %s siap dipasang; menjalankan penolong %s",
              info["versi_terbaru"], penolong)
+
+    # Dicatat SEBELUM penolongnya menyala: sesudah ini aplikasi tidak punya
+    # kesempatan menulis apa pun lagi.
+    catat_niat(info["versi_terbaru"], penolong.with_name("pasang.log"), __version__)
 
     if sys.platform == "win32":
         subprocess.Popen(["cmd", "/c", "start", "", str(penolong)],

@@ -344,12 +344,27 @@ tapi bidang yang lebih sempit dari itu jadi pita kurus di tengah layar.
 | **B0** | **SELESAI 30 September 2026:** sisipan TULISAN (`jenis: "teks"`), terpisah dari judul klip. Isi, 13 font terbundel, ukuran, warna, garis luar, kotak latar, letak bebas, lama tampil, lembut masuk/keluar, dan transparansi. Dibuat untuk syarat kampanye seperti "@motionklip". Transparansi untuk gambar dan video ternyata sudah ada sejak sebelumnya. |
 | **B3** | Pratinjau fade suara. Pemutar sisipan di Studio memakai volume tetap; lembut masuk dan keluarnya baru terdengar di hasil render. |
 
+## B5. Klip panjang (SELESAI 7 Oktober 2026)
+
+Pemiliknya memasukkan satu video dua belas menit utuh sebagai SATU klip. Dua
+cacat muncul yang tidak pernah terlihat pada klip tiga puluh detik:
+
+| | |
+|---|---|
+| **Render ditolak** | Batas 64 letak facecam per klip menolak klip dengan 68 letak. Kini 512 (`render.REAKSI_MAKS`), dan letak yang berjarak di bawah 0,8 detik digabung (`_rapikan_reaksi`). |
+| **Bingkai meleset** | 28,2% durasi klip dibingkai memakai panel yang salah — bukan panel di tempat lain, melainkan panel yang sama dengan ukuran salah, karena `_tepi_panel` sesekali menangkap persegi yang lebih besar. `reframe._stabilkan_panel` menyamakan panel yang menempel di sudut yang sama ke ukuran yang paling lama berlaku, dan membuang lompatan di bawah 1,5 detik. Terukur: 70 letak jadi 3, salah panel 28,2% jadi 0,5%. Pada video gameplay kedua, 12 menit: satu letak untuk seluruh klip. |
+| **Potongan permainan** | Dulu satu potongan untuk seluruh klip yang harus menghindari SEMUA letak facecam. Kini satu potongan per letak (`reaksi[].main`), menghindari facecam yang benar-benar ada saat itu. |
+| **Pemindaian tidak selesai** | "Pencarian kamera wajah gagal, coba lagi" di Studio: pemindaian 713 detik memakan ±370 detik, batas permintaan 30 detik. Yang mahal MEMBACA videonya (125 dari 150 detik pada klip 293 detik), bukan mencari wajahnya; melangkahi jendela dan dekoder GPU sama-sama tidak menolong. Klip di atas 180 detik kini dipindai dengan 40 cuplikan dua detik (`_facecam_cuplikan`): klip 713 detik selesai dalam 43 detik, satu panel. Batas permintaannya dinaikkan jadi sepuluh menit. |
+| **Tanda klip** | Huruf latihan A, B, C diganti nomor 1, 2, 3 (`nomorKlip`), dan panjang klip ditulis "11 mnt 53 dtk", bukan "713s". |
+| **Bingkai ikut isi klip** | Memilih "Main game" sendiri dulu membatalkan pemecahan menurut isi klip; kini satu kunci gaming di detik nol tetap dipecah. Potongan "hanya wajah" tidak lagi dirender `smart` setinggi bingkai penuh melainkan dibidik dari ukuran wajahnya (`_bidikan_wajah`), karena sumber bergaya "webcam di atas permainan buram" membuat kolom setinggi bingkai berisi permainan di atas kepala. Dibuktikan dengan render pada klip pemiliknya. |
+| **Hapus kunci bingkai** | Tombol × di lajur Bingkai dan Arah bingkai tidak lagi menunggu ruang untuk seluruh deretan tombol mode (±400 piksel); 22 piksel cukup. |
+
 ## C. Belum pernah diuji sungguhan
 
 | | |
 |---|---|
 | **C1** | ~~Unggah ke YouTube dan Drive.~~ **SELESAI.** Pemiliknya sudah mengunggah beberapa video lewat fitur ini. Keluhan yang tersisa bukan soal alurnya melainkan MUTU video di YouTube — dan sebabnya ditemukan 2 Oktober 2026: render selalu mengeluarkan 30 fps (`render.py`, `fps=30`) dari sumber 60 fps. Resolusi dan bitrate justru baik: 1080x1920, 13,7 Mbps. |
-| **C2** | **Windows.** Bundelnya terbangun tiap rilis, tapi belum pernah dijalankan di Windows sungguhan. Termasuk unduhan Deno, server PO Token, dan encoder GPU. |
+| **C2** | **Windows.** Bundelnya terbangun tiap rilis, tapi belum pernah dijalankan di Windows sungguhan OLEH SAYA; pemiliknya memakainya tiap hari. Yang sudah terjawab 7 Oktober 2026: pembaruan yang "selalu gagal" ternyata berhasil memasang — yang gagal hanya laporannya, karena penolong menukar folder sesudah aplikasinya mati dan layar hanya melihat sambungan terputus. Kini hasilnya dicatat lalu dilaporkan versi berikutnya, lengkap dengan ekor `pasang.log` bila benar-benar gagal. Belum diuji: unduhan Deno, server PO Token, dan encoder GPU di Windows. |
 | **C3** | **Render GPU pada Linux.** Ffmpeg statis yang dibundel belum diuji dengan VAAPI atau NVENC. |
 | **C4** | **Pemulihan cadangan.** Membuatnya sudah diuji, memulihkannya belum. |
 
