@@ -1,6 +1,7 @@
 """Analisis auto-clip dan render klip."""
 
 import asyncio
+import contextlib
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 import os
@@ -680,6 +681,44 @@ _REFRAME_CACHE_MAX = 48
 # Satu, bukan dua: tiap pemindaian sendiri sudah memakai beberapa utas
 # (`reframe.INTI_ANALISIS`), jadi menjalankan dua sekaligus tidak menyelesaikan
 # apa pun lebih cepat pada mesin empat inti, ia hanya membuat keduanya lambat.
+# Berapa lama pemindaian Studio bersedia menunggu pekerjaan latar minggir.
+#
+# Pemindaian yang diminta Studio tidak lewat antrean pekerjaan, jadi gerbang
+# CPU tidak tahu ia ada — dan pemanasan bingkai yang sedang berjalan di latar
+# TIDAK PERNAH minggir untuknya. Akibatnya dua pemindaian berat jalan
+# bersamaan: ffmpeg enam utas dua kali, deteksi wajah dua kali. Terukur pada
+# mesin ini (i5-8250U, 4 inti/8 utas, sama dengan laptop pemiliknya): beban
+# rata-rata 9 dari 8 utas, ffmpeg 394% CPU. Dilaporkan sebagai "setelah saya
+# membuka partitur, kipasnya menjadi kencang dan sistem mulai terputus".
+#
+# Sekarang pemindaian Studio ikut antre di gerbang yang sama — bukan untuk
+# menunggu lama, melainkan supaya pemanasan TAHU ada yang menunggu lalu minggir
+# di sela dua klip. Kalau dalam dua menit gilirannya belum datang, ia jalan
+# saja: pengguna yang sedang menunggu klipnya terbuka tidak boleh disandera
+# pekerjaan latar.
+GILIRAN_CPU_BATAS = 120.0
+
+
+@contextlib.contextmanager
+def _giliran_cpu(batas: float = GILIRAN_CPU_BATAS):
+    """Ikut antre di gerbang CPU supaya pekerjaan latar sempat minggir."""
+    from ..services.jobs import gerbang_cpu
+
+    dapat = False
+    try:
+        dapat = gerbang_cpu.acquire(timeout=batas)
+    except Exception:                                # noqa: BLE001
+        dapat = False
+    try:
+        yield dapat
+    finally:
+        if dapat:
+            try:
+                gerbang_cpu.release()
+            except Exception:                        # noqa: BLE001
+                pass
+
+
 _PINDAI_BERSAMAAN = max(1, int(os.getenv("OMNICLIP_PINDAI_BERSAMAAN", "1")))
 _GERBANG_PINDAI = threading.BoundedSemaphore(_PINDAI_BERSAMAAN)
 
@@ -879,7 +918,7 @@ def _hitung_reframe_sekarang(*, video_id: str, segments: list[dict], aspect_rati
     # sumbernya sudah tegak dijawab "tidak tersedia" padahal bingkai sempit di
     # dalamnya masih punya ruang untuk bergeser.
     # Satu pemindaian pada satu waktu, seluruh aplikasi. Lihat `_GERBANG_PINDAI`.
-    with _GERBANG_PINDAI:
+    with _GERBANG_PINDAI, _giliran_cpu():
         # Diperiksa lagi sesudah menunggu giliran: selama antre, yang di depan
         # bisa saja sudah menghitung persis rencana ini.
         sudah = _reframe_tersimpan(key)
@@ -1795,7 +1834,10 @@ async def clip_jenis(req: FacecamRequest):
 # v10 (7 Oktober 2026): klip panjang dipindai dengan cuplikan, panel
 # distabilkan terhadap dirinya sendiri, dan potongan "hanya wajah" dibidik dari
 # ukuran wajahnya, bukan setinggi bingkai penuh.
-FACECAM_VERSI = 10
+# v11 (8 Oktober 2026): panel yang timpang diluruskan ke wajahnya, dan panel
+# yang wajahnya hilang lebih dari tiga detik dianggap tidak ada — dua perubahan
+# yang mengubah HASIL pemindaian, jadi simpanan lama tidak boleh dipakai lagi.
+FACECAM_VERSI = 11
 
 
 def _kunci_facecam(video_id: str, segments: list[dict]) -> str:
@@ -1985,6 +2027,39 @@ def _potongan_game(src: str, segments: list[dict],
     return keluar if len(keluar) > 1 else []
 
 
+@router.get("/clip-bingkai/kemajuan")
+async def kemajuan_bingkai():
+    """
+    Kemajuan pemindaian bingkai yang SEDANG berjalan, dalam hitungan sungguhan.
+
+    Diminta pemiliknya 7 Oktober 2026: bilah kemajuan di Studio sebelumnya
+    perkiraan (`6 + 0,36 x panjang klip`), dan sesudah pemindaiannya dipercepat
+    perkiraan itu meleset jauh — menyebut empat menit untuk pekerjaan empat
+    puluh detik.
+
+    Yang dijawab di sini: tahap apa yang sedang berjalan, langkah keberapa dari
+    berapa, dan sudah berapa lama. Jawaban yang BASI (lebih dari lima detik
+    tanpa kabar baru) ditandai `segar: false`, supaya layar tidak menampilkan
+    angka dari pemindaian yang sudah selesai.
+    """
+    import time as _t
+
+    from ..services.reframe import kemajuan_pindai
+
+    k = kemajuan_pindai()
+    umur = _t.time() - float(k.get("pada") or 0)
+    total = float(k.get("total") or 1)
+    selesai = float(k.get("selesai") or 0)
+    return {
+        "tahap": k.get("tahap") or "",
+        "selesai": selesai,
+        "total": total,
+        "persen": max(0.0, min(1.0, selesai / total)) if total else 0.0,
+        "umur": round(umur, 1),
+        "segar": bool(k.get("tahap")) and umur < 5.0,
+    }
+
+
 @router.post("/clip-facecam")
 async def clip_facecam(req: FacecamRequest):
     """
@@ -2063,10 +2138,14 @@ async def clip_facecam(req: FacecamRequest):
         info = probe(str(src))
         w = int(info.get("width") or 1920)
         h = int(info.get("height") or 1080)
-        posisi = deteksi_facecam_waktu(str(src), segs, w, h,
-                                       rasio_potongan=rasio_bidang_wajah(1080, 1920))
-        return {"posisi": posisi or [], "src_w": w, "src_h": h,
-                "potongan": _potongan_game(str(src), segs, posisi)}
+        # Ikut antre di gerbang CPU: lihat `_giliran_cpu`. Tanpa ini,
+        # pemindaian ini dan pemanasan bingkai di latar berjalan bersamaan,
+        # dan mesin empat inti kehabisan napas untuk keduanya.
+        with _giliran_cpu():
+            posisi = deteksi_facecam_waktu(str(src), segs, w, h,
+                                           rasio_potongan=rasio_bidang_wajah(1080, 1920))
+            return {"posisi": posisi or [], "src_w": w, "src_h": h,
+                    "potongan": _potongan_game(str(src), segs, posisi)}
 
     pindai = await _di_kolam_pindai(kerja)
     _simpan_facecam(req.video_id, segs, pindai)

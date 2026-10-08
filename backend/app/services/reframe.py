@@ -20,6 +20,7 @@ import contextvars
 import itertools
 import logging
 import math
+import time
 import statistics
 import os
 import subprocess
@@ -1099,8 +1100,14 @@ def _detect_centers(src: Path, segments: list[dict], source_w: int, source_h: in
         first_of_segment = True
         awal_segmen = sample_i + 1
 
+        total_sampel = max(1.0, sum(max(0.05, float(g["end"]) - float(g["start"]))
+                                    for g in segments) * SAMPLE_FPS)
         for buf in _sample_frames(src, start, duration, fw, fh):
             sample_i += 1
+            # Kemajuan yang SUNGGUHAN: sampel keberapa dari berapa. Tiap
+            # sepuluh sampel supaya tidak ada biaya yang terasa.
+            if sample_i % 10 == 0:
+                lapor_kemajuan("melacak wajah", sample_i, total_sampel)
             full = np.frombuffer(buf, dtype=np.uint8).reshape((fh, fw, 3))
             frame = (cv2.resize(full, (sw, sh), interpolation=cv2.INTER_AREA)
                      if to_detect else full)
@@ -4119,6 +4126,23 @@ PANEL_UKURAN_BEDA = 0.25
 PANEL_TAHAN_MIN = 1.5
 # Bagian waktu klip yang harus dikuasai satu ukuran sebelum ia boleh jadi acuan.
 PANEL_DOMINAN_MIN = 0.4
+# Seberapa timpang ruang kiri dan kanan wajah di dalam panel sebelum panelnya
+# dianggap meleset dan diluruskan ke wajahnya.
+#
+# Terukur pada klip Mobile Legends pemiliknya, 8 Oktober 2026. Wajah terbaca di
+# x=10,4-16,1% sepanjang klip, tapi panel acuan jatuh di x=13,4-22,8%: ruang di
+# kiri wajah 1,2% lebar panel, di kanan 6,7%. Bidang wajah lalu berisi gambar
+# permainan tepat di sebelah kanan kamera pemain — "bingkainya kacau" di
+# pratinjau. Panel kamera yang benar memberi ruang yang kira-kira seimbang.
+PANEL_TIMPANG_MAKS = 0.35
+# Berapa lama sebuah UKURAN panel harus berlaku sebelum ia diakui sebagai
+# ukuran kedua yang memang dipakai, bukan salah baca tepi.
+#
+# Delapan detik. Salah baca tepi hidup satu sampai tiga detik lalu hilang
+# (terukur pada klip dua belas menit: enam kotak setinggi dua kali lipat,
+# masing-masing 0,5-3 detik). Kamera yang sengaja dibesarkan streamer bertahan
+# belasan detik sampai menit.
+PANEL_UKURAN_WAKTU_MIN = 8.0
 
 
 def _median_berbobot(nilai: list[tuple[float, float]]) -> float:
@@ -4160,6 +4184,19 @@ def _stabilkan_panel(ringkas: list[dict], durasi: float, sama) -> list[dict]:
     if dekat_acu < PANEL_DOMINAN_MIN * durasi:
         return ringkas
 
+    # ACUAN DIPERIKSA TERHADAP WAJAHNYA SENDIRI.
+    #
+    # Ukuran dan sudut acuan diambil dari median jendela, dan median bisa
+    # bergeser bila sebagian jendela salah baca. Terlihat pada klip Mobile
+    # Legends pemiliknya 8 Oktober 2026: panel acuan jatuh di x=13,4-22,8%
+    # sementara facecam sungguhannya di x=0,5-13% — bidang wajah lalu menyorot
+    # gambar permainan tepat di sebelah kanan kamera pemain, dan itulah
+    # "bingkainya kacau" yang ia lihat di pratinjau.
+    #
+    # Wajah yang terbaca di tiap jendela adalah bukti yang tidak bisa dibantah:
+    # panel kamera pemain PASTI memuat wajah pemain. Jadi kalau pusat wajah
+    # (median lintas jendela) jatuh di luar acuan, acuannya yang digeser,
+    # bukan wajahnya yang diabaikan.
     # SUDUT, BUKAN TITIK TENGAH, yang menentukan "panel yang sama".
     #
     # Facecam dipaku di salah satu sudut layar, dan kesalahan pembacaan tepi
@@ -4184,6 +4221,55 @@ def _stabilkan_panel(ringkas: list[dict], durasi: float, sama) -> list[dict]:
     sx_acu = x_acu - w_acu / 2 if kiri else x_acu + w_acu / 2
     sy_acu = y_acu - h_acu / 2 if atas else y_acu + h_acu / 2
 
+    # UKURAN KEDUA YANG MEMANG ADA TIDAK IKUT DISAMAKAN.
+    #
+    # Sampai 8 Oktober 2026 setiap panel di sudut yang sama dipaksa memakai
+    # ukuran acuan. Itu benar untuk kesalahan pembacaan tepi, dan SALAH untuk
+    # video yang kameranya memang dibesarkan dan dikecilkan bergantian —
+    # pemiliknya memakai video seperti itu: kamera kecil di pojok saat bermain,
+    # lalu diperbesar saat ia berbicara. Keduanya menempel di sudut yang sama,
+    # jadi yang besar ikut dikerdilkan ke ukuran yang kecil, dan bidang wajah
+    # lalu memotong sepotong kecil dari wajah yang sedang besar-besarnya.
+    #
+    # Pembedanya LAMA BERLAKUNYA. Salah baca tepi hidup satu-dua detik lalu
+    # hilang; ukuran yang memang dipakai streamer bertahan belasan detik atau
+    # lebih. Jadi ukuran yang total waktunya melewati ambang berhak memakai
+    # ukurannya sendiri, dan hanya sisanya yang disamakan ke acuan.
+    def lama_berlaku(i: int) -> float:
+        habis = ringkas[i + 1]["t"] if i + 1 < len(ringkas) else durasi
+        return max(0.0, float(habis) - float(ringkas[i]["t"]))
+
+    kelompok: list[dict] = []
+    for i, h in enumerate(ringkas):
+        f = h["facecam"]
+        sx, sy = sudut(f)
+        if (abs(sx - sx_acu) > PANEL_PUSAT_DEKAT
+                or abs(sy - sy_acu) > PANEL_PUSAT_DEKAT):
+            continue                      # panel di tempat lain: bukan urusan di sini
+        for k in kelompok:
+            if (abs(f["w"] - k["w"]) / max(1e-6, k["w"]) <= PANEL_UKURAN_BEDA
+                    and abs(f["h"] - k["h"]) / max(1e-6, k["h"]) <= PANEL_UKURAN_BEDA):
+                k["waktu"] += lama_berlaku(i)
+                k["anggota"].append(i)
+                break
+        else:
+            kelompok.append({"w": f["w"], "h": f["h"], "waktu": lama_berlaku(i),
+                             "anggota": [i]})
+    ukuran_sendiri: dict[int, tuple[float, float]] = {}
+    for k in kelompok:
+        if k["waktu"] < PANEL_UKURAN_WAKTU_MIN:
+            continue
+        if (abs(k["w"] - w_acu) / max(1e-6, w_acu) <= PANEL_UKURAN_BEDA
+                and abs(k["h"] - h_acu) / max(1e-6, h_acu) <= PANEL_UKURAN_BEDA):
+            continue                      # itu acuannya sendiri
+        lebar = sorted(ringkas[i]["facecam"]["w"] for i in k["anggota"])
+        tinggi = sorted(ringkas[i]["facecam"]["h"] for i in k["anggota"])
+        ukur = (lebar[len(lebar) // 2], tinggi[len(tinggi) // 2])
+        for i in k["anggota"]:
+            ukuran_sendiri[i] = ukur
+        log.info("Ukuran panel kedua dipertahankan: %.0fx%.0f%% selama %.0f detik",
+                 ukur[0], ukur[1], k["waktu"])
+
     disamakan = 0
     seragam: list[dict] = []
     for i, h in enumerate(ringkas):
@@ -4191,6 +4277,17 @@ def _stabilkan_panel(ringkas: list[dict], durasi: float, sama) -> list[dict]:
         sx, sy = sudut(f)
         di_tempat_sama = (abs(sx - sx_acu) <= PANEL_PUSAT_DEKAT
                           and abs(sy - sy_acu) <= PANEL_PUSAT_DEKAT)
+        if i in ukuran_sendiri:
+            # Ukuran kedua yang memang dipakai: hanya diseragamkan di dalam
+            # kelompoknya sendiri, dengan sudut yang sama.
+            uw, uh = ukuran_sendiri[i]
+            x = sx_acu if kiri else sx_acu - uw
+            y = sy_acu if atas else sy_acu - uh
+            f = {**f, "x": round(min(max(0.0, x), max(0.0, 100.0 - uw)), 2),
+                 "y": round(min(max(0.0, y), max(0.0, 100.0 - uh)), 2),
+                 "w": round(uw, 2), "h": round(uh, 2), "ukuran_kedua": True}
+            seragam.append({**h, "facecam": f})
+            continue
         if di_tempat_sama:
             # Panel yang menempel di sudut yang sama DISAMAKAN SELURUHNYA,
             # bukan hanya ukurannya.
@@ -4241,6 +4338,45 @@ def _stabilkan_panel(ringkas: list[dict], durasi: float, sama) -> list[dict]:
     return hasil
 
 
+def _luruskan_panel(f: dict) -> dict:
+    """
+    Panel yang wajahnya menempel di satu sisi digeser supaya wajahnya di tengah.
+
+    Terukur pada klip Mobile Legends pemiliknya, 8 Oktober 2026: panel terbaca
+    x=13,4-22,8% sementara awan wajah di dalamnya x=13,2-16,9%. Ruang di kiri
+    wajah 0% lebar panel, di kanan 63%. Artinya tepi kiri panel salah dibaca —
+    ia dipotong tepat di pipi — dan bidang wajah yang dibentuk dari panel itu
+    berisi gambar permainan di sebelah kanan kamera pemain. Itulah "bingkainya
+    kacau" yang ia lihat.
+
+    Panel kamera yang benar memberi ruang kira-kira seimbang di kiri dan kanan
+    kepala. Jadi panel yang timpang digeser mendatar sampai wajahnya di tengah,
+    dengan lebar dan tinggi yang sama, lalu dijepit ke dalam bingkai. Yang
+    tidak disentuh: panel yang wajahnya memang sudah di tengah, dan panel yang
+    tidak punya awan wajah untuk dinilai.
+    """
+    awan = f.get("awan_kotak")
+    if not awan or len(awan) != 4:
+        return f
+    lebar = float(f.get("w") or 0)
+    if lebar <= 0:
+        return f
+    kiri_p = float(f.get("x") or 0)
+    kiri_w, kanan_w = float(awan[0]), float(awan[2])
+    ruang_kiri = kiri_w - kiri_p
+    ruang_kanan = (kiri_p + lebar) - kanan_w
+    if abs(ruang_kiri - ruang_kanan) <= lebar * PANEL_TIMPANG_MAKS:
+        return f
+    pusat = (kiri_w + kanan_w) / 2.0
+    x_baru = min(max(0.0, pusat - lebar / 2.0), max(0.0, 100.0 - lebar))
+    if abs(x_baru - kiri_p) < 0.5:
+        return f
+    log.info("Panel diluruskan ke wajahnya: x %.1f%% -> %.1f%% "
+             "(ruang kiri %.1f, kanan %.1f, lebar %.1f)",
+             kiri_p, x_baru, ruang_kiri, ruang_kanan, lebar)
+    return {**f, "x": round(x_baru, 2), "diluruskan": True}
+
+
 def _rapikan_facecam(hasil: list[dict], durasi_total: float) -> list[dict]:
     """
     Dari hasil pemindaian mentah ke daftar letak yang dipakai render.
@@ -4250,6 +4386,13 @@ def _rapikan_facecam(hasil: list[dict], durasi_total: float) -> list[dict]:
     perapian masing-masing adalah dua perilaku yang bisa berbeda diam-diam,
     dan yang satu tidak akan pernah diuji.
     """
+    # Tiap panel diluruskan ke wajahnya SEBELUM apa pun yang lain: pewarisan
+    # tepi dan peringkasan di bawah membandingkan kotak, dan membandingkan
+    # kotak yang masih meleset hanya menyebarkan kesalahannya.
+    for h in hasil:
+        if h.get("facecam"):
+            h["facecam"] = _luruskan_panel(h["facecam"])
+
     _warisi_tepi(hasil)
 
     # Isi potongan kosong dari tetangga terdekat (yang sebelumnya dulu).
@@ -4326,6 +4469,33 @@ def _rapikan_facecam(hasil: list[dict], durasi_total: float) -> list[dict]:
     return ringkas
 
 
+# --- Kemajuan pemindaian, untuk dilaporkan apa adanya ke layar ----------------
+#
+# Diminta pemiliknya 7 Oktober 2026: "perbaiki bilah kemajuan agar tidak
+# menampilkan perkiraan dan menampilkan exact perhitungan waktu yang nyata".
+#
+# Sampai hari ini bilah itu memang perkiraan — `6 + 0,36 x panjang klip`,
+# diukur pada klip pendek — dan sesudah pemindaiannya dipercepat, perkiraan itu
+# meleset jauh: ia menyebut empat menit untuk pekerjaan empat puluh detik.
+#
+# Yang dilaporkan di sini bukan tebakan melainkan hitungan: cuplikan keberapa
+# dari berapa, sampel keberapa dari berapa. Satu tempat untuk seluruh aplikasi,
+# karena pemindaian memang dijalankan satu per satu (lihat `_GERBANG_PINDAI` di
+# routers/clips.py); yang kedua menunggu giliran, tidak berjalan bersamaan.
+_KEMAJUAN: dict = {"tahap": "", "selesai": 0.0, "total": 0.0, "pada": 0.0}
+
+
+def lapor_kemajuan(tahap: str, selesai: float, total: float) -> None:
+    """Dipanggil pemindai tiap kali satu langkah selesai."""
+    _KEMAJUAN.update({"tahap": tahap, "selesai": float(selesai),
+                      "total": float(max(total, 1.0)), "pada": time.time()})
+
+
+def kemajuan_pindai() -> dict:
+    """Keadaan pemindaian yang sedang berjalan, atau tahap kosong bila diam."""
+    return dict(_KEMAJUAN)
+
+
 def _facecam_cuplikan(src, segments: list[dict], source_w: int, source_h: int,
                       rasio_potongan: float, durasi: float) -> list[dict]:
     """
@@ -4341,11 +4511,13 @@ def _facecam_cuplikan(src, segments: list[dict], source_w: int, source_h: int,
 
     hasil: list[dict] = []
     t_klip = 0.0
+    perkiraan = max(1.0, durasi / max(1e-6, jarak))
     for sg in segments or []:
         a, b = float(sg["start"]), float(sg["end"])
         pos = a
         while pos < b - 0.5:
             panjang = min(CUPLIK_PANJANG, b - pos)
+            lapor_kemajuan("kamera wajah", len(hasil), perkiraan)
             fc = _facecam_dari_bingkai(
                 _sample_frames(src, pos, panjang, sw, sh), sw, sh,
                 rasio_potongan=rasio_potongan)
@@ -4431,7 +4603,8 @@ def deteksi_facecam_waktu(src, segments: list[dict], source_w: int, source_h: in
         # bersama oleh semua jendela di dalam blok itu. Satu aliran ffmpeg yang
         # sama, satu kali hitung gradien, dan letaknya tetap per setengah detik.
         blok = _BlokGradien(milik, aliran, sw, sh)
-        for t, mulai, panjang in milik:
+        for nomor, (t, mulai, panjang) in enumerate(milik):
+            lapor_kemajuan("kamera wajah", nomor, len(milik))
             # Bingkai jendela ini saja. `fps` tetap, jadi jumlahnya bisa
             # dihitung, bukan ditebak.
             n = max(1, int(round(panjang * SAMPLE_FPS)))

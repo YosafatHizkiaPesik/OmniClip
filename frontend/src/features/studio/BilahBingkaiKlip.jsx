@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { apiGet } from '../../lib/api';
 
 /**
  * Bilah kemajuan untuk perhitungan bingkai SATU klip yang sedang dibuka.
@@ -38,34 +39,60 @@ function lamanya(d) {
 
 export default function BilahBingkaiKlip({ aktif, panjangKlip = 0, label }) {
   const [berjalan, setBerjalan] = useState(0);
+  // Kemajuan SUNGGUHAN dari pemindainya: langkah keberapa dari berapa.
+  // Perkiraan di bawah hanya dipakai selama jawaban itu belum ada.
+  const [nyata, setNyata] = useState(null);
   const mulaiRef = useRef(0);
 
   useEffect(() => {
-    if (!aktif) { setBerjalan(0); return undefined; }
+    if (!aktif) { setBerjalan(0); setNyata(null); return undefined; }
     mulaiRef.current = Date.now();
     setBerjalan(0);
     const jam = setInterval(() => {
       setBerjalan((Date.now() - mulaiRef.current) / 1000);
     }, 200);
-    return () => clearInterval(jam);
+    let batal = false;
+    const tanya = () => {
+      apiGet('/clip-bingkai/kemajuan')
+        .then((k) => { if (!batal) setNyata(k?.segar ? k : null); })
+        .catch(() => { if (!batal) setNyata(null); });
+    };
+    tanya();
+    const jamTanya = setInterval(tanya, 1000);
+    return () => { batal = true; clearInterval(jam); clearInterval(jamTanya); };
   }, [aktif]);
 
   if (!aktif) return null;
 
-  const kira = TETAP + PER_DETIK * Math.max(0, panjangKlip);
-  const lewat = berjalan > kira;
-  const persen = lewat ? 95 : Math.min(95, (berjalan / Math.max(1, kira)) * 95);
-  const sisa = Math.max(0, kira - berjalan);
+  // Dengan kemajuan sungguhan, sisa waktunya DIHITUNG dari laju yang sedang
+  // terjadi, bukan dari rumus: (lama berjalan / bagian yang sudah selesai)
+  // dikali bagian yang tersisa. Itu angka yang benar-benar berubah mengikuti
+  // kenyataan — melambat saat mesin sibuk, mempercepat saat lega.
+  let persen;
+  let kanan;
+  if (nyata && nyata.total > 0 && nyata.selesai > 0) {
+    const bagian = Math.max(0, Math.min(1, nyata.selesai / nyata.total));
+    persen = Math.min(99, bagian * 100);
+    const sisaDetik = berjalan * (1 - bagian) / Math.max(0.02, bagian);
+    kanan = `${Math.round(nyata.selesai)}/${Math.round(nyata.total)} · `
+          + `${lamanya(sisaDetik)} lagi`;
+  } else {
+    const kira = TETAP + PER_DETIK * Math.max(0, panjangKlip);
+    const lewat = berjalan > kira;
+    persen = lewat ? 95 : Math.min(95, (berjalan / Math.max(1, kira)) * 95);
+    kanan = lewat ? `berjalan ${lamanya(berjalan)}` : 'menyiapkan…';
+  }
+
+  const tahap = nyata?.tahap
+    ? (nyata.tahap === 'kamera wajah' ? 'Mencari kamera wajah pemain…'
+                                      : 'Melacak wajah di klip ini…')
+    : (label || 'Menghitung bingkai klip ini…');
 
   return (
     <div className="bingkai-kira" role="status" aria-live="polite">
       <div className="bingkai-kira-teks">
-        <span>{label || 'Menghitung bingkai klip ini…'}</span>
-        <span className="tc">
-          {lewat
-            ? `lebih lama dari biasanya · ${lamanya(berjalan)}`
-            : `kira-kira ${lamanya(sisa)} lagi`}
-        </span>
+        <span>{tahap}</span>
+        <span className="tc">{kanan}</span>
       </div>
       <div className="bingkai-kira-alur">
         <div className="bingkai-kira-isi" style={{ width: `${persen}%` }} />

@@ -687,6 +687,16 @@ def _lebar_wajah_per_sampel(plan) -> list[float]:
 # adalah kamera pemain atau gambar, bukan bidikan wajah.
 WAJAH_LUAR_PANEL_MIN = 0.10
 
+# Berapa lama wajah boleh hilang dari panelnya sebelum panel itu dianggap
+# TIDAK ADA di layar.
+#
+# Tiga detik. Di bawah itu yang terjadi cuma orangnya menoleh atau tangannya
+# menutupi muka, dan bingkai yang berubah karena itu terbaca sebagai kerusakan.
+# Di atas itu kameranya memang sedang tidak ditampilkan — permainan menutupi
+# layar penuh — dan bidang wajah yang tetap dipasang menyorot kotak kosong.
+PANEL_SEPI_DETIK = 3.0
+PANEL_SEPI_SAMPEL = int(PANEL_SEPI_DETIK * 8)     # SAMPLE_FPS = 8
+
 
 def _di_dalam(x: float, cy: float, panel: dict, sw: int, sh: int) -> bool:
     """Apakah titik wajah ini berada di dalam panel facecam (dalam persen)."""
@@ -708,6 +718,13 @@ def _label_per_sampel(plan, panel_pada=None) -> list[str]:
     sw, sh = plan.source_w, plan.source_h
     n = min((len(s) for s in plan.people_seen), default=0)
     label = []
+    # Sampel terakhir yang wajahnya benar-benar terlihat di dalam panel.
+    #
+    # Dimulai dari nol, bukan dari minus tak hingga: di awal klip belum ada
+    # yang bisa dibuktikan, dan panel yang baru saja ditemukan pemindai berhak
+    # dipercaya selama beberapa detik pertama. Tanpa ini, klip yang dibuka
+    # tepat saat orangnya menoleh langsung kehilangan bidang wajahnya.
+    terakhir_pojok = 0
     for i in range(n):
         ada_pojok = ada_tengah = False
         panel = panel_pada(i / SAMPLE_FPS) if panel_pada else None
@@ -731,9 +748,20 @@ def _label_per_sampel(plan, panel_pada=None) -> list[str]:
                 ada_pojok = True
             else:
                 ada_tengah = True
-        if panel is not None and not ada_tengah:
+        if ada_pojok:
+            terakhir_pojok = i
+        if (panel is not None and not ada_tengah
+                and i - terakhir_pojok <= PANEL_SEPI_SAMPEL):
             # Panelnya ada di layar: ini potongan permainan, walau wajah
             # pemainnya kebetulan tidak terbaca pada sampel ini.
+            #
+            # BATAS WAKTUNYA PENTING. Wajah yang hilang sekejap — menoleh,
+            # tangan menutupi muka — tidak boleh mengubah bingkai. Tapi wajah
+            # yang hilang BERLAMA-LAMA berarti kameranya memang sedang tidak
+            # ada: permainan menutupi layar penuh, atau streamer mematikan
+            # kameranya. Dilaporkan pemiliknya 8 Oktober 2026 dengan tangkapan
+            # layar: di detik 28 klipnya tidak ada facecam sama sekali, dan
+            # bidang wajah di pratinjau menyorot kotak hitam kosong.
             ada_pojok = True
         # "game" hanya bila wajah di pojok itu SATU-SATUNYA wajah.
         #

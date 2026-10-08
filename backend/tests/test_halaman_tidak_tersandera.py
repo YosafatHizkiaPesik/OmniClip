@@ -49,7 +49,7 @@ class PemindaianPunyaKolamSendiri(unittest.TestCase):
     def test_gerbangnya_tetap_ada(self):
         """Kolam yang terpisah menggantikan tempat menunggu, bukan batasnya."""
         self.assertTrue(hasattr(clips, "_GERBANG_PINDAI"))
-        self.assertIn("with _GERBANG_PINDAI:", inspect.getsource(clips))
+        self.assertIn("with _GERBANG_PINDAI, _giliran_cpu():", inspect.getsource(clips))
 
 
 class KolamPindaiBekerja(unittest.TestCase):

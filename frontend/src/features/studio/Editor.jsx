@@ -451,10 +451,33 @@ export default function Editor({ project, onBack }) {
   const [gamingKabar, setGamingKabar] = useState(null);
   const tKlip = selected ? clipTimeFor(selected.segments, sourceTime) : 0;
 
+  // KAPAN PENCARIAN KAMERA WAJAH DIJALANKAN.
+  //
+  // Dulu hanya saat MODE KLIP-nya "Main game", yaitu yang dipilih di panel
+  // Bingkai. Padahal cara memilih yang paling dekat dengan tangan adalah chip
+  // "Game" di lajur Bingkai — dan chip itu menulis sebuah KUNCI, bukan mode
+  // klip. Akibatnya memilih lewat chip tidak pernah memicu pencarian apa pun:
+  // tidak ada letak facecam, tidak ada pemecahan menurut isi klip, dan lajur
+  // Bingkai tinggal satu blok "Game" dari awal sampai akhir. Itulah yang
+  // dilihat pemiliknya 8 Oktober 2026, dan ia benar membandingkannya dengan
+  // klip lain yang lajurnya terpotong-potong: klip itu modenya memang disetel
+  // di panel, jadi jalur ini terpakai.
+  const adaKunciGaming = (selected?.frame_keys ?? []).some(
+    (k) => (k.mode || '') === 'gaming');
   useEffect(() => {
-    if (frameModeEfektif !== 'gaming' || !selected?.segments?.length) return undefined;
-    // Sudah disetel atau sudah dicari untuk klip ini: jangan ditimpa tebakan.
-    if (layoutGamingRef.current?.frames?.length) return undefined;
+    if ((frameModeEfektif !== 'gaming' && !adaKunciGaming)
+        || !selected?.segments?.length) return undefined;
+    // SUSUNAN yang sudah ada tidak ditimpa — tapi PEMECAHAN klipnya tetap
+    // dijemput.
+    //
+    // Dulu satu baris ini membatalkan seluruh permintaan begitu klipnya sudah
+    // punya susunan tersimpan, dan bersamanya ikut hilang pemecahan menurut
+    // isi klip. Akibatnya klip yang pernah dibuka sekali terkunci pada satu
+    // blok "Main game" dari awal sampai akhir selamanya, berapa kali pun
+    // dibuka ulang. Itu yang dilihat pemiliknya 8 Oktober 2026: lajur Bingkai
+    // klip ini satu blok, sementara klip lain yang belum pernah punya susunan
+    // tersimpan terpotong-potong dengan benar.
+    const sudahAdaSusunan = Boolean(layoutGamingRef.current?.frames?.length);
     const idKlip = selected.clip_id;
     let batal = false;
     setGamingSibuk(true);
@@ -483,7 +506,7 @@ export default function Editor({ project, onBack }) {
           permainan: l.gaming?.permainan ?? 'isi',
           srcAspek, outAspek: rasioKeluaran(aspectRatio),
         });
-        setCacheGaming((c) => ({ ...c, [idKlip]: jadi || null }));
+        if (!sudahAdaSusunan) setCacheGaming((c) => ({ ...c, [idKlip]: jadi || null }));
 
         // Klip game jarang permainan dari awal sampai akhir. Bagian pembuka
         // dan penutup sering wajah SATU LAYAR PENUH, orangnya bicara ke
@@ -539,7 +562,7 @@ export default function Editor({ project, onBack }) {
       })
       .finally(() => { if (!batal) setGamingSibuk(false); });
     return () => { batal = true; };
-  }, [frameModeEfektif, selected?.clip_id, videoId, deteksiUlang]);   // eslint-disable-line
+  }, [frameModeEfektif, adaKunciGaming, selected?.clip_id, videoId, deteksiUlang]);   // eslint-disable-line
 
   /** Mengubah setelan Main game: tinggi wajah dan titik berangkat permainan. */
   const setelGaming = useCallback((ubah) => {
@@ -1652,6 +1675,62 @@ export default function Editor({ project, onBack }) {
     }
     setExporting(false);
   };
+
+  // RENDER YANG MASIH BERJALAN DISAMBUNG LAGI SAAT PARTITUR DIBUKA.
+  //
+  // Rendernya sendiri tidak pernah berhenti: ia pekerjaan di antrean server,
+  // dan menutup layar tidak menyentuhnya sama sekali. Yang hilang cuma
+  // tampilannya — `exportLog` adalah keadaan React milik layar ini, dan layar
+  // yang dibuka ulang mulai dari daftar kosong. Dilaporkan pemiliknya
+  // 7 Oktober 2026: "saat saya kembali lagi ke partitur progress rendering
+  // menghilang dan tidak tampil lagi".
+  //
+  // Jadi di sini layarnya BERTANYA: pekerjaan render mana yang masih berjalan
+  // untuk video ini? Lalu ia mengikutinya seperti kalau ia sendiri yang
+  // memulainya. Nomor klipnya tidak ikut di jawaban antrean, jadi barisnya
+  // diberi nama seadanya — yang penting bilahnya hidup lagi dan angkanya
+  // benar.
+  useEffect(() => {
+    if (!videoId) return undefined;
+    let batal = false;
+    apiGet(`/jobs/aktif?video_id=${encodeURIComponent(videoId)}&type=render`)
+      .then(({ jobs }) => {
+        if (batal || !jobs?.length) return;
+        setExporting(true);
+        setExportLog(jobs.map((j, i) => ({
+          name: `render-${j.id}`,
+          label: jobs.length > 1 ? `Render berjalan ${i + 1}/${jobs.length}` : 'Render berjalan',
+          status: 'running',
+          urut: '',
+          progress: j.progress ?? 0,
+          message: j.message || 'Melanjutkan…',
+          eta: j.eta_seconds ?? null,
+          sejak: j.started_at ? j.started_at * 1000 : Date.now(),
+        })));
+        jobs.forEach((j) => {
+          const nama = `render-${j.id}`;
+          const kabar = (patch) => setExportLog((l) => l.map((e) => (
+            e.name === nama ? { ...e, ...patch } : e)));
+          waitForJob(j.id, {
+            onProgress: (job) => kabar({
+              progress: job.progress ?? 0,
+              message: job.message || 'Merender…',
+              eta: job.eta_seconds ?? null,
+            }),
+          }).then((job) => {
+            if (batal) return;
+            kabar(job.status === 'done'
+              ? { status: 'done', progress: 1, eta: null,
+                  message: 'Tersimpan di folder klip' }
+              : { status: 'failed', eta: null, message: job.error || 'Gagal' });
+            setExporting(false);
+          });
+        });
+      })
+      .catch(() => { /* tidak ada yang berjalan, atau server belum siap */ });
+    return () => { batal = true; };
+  }, [videoId]);
+
   if (error) {
     return (
       <Centered>
@@ -1920,7 +1999,7 @@ export default function Editor({ project, onBack }) {
                     {e.status === 'done' && e.unggahGagal
                       && <AlertTriangle size={13} style={{ color: 'var(--danger)' }} />}
                     {e.status === 'failed' && <AlertTriangle size={13} style={{ color: 'var(--danger)' }} />}
-                    <b style={{ minWidth: '64px' }}>{e.urut}{e.name}</b>
+                    <b style={{ minWidth: '64px' }}>{e.urut}{e.label || e.name}</b>
                     <span style={{ color: 'var(--ink-2)' }}>
                       {e.status === 'running' ? bersihkanPesan(e.message) : e.message}
                     </span>

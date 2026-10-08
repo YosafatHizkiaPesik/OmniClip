@@ -106,6 +106,28 @@ ketajamannya ada di hulu — sumber 1440p atau 4K.
   dua detik yang disebar merata (`_facecam_cuplikan`). Klip dua belas menit
   pemiliknya: **43 detik**, satu panel, dan batas waktu permintaannya dinaikkan
   jadi sepuluh menit.
+- ~~Lajur Bingkai satu blok dari awal sampai akhir.~~ **Selesai 8 Oktober
+  2026.** Pemiliknya membandingkannya dengan klip LaperGang yang terpotong
+  dengan benar, dan ia benar untuk curiga: pemecahan menurut isi klip memang
+  TIDAK PERNAH berjalan pada klip itu. Tiga penghalang bertumpuk:
+  1. `if (layoutGamingRef.current?.frames?.length) return;` membatalkan seluruh
+     permintaan begitu klip punya susunan tersimpan — jadi klip yang pernah
+     dibuka sekali terkunci pada satu blok selamanya. Sekarang susunannya yang
+     tidak ditimpa, permintaannya tetap jalan.
+  2. Memilih "Game" lewat chip di lajur menulis KUNCI, bukan mode klip,
+     sementara pencarian hanya dipicu mode klip. Kini kunci bermode gaming juga
+     memicunya.
+  3. Nomor versi simpanan facecam tidak dinaikkan setelah perbaikan 7-8
+     Oktober, jadi Studio terus membaca hasil lama. Naik ke v11.
+  Hasil pada klip pemiliknya: lajur Bingkai **1 blok jadi 23 blok**, berpola
+  gaming / hanya-permainan / hanya-wajah, semuanya bertanda otomatis.
+- ~~Panel kamera meleset ke kanan, dan bidang wajah berisi permainan.~~
+  **Selesai 8 Oktober 2026.** Terukur: panel x=13,4-22,8% sementara wajahnya
+  x=10,4-16,1% — ruang di kiri wajah 0%, di kanan 63% lebar panel. Panel yang
+  timpang kini diluruskan ke wajahnya (`_luruskan_panel`), dan panel yang
+  wajahnya hilang lebih dari tiga detik dianggap tidak ada sehingga bingkainya
+  pindah ke permainan satu layar penuh. Ukuran panel KEDUA yang berlaku lebih
+  dari delapan detik juga tidak lagi dipaksa seragam.
 - ~~Klip game panjang dibingkai sebagai sorot wajah padahal layarnya
   permainan.~~ **Selesai 7 Oktober 2026.** Diukur pada video Dwiwoi 17 menit
   yang dipakai pemiliknya menguji: 136 detik (13% durasi) dibingkai sebagai

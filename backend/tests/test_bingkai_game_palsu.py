@@ -154,3 +154,41 @@ class HapusKlipSabar(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as d:
             _buang_berkas(Path(d) / "tidak-ada.mp4")   # tidak melempar
+
+
+class KemajuanNyata(unittest.TestCase):
+    """
+    Bilah kemajuan melaporkan hitungan, bukan perkiraan.
+
+    Sampai 7 Oktober 2026 bilah di Studio memakai rumus `6 + 0,36 x panjang
+    klip` yang diukur pada klip pendek. Sesudah pemindaian klip panjang
+    dipercepat delapan kali, rumus itu menyebut EMPAT MENIT untuk pekerjaan
+    empat puluh detik. Diminta pemiliknya: "agar tidak menampilkan perkiraan
+    dan menampilkan exact perhitungan waktu yang nyata dan jelas".
+    """
+
+    def test_laporan_membawa_langkah_keberapa_dari_berapa(self):
+        from app.services.reframe import kemajuan_pindai, lapor_kemajuan
+
+        lapor_kemajuan("kamera wajah", 7, 40)
+        k = kemajuan_pindai()
+        self.assertEqual(k["tahap"], "kamera wajah")
+        self.assertEqual((k["selesai"], k["total"]), (7.0, 40.0))
+
+    def test_laporan_basi_ditandai_tidak_segar(self):
+        import time as _t
+        from app.services import reframe
+
+        reframe.lapor_kemajuan("melacak wajah", 100, 1000)
+        reframe._KEMAJUAN["pada"] = _t.time() - 30
+        k = reframe.kemajuan_pindai()
+        self.assertGreater(_t.time() - k["pada"], 5)
+
+    def test_pemindai_memanggil_pelapor(self):
+        # Dua tempat yang memindai harus melaporkan kemajuannya; tanpa itu
+        # bilahnya diam-diam kembali jadi perkiraan.
+        from pathlib import Path
+        sumber = Path(__import__("app.services.reframe", fromlist=["x"]).__file__)
+        teks = sumber.read_text(encoding="utf-8")
+        self.assertIn('lapor_kemajuan("kamera wajah"', teks)
+        self.assertIn('lapor_kemajuan("melacak wajah"', teks)

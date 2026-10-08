@@ -1703,7 +1703,16 @@ export default function ClipPreview({
                 Digambar DI ATAS kedua kotak: ia menggerakkan keduanya
                 sekaligus, jadi ia yang harus lebih dulu tertangkap jari di
                 garis tempat keduanya bertemu. */}
-            {useLayout && frameMode === 'gaming' && frameEditing
+            {/* PEMBATAS INI TIDAK LAGI MENUNGGU TAB BINGKAI DIBUKA.
+                Dilaporkan pemiliknya 8 Oktober 2026: "pada bagian preview
+                mengapa saya tidak bisa mengatur besar facecam dan gameplay
+                sesuai dengan keinginan saya". Pengaturnya memang ada — garis
+                tipis di batas kedua bidang — tapi ia hanya digambar saat tab
+                Bingkai sedang terbuka, dan di tab mana pun yang lain
+                pratinjaunya terlihat seperti tidak bisa disentuh sama sekali.
+                Menyeret batas dua bidang tidak bertabrakan dengan pekerjaan
+                tab lain, jadi tidak ada alasan menyembunyikannya. */}
+            {useLayout && frameMode === 'gaming'
               && onGamingWajah && gamingWajah != null && !fullscreen && (
               <div onPointerDown={startBatasDrag}
                    title="Seret untuk mengatur besar bidang wajah dan bidang permainan"

@@ -115,7 +115,10 @@ class BatasnyaBisaDisetel(unittest.TestCase):
         with open(clips.__file__, encoding="utf-8") as f:
             teks = f.read()
         self.assertIn('OMNICLIP_PINDAI_BERSAMAAN", "1"', teks)
-        self.assertIn("with _GERBANG_PINDAI:", teks)
+        # Gerbangnya tetap dipegang; sejak 7 Oktober 2026 pemindaian Studio
+        # juga ikut antre di gerbang CPU supaya pemanasan bingkai di latar
+        # sempat minggir (lihat `_giliran_cpu`).
+        self.assertIn("with _GERBANG_PINDAI, _giliran_cpu():", teks)
 
 
 if __name__ == "__main__":
