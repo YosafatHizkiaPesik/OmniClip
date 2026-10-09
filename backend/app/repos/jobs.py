@@ -91,6 +91,27 @@ def jadwal_terakhir(type_: str, profil_id: int) -> float:
     return float((row["t"] if row else 0) or 0)
 
 
+def rencana_unggah(profil_id: int, target: str, sejak: float) -> list[float]:
+    """
+    Jam mulai unggahan ke `target` milik profil ini, sejak `sejak`.
+
+    Untuk batas unggah harian (JOB-2 F0-5). Yang dihitung unggahan yang SUDAH
+    naik maupun yang masih antre, karena keduanya sama-sama memakai jatah hari
+    itu; yang gagal atau dibatalkan tidak ikut, karena keduanya tidak pernah
+    tayang. Jam mulainya `mulai_setelah` bila dijadwalkan, atau saat dibuat
+    bila langsung jalan.
+    """
+    rows = get_conn().execute(
+        """SELECT MAX(COALESCE(mulai_setelah, 0), created_at) AS t FROM jobs
+           WHERE type = 'upload' AND status IN ('queued', 'running', 'done')
+             AND json_extract(payload_json, '$.profil_id') = ?
+             AND json_extract(payload_json, '$.target') = ?
+             AND MAX(COALESCE(mulai_setelah, 0), created_at) >= ?""",
+        (profil_id, target, sejak),
+    ).fetchall()
+    return [float(r["t"]) for r in rows if r["t"]]
+
+
 def claim_next(lane: str) -> Optional[dict]:
     """Mengambil satu job antre pada lane tertentu dan menandainya running (atomik)."""
     with tx() as conn:

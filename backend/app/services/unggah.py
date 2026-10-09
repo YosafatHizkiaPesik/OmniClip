@@ -25,6 +25,11 @@ def antrekan(*, clip_name: str, target: str, title: str = "", description: str =
     from .jobs import queue
 
     pid = profil_id or profil.kini()
+    if target == "youtube":
+        # Batas unggah harian (JOB-2 F0-5): bila jatah hari itu sudah habis,
+        # unggahannya DIJADWALKAN ke hari berikutnya, bukan ditolak.
+        batas = int(profil.unggah(pid).get("batas_harian") or 0)
+        mulai_setelah = slot_harian(pid, mulai_setelah, batas)
     # Baris riwayat dibuat LEBIH DULU supaya id-nya sudah ada di dalam muatan
     # saat pekerja mengambilnya.
     upload_id = uploads_repo.create(clip_name=clip_name, target=target, title=title,
@@ -206,6 +211,52 @@ def _pastikan_shorts(tagar: list[str], clip_name: str) -> list[str]:
     except Exception as e:                           # noqa: BLE001
         log.info("Syarat Shorts tidak terbaca untuk %s: %s", clip_name, str(e)[:120])
     return tagar
+
+
+# Jam berapa unggahan yang dipindah ke hari berikutnya dimulai, waktu lokal.
+# Tengah malam bukan jam orang menonton; pukul sepuluh pagi sudah.
+JAM_PINDAH_HARI = 10
+
+
+def slot_harian(pid: int, mulai: float, batas: int, *, sekarang: Optional[float] = None) -> float:
+    """
+    Jam mulai yang menghormati batas unggahan YouTube per hari (JOB-2 F0-5).
+
+    Kenapa ada: kanal baru yang menerbitkan sepuluh video dalam sehari adalah
+    pola "produksi massal" yang disebut kebijakan konten yang digunakan ulang,
+    dan sampai 9 Oktober 2026 OmniClip tidak membatasi apa pun selain jeda 90
+    detik antar unggahan.
+
+    Bukan penolakan. Unggahan yang melewati jatah hari itu DIJADWALKAN ke hari
+    berikutnya yang masih punya jatah, pukul JAM_PINDAH_HARI waktu lokal. Nol
+    berarti tidak dibatasi.
+
+    `mulai` 0 berarti "sekarang", sama seperti `mulai_setelah` di antrean.
+    """
+    import time
+    from datetime import datetime, timedelta
+
+    if batas <= 0:
+        return mulai
+    kini = sekarang if sekarang is not None else time.time()
+    ingin = mulai if mulai and mulai > kini else kini
+    hari = datetime.fromtimestamp(ingin).date()
+    awal_hari = datetime.combine(hari, datetime.min.time()).timestamp()
+
+    from ..repos import jobs as jobs_repo
+    terpakai: dict = {}
+    for t in jobs_repo.rencana_unggah(pid, "youtube", awal_hari):
+        d = datetime.fromtimestamp(t).date()
+        terpakai[d] = terpakai.get(d, 0) + 1
+
+    for i in range(0, 366):
+        d = hari + timedelta(days=i)
+        if terpakai.get(d, 0) < batas:
+            if i == 0:
+                return mulai                         # hari yang diminta masih punya jatah
+            jam = datetime.combine(d, datetime.min.time()) + timedelta(hours=JAM_PINDAH_HARI)
+            return round(jam.timestamp(), 3)
+    return mulai
 
 
 def _jam_tayang(target: str, pid: int, jarak_jam: float) -> float:

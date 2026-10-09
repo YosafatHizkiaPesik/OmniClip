@@ -37,6 +37,16 @@ class UnggahModel(BaseModel):
     hashtag: Optional[List[str]] = None
     # Kredit video asli di deskripsi (JOB-2 F0-2). Bawaannya menyala.
     kredit: Optional[bool] = None
+    # Unggahan YouTube per hari (JOB-2 F0-5). 0 = tidak dibatasi.
+    batas_harian: Optional[int] = Field(None, ge=0, le=50)
+    # Jarak jam antar unggahan otomatis.
+    #
+    # Medan ini ada di layar sejak lama ("Berjarak 1 jam" sampai "1 hari"),
+    # tapi TIDAK ada di model ini, dan pydantic diam-diam membuang medan yang
+    # tidak dikenalnya. Jadi pilihan itu tidak pernah tersimpan sekali pun.
+    # Ditemukan 9 Oktober 2026 saat mengerjakan JOB-2 F0-5: keempat akun
+    # pemiliknya tersimpan dengan setelan unggah kosong.
+    jadwal_jam: Optional[float] = Field(None, ge=0, le=168)
 
     @field_validator("privasi")
     @classmethod

@@ -49,6 +49,15 @@ UNGGAH_BAWAAN = {
     # tetap mendapat kreditnya di akhir, kecuali `kredit` dimatikan.
     "deskripsi": "{judul}\n\n{sumber}\n\n{hashtag}",
     "kredit": True,
+    # Unggahan YouTube paling banyak sekian per hari (JOB-2 F0-5); kelebihannya
+    # dijadwalkan ke hari berikutnya, tidak ditolak. 0 = tidak dibatasi.
+    #
+    # Tiga, bukan angka dari YouTube: YouTube tidak mengumumkan ambang
+    # "produksi massal". Yang pasti hanya kuota API, kira-kira enam unggahan per
+    # hari per proyek Google Cloud, DIBAGI semua profil. Tiga per kanal menjaga
+    # dua kanal tetap muat di kuota itu, dan menyebar unggahan alih-alih
+    # menumpuknya.
+    "batas_harian": 3,
     "hashtag": ["#shorts"],
 }
 

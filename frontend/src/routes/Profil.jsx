@@ -421,9 +421,23 @@ export default function Profil() {
                   <option value={12}>Berjarak 12 jam</option>
                   <option value={24}>Berjarak 1 hari</option>
                 </select>
+                {/* Batas unggahan YouTube per hari (JOB-2 F0-5). Kelebihannya
+                    dijadwalkan ke hari berikutnya, bukan ditolak. */}
+                <select value={u.batas_harian ?? 3}
+                        onChange={(e) => ubahUnggah({ batas_harian: Number(e.target.value) })}
+                        title="Unggahan YouTube paling banyak per hari. Kelebihannya dijadwalkan ke hari berikutnya pukul 10.00, bukan ditolak. Banyak video sehari dari kanal baru adalah pola produksi massal."
+                        style={{ ...masukan, padding: '5px 8px' }}>
+                  <option value={1}>Maks 1 video/hari</option>
+                  <option value={2}>Maks 2 video/hari</option>
+                  <option value={3}>Maks 3 video/hari</option>
+                  <option value={5}>Maks 5 video/hari</option>
+                  <option value={0}>Tanpa batas harian</option>
+                </select>
               </div>
               <div style={{ ...helpText, marginTop: '12px', marginBottom: '4px' }}>
-                Deskripsi video. <code>{'{judul}'}</code> dan <code>{'{hashtag}'}</code> diganti otomatis:
+                Deskripsi video. <code>{'{judul}'}</code>, <code>{'{sumber}'}</code>, dan{' '}
+                <code>{'{hashtag}'}</code> diganti otomatis. <code>{'{sumber}'}</code> adalah kredit
+                video asli; tanpanya, kredit tetap ditambahkan di akhir:
               </div>
               <textarea value={u.deskripsi ?? ''} rows={3} maxLength={4000}
                         onChange={(e) => ubahUnggah({ deskripsi: e.target.value })}

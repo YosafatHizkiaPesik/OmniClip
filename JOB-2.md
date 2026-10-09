@@ -70,9 +70,13 @@ Murah, dan mengurangi risiko terbesar lebih dulu.
   (selesai 9 Oktober 2026, commit 029f8dc) Tampil di formulir unggah dan di
   Siapkan terbit. Izin dicatat pada nomor DAN nama kanal, jadi klip lama tanpa
   nomor kanal ikut terbaca. Belum ada izin yang tercatat untuk kanal mana pun.
-- [ ] **F0-4** Gerbang tinjau sebelum unggah PUBLIK: `fyp.periksa` + skor nilai
+- [x] **F0-4** Gerbang tinjau sebelum unggah PUBLIK: `fyp.periksa` + skor nilai
   tambah (F3-1) + kredit ada. Unggah otomatis yang tidak lolos gerbang turun ke
   *private*, dengan alasannya dicatat.
+  (selesai 9 Oktober 2026, commit e308f25) Yang dinilai sekarang: temuan BERAT
+  `fyp.periksa` + kredit. **Skor nilai tambah belum ikut** karena F3-1 belum
+  ada; pasang di `services/gerbang.py` begitu F3-1 selesai. Unggahan manual
+  hanya diberi alasan, tidak diubah.
 - [ ] **F0-5** Batas unggah per hari per kanal (setelan profil), dipaksa di
   jalur penjadwalan `unggah._jam_tayang`.
 - [ ] **F0-6** `categoryId` dipilih (Hiburan 24, Game 20, dan seterusnya),
@@ -123,7 +127,8 @@ klip orang lain.
 
 - [ ] **F3-1** Skor nilai tambah per klip: detik yang diberi lapisan buatan
   pengguna (komentar, kartu, sisipan) dibagi durasi. Tampil di Studio, disimpan
-  di sidecar, dipakai gerbang F0-4.
+  di sidecar, dipakai gerbang F0-4. **Sambungkan ke `services/gerbang.nilai`**:
+  sampai itu dikerjakan, gerbang F0-4 belum menilai nilai tambah sama sekali.
 - [ ] **F3-2** Analitik membandingkan klip dengan dan tanpa komentar (pakai
   `analitik._temuan_terbukti`, butuh minimal 8 video terbaca).
 - [ ] **F3-3** (Opsional) YouTube Analytics API untuk retensi penonton. Butuh
