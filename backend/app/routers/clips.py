@@ -799,9 +799,20 @@ def _ingat_plan(src: str, segments: list[dict], plan) -> None:
         _PLAN_TERAKHIR.popitem(last=False)
 
 
+# Versi rencana bingkai. Dinaikkan setiap kali CARA menghitungnya berubah.
+#
+# Tanpa ini, perbaikan pada penghalus tidak pernah sampai ke klip yang sudah
+# pernah dibuka: kuncinya hanya berisi permintaan, jadi rencana lama dipakai
+# ulang selamanya dan satu-satunya cara melihat perbaikannya adalah menghapus
+# seluruh simpanan. Dilewatkan sekali pada 9 Oktober 2026, saat potongan
+# adegan dikecualikan dari jeda antar batas di `reframe._smooth`.
+BINGKAI_VERSI = 3
+
+
 def _kunci_reframe(key: tuple) -> str:
     import hashlib
-    return "bingkai:" + hashlib.sha1(repr(key).encode()).hexdigest()
+    return ("bingkai:" + hashlib.sha1(
+        f"{key!r}|v{BINGKAI_VERSI}".encode()).hexdigest())
 
 
 def rencana_tersimpan(*, video_id: str, segments: list[dict], aspect_ratio: str = "9:16",

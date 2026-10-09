@@ -2086,7 +2086,12 @@ def _smooth(centers: list[Optional[float]], cuts: list[bool], *,
         filled.append(last)
 
     # Pecah menjadi rentang antar potongan adegan DAN pergantian subjek.
-    breaks = {i for i, is_cut in enumerate(cuts) if is_cut and i > 0}
+    #
+    # Dibedakan KERAS dan LUNAK, dan pembedaan itu penting. Keras berarti
+    # gambarnya memang berganti total; lunak berarti kita yang memutuskan
+    # berpindah di dalam gambar yang sama.
+    keras = {i for i, is_cut in enumerate(cuts) if is_cut and i > 0}
+    breaks = set(keras)
     # Perpindahan target yang terlalu jauh untuk di-pan diperlakukan sama
     # dengan potongan adegan. Dibaca dari jejak yang SUDAH dimedian, supaya
     # satu deteksi nyasar tidak memotong bingkai tanpa alasan.
@@ -2104,11 +2109,25 @@ def _smooth(centers: list[Optional[float]], cuts: list[bool], *,
     # dalam JEDA_BATAS_MIN detik dibuang. Kamera yang berpindah dua kali dalam
     # satu detik tidak pernah disengaja siapa pun, dan itulah yang terbaca
     # sebagai goyang.
+    #
+    # POTONGAN ADEGAN DIKECUALIKAN dari penyaringan itu, dan ini koreksi
+    # 9 Oktober 2026. Jeda dua detik masuk akal untuk keputusan KITA: berpindah
+    # dari wajah satu ke wajah lain dua kali dalam sedetik memang goyang. Tapi
+    # potongan adegan bukan keputusan kita, melainkan kenyataan di gambarnya,
+    # dan video yang disunting memang berganti bidikan lebih cepat dari dua
+    # detik sepanjang waktu.
+    #
+    # Akibatnya terukur pada klip 5 video LaperGang pemiliknya: potongan di
+    # detik 36,12 diterima, potongan di detik 37,75 dibuang karena cuma
+    # berjarak 1,63 detik. Gambar kembali ke bidikan kiri, bingkainya tidak,
+    # dan plafon kecepatan memaksanya MENGGESER 2,38 detik melintasi layar
+    # sementara wajah satu-satunya ada 688 piksel di luar potongan. Itu 5,8%
+    # dari klip tanpa siapa pun di dalam bingkai.
     jeda_min = max(1, int(round(JEDA_BATAS_MIN * SAMPLE_FPS)))
     bounds: list[int] = []
     terakhir = -(10 ** 9)
     for b in sorted(breaks):
-        if b - terakhir >= jeda_min:
+        if b in keras or b - terakhir >= jeda_min:
             bounds.append(b)
             terakhir = b
     runs: list[tuple[int, int]] = []
@@ -2163,8 +2182,18 @@ def _smooth(centers: list[Optional[float]], cuts: list[bool], *,
     return out
 
 
+def _titik_wajah_terlihat(people, seen, i):
+    """Titik tengah wajah yang BENAR-BENAR terlihat pada sampel ini, atau None."""
+    if seen is None:
+        return None
+    nilai = [float(people[p][i]) for p in range(len(people))
+             if p < len(seen) and i < len(seen[p]) and seen[p][i]
+             and people[p][i] is not None]
+    return sum(nilai) / len(nilai) if nilai else None
+
+
 def _centers_from_speakers(centers, people, mapping, speaker_turns, n,
-                           seen=None, cuts=None):
+                           seen=None, cuts=None, crop_w=0):
     """
     Jejak pusat crop yang mengikuti penutur aktif.
 
@@ -2223,6 +2252,36 @@ def _centers_from_speakers(centers, people, mapping, speaker_turns, n,
     # sungguhan tetap diam pada pembicaranya sampai orang lain mulai bicara.
     tahan_jeda = max(1, int(round(JEDA_TAHAN_SECONDS * SAMPLE_FPS)))
 
+    def cadangan(i):
+        """
+        Titik bingkai saat tidak ada subjek yang dipegang.
+
+        Bawaannya `centers[i]`, yaitu titik yang dihitung pelacak wajah tanpa
+        tahu siapa yang bicara. Tapi titik itu bisa USANG: pada sampel yang
+        wajahnya tidak terpilih, `_smooth` menahan nilai terakhir, dan nilai
+        terakhir itu bisa berasal dari bidikan yang sudah berganti.
+
+        Terukur pada klip 4 video Kajian pemiliknya, 9 Oktober 2026: selama
+        3,75 detik bingkai membeku di x=1083 sementara satu-satunya orang di
+        layar berdiri tenang di x=558, yaitu 569 piksel di luar potongan. Itu
+        6,9% dari klipnya tanpa siapa pun di dalam bingkai.
+
+        Jadi titik itu dipakai hanya bila ia memang MEMUAT salah satu wajah
+        yang sedang terlihat. Kalau tidak, yang dipakai titik tengah wajah yang
+        terlihat sekarang, persis seperti yang dijanjikan arti `subject=None`.
+        Syarat "tidak memuat" membuat perubahan ini tidak bisa menyentuh sampel
+        yang sudah benar.
+        """
+        c = centers[i]
+        titik = _titik_wajah_terlihat(people, seen, i)
+        if titik is None:
+            return c
+        if c is None:
+            return titik
+        if crop_w > 0 and abs(titik - c) > crop_w / 2.0:
+            return titik
+        return c
+
     out: list[Optional[float]] = []
     subject: list[Optional[int]] = []
     held: Optional[int] = None
@@ -2240,7 +2299,7 @@ def _centers_from_speakers(centers, people, mapping, speaker_turns, n,
                 out.append(people[held][i])
                 subject.append(held)
             else:
-                out.append(centers[i])
+                out.append(cadangan(i))
                 subject.append(None)
         elif (sp is None and held is not None and diam < tahan_jeda
               and people[held][i] is not None
@@ -2254,7 +2313,7 @@ def _centers_from_speakers(centers, people, mapping, speaker_turns, n,
         else:
             held = None
             diam = 0
-            out.append(centers[i])
+            out.append(cadangan(i))
             subject.append(None)
     return out, subject
 
@@ -3082,7 +3141,8 @@ def plan_reframe(source_video_path: str, segments: list[dict], *,
     elif mapping:
         centers, subject = _centers_from_speakers(centers, people, mapping,
                                                   speaker_turns, len(centers),
-                                                  seen=seen, cuts=cuts)
+                                                  seen=seen, cuts=cuts,
+                                                  crop_w=crop_w)
         log.info("Wajah dicocokkan ke penutur: %s",
                  {f"penutur {k}": f"orang {v + 1}" for k, v in mapping.items()})
 
