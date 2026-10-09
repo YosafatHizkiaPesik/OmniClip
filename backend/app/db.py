@@ -401,6 +401,30 @@ MIGRATIONS: list[str] = [
     """
     ALTER TABLE profil ADD COLUMN setelan_json TEXT NOT NULL DEFAULT '{}';
     """,
+    # Tayangan harian tiap video, dicatat sendiri.
+    #
+    # Dilaporkan pemiliknya 9 Oktober 2026: "tidak ada grafik views atau
+    # apapun". YouTube Data API v3 hanya memberi angka SAAT INI; tidak ada
+    # satu pun endpoint di dalamnya yang memberi riwayat. Riwayat sungguhan
+    # ada di YouTube Analytics API, dan itu menuntut izin baru plus
+    # persetujuan ulang dari setiap akun yang sudah tersambung.
+    #
+    # Jadi OmniClip mencatatnya sendiri: satu baris per video per hari. Ia
+    # tidak bisa memberi masa lalu, dan itu dikatakan apa adanya di layar.
+    # Tapi mulai hari pertama ia dipakai, grafiknya tumbuh dari angka yang
+    # benar-benar diamati, bukan dari tebakan.
+    """
+    CREATE TABLE statistik_harian (
+      video_id   TEXT NOT NULL,
+      tanggal    TEXT NOT NULL,
+      tayangan   INTEGER,
+      suka       INTEGER,
+      komentar   INTEGER,
+      dicatat_at REAL NOT NULL,
+      PRIMARY KEY (video_id, tanggal)
+    );
+    CREATE INDEX idx_statistik_harian_tanggal ON statistik_harian(tanggal);
+    """,
 ]
 
 

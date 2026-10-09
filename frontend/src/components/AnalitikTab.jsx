@@ -4,6 +4,7 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { apiGet } from '../lib/api';
+import GrafikHarian from './GrafikHarian';
 
 /**
  * Analitik: bagaimana klip yang sudah diunggah berjalan, dan apa artinya.
@@ -164,6 +165,43 @@ export default function AnalitikTab() {
                    nota={belumTerbaca > 0 ? `${belumTerbaca} belum terbaca` : 'semuanya terbaca'} />
           </div>
 
+          {/* Ringkasan kanal, dan dari mana tiap video datang.
+
+              Sampai 9 Oktober 2026 halaman ini hanya memuat video yang
+              diunggah LEWAT OmniClip, karena sumbernya tabel `uploads`. Di
+              kanal pemiliknya itu 1 dari 4 video. Yang dilaporkannya: "disana
+              tidak memuat seluruh video yang kita upload". */}
+          {data.kanal_terbaca && data.kanal && (
+            <div style={{ ...card, marginTop: '12px' }}>
+              <div style={sectionTitle}>
+                <BarChart3 size={18} style={{ color: 'var(--reh)' }} />
+                Kanal {data.kanal.nama}
+              </div>
+              <div style={{ display: 'flex', gap: '22px', flexWrap: 'wrap',
+                            margin: '8px 0 4px' }}>
+                <Angka label="Video di kanal" nilai={data.kanal.jumlah_video ?? '-'}
+                       nota={data.dari_omniclip !== undefined
+                         ? `${data.dari_omniclip} diunggah lewat OmniClip`
+                         : ''} />
+                <Angka label="Total tayangan kanal"
+                       nilai={data.kanal.total_tayangan ?? '-'}
+                       nota="seluruh video, sejak kanal dibuat" />
+                <Angka label="Pelanggan"
+                       nilai={data.kanal.pelanggan_disembunyikan ? 'disembunyikan'
+                         : (data.kanal.pelanggan ?? '-')}
+                       nota="menurut YouTube" />
+              </div>
+              <div style={{ marginTop: '14px', paddingTop: '12px',
+                            borderTop: '1px solid var(--border-color)' }}>
+                <div style={{ fontSize: '0.82rem', fontWeight: 800,
+                              marginBottom: '8px' }}>
+                  Tambahan tayangan per hari
+                </div>
+                <GrafikHarian harian={data.harian} helpText={helpText} />
+              </div>
+            </div>
+          )}
+
           {belumTerbaca > 0 && (
             <div style={{ ...card, marginTop: '12px', display: 'flex', gap: '9px',
                           alignItems: 'flex-start' }}>
@@ -240,6 +278,17 @@ export default function AnalitikTab() {
                         <div style={{ fontWeight: 700, overflow: 'hidden',
                                       textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {k.judul || k.clip_name}
+                        </div>
+                        {/* Dari mana video ini datang. Penting karena hanya
+                            untuk yang lewat OmniClip kita punya keterangan
+                            isinya; untuk yang lain yang ada cuma angkanya, dan
+                            itu dikatakan apa adanya alih-alih dikarang. */}
+                        <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)',
+                                      marginTop: 2 }}>
+                          {k.dari_omniclip === false
+                            ? 'diunggah di luar OmniClip'
+                            : 'lewat OmniClip'}
+                          {k.waktu ? ` · ${String(k.waktu).slice(0, 10)}` : ''}
                         </div>
                         {!k.terbaca && (
                           <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>

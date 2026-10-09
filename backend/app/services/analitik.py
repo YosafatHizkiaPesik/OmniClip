@@ -207,10 +207,110 @@ def _temuan_terbukti(klip: list[dict]) -> list[dict]:
     return hasil
 
 
+def _gabung_kanal(data: dict, profil_id: int) -> dict:
+    """
+    Menambahkan video kanal yang TIDAK diunggah lewat OmniClip.
+
+    Dilaporkan pemiliknya 9 Oktober 2026: "disana tidak memuat seluruh video
+    yang kita upload". Benar: `kumpulkan` membaca tabel `uploads`, yaitu
+    riwayat unggahan OmniClip sendiri, dan video yang naik dari ponsel atau
+    dari peramban tidak pernah lewat situ. Pada kanalnya saat itu: 4 video di
+    kanal, 1 yang diunggah OmniClip. Tiga perempat datanya hilang dari halaman
+    yang seharusnya menjawab "video saya harus seperti apa".
+
+    Yang datang dari OmniClip tetap dibedakan, karena hanya untuk video itulah
+    kita punya keterangan isinya: hook, durasi, tagar, hasil periksa fyp. Untuk
+    video dari luar yang ada cuma angkanya, dan itu dikatakan apa adanya alih-
+    alih dikarang.
+    """
+    from . import kanal as kanal_svc
+
+    try:
+        isi = kanal_svc.semua(profil_id)
+    except Exception as e:                           # noqa: BLE001
+        log.info("Daftar video kanal tidak terbaca: %s", str(e)[:160])
+        return data
+    if not isi.get("ada"):
+        return {**data, "kanal": isi.get("kanal") or {},
+                "kanal_terbaca": False,
+                "kanal_alasan": isi.get("alasan") or ""}
+
+    punya = {k["remote_id"] for k in data["klip"]}
+    tambahan = []
+    for v in isi["video"]:
+        if v["id"] in punya:
+            continue
+        tambahan.append({
+            "remote_id": v["id"],
+            "clip_name": "",
+            "judul": v["judul"],
+            "waktu": v["terbit"],
+            "privasi": "",
+            "url": f"https://youtu.be/{v['id']}",
+            "durasi": v["durasi"],
+            "terbaca": v["tayangan"] is not None,
+            "tayangan": v["tayangan"],
+            "suka": v["suka"],
+            "komentar": v["komentar"],
+            "sampul": v["sampul"],
+            "skor": None,
+            "catatan": [],
+            "ada_catatan_isi": False,
+            "dari_omniclip": False,
+        })
+
+    # Angka yang paling baru menang. Video yang diunggah OmniClip juga ada di
+    # daftar kanal, dan daftar kanal dibaca sekaligus dengan tanggal terbit dan
+    # sampulnya, jadi keterangan itu dipinjamkan ke barisnya.
+    peta = {v["id"]: v for v in isi["video"]}
+    for k in data["klip"]:
+        v = peta.get(k["remote_id"])
+        k["dari_omniclip"] = True
+        if not v:
+            continue
+        k["sampul"] = v["sampul"]
+        k["waktu"] = v["terbit"] or k["waktu"]
+        for kolom in ("tayangan", "suka", "komentar"):
+            if v.get(kolom) is not None:
+                k[kolom] = v[kolom]
+        k["terbaca"] = True
+        if not k.get("durasi"):
+            k["durasi"] = v["durasi"]
+
+    semua = data["klip"] + tambahan
+    semua.sort(key=lambda k: (k["tayangan"] is None, -(k["tayangan"] or 0)))
+    return {**data, "klip": semua, "kanal": isi.get("kanal") or {},
+            "kanal_terbaca": True,
+            "dari_omniclip": len(data["klip"]),
+            "terunggah": len(semua),
+            "terbaca": sum(1 for k in semua if k["terbaca"])}
+
+
+def _catat_harian(klip: list[dict]) -> None:
+    """
+    Menyimpan angka hari ini, sekali sehari.
+
+    Ini satu-satunya cara OmniClip bisa punya grafik: YouTube Data API hanya
+    memberi angka SAAT INI, dan riwayat sungguhan ada di Analytics API yang
+    menuntut izin baru plus persetujuan ulang dari tiap akun.
+    """
+    from ..repos import statistik_harian as sh
+
+    try:
+        if sh.sudah_dicatat():
+            return
+        sh.catat([{"id": k["remote_id"], "tayangan": k.get("tayangan"),
+                   "suka": k.get("suka"), "komentar": k.get("komentar")}
+                  for k in klip if k.get("terbaca")])
+    except Exception as e:                           # noqa: BLE001
+        log.info("Catatan harian gagal: %s", str(e)[:160])
+
+
 def laporan(profil_id: int, *, batas: int = 200) -> dict:
     """Satu halaman penuh: angka, temuan, dan apa yang belum boleh dikatakan."""
-    data = kumpulkan(profil_id, batas=batas)
+    data = _gabung_kanal(kumpulkan(profil_id, batas=batas), profil_id)
     klip = data["klip"]
+    _catat_harian(klip)
     terbaca = data["terbaca"]
     cukup = terbaca >= AMBANG_BANDING
 
@@ -221,12 +321,22 @@ def laporan(profil_id: int, *, batas: int = 200) -> dict:
         # mengaku sebagai sebab.
         temuan = _temuan_terkumpul(klip)
 
+    from ..repos import statistik_harian as sh
+    try:
+        deret = sh.harian_kanal([k["remote_id"] for k in klip])
+    except Exception:                                # noqa: BLE001
+        deret = []
+
     return {
         **data,
         "ringkasan": _ringkasan(klip),
         "temuan": temuan,
         "cukup_data": cukup,
         "ambang": AMBANG_BANDING,
+        # Grafik tayangan per hari, dicatat OmniClip sendiri. Kosong pada hari
+        # pertama, dan itu dikatakan apa adanya di layar alih-alih digambar
+        # sebagai garis datar yang seolah berarti "tidak ada penonton".
+        "harian": deret,
         "catatan_kaki": (
             "Angka ini dibaca dengan kunci YouTube Data API, jadi hanya video "
             "PUBLIK yang terbaca; yang masih pribadi atau tidak publik tidak "
