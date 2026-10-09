@@ -179,6 +179,13 @@ async def lifespan(app: FastAPI):
     import threading as _th2
     _th2.Thread(target=_bereskan_pembaruan, name="sisa-pembaruan",
                 daemon=True).start()
+
+    # Sampah yang tidak mungkin berguna lagi: berkas sementara penyalinan yang
+    # terputus, pecahan unduhan, sisa pemasangan. Hanya kelompok yang tidak
+    # mungkin keliru; sisanya menunggu tombol di Pengaturan, karena melihat
+    # dulu apa yang akan hilang adalah hak yang pantas diberikan.
+    from .services import sampah as _sampah
+    _sampah.bersihkan_di_latar()
     # Encoder GPU diuji di latar, supaya render pertama tidak menunggunya.
     from .services import enkoder
     enkoder.siapkan_di_latar()

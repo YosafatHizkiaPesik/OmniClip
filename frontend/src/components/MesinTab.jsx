@@ -2,6 +2,7 @@ import React from 'react';
 import KesehatanCard from './KesehatanCard';
 import PemakaianAiCard from './PemakaianAiCard';
 import PemeliharaanCard from './PemeliharaanCard';
+import SampahCard from './SampahCard';
 import StorageCard from './StorageCard';
 import SecurityCard from './SecurityCard';
 import UpdateCard from './UpdateCard';
@@ -72,6 +73,7 @@ export default function MesinTab() {
                 nota="Di mana semuanya tinggal, dan berapa yang tersisa.">
         <StorageCard {...alat} />
         <PemeliharaanCard {...alat} />
+        <SampahCard {...alat} />
       </Kelompok>
 
       <Kelompok judul="Kesehatan dan pemakaian"

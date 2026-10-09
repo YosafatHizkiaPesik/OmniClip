@@ -1130,6 +1130,51 @@ class CookiesRequest(BaseModel):
     profil: str = ""
 
 
+@router.get("/sampah")
+async def lihat_sampah():
+    """
+    Berkas yang tidak mungkin berguna lagi, beserta alasannya satu per satu.
+
+    Murah: hanya nama, ukuran, dan waktu sentuh terakhir. Yang menuntut membuka
+    isi berkas ada di `/sampah/periksa`, dan itu tidak pernah berjalan sendiri.
+    """
+    from ..services import sampah
+
+    return await asyncio.to_thread(sampah.pindai)
+
+
+@router.post("/sampah/periksa")
+async def periksa_sampah_rusak():
+    """
+    Memeriksa isi tiap berkas media dengan ffprobe. Mahal, jadi diminta sendiri.
+
+    Dipisah karena harganya berbeda jauh dari pemindaian biasa: ini membuka
+    tiap berkas dan menunggu jawabannya.
+    """
+    from ..services import sampah
+
+    return await asyncio.to_thread(sampah.periksa_rusak)
+
+
+class SampahRequest(BaseModel):
+    jalur: Optional[List[str]] = None
+
+
+@router.post("/sampah/buang")
+async def buang_sampah(req: SampahRequest | None = None):
+    """
+    Membuang sampah. Tanpa daftar jalur, seluruh hasil pemindaian.
+
+    Jalur yang dikirim diperiksa dua kali di lapisan layanan: harus di dalam
+    folder yang dikelola OmniClip, dan harus muncul di hasil pemindaian saat
+    ini. Yang kedua membuat permintaan tidak bisa menghapus berkas apa pun yang
+    kebetulan ada di sana.
+    """
+    from ..services import sampah
+
+    return await asyncio.to_thread(sampah.bersihkan, (req.jalur if req else None))
+
+
 @router.get("/cookies")
 async def lihat_cookies(periksa: bool = False):
     """
