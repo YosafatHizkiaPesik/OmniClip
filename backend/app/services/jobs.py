@@ -87,6 +87,33 @@ class _GerbangCPU:
         with self._kunci:
             return self._dipakai > 0
 
+    @contextmanager
+    def sebagai_penunggu(self):
+        """
+        Menghitung diri sebagai penunggu TANPA ikut antre masuk.
+
+        Untuk pekerjaan berat yang sengaja tidak melewati gerbang ini karena
+        memang tidak boleh ditahan, tapi tetap merebut mesin yang sama.
+
+        Satu-satunya pemakainya sejauh ini: salinan pratinjau yang sedang
+        DITUNGGU Studio. Ia dikecualikan dari gerbang dengan alasan yang benar,
+        orangnya sedang menatap layar menunggu salinan itu. Tapi karena ia
+        tidak pernah masuk, `ada_penunggu` tetap False, dan pemanasan bingkai
+        di latar tidak pernah tahu ada yang perlu didahulukan.
+
+        Terlihat pada mesin pemiliknya 9 Oktober 2026: satu salinan pratinjau
+        pada 262% CPU dan satu pemindaian wajah pada 118% berjalan berdampingan
+        di laptop empat inti, dengan beban sistem 20. Yang dilaporkannya:
+        "mengapa progress auto bingkai satu video tidak selesai selesai".
+        """
+        with self._kunci:
+            self._penunggu += 1
+        try:
+            yield
+        finally:
+            with self._kunci:
+                self._penunggu = max(0, self._penunggu - 1)
+
 
 # Gerbang untuk pekerjaan berat: Whisper, analisis wajah, encode. Job lane `cpu`
 # melewatinya seluruhnya; auto-klip baru masuk SESUDAH unduhannya selesai

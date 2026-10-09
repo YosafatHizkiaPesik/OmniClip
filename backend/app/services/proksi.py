@@ -28,6 +28,7 @@ import os
 import queue
 import threading
 import time
+from contextlib import nullcontext
 from pathlib import Path
 from typing import Optional
 
@@ -232,7 +233,13 @@ def _buat(src: Path, tujuan: Path) -> None:
     try:
         log.info("Membuat salinan analisis: %s (%d inti%s)", src.name, inti,
                  ", ditunggu Studio" if buru else "")
-        hasil = jalankan(cmd, rendah=not buru)
+        # Salinan yang ditunggu Studio tidak ikut antre di gerbang CPU, dan itu
+        # memang disengaja. Tapi ia tetap merebut mesin yang sama, jadi ia
+        # MENGHITUNG DIRI sebagai penunggu supaya pemanasan bingkai di latar
+        # minggir di sela klipnya. Lihat `_GerbangCPU.sebagai_penunggu`.
+        from .jobs import gerbang_cpu
+        with (gerbang_cpu.sebagai_penunggu() if buru else nullcontext()):
+            hasil = jalankan(cmd, rendah=not buru)
         if hasil.returncode == 0 and sementara.is_file():
             sementara.replace(tujuan)
             tujuan.with_suffix(".sumber").write_text(str(src.resolve()), encoding="utf-8")

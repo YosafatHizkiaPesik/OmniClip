@@ -54,3 +54,43 @@ class PrioritasCakram(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SalinanYangDitungguIkutDihitung(unittest.TestCase):
+    """
+    Salinan pratinjau yang ditunggu Studio dikecualikan dari gerbang CPU, dan
+    itu benar: orangnya sedang menatap layar menunggu salinan itu. Tapi ia
+    tetap merebut mesin yang sama.
+
+    Terlihat pada mesin pemiliknya 9 Oktober 2026: satu salinan pratinjau pada
+    262% CPU dan satu pemindaian wajah pada 118% berjalan berdampingan di
+    laptop empat inti, beban sistem 20, dan yang dilaporkannya "mengapa
+    progress auto bingkai satu video tidak selesai selesai". Pemanasan tidak
+    pernah minggir karena `ada_penunggu` tetap False.
+    """
+
+    def test_menghitung_diri_sebagai_penunggu(self):
+        from app.services.jobs import gerbang_cpu
+        self.assertFalse(gerbang_cpu.ada_penunggu)
+        with gerbang_cpu.sebagai_penunggu():
+            self.assertTrue(gerbang_cpu.ada_penunggu)
+        self.assertFalse(gerbang_cpu.ada_penunggu)
+
+    def test_tidak_ikut_memakai_gerbangnya(self):
+        """Ia tidak boleh ditahan; yang ditambahkan cuma hitungan penunggu."""
+        from app.services.jobs import gerbang_cpu
+        with gerbang_cpu.sebagai_penunggu():
+            self.assertFalse(gerbang_cpu.sedang_dipakai)
+
+    def test_tetap_bersih_saat_ada_galat(self):
+        from app.services.jobs import gerbang_cpu
+        with self.assertRaises(ValueError):
+            with gerbang_cpu.sebagai_penunggu():
+                raise ValueError("gagal di tengah")
+        self.assertFalse(gerbang_cpu.ada_penunggu)
+
+    def test_dipakai_pembuat_salinan(self):
+        from pathlib import Path
+        import app.services.proksi as pr
+        src = Path(pr.__file__).read_text(encoding="utf-8")
+        self.assertIn("gerbang_cpu.sebagai_penunggu() if buru else nullcontext()", src)
