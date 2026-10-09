@@ -143,6 +143,19 @@ def setelah_render(*, clip_name: str, judul: str, hashtag: list[str],
         jam = _jam_tayang(target, pid, float(pilihan.get("jadwal_jam") or 0))
         tagar_kirim = (_pastikan_shorts(tagar, clip_name)
                        if target == "youtube" else tagar)
+        privasi = pilihan.get("privasi") or "private"
+        catatan_gerbang: list[str] = []
+        if target == "youtube" and privasi == "public":
+            # Gerbang tinjau (JOB-2 F0-4). Yang tidak lolos tetap naik, tapi
+            # sebagai PRIVATE dengan alasannya, supaya orangnya memeriksa lalu
+            # menerbitkannya sendiri. Lihat services/gerbang.py.
+            from .gerbang import untuk_klip
+            g = untuk_klip(clip_name, pid)
+            if not g["lolos"]:
+                privasi = "private"
+                catatan_gerbang = g["alasan"]
+                log.info("Unggahan %s diturunkan ke private: %s",
+                         clip_name, "; ".join(g["alasan"]))
         job_id, _ = antrekan(
             clip_name=clip_name, target=target, title=judul,
             description=deskripsi(setel.get("deskripsi", ""), judul=judul,
@@ -150,9 +163,10 @@ def setelah_render(*, clip_name: str, judul: str, hashtag: list[str],
                                   sumber=sumber_klip(clip_name, pid),
                                   pakai_kredit=setel.get("kredit", True) is not False),
             tags=[h.lstrip("#") for h in tagar_kirim][:15],
-            privacy=pilihan.get("privasi") or "private", profil_id=pid,
+            privacy=privasi, profil_id=pid,
             mulai_setelah=jam)
-        hasil.append({"target": target, "job_id": job_id, "mulai_setelah": jam})
+        hasil.append({"target": target, "job_id": job_id, "mulai_setelah": jam,
+                      "privasi": privasi, "gerbang": catatan_gerbang})
     return hasil
 
 

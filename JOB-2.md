@@ -8,7 +8,12 @@ berikutnya, lalu centang** dengan format:
 ```
 
 Butir yang dikerjakan sebagian tetap `- [ ]`, dengan keterangan
-`**SEBAGIAN:**` di bawahnya. Urutan yang disepakati pemilik: **Fase 0, lalu
+`**SEBAGIAN:**` di bawahnya.
+
+Hash yang ditulis adalah commit **kodenya**. Centangan di berkas ini sendiri
+ikut commit berikutnya, karena sebuah commit tidak bisa memuat hash-nya
+sendiri; jangan pakai `--amend` untuk itu, hash-nya berubah dan catatannya
+jadi menunjuk commit yang tidak ada. Urutan yang disepakati pemilik: **Fase 0, lalu
 Fase 1**, baru Fase 2 dan 3.
 
 ---
@@ -62,7 +67,7 @@ Murah, dan mengurangi risiko terbesar lebih dulu.
 - [x] **F0-3** Peringatan risiko hak cipta saat menyiapkan unggahan. Tidak
   memblokir apa pun. Satu medan "izin" per kanal sumber (bawaan: belum), supaya
   kelak bisa diisi saat izin didapat dan peringatannya hilang untuk kanal itu.
-  (selesai 9 Oktober 2026, commit 5829d9b) Tampil di formulir unggah dan di
+  (selesai 9 Oktober 2026, commit 029f8dc) Tampil di formulir unggah dan di
   Siapkan terbit. Izin dicatat pada nomor DAN nama kanal, jadi klip lama tanpa
   nomor kanal ikut terbaca. Belum ada izin yang tercatat untuk kanal mana pun.
 - [ ] **F0-4** Gerbang tinjau sebelum unggah PUBLIK: `fyp.periksa` + skor nilai

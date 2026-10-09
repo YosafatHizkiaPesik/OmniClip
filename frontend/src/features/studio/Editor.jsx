@@ -1723,8 +1723,13 @@ export default function Editor({ project, onBack }) {
             })).then((hasil) => {
               const naik = hasil.filter((h) => h.ok).map((h) => h.t);
               const gagal = hasil.filter((h) => !h.ok);
+              // Gerbang tinjau (JOB-2 F0-4) bisa menurunkannya ke private.
+              // Tanpa kalimat ini, "terunggah ke YouTube" terbaca seperti
+              // sudah tayang publik padahal belum.
+              const turun = (job.result.unggahan ?? []).find((u) => (u.gerbang ?? []).length);
               const kata = [
                 naik.length ? `terunggah ke ${naik.join(' & ')}` : '',
+                turun ? `sebagai PRIVATE, belum lolos tinjau: ${turun.gerbang.join(' ')}` : '',
                 ...gagal.map((h) => `${h.t} gagal: ${h.pesan}`),
               ].filter(Boolean).join(' · ');
               setExportLog((l) => l.map((e) => (e.name === name

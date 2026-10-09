@@ -307,6 +307,12 @@ def run_render(ctx: JobContext) -> dict:
     if antre:
         pesan += " Diantrekan untuk diunggah ke " + " dan ".join(
             "YouTube" if t == "youtube" else "Google Drive" for t in antre) + "."
+    # Gerbang tinjau menurunkannya ke private (JOB-2 F0-4): dikatakan di sini
+    # juga, bukan hanya di log, supaya orangnya tahu klip itu belum publik.
+    turun = [u for u in unggahan if u.get("gerbang")]
+    if turun:
+        pesan += (" Diunggah sebagai PRIVATE, belum lolos tinjau: "
+                  + " ".join(turun[0]["gerbang"]))
     ctx.progress(1.0, stage="done", message=pesan)
     return {
         "unggahan": unggahan,

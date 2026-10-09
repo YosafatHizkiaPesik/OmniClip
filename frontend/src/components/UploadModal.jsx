@@ -53,6 +53,17 @@ export default function UploadModal({ clip, onClose, onDone }) {
   // Ref, bukan state: janji di bawah membaca nilainya SAAT jawabannya tiba,
   // bukan nilai saat formulir dibuka.
   const disentuh = useRef(false);
+  // Gerbang tinjau (JOB-2 F0-4). Di formulir ini tidak ada yang diubah:
+  // orang yang menekan tombolnya sedang meninjau saat itu juga. Yang ia
+  // dapat adalah alasan yang sama yang dipakai unggahan otomatis.
+  const [gerbang, setGerbang] = useState(null);
+  useEffect(() => {
+    let batal = false;
+    apiGet(`/uploads/gerbang?clip_name=${encodeURIComponent(clip.file_name)}`)
+      .then((r) => { if (!batal) setGerbang(r); })
+      .catch(() => {});
+    return () => { batal = true; };
+  }, [clip.file_name]);
   useEffect(() => {
     let batal = false;
     apiGet(`/uploads/saran-deskripsi?clip_name=${encodeURIComponent(clip.file_name)}`
@@ -206,6 +217,19 @@ export default function UploadModal({ clip, onClose, onDone }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {/* Izin kanal sumber (JOB-2 F0-3). Tidak memblokir. */}
             <PeringatanIzin clipName={clip.file_name} />
+            {privacy === 'public' && gerbang && !gerbang.lolos && (
+              <div style={{ fontSize: '0.76rem', lineHeight: 1.6, padding: '9px 12px',
+                            borderRadius: 'var(--radius-md)',
+                            border: '1px solid var(--border-color)',
+                            color: 'var(--text-secondary)' }}>
+                <b>Belum lolos tinjau untuk publik.</b> Unggahan otomatis akan
+                menurunkannya ke Private karena:
+                <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>
+                  {gerbang.alasan.map((a) => <li key={a}>{a}</li>)}
+                </ul>
+                Di sini Anda tetap bisa menerbitkannya publik.
+              </div>
+            )}
             {phase === 'failed' && (
               <div style={{
                 display: 'flex', gap: '9px', fontSize: '.83rem', lineHeight: 1.55,

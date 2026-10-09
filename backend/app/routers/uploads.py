@@ -229,6 +229,23 @@ async def saran_deskripsi(clip_name: str, judul: str = ""):
     return await asyncio.to_thread(kerja)
 
 
+@router.get("/gerbang")
+async def lihat_gerbang(clip_name: str):
+    """
+    Apakah klip ini lolos gerbang tinjau untuk terbit publik (JOB-2 F0-4).
+
+    Untuk formulir unggah manual: alasannya ditampilkan, tapi tidak ada yang
+    diubah, karena orang yang menekan tombolnya sedang meninjau saat itu juga.
+    """
+    import asyncio
+
+    from ..services import profil
+    from ..services.gerbang import untuk_klip
+
+    hasil = await asyncio.to_thread(untuk_klip, clip_name, profil.kini())
+    return {"lolos": hasil["lolos"], "alasan": hasil["alasan"]}
+
+
 @router.get("/izin")
 async def lihat_izin(clip_name: str):
     """
