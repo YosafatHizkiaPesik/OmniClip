@@ -700,6 +700,18 @@ def get_video_info(url_or_id: str):
             "url": url,
             "thumbnail": info.get('thumbnail'),
             "channel": info.get('uploader'),
+            # Identitas kanal sumber, untuk kredit di deskripsi unggahan dan
+            # catatan izin per kanal (JOB-2 F0-1 sampai F0-3).
+            #
+            # Sampai 9 Oktober 2026 hanya NAMA kanal yang diteruskan, jadi
+            # `videos.channel_id` selalu kosong padahal yt-dlp memberikannya.
+            # Nama kanal bisa berubah dan bisa kembar; nomornya tidak.
+            "channel_id": info.get('channel_id') or None,
+            "channel_url": info.get('channel_url') or info.get('uploader_url') or None,
+            # Teks lisensi dari YouTube, misalnya "Creative Commons Attribution
+            # license (reuse allowed)". Kosong berarti lisensi standar YouTube,
+            # yaitu TIDAK ada izin pakai ulang.
+            "license": info.get('license') or None,
             "views": info.get('view_count', 0),
             "upload_date": info.get('upload_date'),
             "available_resolutions": _available_resolutions(info),

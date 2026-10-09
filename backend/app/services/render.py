@@ -2314,6 +2314,11 @@ def render_clip(
             "subtitles": subtitles or [],
             "media_layers": media_layers or [],
             "subtitle_kedua": subtitle_kedua,
+            # Identitas video sumbernya, ditulis di sini juga dan bukan hanya
+            # diturunkan dari tabel `videos` saat diperlukan. Klip jadi bisa
+            # hidup lebih lama daripada baris sumbernya, dan kredit di deskripsi
+            # unggahan tidak boleh ikut hilang bersama baris itu (JOB-2 F0-1).
+            "sumber": _sumber_klip(vid),
             "created_at": time.time(),
         }
         (folder_keluar / out_name.replace(".mp4", ".json")).write_text(
@@ -2371,6 +2376,15 @@ def render_clip(
 # nama berkas di dalamnya mengubah angka itu, jadi klip yang baru selesai
 # dirender langsung terlihat tanpa menunggu apa pun kedaluwarsa.
 _DAFTAR_KLIP: tuple[float, int, list[dict]] | None = None
+
+
+def _sumber_klip(video_id) -> dict:
+    """Identitas video sumber untuk sidecar; kosong bila tidak terbaca."""
+    try:
+        from ..repos.media import sumber_video
+        return sumber_video(str(video_id or ""))
+    except Exception:                                # noqa: BLE001
+        return {}
 
 
 def list_local_clips(folder: Optional[Path] = None) -> list[dict]:

@@ -51,7 +51,9 @@ def upsert_video(info: dict[str, Any]) -> str:
                                    fetched_at, created_at)
                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
                ON CONFLICT(id) DO UPDATE SET
-                 title=excluded.title, channel=excluded.channel, duration=excluded.duration,
+                 title=excluded.title, channel=excluded.channel,
+                 channel_id=COALESCE(excluded.channel_id, videos.channel_id),
+                 duration=excluded.duration,
                  thumbnail_url=excluded.thumbnail_url, description=excluded.description,
                  view_count=excluded.view_count, upload_date=excluded.upload_date,
                  meta_json=excluded.meta_json, fetched_at=excluded.fetched_at""",
@@ -61,6 +63,32 @@ def upsert_video(info: dict[str, Any]) -> str:
              json.dumps(meta, ensure_ascii=False), ts, ts),
         )
     return video_id
+
+
+def sumber_video(video_id: str) -> dict:
+    """
+    Identitas video SUMBER sebuah klip: judul, kanal, nomor kanal, alamat, lisensi.
+
+    Dipakai untuk kredit di deskripsi unggahan dan catatan izin per kanal
+    (JOB-2 F0-1 sampai F0-3). Yang tidak diketahui dikembalikan kosong, bukan
+    dikarang; alamat videonya selalu bisa dibentuk dari nomornya.
+    """
+    row = get_video(video_id) if video_id else None
+    meta: dict = {}
+    if row:
+        try:
+            meta = json.loads(row.get("meta_json") or "{}") or {}
+        except (TypeError, ValueError):
+            meta = {}
+    return {
+        "video_id": video_id or "",
+        "judul": ((row or {}).get("title") or "").strip(),
+        "kanal": ((row or {}).get("channel") or "").strip(),
+        "channel_id": ((row or {}).get("channel_id") or meta.get("channel_id") or "").strip(),
+        "channel_url": (meta.get("channel_url") or "").strip(),
+        "url": f"https://www.youtube.com/watch?v={video_id}" if video_id else "",
+        "lisensi": (meta.get("license") or "").strip(),
+    }
 
 
 def get_video(video_id: str) -> Optional[dict]:
