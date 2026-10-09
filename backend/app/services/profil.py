@@ -268,8 +268,28 @@ def _slug(nama: str) -> str:
     return re.sub(r"\s+", " ", s)[:40] or "Profil"
 
 
-def folder_klip(pid: int) -> Path:
-    """Folder hasil render profil ini. Profil Utama memakai folder klip lama."""
+def folder_klip(pid: int, *, buat: bool = False) -> Path:
+    """
+    Folder hasil render profil ini. Profil Utama memakai folder klip lama.
+
+    `buat=False` berarti MENYEBUTKAN jalurnya tanpa membuatnya. Itu bawaannya,
+    dan bedanya bukan soal rapi.
+
+    Sampai 9 Oktober 2026 fungsi ini selalu `mkdir`. Padahal pemanggil
+    terbanyaknya cuma ingin tahu jalurnya: halaman daftar akun menyebutkannya
+    di layar, pemeliharaan menghitung isinya, penyaji media memetakan kategori.
+    Jadi sekadar MEMBUKA daftar akun sudah melahirkan satu folder untuk setiap
+    profil yang ada, termasuk wadah "Akun baru" yang izin Google-nya sedang
+    ditunggu dan sebentar lagi dibuang.
+
+    Akibatnya terlihat di penyimpanan pemiliknya: empat folder kosong bernama
+    "Akun baru (2)" sampai "(5)", peninggalan login yang gagal, yang tetap
+    berdiri lama sesudah profilnya sendiri terhapus. Ia memintanya dihapus dan
+    "jangan pernah lagi ada akun baru yang tidak jelas itu".
+
+    Yang berhak membuatnya adalah yang benar-benar MENULIS ke dalamnya, yaitu
+    render. Folder yang tidak pernah berisi klip memang tidak perlu ada.
+    """
     from ..repos import profil as repo
     p = repo.ambil(pid)
     if p and p.get("folder_klip"):
@@ -278,7 +298,8 @@ def folder_klip(pid: int) -> Path:
         d = CLIPS_DIR
     else:
         d = CLIPS_DIR / f"{_slug(p['nama'])} ({pid})"
-    d.mkdir(parents=True, exist_ok=True)
+    if buat:
+        d.mkdir(parents=True, exist_ok=True)
     return d
 
 

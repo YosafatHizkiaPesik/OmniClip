@@ -1751,7 +1751,9 @@ def render_clip(
     first = segments[0]
     # Folder klip milik profil yang meminta render ini (services/profil.py).
     from . import profil as _profil
-    folder_keluar = _profil.folder_klip(_profil.kini())
+    # `buat=True`: di sinilah berkasnya benar-benar ditulis, jadi di sinilah
+    # foldernya pantas lahir. Lihat `profil.folder_klip`.
+    folder_keluar = _profil.folder_klip(_profil.kini(), buat=True)
     out_name = build_clip_filename(
         title=title or vid,
         index=clip_index,
