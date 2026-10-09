@@ -327,7 +327,7 @@ export default function FramePanel({
         </>
       )}
 
-      {frameMode === 'smart' && peopleCount > 1 && onAimPerson && (
+      {frameMode === 'smart' && jenisKlip !== 'memuat' && peopleCount > 1 && onAimPerson && (
         <>
           <div style={{ height: '1px', background: 'var(--rule-2)', margin: '4px 0' }} />
           <div className="mark" style={{ color: 'var(--ink)' }}>Arahkan bingkai dari detik ini</div>

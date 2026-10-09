@@ -690,11 +690,21 @@ WAJAH_LUAR_PANEL_MIN = 0.10
 # Berapa lama wajah boleh hilang dari panelnya sebelum panel itu dianggap
 # TIDAK ADA di layar.
 #
-# Tiga detik. Di bawah itu yang terjadi cuma orangnya menoleh atau tangannya
-# menutupi muka, dan bingkai yang berubah karena itu terbaca sebagai kerusakan.
-# Di atas itu kameranya memang sedang tidak ditampilkan — permainan menutupi
-# layar penuh — dan bidang wajah yang tetap dipasang menyorot kotak kosong.
-PANEL_SEPI_DETIK = 3.0
+# Sepuluh detik, dan angkanya DIUKUR, bukan dipilih.
+#
+# Pada klip Mobile Legends pemiliknya, sepanjang dua belas menit, celah "wajah
+# tidak terlihat di panelnya" terbagi dengan jurang yang bersih:
+#
+#   celah pendek : 0,4  2,0  3,8  4,5  4,8  5,2 detik   (pelacak kehilangan
+#                                                        wajah sesaat)
+#   celah panjang:  25,1  35,4  71,9  105,2 detik       (kameranya memang tidak
+#                                                        di layar)
+#
+# Tidak ada satu pun celah antara 5,2 dan 25,1 detik. Ambang tiga detik yang
+# dipakai semalam memotong tepat di tengah kelompok yang pendek, dan itulah
+# sebabnya bingkai berpindah ke "hanya permainan" padahal facecam-nya ada,
+# dilaporkan pemiliknya 8 Oktober 2026 dengan tangkapan layar detik 1:49.
+PANEL_SEPI_DETIK = 10.0
 PANEL_SEPI_SAMPEL = int(PANEL_SEPI_DETIK * 8)     # SAMPLE_FPS = 8
 
 
@@ -990,6 +1000,110 @@ def _tandai_panel_besar(runs: list[list], facecam_waktu,
     return keluar, dari_panel
 
 
+# Apa yang membuktikan sebuah klip punya KAMERA PEMAIN.
+#
+# Pemindai panel tidak bisa dijadikan hakim. Ia juga menemukan "panel" pada
+# podcast, di situ yang ia temukan hanyalah wajah orang yang bergerak, dan
+# memperlakukannya sebagai kamera pemain berarti wajah di luar "panel" dibuang
+# oleh WAJAH_LUAR_PANEL_MIN. Terukur 9 Oktober 2026: dari 6 jendela podcast,
+# 5 akan digolongkan "klip game" kalau panelnya dipercaya begitu saja.
+#
+# Dua pembeda lain sudah saya coba dan TOLAK dengan angkanya sendiri:
+#
+#   berapa kali panel berpindah per menit  gameplay 0,4-36,4 vs podcast 17-44
+#   sebaran letak panel                    gameplay 0,00-1,10 vs podcast 0,35-0,83
+#
+# Keduanya bertumpuk, jadi keduanya tebakan. Yang memisahkan bersih justru
+# jejak wajah yang SUDAH dihitung, tanpa pemindaian tambahan sama sekali:
+# kamera pemain adalah satu wajah kecil yang DUDUK DI POJOK dan tetap di situ
+# sepanjang klip. Terukur pada penyimpanan pemiliknya:
+#
+#   letak median wajah, sumbu y   gameplay 0,81-0,86  podcast 0,31-0,52
+#   porsi klip ia terlihat        gameplay 0,70-1,00
+#
+# Jadi batasnya 0,70 (margin 0,11 ke gameplay, 0,18 ke podcast), bukan angka
+# yang pas-pasan di celah 0,03 seperti dua calon yang saya buang.
+# Namanya berawalan KAMERA_, bukan FACECAM_: FACECAM_TEPI_X dan FACECAM_BAWAH_Y
+# sudah dipakai `_wajah_pojok` dengan angka lain, dan menamainya sama berarti
+# diam-diam mengubah fungsi itu. Tertangkap uji `FacecamDiTepiTengahTerbaca`.
+KAMERA_ADA_MIN = 0.60           # porsi klip wajah itu harus terlihat
+KAMERA_TEPI_X = 0.25            # di luar 25% tengah mendatar
+KAMERA_ATAS_Y = 0.25            # dan di luar 25%-70% tegak: benar-benar pojok
+KAMERA_BAWAH_Y = 0.70
+
+
+def ada_facecam(plan) -> bool:
+    """
+    Apakah klip ini punya kamera pemain, dinilai dari jejak wajahnya sendiri.
+
+    Gratis: `plan` sudah dihitung untuk hal lain. Lihat FACECAM_ADA_MIN untuk
+    angka-angka yang mendasarinya, dan dua pembeda yang ditolak sebelumnya.
+    """
+    import statistics as st
+
+    if plan is None or not getattr(plan, "people_seen", None):
+        return False
+    sw, sh = plan.source_w or 1, plan.source_h or 1
+    n = min((len(x) for x in plan.people_seen), default=0)
+    if not n:
+        return False
+    for p in range(len(plan.people)):
+        xs, ys, ws = [], [], []
+        for i in range(n):
+            if not plan.people_seen[p][i]:
+                continue
+            kotak = plan.people_box[p][i] if p < len(plan.people_box) else None
+            x = plan.people[p][i]
+            if not kotak or x is None:
+                continue
+            xs.append(float(x) / sw)
+            ys.append(float(kotak[0]) / sh)
+            ws.append(float(kotak[1]) / sw)
+        if len(xs) < 5 or len(xs) / n < KAMERA_ADA_MIN:
+            continue
+        if st.median(ws) >= WAJAH_LUAR_PANEL_MIN:
+            continue                                 # wajah sebesar itu bukan kamera pojok
+        xm, ym = st.median(xs), st.median(ys)
+        if not (xm < KAMERA_TEPI_X or xm > 1 - KAMERA_TEPI_X):
+            continue
+        if KAMERA_ATAS_Y <= ym <= KAMERA_BAWAH_Y:
+            continue
+        return True
+    return False
+
+
+def panel_kecil_pada(facecam_waktu: Optional[list]):
+    """
+    Fungsi `t -> panel facecam kecil yang berlaku`, atau None bila klip ini
+    memang tidak punya kamera pemain.
+
+    Fungsi ini TIDAK memutuskan apakah kamera pemainnya ada; itu tugas
+    `ada_facecam(plan)`. Di sini hanya geometrinya.
+
+    Satu tempat, dua pemanggil: penggolong per klip (`jenis_klip`) dan
+    sutradara per momen (`_dasar_per_waktu`). Sampai 9 Oktober 2026 hanya yang
+    kedua yang tahu letak panelnya, sementara yang pertama melabeli sampel
+    tanpa petunjuk itu sama sekali. Akibatnya terukur pada video gameplay
+    pemiliknya: klip 1 punya panel seluas 4,1% layar, tapi digolongkan "wajah
+    100%" lalu dibuka sebagai ikut-wajah, lengkap dengan tombol "Wajah 1/2/3"
+    di atas video permainan.
+    """
+    kecil = sorted((float(q["t"]), q["facecam"]) for q in (facecam_waktu or [])
+                   if q.get("facecam"))
+    if not kecil:
+        return None
+
+    def panel(t: float) -> Optional[dict]:
+        f = kecil[0][1]
+        for tt, ff in kecil:
+            if tt <= t + 1e-6:
+                f = ff
+        luas = float(f["w"]) * float(f["h"]) / 10000.0
+        return f if luas < PANEL_BESAR_MIN else None
+
+    return panel
+
+
 def _dasar_per_waktu(plan, src: Path, segments: list[dict], durasi: float,
                      out_w: int, out_h: int,
                      # Linimasa facecam yang sudah dipindai pemanggil. Tanpa ini
@@ -1010,18 +1124,7 @@ def _dasar_per_waktu(plan, src: Path, segments: list[dict], durasi: float,
     # Panel facecam KECIL yang berlaku pada tiap detik, bila klip ini memang
     # punya satu. Dipakai penggolong untuk mengabaikan wajah gambar di dalam
     # permainan; lihat `WAJAH_LUAR_PANEL_MIN`.
-    kecil = sorted((float(q["t"]), q["facecam"]) for q in (facecam_waktu or [])
-                   if q.get("facecam"))
-
-    def panel_kecil(t: float) -> Optional[dict]:
-        if not kecil:
-            return None
-        f = kecil[0][1]
-        for tt, ff in kecil:
-            if tt <= t + 1e-6:
-                f = ff
-        luas = float(f["w"]) * float(f["h"]) / 10000.0
-        return f if luas < PANEL_BESAR_MIN else None
+    panel_kecil = (panel_kecil_pada(facecam_waktu) if ada_facecam(plan) else None)
 
     label = _haluskan(_label_per_sampel(plan, panel_kecil))
     if not label:
@@ -1211,14 +1314,20 @@ def _layout_permainan_penuh(sw: int, sh: int, out_w: int, out_h: int) -> dict:
 # umur, jadi tanpa nomor ini video yang sudah pernah digolongkan akan tetap
 # memakai keputusan lama selamanya. v2: facecam di tepi kiri/kanan pada
 # ketinggian berapa pun ikut terbaca (27 September 2026).
-JENIS_VERSI = 2
+# Naik ke 4 pada 9 Oktober 2026: penggolong sekarang diberi letak panel
+# facecam (lihat `ada_facecam`), jadi jawaban yang tersimpan sebelumnya
+# dihitung tanpa petunjuk itu dan harus dibuang. Tanpa menaikkannya, video yang
+# sudah pernah dibuka tetap memakai golongan yang salah selamanya.
+JENIS_VERSI = 4
 
 JENIS_GAME_MIN = 0.30          # porsi sampel "wajah di pojok" untuk disebut klip game
 JENIS_GAME_YAKIN = 0.70        # ... tanpa perlu memeriksa panel facecam
 JENIS_GERAK_MIN = 0.60         # porsi sampel tanpa wajah untuk disebut klip tanpa wajah
 
 
-def jenis_klip(src: Path, segments: list[dict]) -> dict:
+def jenis_klip(src: Path, segments: list[dict],
+               facecam_waktu: Optional[list] = None,
+               video_id: str = "") -> dict:
     """
     Bingkai bawaan untuk SATU klip, dari isinya: {"mode", "alasan", "porsi"}.
 
@@ -1238,19 +1347,40 @@ def jenis_klip(src: Path, segments: list[dict]) -> dict:
     info = probe(str(src))
     sw, sh = int(info.get("width") or 1920), int(info.get("height") or 1080)
 
-    def facecam() -> bool:
-        try:
-            return bool(deteksi_facecam_waktu(str(src), segments, sw, sh,
-                                              rasio_potongan=rasio_bidang_wajah(1080, 1920)))
-        except Exception as e:
-            log.info("Facecam tidak terbaca: %s", str(e)[:120])
-            return False
 
     # Rencana yang SAMA dengan yang diminta pratinjau (track_only, 9:16), jadi
     # pindaian wajahnya tersimpan di cache dan jejak ikut-wajah berikutnya
     # tidak menghitung ulang.
     plan = plan_reframe(str(src), segments, aspect_ratio="9:16", track_only=True)
-    label = _label_per_sampel(plan) if plan is not None and plan.people else []
+
+    # Kamera pemain: ditanyakan ke jejak wajah dulu, baru dipindai.
+    #
+    # Urutannya menghemat seluruh pemindaian panel pada video tanpa kamera
+    # pojok, yaitu 6 detik per klip pada podcast, dan di situlah pemindaian itu
+    # memang tidak berguna. Lihat `ada_facecam`.
+    panel_kecil = None
+    if ada_facecam(plan):
+        posisi = facecam_waktu
+        if posisi is None and video_id:
+            # Lewat `_facecam_untuk`, jadi pemindaian yang dibayar di sini ikut
+            # tersimpan dan dipakai ulang Studio saat klipnya dibuka.
+            posisi = _facecam_untuk(video_id, src, segments)
+        elif posisi is None:
+            try:
+                posisi = deteksi_facecam_waktu(str(src), segments, sw, sh,
+                                               rasio_potongan=rasio_bidang_wajah(1080, 1920))
+            except Exception as e:                   # noqa: BLE001
+                log.info("Facecam tidak terbaca: %s", str(e)[:120])
+                posisi = []
+        panel_kecil = panel_kecil_pada(posisi)
+    # Melabeli DENGAN letak panelnya, sama seperti sutradara per momen.
+    #
+    # Tanpa panel, satu wajah di tengah layar sudah cukup membuat sampel
+    # dilabeli "wajah": dan di permainan, wajah di tengah layar sering kali
+    # gambar: tokoh, poster, orang di dalam game. Terukur pada video gameplay
+    # pemiliknya 9 Oktober 2026: 9 dari 20 klip digolongkan ikut-wajah padahal
+    # panel kamera pemainnya terbaca jelas, dan klip 1 sampai "wajah 100%".
+    label = _label_per_sampel(plan, panel_kecil) if plan is not None and plan.people else []
     if not label:
         # Tanpa satu wajah pun, facecam juga tidak ada. Pemindai panel tidak
         # ditanya di sini: pada kartun ia menemukan "panel" di mana-mana.
@@ -1261,7 +1391,8 @@ def jenis_klip(src: Path, segments: list[dict]) -> dict:
     porsi = {k: round(label.count(k) / n, 2) for k in ("game", "wajah", "gerak")}
     # Wajah kecil di pojok hampir sepanjang klip sudah cukup jadi bukti;
     # panelnya baru diperiksa bila buktinya setengah-setengah.
-    if porsi["game"] >= JENIS_GAME_YAKIN or (porsi["game"] >= JENIS_GAME_MIN and facecam()):
+    if porsi["game"] >= JENIS_GAME_YAKIN or (porsi["game"] >= JENIS_GAME_MIN
+                                             and panel_kecil is not None):
         return {"mode": "gaming", "porsi": porsi,
                 "alasan": "Klip game, permainan dan kamera wajah pemain"}
     if porsi["gerak"] + porsi["game"] >= JENIS_GERAK_MIN:
@@ -1270,6 +1401,46 @@ def jenis_klip(src: Path, segments: list[dict]) -> dict:
         return {"mode": "motion", "porsi": porsi,
                 "alasan": "Wajah jarang terlihat, kamera mengikuti gerakan"}
     return {"mode": "smart", "porsi": porsi, "alasan": "Wajah terlihat jelas, mengikuti wajah"}
+
+
+def _facecam_untuk(video_id: str, src: Path, segments: list[dict]) -> list:
+    """
+    Linimasa kamera pemain untuk klip ini: dari simpanan bila ada, dipindai
+    bila belum, dan hasilnya disimpan.
+
+    Hanya dipanggil sesudah `ada_facecam(plan)` membuktikan klip ini memang
+    punya kamera pojok, jadi tidak ada video tanpa facecam yang membayar
+    pemindaian ini.
+    """
+    from ..routers.clips import _facecam_tersimpan, _simpan_facecam
+    from .media import probe
+    from .reframe import deteksi_facecam_waktu
+    from .render import rasio_bidang_wajah
+
+    try:
+        lama = _facecam_tersimpan(video_id, segments)
+        if lama is not None and "posisi" in lama:
+            return lama.get("posisi") or []
+    except Exception:                                # noqa: BLE001
+        pass
+
+    info = probe(str(src))
+    w = int(info.get("width") or 1920)
+    h = int(info.get("height") or 1080)
+    try:
+        posisi = deteksi_facecam_waktu(str(src), segments, w, h,
+                                       rasio_potongan=rasio_bidang_wajah(1080, 1920))
+    except Exception as e:                           # noqa: BLE001
+        log.info("Facecam tidak terbaca: %s", str(e)[:120])
+        return []
+    # Disimpan tanpa `potongan`: endpoint facecam melengkapinya sendiri saat
+    # Studio memintanya, dan itu jalur yang sudah ada.
+    try:
+        _simpan_facecam(video_id, segments,
+                        {"posisi": posisi or [], "src_w": w, "src_h": h})
+    except Exception:                                # noqa: BLE001
+        pass
+    return posisi or []
 
 
 def jenis_klip_tersimpan(video_id: str, src: Path, segments: list[dict]) -> dict:
@@ -1284,7 +1455,7 @@ def jenis_klip_tersimpan(video_id: str, src: Path, segments: list[dict]) -> dict
             return lama
     except Exception:
         pass
-    hasil = jenis_klip(src, segments)
+    hasil = jenis_klip(src, segments, video_id=video_id)
     try:
         cache_repo.simpan(kunci, hasil)
     except Exception as e:

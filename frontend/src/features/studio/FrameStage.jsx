@@ -26,6 +26,8 @@ export default function FrameStage({
   src,
   videoRef,
   frameMode = 'smart',
+  // Jenis klip ini masih ditanyakan server; `frameMode` masih tebakan bawaan.
+  menungguJenis = false,
   reframe = null,
   aspectRatio = '9:16',
   layout = null,
@@ -439,7 +441,8 @@ export default function FrameStage({
               hampir tidak bergerak di gambar, dan sistem lalu mengunci orang
               yang sedang menyimak. Saat itu terjadi, yang dibutuhkan bukan
               tebakan yang lebih pintar melainkan cara membetulkannya. */}
-          {frameMode === 'smart' && onLockPerson && (reframe?.people?.length ?? 0) > 1
+          {frameMode === 'smart' && !menungguJenis && onLockPerson
+            && (reframe?.people?.length ?? 0) > 1
             && reframe.people.map((_, i) => (
               <button key={i} type="button"
                       ref={(el) => { personRefs.current[i] = el; }}
