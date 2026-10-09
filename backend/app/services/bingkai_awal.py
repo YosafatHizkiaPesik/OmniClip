@@ -20,6 +20,8 @@ berbeda diam-diam.
 from __future__ import annotations
 
 import logging
+import os
+import time
 
 from ..errors import JobCancelled
 
@@ -40,6 +42,15 @@ log = logging.getLogger("omniclip.bingkai")
 # memperlambat apa pun yang dilihat.
 MAKS_KLIP = 60
 
+# Berapa lama pemanasan boleh memakai mesin sebelum menyerahkan sisanya ke
+# perhitungan saat klip dibuka.
+#
+# Lima menit. Diukur pada mesin pemiliknya (i5-8250U, 15 watt): pelacakan wajah
+# memakan kira-kira sepertiga durasi klip, jadi lima menit kira-kira cukup
+# untuk sepuluh sampai dua belas klip empat puluh detik: jauh lebih banyak
+# daripada yang dibuka orang dalam lima menit pertama sesi penyuntingan.
+ANGGARAN_DETIK = float(os.getenv("OMNICLIP_PEMANASAN_ANGGARAN", "300"))
+
 
 def run_bingkai_awal(ctx) -> dict:
     """payload: {video_id, klip: [{segments, subtitles}], aspect_ratio}"""
@@ -57,6 +68,7 @@ def _jalankan(ctx) -> dict:
     terendah. Itu yang membedakan "berjalan di latar" dari "menguasai mesin".
     """
     from ..routers.clips import hitung_reframe
+    from .clipmodel import baris_siap_pakai, giliran_bicara
     from .pipeline import pemanasan_bingkai
 
     video_id = ctx.payload["video_id"]
@@ -88,6 +100,16 @@ def _jalankan(ctx) -> dict:
     # Sekarang tiap klip digolongkan di sini, dan yang disiapkan adalah persis
     # jejak yang akan diminta klip itu: facecam untuk gaming, jejak gerakan
     # untuk klip tanpa wajah, jejak wajah untuk sisanya.
+    # Transkrip video, dibaca sekali: bahan untuk membangun ulang baris yang
+    # lahir dari cue takarir, persis seperti yang dilakukan `/api/projects`.
+    try:
+        from ..repos import transcripts as tx_repo
+        _tx = tx_repo.get_best(video_id)
+        kata_video = _tx["words"] if _tx else []
+    except Exception as e:                           # noqa: BLE001
+        log.info("Transkrip %s tidak terbaca: %s", video_id, str(e)[:140])
+        kata_video = []
+
     gameplay = _jenis_video(video_id, daftar)
     log.info("Video %s %s.", video_id,
              "gameplay" if gameplay else "bukan gameplay")
@@ -122,8 +144,30 @@ def _jalankan(ctx) -> dict:
 
     siap = gagal = tersusun = 0
     berhenti = False
+    kehabisan_waktu = False
+    mulai_pada = time.time()
     for i, klip in enumerate(daftar):
         ctx.check_cancelled()
+        # ANGGARAN WAKTU, bukan hanya jumlah klip.
+        #
+        # Batas 60 klip dipilih saat satu klip berharga sekitar sepuluh detik.
+        # Pada klip panjang harganya jauh berbeda: pelacakan wajah memakan
+        # kira-kira sepertiga durasi klip, jadi dua puluh klip empat puluh
+        # detik sudah lima menit, dan satu video berisi klip dua belas menit
+        # bisa menahan mesin berjam-jam. Dilaporkan pemiliknya 8 Oktober 2026
+        # dengan layar Partitur yang menjawab "server tidak menjawab dalam 30
+        # detik": laptopnya sedang memanaskan bingkai dua puluh klip, dan ia
+        # tidak bisa melihat daftar klipnya sendiri.
+        #
+        # Pekerjaan ini ada supaya membuka klip terasa seketika. Tujuan itu
+        # tidak menuntut SELURUH klip siap: klip yang belum sampai gilirannya
+        # tetap bisa dibuka dan menghitung bingkainya sendiri saat itu juga.
+        # Jadi ia bekerja selama anggarannya, lalu berhenti dan mengatakannya.
+        if i and time.time() - mulai_pada > ANGGARAN_DETIK:
+            kehabisan_waktu = True
+            log.info("Penyiapan bingkai %s berhenti: anggaran %.0f detik habis "
+                     "sesudah %d klip.", video_id, ANGGARAN_DETIK, i)
+            break
         # Minggir dulu bila ada yang menunggu gerbang CPU.
         #
         # "Prioritas paling rendah" pada antrean hanya memutuskan siapa yang
@@ -154,11 +198,17 @@ def _jalankan(ctx) -> dict:
                   if float(s["end"]) - float(s["start"]) > 0.2]
         if not segmen:
             continue
-        turns = tuple(
-            (float(l["start"]), float(l["end"]), int(l["speaker"]))
-            for l in (klip.get("subtitles") or [])
-            if l.get("speaker") is not None and l.get("end") is not None
-        )
+        # Giliran bicara diturunkan dari baris YANG SAMA dengan yang dipakai
+        # Studio, bukan dari baris mentah di penyimpanan.
+        #
+        # Giliran ini masuk ke kunci simpanan rencana bingkai. Sebelumnya di
+        # sini dihitung langsung dari `klip["subtitles"]`, sementara Studio
+        # menerima baris yang sudah dibersihkan, dibangun ulang, dan waktu
+        # tampilnya dibetulkan. Terukur pada video 20 klip pemiliknya,
+        # 8 Oktober 2026: selisihnya sampai 147 milidetik, cukup untuk membuat
+        # kuncinya berbeda: jadi pemanasan melaporkan "bingkai 11 dari 20
+        # siap" sementara tiap klip yang dibuka tetap menghitung dari nol.
+        turns = giliran_bicara(baris_siap_pakai(klip, kata_video))
         # Nomor, jumlah, dan judulnya. "Sedang memproses" tanpa nomor tidak
         # bisa dibedakan dari macet, dan justru pekerjaan inilah yang paling
         # lama tanpa ada yang menunggunya di layar mana pun.
@@ -196,6 +246,14 @@ def _jalankan(ctx) -> dict:
             # akan menghitungnya sendiri saat klip itu dibuka.
             gagal += 1
             log.warning("Bingkai awal klip %d gagal: %s", i + 1, str(e)[:160])
+
+    if kehabisan_waktu:
+        pesan = (f"Bingkai {siap} dari {len(daftar)} klip sudah siap. Sisanya "
+                 "dihitung sendiri saat klipnya dibuka, supaya mesin ini tidak "
+                 "dipakai habis-habisan di latar.")
+        ctx.progress(1.0, stage="done", message=pesan)
+        return {"siap": siap, "gagal": gagal, "kehabisan_waktu": True,
+                "sidik": ctx.payload.get("sidik") or ""}
 
     if berhenti:
         # Berhenti atas permintaan bukan kegagalan, dan bukan pula "selesai".

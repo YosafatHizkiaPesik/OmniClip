@@ -763,3 +763,48 @@ def suggest_hashtags(text: str, video_title: str = "", channel: str = "",
             break
 
     return tags[:limit]
+
+
+def baris_siap_pakai(klip: dict, kata_video: Optional[list] = None) -> list[dict]:
+    """
+    Baris subtitle sebuah klip, SESUDAH semua pembetulan yang dipakai Studio.
+
+    Satu tempat, dipakai dua pemanggil, dan itu alasan ia ada.
+
+    Studio membetulkan baris saat proyek dibuka: membersihkan penanda non-
+    ucapan, membangun ulang baris yang lahir dari cue takarir, dan memanjangkan
+    waktu tampil yang terlalu pendek. Pemanasan bingkai sebelumnya membaca
+    baris MENTAH dari penyimpanan, dan dari baris itu ia menurunkan giliran
+    bicara yang ikut masuk ke kunci simpanan rencana bingkai.
+
+    Akibatnya terukur pada video 20 klip milik pemiliknya, 8 Oktober 2026:
+    selisih waktu sampai 147 milidetik antara baris mentah dan baris yang
+    dipakai Studio. Kuncinya jadi berbeda, dan seluruh pemanasan klip itu
+    terbuang: pemanasan melaporkan "bingkai 11 dari 20 siap" sementara tiap
+    klip yang dibuka tetap menghitung dari nol. Itu persis keluhannya: "di
+    loading klipnya diberitahu sudah ada 11 klip yang diprogress bingkainya,
+    tapi klip selanjutnya saya buka malah loading lagi".
+    """
+    lines = sanitize_caption_lines(klip.get("subtitles") or [])
+    utuh = any(" " in (w.get("w") or "")
+               for l in lines for w in (l.get("words") or []))
+    if kata_video and klip.get("segments") and utuh:
+        try:
+            baru, _ = rebuild_subtitles_for_segments(klip["segments"], kata_video)
+            if baru:
+                lines = sanitize_caption_lines(baru)
+        except Exception:                            # noqa: BLE001
+            pass
+    return repair_caption_timing(lines)
+
+
+def giliran_bicara(baris: list[dict]) -> tuple:
+    """
+    (mulai, selesai, penutur) dari baris subtitle, bentuk yang dipakai rencana
+    bingkai. Dipisahkan supaya kedua pemanggilnya tidak bisa berbeda cara.
+    """
+    return tuple(
+        (float(l["start"]), float(l["end"]), int(l["speaker"]))
+        for l in (baris or [])
+        if l.get("speaker") is not None and l.get("end") is not None
+    )

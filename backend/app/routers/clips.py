@@ -426,7 +426,24 @@ async def start_auto_clip(req: AutoClipRequest):
     # analisis video ini sudah ada dari profil lain dan langsung dipakai ulang.
     from ..repos import profil as profil_repo
     from ..services import profil
-    profil_repo.tandai_video(profil.kini(), video_id)
+    pid = profil.kini()
+    profil_repo.tandai_video(pid, video_id)
+
+    # Preferensi pengklipan MILIK AKUN ini dipakai untuk yang tidak dikirim.
+    #
+    # Sebelumnya ketiganya hanya ada di localStorage peramban, satu nilai untuk
+    # semua akun. Dilaporkan 9 Oktober 2026: "tiap akun tidak memiliki
+    # settingnya masing masing". Dibaca di SERVER, bukan hanya dikirim dari
+    # satu halaman, supaya jalur mana pun yang memanggil auto-clip memakai
+    # setelan akun yang sama: halaman unduhan, halaman tonton, dan pekerjaan
+    # berjadwal.
+    setelan_klip = profil_repo.setelan(pid, "klip")
+    if not req.max_clips:
+        req.max_clips = int(setelan_klip.get("max_clips") or 0)
+    if req.whisper_model == "base" and setelan_klip.get("whisper_model"):
+        req.whisper_model = str(setelan_klip["whisper_model"])
+    if not req.gemini_model and setelan_klip.get("gemini_model"):
+        req.gemini_model = str(setelan_klip["gemini_model"])
 
     # Jalur audio yang diminta tidak sama dengan yang ada di disk: videonya
     # harus diunduh ulang, jadi hasil tersimpan tidak boleh langsung dipakai.
@@ -1075,14 +1092,14 @@ async def clip_reframe(req: ReframePlanRequest):
                 for s in req.segments if s.end - s.start > 0.2]
     if not segments:
         raise NotFound("Rentang klip tidak valid.")
-    turns = [
-        (float(l["start"]), float(l["end"]), int(l["speaker"]))
-        for l in (req.subtitles or [])
-        if l.get("speaker") is not None and l.get("end") is not None
-    ]
+    # Bentuk gilirannya diambil dari satu pembantu bersama, yang dipakai juga
+    # oleh pemanasan bingkai. Giliran ini bagian dari kunci simpanan rencana,
+    # jadi dua cara menuliskannya berarti dua kunci untuk klip yang sama.
+    from ..services.clipmodel import giliran_bicara
+    turns = giliran_bicara(req.subtitles or [])
     return await _di_kolam_pindai(
         hitung_reframe, video_id=video_id, segments=segments,
-        aspect_ratio=req.aspect_ratio, turns=tuple(turns),
+        aspect_ratio=req.aspect_ratio, turns=turns,
         lock_person=req.lock_person,
         person_keys=[k.model_dump() for k in req.person_keys],
         frame_motion=req.frame_motion, subjek=req.subjek)

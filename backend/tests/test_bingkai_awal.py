@@ -546,3 +546,120 @@ class JalurPekerjaanRingan(unittest.TestCase):
         # Tidak boleh ada penjajakan berkala ke daftar job yang penuh.
         self.assertNotIn("apiGet('/jobs?limit", jsx)
         self.assertNotIn("setTimeout(cari", jsx)
+
+
+class AnggaranWaktu(unittest.TestCase):
+    """
+    Pemanasan berhenti saat anggaran waktunya habis, bukan saat klipnya habis.
+
+    Dilaporkan pemiliknya 8 Oktober 2026 dengan layar Partitur yang menjawab
+    "server tidak menjawab dalam 30 detik": laptopnya sedang memanaskan bingkai
+    dua puluh klip, dan ia tidak bisa melihat daftar klipnya sendiri. Batas 60
+    klip dipilih saat satu klip berharga sepuluh detik; pada klip panjang
+    harganya sepertiga durasi klip, jadi batas itu tidak lagi membatasi apa pun
+    yang terasa.
+    """
+
+    def setUp(self):
+        self.asli = ba.ANGGARAN_DETIK
+        self.dipanggil = 0
+
+    def tearDown(self):
+        ba.ANGGARAN_DETIK = self.asli
+
+    def _jalankan(self, jumlah, lama_per_klip):
+        import time as _t
+        import app.routers.clips as clips
+
+        asli_hitung = clips.hitung_reframe
+        asli_tema = ba._tema_untuk_semua
+        mulai = _t.time()
+        maju = {"t": mulai}
+
+        def hitung(**kv):
+            self.dipanggil += 1
+            maju["t"] += lama_per_klip
+            return {}
+
+        clips.hitung_reframe = hitung
+        ba._tema_untuk_semua = lambda *a, **kv: 0
+        asli_time = ba.time.time
+        ba.time.time = lambda: maju["t"]
+        try:
+            klip = [{"segments": [{"start": i * 60.0, "end": i * 60.0 + 40.0}],
+                     "subtitles": [{"start": i * 60.0, "end": i * 60.0 + 2.0, "speaker": 0}]}
+                    for i in range(jumlah)]
+            return ba.run_bingkai_awal(Ctx({"paksa": True, "video_id": "v", "klip": klip}))
+        finally:
+            clips.hitung_reframe = asli_hitung
+            ba._tema_untuk_semua = asli_tema
+            ba.time.time = asli_time
+
+    def test_berhenti_saat_anggaran_habis(self):
+        ba.ANGGARAN_DETIK = 300.0
+        hasil = self._jalankan(jumlah=20, lama_per_klip=60.0)
+        self.assertTrue(hasil.get("kehabisan_waktu"))
+        # Lima menit dengan satu klip semenit: enam klip, bukan dua puluh.
+        self.assertLessEqual(self.dipanggil, 8)
+        self.assertGreaterEqual(self.dipanggil, 4)
+
+    def test_klip_murah_tetap_selesai_semua(self):
+        ba.ANGGARAN_DETIK = 300.0
+        hasil = self._jalankan(jumlah=12, lama_per_klip=2.0)
+        self.assertFalse(hasil.get("kehabisan_waktu"))
+        self.assertEqual(self.dipanggil, 12)
+
+    def test_klip_pertama_tidak_pernah_dilewati(self):
+        ba.ANGGARAN_DETIK = 0.0
+        self._jalankan(jumlah=5, lama_per_klip=10.0)
+        self.assertEqual(self.dipanggil, 1)
+
+
+class GiliranSamaDenganStudio(unittest.TestCase):
+    """
+    Pemanasan harus menurunkan giliran bicara dari baris yang SAMA dengan yang
+    diterima Studio.
+
+    Dilaporkan 8 Oktober 2026: "di loading klipnya diberitahu sudah ada 11 dari
+    20 klip yang diprogress bingkainya, tapi klip selanjutnya saya buka malah
+    loading lagi dan bingkai belum siap". Sebabnya terukur: `/api/projects`
+    membetulkan waktu tampil baris sebelum mengirimkannya, pemanasan membaca
+    baris mentah, dan selisihnya sampai 147 milidetik: cukup untuk membuat
+    kunci simpanan rencana bingkai berbeda, sehingga seluruh pemanasannya
+    terbuang.
+    """
+
+    def baris_mentah(self):
+        # Baris 0,3 detik: persis bentuk yang DIPANJANGKAN `repair_caption_timing`,
+        # jadi baris mentah dan baris siap pakai pasti berbeda waktunya.
+        return [{"start": 1.0, "end": 1.3, "speaker": 0, "text": "halo",
+                 "words": [{"w": "halo", "s": 1.0, "e": 1.3}]},
+                {"start": 5.0, "end": 5.3, "speaker": 1, "text": "hai",
+                 "words": [{"w": "hai", "s": 5.0, "e": 5.3}]}]
+
+    def test_giliran_pemanasan_sama_dengan_yang_dikirim_studio(self):
+        from app.services.clipmodel import baris_siap_pakai, giliran_bicara
+
+        klip = {"segments": [{"start": 0.0, "end": 8.0}],
+                "subtitles": self.baris_mentah()}
+        # Sisi Studio: baris yang sudah dibetulkan `/api/projects`, lalu
+        # dikirim kembali apa adanya ke `/clip-reframe`.
+        dari_studio = giliran_bicara(baris_siap_pakai(klip, []))
+        # Sisi pemanasan: klip tersimpan, dilewatkan pembantu yang sama.
+        dari_pemanasan = giliran_bicara(baris_siap_pakai(klip, []))
+        self.assertEqual(dari_studio, dari_pemanasan)
+        # Dan keduanya memang BUKAN baris mentah: kalau sama, uji ini tidak
+        # membuktikan apa pun.
+        mentah = giliran_bicara(klip["subtitles"])
+        self.assertNotEqual(mentah, dari_studio)
+
+    def test_pemanasan_memakai_pembantu_bersama(self):
+        """Giliran tidak boleh dihitung ulang dengan tangan di dalam pemanasan."""
+        sumber = Path(ba.__file__).read_text(encoding="utf-8")
+        self.assertIn("giliran_bicara(baris_siap_pakai(klip, kata_video))", sumber)
+        self.assertNotIn('int(l["speaker"])', sumber)
+
+    def test_clip_reframe_memakai_pembantu_bersama(self):
+        import app.routers.clips as clips
+        sumber = Path(clips.__file__).read_text(encoding="utf-8")
+        self.assertIn("giliran_bicara(req.subtitles or [])", sumber)

@@ -88,51 +88,23 @@ async def get_project(video_id: str):
     # hanya saat analisis baru dibuat, supaya project yang sudah tersimpan ikut
     # membaik tanpa perlu dianalisis ulang.
     from ..repos import transcripts as tx_repo
-    from ..services.clipmodel import (rebuild_subtitles_for_segments,
-                                      repair_caption_timing,
-                                      sanitize_caption_lines, suggest_title)
+    from ..services.clipmodel import baris_siap_pakai, suggest_title
 
     # Transkrip dipakai untuk membangun ulang baris yang memang rusak sejak
     # dibuat. Dibaca sekali, bukan per klip.
     tersimpan = (await asyncio.to_thread(tx_repo.get_best, vid))
     kata_video = tersimpan["words"] if tersimpan else []
 
-    def _kalimat_utuh(lines: list[dict]) -> bool:
-        """
-        Apakah baris ini lahir dari cue takarir, bukan dari kata?
-
-        Tandanya satu dan tidak ambigu: sebuah "kata" yang berisi spasi. Itu
-        hanya mungkin terjadi pada takarir resmi kanal, yang berwaktu per-cue —
-        dan baris yang lahir darinya memuat kalimat enam puluh karakter dalam
-        satu setengah detik, yang tidak bisa dibaca siapa pun.
-        """
-        return any(" " in (w.get("w") or "")
-                   for l in lines for w in (l.get("words") or []))
-
     def _lengkapi(c: dict) -> dict:
-        lines = sanitize_caption_lines(c.get("subtitles") or [])
-        # Dibangun ulang HANYA bila barisnya memang cue, bukan kata.
+        # Baris dibetulkan oleh satu pembantu bersama di clipmodel.
         #
-        # Ini membuang suntingan tangan pada klip itu, jadi syaratnya sengaja
-        # sempit: yang dibangun ulang cuma yang sejak awal tidak pernah bisa
-        # dibaca. Transkripnya sendiri sudah dipecah jadi kata di lapisan
-        # penyimpanan, jadi hasil bangunan ulangnya memakai waktu per kata.
-        if kata_video and c.get("segments") and _kalimat_utuh(lines):
-            try:
-                baru, _ = rebuild_subtitles_for_segments(c["segments"], kata_video)
-                if baru:
-                    lines = sanitize_caption_lines(baru)
-            except Exception:      # membangun ulang tidak boleh menjatuhkan proyek
-                pass
-        # Waktu tampil dibetulkan JUGA untuk klip yang sudah tersimpan.
-        #
-        # Tanpa ini, perbaikan hanya berlaku untuk analisis baru: proyek yang
-        # sudah ada tetap memakai baris berkedip 0,3 detik selamanya, dan
-        # satu-satunya cara memperbaikinya adalah menganalisis ulang seluruh
-        # video. Keduanya hanya MEMANJANGKAN ke dalam jeda yang memang kosong
-        # dan tidak pernah melewati baris berikutnya, jadi menjalankannya
-        # berulang kali pada data yang sama tidak menggeser apa pun lagi.
-        lines = repair_caption_timing(lines)
+        # Dulu pembetulannya ditulis di sini saja, dan pemanasan bingkai
+        # membaca baris mentah dari penyimpanan. Dari baris itulah pemanasan
+        # menurunkan giliran bicara yang masuk ke kunci simpanan rencana
+        # bingkai, jadi kuncinya tidak pernah cocok dengan yang diminta Studio
+        # dan seluruh pemanasannya terbuang. Sekarang keduanya memanggil
+        # `baris_siap_pakai`, jadi perbedaan itu tidak mungkin lahir lagi.
+        lines = baris_siap_pakai(c, kata_video)
         out = {**c, "subtitles": lines}
         # Judul diisikan bila belum ada.
         #
