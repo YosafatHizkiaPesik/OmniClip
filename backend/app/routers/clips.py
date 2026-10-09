@@ -806,7 +806,7 @@ def _ingat_plan(src: str, segments: list[dict], plan) -> None:
 # ulang selamanya dan satu-satunya cara melihat perbaikannya adalah menghapus
 # seluruh simpanan. Dilewatkan sekali pada 9 Oktober 2026, saat potongan
 # adegan dikecualikan dari jeda antar batas di `reframe._smooth`.
-BINGKAI_VERSI = 3
+BINGKAI_VERSI = 4
 
 
 def _kunci_reframe(key: tuple) -> str:

@@ -3163,6 +3163,35 @@ def plan_reframe(source_video_path: str, segments: list[dict], *,
     if people and lock_person is None:
         centers, subject = _tahan_saat_sepi(centers, subject, people, seen)
 
+    # Subjek ditenangkan SEKALI, dan titiknya ikut.
+    #
+    # Sampai 9 Oktober 2026 keduanya tidak sejalan: `centers` mengikuti subjek
+    # mentah, sementara batas lompatan di `_smooth` dihitung dari subjek yang
+    # sudah ditenangkan `_settle_subject`. Jadi pergantian yang terlalu pendek
+    # untuk dipercaya tetap MENGGESER SASARAN, tanpa pernah mendapat izin
+    # melompat ke sana. Yang tersisa buat kamera cuma satu: menggeser pelan
+    # melintasi layar dengan plafon kecepatan, dan selama geseran itu bingkai
+    # tidak memuat siapa pun.
+    #
+    # Terukur pada video NESSIE JUDGE pemiliknya, 15 klip: bingkai kosong 3,35%
+    # dengan 13,4 perpindahan per menit. Kaitannya rapat, klip demi klip, dan
+    # itu yang menunjukkan sebabnya: klip 10 kosong 9,1% dengan 18,1
+    # perpindahan, klip 13 kosong 8,6% dengan 22,4; sementara ketiga klip yang
+    # kosongnya NOL semuanya di bawah 7 perpindahan per menit. Pada video lain
+    # yang perpindahannya memang jarang (Dokter Tirta, 0-4 per menit), bingkai
+    # kosongnya 0,00% di seluruh klip.
+    #
+    # Tidak dijalankan saat pengguna memasang tanda orangnya sendiri: di situ
+    # ia memang meminta perpindahan pada detik yang ia tentukan, dan menahannya
+    # berarti mengabaikan permintaannya.
+    if people and lock_person is None and not person_keys:
+        subject = _settle_subject(list(subject))
+        centers = [
+            float(people[s][i]) if (s is not None and s < len(people)
+                                    and people[s][i] is not None) else c
+            for i, (c, s) in enumerate(zip(centers, subject))
+        ]
+
     smoothed = _smooth(centers, cuts, source_w=source_w, crop_w=crop_w,
                        subject=subject, motion=frame_motion)
 

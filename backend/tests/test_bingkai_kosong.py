@@ -140,3 +140,63 @@ class SimpananIkutNaikVersi(unittest.TestCase):
         finally:
             c.BINGKAI_VERSI = asli
         self.assertNotEqual(a, b, "versi tidak ikut ke dalam kunci")
+
+
+class SubjekDanTitiknyaSejalan(unittest.TestCase):
+    """
+    Pergantian subjek yang terlalu pendek untuk dipercaya tidak boleh
+    menggeser sasaran bingkai.
+
+    Sampai 9 Oktober 2026 keduanya tidak sejalan: `centers` mengikuti subjek
+    mentah, sementara izin melompat di `_smooth` dihitung dari subjek yang
+    sudah ditenangkan `_settle_subject`. Jadi sela satu kata menggeser sasaran
+    tanpa pernah mendapat izin melompat ke sana, dan yang tersisa buat kamera
+    cuma menggeser pelan melintasi layar. Selama geseran itu bingkai tidak
+    memuat siapa pun.
+
+    Terukur pada video NESSIE JUDGE pemiliknya, 15 klip: bingkai kosong 3,35%
+    dengan 13,4 perpindahan per menit, sementara klip yang kosongnya NOL
+    semuanya di bawah 7 perpindahan per menit.
+    """
+
+    def test_sela_pendek_tidak_menggeser_sasaran(self):
+        """Sela 0,25 detik, jauh di bawah MIN_SUBJECT_HOLD 0,6 detik."""
+        n = 8 * 6
+        subject = [0] * n
+        for i in range(8 * 2, 8 * 2 + 2):            # 0,25 detik milik orang 1
+            subject[i] = 1
+        ditenangkan = R._settle_subject(list(subject))
+        self.assertEqual(set(ditenangkan), {0},
+                         "sela pendek masih diakui sebagai pergantian subjek")
+
+    def test_giliran_sungguhan_tetap_diakui(self):
+        """Yang ditahan hanya sela; giliran bicara sungguhan harus lewat."""
+        n = 8 * 6
+        subject = [0] * n
+        for i in range(8 * 2, 8 * 4):                # dua detik penuh
+            subject[i] = 1
+        ditenangkan = R._settle_subject(list(subject))
+        self.assertEqual(ditenangkan[8 * 3], 1)
+        self.assertEqual(ditenangkan[0], 0)
+
+    def test_dikerjakan_sebelum_penghalus(self):
+        """
+        Dijaga di sumbernya: titiknya harus ikut ditulis ulang, bukan cuma
+        subjeknya. Kalau hanya subjeknya yang ditenangkan, ketidakcocokan yang
+        sama lahir lagi dalam bentuk lain.
+        """
+        from pathlib import Path
+        src = Path(R.__file__).read_text(encoding="utf-8")
+        awal = src.index("    if people and lock_person is None and not person_keys:")
+        blok = src[awal:src.index("    smoothed = _smooth(", awal)]
+        self.assertIn("_settle_subject(list(subject))", blok)
+        self.assertIn("centers = [", blok)
+
+    def test_tanda_orang_dari_pengguna_tidak_ditahan(self):
+        """
+        Di situ pengguna memang meminta perpindahan pada detik yang ia
+        tentukan, dan menahannya berarti mengabaikan permintaannya.
+        """
+        from pathlib import Path
+        src = Path(R.__file__).read_text(encoding="utf-8")
+        self.assertIn("if people and lock_person is None and not person_keys:", src)
