@@ -116,17 +116,28 @@ class TulisanDigambarLangsung(unittest.TestCase):
 
 class BidangWajahTidakKeluarFacecam(unittest.TestCase):
     """
-    Janji yang diminta pemiliknya, dan yang paling sering dilanggar sebelum ini:
-    apa pun yang di luar panel facecam isinya permainan, dan permainan tidak
-    boleh masuk ke bidang wajah.
+    Janji yang diminta pemiliknya, dengan satu kelonggaran yang juga ia minta.
+
+    Aslinya, 30 September 2026: apa pun yang di luar panel facecam isinya
+    permainan, dan permainan tidak boleh masuk ke bidang wajah.
+
+    Dilonggarkan 9 Oktober 2026 atas permintaannya yang lain: "bingkai untuk
+    wajahnya terlalu crop wajahnya saja, seharusnya dilebihkan juga untuk crop
+    badannya". Kurungan penuh membuang 29% tinggi panel, dan di situlah bahu
+    dan dadanya. Yang diizinkan sekarang hanya KE SAMPING, sebatas
+    LUAR_PANEL_MAKS, dan hanya demi memakai seluruh tinggi panel. Ke atas dan
+    ke bawah tetap tidak boleh, karena di situlah bingkai permainan.
     """
 
     PANEL = {"x": 4.0, "y": 20.0, "w": 18.0, "h": 30.0}
 
     def _di_dalam(self, r, p):
-        return (r["x"] >= p["x"] - 0.01 and r["y"] >= p["y"] - 0.01
-                and r["x"] + r["w"] <= p["x"] + p["w"] + 0.01
-                and r["y"] + r["h"] <= p["y"] + p["h"] + 0.01)
+        """Tegak keras, mendatar sebatas kelonggaran yang disengaja."""
+        from app.services.render import LUAR_PANEL_MAKS
+        batas = p["w"] * (1 + 2 * LUAR_PANEL_MAKS) + 0.01
+        return (r["y"] >= p["y"] - 0.01
+                and r["y"] + r["h"] <= p["y"] + p["h"] + 0.01
+                and r["w"] <= batas)
 
     def test_kepala_yang_wajar_tetap_di_dalam(self):
         muka = [10.0, 28.0, 16.0, 40.0]

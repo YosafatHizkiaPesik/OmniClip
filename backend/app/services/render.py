@@ -547,6 +547,74 @@ def _pilih(lo: float, hi: float, plo: float, phi: float, ingin: float) -> float:
 # Bagian ruang sisa yang ditaruh di ATAS kepala; sisanya di bawah.
 ATAS_KEPALA_SISA = 0.25
 
+# Seberapa jauh potongan reaksi boleh MELAMPAUI panel ke samping, dalam pecahan
+# lebar panel, demi memakai seluruh TINGGI panel.
+#
+# Diminta pemiliknya 9 Oktober 2026: "bingkai untuk wajahnya terlalu crop
+# wajahnya saja, seharusnya dilebihkan juga untuk crop badannya, jika full
+# wajahnya nantinya terlalu besar di hasil preview dan render".
+#
+# Ia benar, dan sebabnya bentuk. Bidang wajah selebar kanvas berasio 1,41:1
+# sementara panel facecam hampir persegi. Potongan terbesar berasio bidang yang
+# muat DI DALAM panel karena itu membuang tinggi panelnya: terukur pada klip 1
+# video pemiliknya, panel 15,2x27,0% dipotong jadi 15,2x19,2%. Yang terbuang
+# 29% tinggi panel, dan di situlah bahu dan dadanya.
+#
+# Dengan melampaui panel ke samping, tinggi panel terpakai penuh:
+#
+#   di dalam panel     potongan 15,2x19,2%  zoom 3,70x  wajah 47% lebar kanvas
+#   tinggi panel penuh potongan 21,4x27,0%  zoom 2,63x  wajah 33% lebar kanvas
+#
+# Harganya nyata dan harus disebut: sekitar 14% lebar bidang di kiri dan di
+# kanan berisi gambar permainan, bukan facecam.
+#
+# Angkanya PER SISI, dan 0,22 bukan pilihan selera. Ia persis sebanyak yang
+# dibutuhkan supaya tinggi panel terpakai penuh pada bentuk panel yang biasa
+# (hampir persegi) dengan bidang wajah 40%. Dicoba 0,35 lebih dulu dan ditolak
+# dengan angkanya sendiri: potongannya jadi 25,8% lebar, 42% bidang wajah
+# berisi permainan, dan wajahnya tinggal 27% lebar kanvas. Itu bukan lagi
+# "dilebihkan sedikit untuk badannya", itu bidang permainan yang kebetulan ada
+# wajahnya.
+#
+# Nol mengembalikan perilaku sebelum hari itu, persis.
+LUAR_PANEL_MAKS = 0.22
+
+
+def _pakai_tinggi_panel(dasar: dict, panel: dict, rasio_px: float,
+                       src_aspek: float) -> dict:
+    """
+    Melebarkan potongan reaksi sampai SELURUH tinggi panel terpakai.
+
+    Lihat LUAR_PANEL_MAKS untuk angka dan harganya. Dipanggil sesudah potongan
+    terbesar yang muat di dalam panel sudah dihitung, jadi yang dikerjakan di
+    sini hanya menukar tinggi yang terbuang dengan lebar yang melampaui panel.
+
+    Tidak pernah melampaui bingkai sumber, dan tidak pernah mengecilkan apa pun:
+    kalau pelebarannya tidak muat, yang dikembalikan potongan semula.
+    """
+    if LUAR_PANEL_MAKS <= 0:
+        return dasar
+    ph = float(panel["h"])
+    if ph <= float(dasar["h"]) + 0.01:
+        return dasar                                 # tingginya memang sudah penuh
+    # Lebar yang dibutuhkan supaya potongan setinggi panel tetap berasio bidang.
+    w = ph * rasio_px / src_aspek
+    tambah = w - float(dasar["w"])
+    if tambah <= 0:
+        return dasar
+    if tambah > LUAR_PANEL_MAKS * float(panel["w"]) * 2:
+        # Terlalu jauh: ambil sebanyak yang diizinkan, tingginya ikut menyesuaikan.
+        w = float(dasar["w"]) + LUAR_PANEL_MAKS * float(panel["w"]) * 2
+    h = w * src_aspek / rasio_px
+    if w > 100.0 or h > 100.0:
+        return dasar
+    # Dipusatkan pada panel, lalu dikurung di dalam bingkai sumber.
+    x = float(panel["x"]) + float(panel["w"]) / 2 - w / 2
+    y = float(panel["y"]) + ph / 2 - h / 2
+    x = min(max(0.0, x), 100.0 - w)
+    y = min(max(0.0, y), 100.0 - h)
+    return {"x": round(x, 2), "y": round(y, 2), "w": round(w, 2), "h": round(h, 2)}
+
 
 def kotak_reaksi(kotak: dict, muka, rasio_px: float, src_aspek: float) -> dict:
     """
@@ -582,12 +650,21 @@ def kotak_reaksi(kotak: dict, muka, rasio_px: float, src_aspek: float) -> dict:
     menentukan di mana memangkasnya adalah di mana kepalanya.
     """
     dasar = _pas_rasio(kotak, rasio_px, src_aspek, dalam=True)
+    dasar = _pakai_tinggi_panel(dasar, kotak, rasio_px, src_aspek)
     butuh = _ruang_wajah(muka, kotak)
     if butuh is None:
         return dasar
     w, h = float(dasar["w"]), float(dasar["h"])
+    # Batas geser: panelnya sendiri bila potongan masih muat di dalamnya, atau
+    # seluruh bingkai bila potongan memang sengaja melampauinya (lihat
+    # `_pakai_tinggi_panel`). Tanpa pelonggaran ini, `_pilih` di bawah menerima
+    # rentang kosong dan potongannya terlempar ke tengah panel.
     px, py = float(kotak["x"]), float(kotak["y"])
     pw, ph = float(kotak["w"]), float(kotak["h"])
+    if w > pw:
+        px, pw = max(0.0, px + pw / 2 - w / 2), w
+    if h > ph:
+        py, ph = max(0.0, py + ph / 2 - h / 2), h
     # Panel syarat KERAS, kepala syarat lunak: apa pun yang di luar panel
     # isinya permainan, dan permainan di bidang wajah adalah keluhan yang
     # berulang — "bingkai wajahnya terlalu besar melebihi facecam bahkan

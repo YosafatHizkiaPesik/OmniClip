@@ -1830,6 +1830,26 @@ export default function Editor({ project, onBack }) {
 
   const letter = selected ? nomorKlip(clips.indexOf(selected)) : '·';
 
+  /**
+   * Urutan daftar klip: waktu (bawaan) atau nilai tertinggi.
+   *
+   * Diminta pemiliknya 9 Oktober 2026: "saya tidak ingin banyak video klip
+   * untuk satu video jadi saya mengambil klip dengan rating tertinggi... tapi
+   * ingat bahwa default bawaannya masih sama seperti saat ini yang mengurutkan
+   * sesuai dengan timestamp video raw".
+   *
+   * NOMORNYA TIDAK IKUT BERUBAH. Yang diurutkan hanya tampilannya; tiap baris
+   * tetap membawa nomor aslinya, yaitu urutan waktu di video mentah. Kalau
+   * nomornya ikut diurutkan, "klip 3" berarti dua klip berbeda tergantung
+   * sakelar ini, dan nama berkas hasil render memakai nomor itu.
+   */
+  const [urutNilai, setUrutNilai] = useState(false);
+  const klipTampil = useMemo(() => {
+    const dengan = clips.map((clip, i) => ({ clip, i }));
+    if (!urutNilai) return dengan;
+    return [...dengan].sort((a, b) => (Number(b.clip.score) || 0) - (Number(a.clip.score) || 0));
+  }, [clips, urutNilai]);
+
   return (
     /* ── Studio sebagai RUANG, bukan halaman ────────────────────────────────
        Sebelumnya seluruh studio adalah satu halaman yang digulir: panggung di
@@ -1956,12 +1976,27 @@ export default function Editor({ project, onBack }) {
           <aside className="studio-rail">
             <div className="plate-head">
               <span className="mark" style={{ color: 'var(--ink)' }}>Klip</span>
-              <span className="tc" style={{ marginLeft: 'auto', fontSize: '.72rem', color: 'var(--ink-3)' }}>
+              {/* Urutan daftar. Bawaannya tetap urutan waktu di video mentah,
+                  dan itu disengaja: nomor klip ikut urutan itu, dan orang
+                  menyusun cerita dari awal ke akhir. Yang mau memilih beberapa
+                  klip terbaik saja menyalakan urutan nilai, dan nomornya tetap
+                  menunjuk klip yang sama supaya tidak ada yang tertukar. */}
+              <button className="chip" onClick={() => setUrutNilai((v) => !v)}
+                      title={urutNilai
+                        ? 'Kembali ke urutan waktu di video'
+                        : 'Urutkan dari nilai tertinggi ke terendah'}
+                      style={{ marginLeft: 'auto', fontSize: '.66rem',
+                               padding: '2px 7px', cursor: 'pointer',
+                               color: urutNilai ? 'var(--accent-cyan)' : 'var(--ink-3)',
+                               borderColor: urutNilai ? 'var(--accent-cyan)' : undefined }}>
+                {urutNilai ? 'Nilai' : 'Waktu'}
+              </button>
+              <span className="tc" style={{ fontSize: '.72rem', color: 'var(--ink-3)' }}>
                 {clips.length}
               </span>
             </div>
             <div className="reh-index">
-              {clips.map((clip, i) => {
+              {klipTampil.map(({ clip, i }) => {
                 const on = clip.clip_id === editor.selectedId;
                 return (
                   <div key={clip.clip_id} onClick={() => selectClip(clip.clip_id)}

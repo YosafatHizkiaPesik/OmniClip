@@ -105,8 +105,25 @@ def tanya_gemini(bahan: list[dict], *, schema, sistem: str, api_key: str,
         temperature=suhu, max_output_tokens=maks_keluaran,
         system_instruction=sistem,
         # Resolusi rendah: ±100 token per detik video, bukan ±300. Yang dinilai
-        # adalah siapa bereaksi kapan — wajah dan gerak besar, bukan detail.
+        # adalah siapa bereaksi kapan, yaitu wajah dan gerak besar, bukan detail.
         media_resolution=types.MediaResolution.MEDIA_RESOLUTION_LOW,
+        # Token BERPIKIR ikut memakan jatah keluaran, dan itu yang membuang
+        # panggilan ke model terbaik.
+        #
+        # Terbaca di catatan pemakaian pemiliknya, 9 Oktober 2026: pemilihan
+        # tema subtitle gagal berulang kali dengan "JSON tidak lengkap (281
+        # karakter, finish_reason=MAX_TOKENS)" padahal jatahnya 2.700 token.
+        # Dua ratus delapan puluh satu karakter itu sekitar 80 token; sisanya
+        # habis sebelum satu huruf jawaban pun keluar. Yang gagal justru model
+        # kuat (3.5-flash dan 3-flash-preview, 0 dari 4 berhasil), dan yang
+        # akhirnya menjawab model lite. Jadi bukan modelnya yang kurang pintar,
+        # melainkan jatahnya yang habis dipakai berpikir.
+        #
+        # Tugas-tugas di sini memilih dari menu dan mengisi JSON berstruktur;
+        # tidak satu pun menuntut penalaran panjang. Dimatikan, seluruh jatah
+        # jadi milik jawabannya. Model yang tidak mengenal setelan ini
+        # mengabaikannya, dan itu sebabnya ia dipasang tanpa syarat.
+        thinking_config=types.ThinkingConfig(thinking_budget=0),
     )
     isi = _bagian_gemini(bahan)
     tenggat = time.monotonic() + batas_detik

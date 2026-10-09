@@ -122,15 +122,27 @@ class GeometriGaming(unittest.TestCase):
         self.assertTrue(all(id_), "ada bingkai tanpa id")
         self.assertEqual(len(set(id_)), len(id_), "id bingkai tidak unik")
 
-    def test_potongan_wajah_tidak_pernah_keluar_panel_facecam(self):
+    def test_potongan_wajah_tidak_jauh_keluar_panel_facecam(self):
         """
-        Apa pun bentuk bidangnya, yang tampil di bidang wajah harus isi
-        facecam — bukan sepotong permainan di sebelahnya.
+        Yang tampil di bidang wajah harus isi facecam, dengan kelonggaran yang
+        TERBATAS dan disengaja di kiri-kanannya.
 
-        Ini yang menggantikan penyempitan bidang: dengan bidang selebar
-        kanvas, satu-satunya penjaga yang tersisa adalah kurungan di
-        `kotak_reaksi`. Keluhan aslinya, 30 September 2026: "bingkai wajahnya
-        terlalu besar melebihi facecam bahkan memotong bingkai game".
+        Dua permintaan pemiliknya bertabrakan di sini, dan keduanya sah.
+
+        30 September 2026: "bingkai wajahnya terlalu besar melebihi facecam
+        bahkan memotong bingkai game". Sejak itu potongan dikurung di dalam
+        panel.
+
+        9 Oktober 2026: "bingkai untuk wajahnya terlalu crop wajahnya saja,
+        seharusnya dilebihkan juga untuk crop badannya". Kurungan itu membuang
+        29% tinggi panel, dan di situlah bahu dan dadanya; terukur pada klip
+        pemiliknya, wajahnya jadi 47% lebar kanvas.
+
+        Yang dipakai sekarang bukan membuang kurungannya melainkan memberinya
+        batas: melampaui panel ke SAMPING sebanyak LUAR_PANEL_MAKS, demi
+        memakai seluruh tinggi panel. Hasilnya wajah 33% lebar kanvas dengan
+        14% bidang berisi permainan di tiap sisi. Nol mengembalikan aturan
+        30 September persis.
         """
         for panel in (self.FACECAM,
                       {"x": 70.0, "y": 60.0, "w": 28.0, "h": 36.0},
@@ -138,10 +150,16 @@ class GeometriGaming(unittest.TestCase):
             with self.subTest(panel=panel):
                 src = susun_layout_gaming(panel, src_w=1920, src_h=1080,
                                           out_w=1080, out_h=1920)["frames"][1]["src"]
-                self.assertGreaterEqual(src["x"], panel["x"] - 0.05)
+                from app.services.render import LUAR_PANEL_MAKS
                 self.assertGreaterEqual(src["y"], panel["y"] - 0.05)
-                self.assertLessEqual(src["x"] + src["w"],
-                                     panel["x"] + panel["w"] + 0.05)
+                self.assertLessEqual(
+                    src["w"], panel["w"] * (1 + 2 * LUAR_PANEL_MAKS) + 0.05)
+                # Dan panelnya tetap jadi isi utamanya: lebih dari separuh
+                # bidang wajah harus benar-benar facecam.
+                tumpang = (min(src["x"] + src["w"], panel["x"] + panel["w"])
+                           - max(src["x"], panel["x"]))
+                self.assertGreater(tumpang / src["w"], 0.55,
+                                   "bidang wajah lebih banyak permainan daripada facecam")
                 self.assertLessEqual(src["y"] + src["h"],
                                      panel["y"] + panel["h"] + 0.05)
 
@@ -155,9 +173,13 @@ class GeometriGaming(unittest.TestCase):
         Jadi dua hal, dan urutannya penting: tidak boleh LEBIH (keras), dan
         sekecil-kecilnya kurang (sebisanya). Yang kedua inilah yang dulu
         dilanggar — potongan diukur dari kepala, jadi ia lebih kecil daripada
-        panelnya di kedua sisi sekaligus. Sekarang satu sisinya selalu pas
-        dengan sisi panelnya; yang dipangkas hanya sisi yang bentuknya memang
-        tidak muat.
+        panelnya di kedua sisi sekaligus.
+
+        "Tidak boleh lebih" dilonggarkan 9 Oktober 2026, atas permintaannya
+        yang lain: ke SAMPING saja, sebanyak LUAR_PANEL_MAKS lebar panel, demi
+        memakai seluruh tinggi panel sehingga bahunya ikut masuk. Ke atas dan
+        ke bawah tetap tidak boleh lebih, karena di situlah bingkai permainan
+        yang tidak boleh terpotong.
         """
         for panel in (self.FACECAM,
                       {"x": 70.0, "y": 60.0, "w": 28.0, "h": 36.0},
@@ -168,16 +190,25 @@ class GeometriGaming(unittest.TestCase):
                 tata = susun_layout_gaming(panel, src_w=1920, src_h=1080,
                                            out_w=1080, out_h=1920)
                 src = tata["frames"][1]["src"]
-                # Tidak boleh LEBIH: seluruh potongan ada di dalam panel.
-                self.assertGreaterEqual(src["x"], panel["x"] - 0.05)
+                # Tidak boleh LEBIH ke atas dan ke bawah: di situlah bingkai
+                # permainan yang tidak boleh terpotong.
                 self.assertGreaterEqual(src["y"], panel["y"] - 0.05)
-                self.assertLessEqual(src["x"] + src["w"], panel["x"] + panel["w"] + 0.05)
                 self.assertLessEqual(src["y"] + src["h"], panel["y"] + panel["h"] + 0.05)
-                # Dan sebesar yang bentuknya izinkan: satu sisi pas dengan
-                # sisi panelnya, tidak keduanya mengecil.
-                pas_lebar = abs(src["w"] - panel["w"]) <= 0.05
-                pas_tinggi = abs(src["h"] - panel["h"]) <= 0.05
-                self.assertTrue(pas_lebar or pas_tinggi,
+                # Ke samping boleh, sebatas yang disengaja. Batasnya TOTAL,
+                # bukan per sisi: panel yang menempel tepi layar melempar
+                # seluruh kelonggarannya ke satu sisi, dan itu benar.
+                from app.services.render import LUAR_PANEL_MAKS
+                self.assertLessEqual(
+                    src["w"], panel["w"] * (1 + 2 * LUAR_PANEL_MAKS) + 0.05,
+                    "potongan melampaui panel lebih jauh dari yang disengaja")
+                # Dan sebesar yang bentuknya izinkan: tidak boleh lebih kecil
+                # daripada panelnya di KEDUA sisi sekaligus. Itulah kesalahan
+                # aslinya, saat potongan diukur dari kepala alih-alih dari
+                # panel. Satu sisi boleh lebih besar sekarang (lihat
+                # LUAR_PANEL_MAKS), dan itu tetap memenuhi syarat ini.
+                cukup_lebar = src["w"] >= panel["w"] - 0.05
+                cukup_tinggi = src["h"] >= panel["h"] - 0.05
+                self.assertTrue(cukup_lebar or cukup_tinggi,
                                 f"potongan {src['w']}x{src['h']} lebih kecil dari "
                                 f"panel {panel['w']}x{panel['h']} di KEDUA sisi")
 

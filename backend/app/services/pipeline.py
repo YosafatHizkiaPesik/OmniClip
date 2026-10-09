@@ -528,9 +528,11 @@ def _hasilnya_masih_ada(video_id: str, ringkas: list[dict]) -> bool:
     for c in contoh:
         segmen = [{"start": round(float(s["start"]), 3),
                    "end": round(float(s["end"]), 3)} for s in c["segments"]]
-        turns = tuple((float(l["start"]), float(l["end"]), int(l["speaker"]))
-                      for l in (c.get("subtitles") or [])
-                      if l.get("speaker") is not None and l.get("end") is not None)
+        # Giliran yang sama dengan yang dipakai pemanasan, bukan dihitung ulang
+        # dengan cara lain. Kunci yang sedikit berbeda menjawab "tidak ada"
+        # untuk rencana yang sebenarnya ada, dan penjadwalnya lalu mengantre
+        # pekerjaan yang sama berulang-ulang.
+        turns = tuple(tuple(t) for t in (c.get("turns") or []))
         # Salah satu dari ketiga jejak yang mungkin diminta klip ini cukup:
         # klip gameplay tidak punya rencana bingkai sama sekali, dan itu bukan
         # tanda hasilnya hilang.
@@ -561,8 +563,35 @@ def _jadwalkan_jejak_sekarang(video_id: str, clips: list[dict],
         return ""
     from .jobs import queue
 
-    # Subtitle dibawa LENGKAP dengan teksnya, bukan hanya waktunya: pekerjaan
-    # yang sama juga memilihkan tema, dan tema dipilih dari apa yang diucapkan.
+    # Giliran bicara dihitung DI SINI, lalu dibawa apa adanya.
+    #
+    # Ini koreksi 9 Oktober 2026, dan kesalahannya milik saya. Muatan pekerjaan
+    # hanya membawa start/end/speaker tiap baris, tanpa teks, karena teks itu
+    # yang membuat muatannya membengkak sampai ratusan kilobita. Tapi
+    # `baris_siap_pakai` MEMBUANG baris yang tidak punya teks, jadi pemanasan
+    # menghitung NOL giliran untuk setiap klip sementara Studio mengirim 23, 18,
+    # dan 11. Terukur pada video 20 klip pemiliknya: 20 dari 20 klip memakai
+    # kunci simpanan yang berbeda, jadi seluruh pemanasannya terbuang dan
+    # penjadwalnya mengantre lagi tiap kali proyeknya dibuka. Yang dilihat
+    # orangnya: "mengapa harus muncul lagi loading bar itu jika sudah beres".
+    #
+    # Dihitung di sini karena di sinilah klip LENGKAP masih ada. Yang dibawa
+    # hasilnya, tiga angka per baris, bukan teksnya.
+    from ..repos import transcripts as _tx_repo
+    from .clipmodel import baris_siap_pakai, giliran_bicara
+    try:
+        _tx = _tx_repo.get_best(video_id)
+        _kata = _tx["words"] if _tx else []
+    except Exception:                                # noqa: BLE001
+        _kata = []
+
+    def _giliran(c):
+        try:
+            return [[float(a), float(b), int(sp)]
+                    for a, b, sp in giliran_bicara(baris_siap_pakai(c, _kata))]
+        except Exception:                            # noqa: BLE001
+            return []
+
     ringkas = [{"segments": [{"start": s["start"], "end": s["end"]}
                              for s in (c.get("segments") or [])],
                 # Ikut supaya pemanasan bisa MENULISKAN bingkainya ke klip,
@@ -584,7 +613,9 @@ def _jadwalkan_jejak_sekarang(video_id: str, clips: list[dict],
                 # persis melewati batas itu.
                 "subtitles": [{"start": l.get("start"), "end": l.get("end"),
                                "speaker": l.get("speaker")}
-                              for l in (c.get("subtitles") or [])]}
+                              for l in (c.get("subtitles") or [])],
+                # Hasil jadinya, bukan bahannya. Lihat catatan di atas.
+                "turns": _giliran(c)}
                for c in clips if c.get("segments")]
     if not ringkas:
         return ""

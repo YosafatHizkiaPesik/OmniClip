@@ -208,7 +208,14 @@ def _jalankan(ctx) -> dict:
         # 8 Oktober 2026: selisihnya sampai 147 milidetik, cukup untuk membuat
         # kuncinya berbeda: jadi pemanasan melaporkan "bingkai 11 dari 20
         # siap" sementara tiap klip yang dibuka tetap menghitung dari nol.
-        turns = giliran_bicara(baris_siap_pakai(klip, kata_video))
+        # Dipakai apa adanya bila penjadwal sudah menghitungnya.
+        #
+        # Muatan pekerjaan ini hanya membawa start/end/speaker tanpa teks, dan
+        # `baris_siap_pakai` MEMBUANG baris tanpa teks. Menghitungnya di sini
+        # karena itu menghasilkan nol giliran untuk tiap klip, sementara Studio
+        # mengirim puluhan. Lihat catatan di `pipeline._jadwalkan_jejak_sekarang`.
+        turns = (tuple(tuple(t) for t in klip["turns"]) if klip.get("turns")
+                 else giliran_bicara(baris_siap_pakai(klip, kata_video)))
         # Nomor, jumlah, dan judulnya. "Sedang memproses" tanpa nomor tidak
         # bisa dibedakan dari macet, dan justru pekerjaan inilah yang paling
         # lama tanpa ada yang menunggunya di layar mana pun.
