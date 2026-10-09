@@ -77,8 +77,12 @@ Murah, dan mengurangi risiko terbesar lebih dulu.
   `fyp.periksa` + kredit. **Skor nilai tambah belum ikut** karena F3-1 belum
   ada; pasang di `services/gerbang.py` begitu F3-1 selesai. Unggahan manual
   hanya diberi alasan, tidak diubah.
-- [ ] **F0-5** Batas unggah per hari per kanal (setelan profil), dipaksa di
+- [x] **F0-5** Batas unggah per hari per kanal (setelan profil), dipaksa di
   jalur penjadwalan `unggah._jam_tayang`.
+  (selesai 9 Oktober 2026, commit ba17335) Dipasang di `unggah.antrekan`
+  sebagai penjadwalan ke hari berikutnya pukul 10.00, bukan penolakan. Bawaan 3
+  per hari. Ikut diperbaiki: "Berjarak N jam" di halaman Akun ternyata tidak
+  pernah tersimpan karena `jadwal_jam` tidak ada di model PATCH profil.
 - [ ] **F0-6** `categoryId` dipilih (Hiburan 24, Game 20, dan seterusnya),
   bukan dikunci 22. Tebakan awal dari jenis video (gameplay atau bukan).
 - [ ] **F0-7** Label konten sintetis saat narasi TTS dipakai. **Verifikasi dulu

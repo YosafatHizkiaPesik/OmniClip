@@ -707,6 +707,7 @@ YOUTUBE_PRIVACY = ("private", "unlisted", "public")
 def upload_to_youtube(path: Path, *, title: str, description: str = "",
                       tags: Optional[list[str]] = None,
                       privacy: str = "private",
+                      category_id: str = "24",
                       on_progress: Optional[Callable[[float], None]] = None,
                       should_cancel: Optional[Callable[[], bool]] = None) -> dict:
     from googleapiclient.http import MediaFileUpload
@@ -723,7 +724,9 @@ def upload_to_youtube(path: Path, *, title: str, description: str = "",
             "title": (title or path.stem)[:100],
             "description": description[:5000],
             "tags": [t[:30] for t in (tags or [])][:15],
-            "categoryId": "22",          # People & Blogs
+            # Dipilih per klip (JOB-2 F0-6), bukan dikunci 22 (People &
+            # Blogs) seperti sebelumnya. Lihat `unggah.kategori_youtube`.
+            "categoryId": str(category_id or "24"),
         },
         "status": {
             "privacyStatus": privacy,

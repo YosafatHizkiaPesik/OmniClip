@@ -433,6 +433,21 @@ export default function Profil() {
                   <option value={5}>Maks 5 video/hari</option>
                   <option value={0}>Tanpa batas harian</option>
                 </select>
+                {/* Kategori YouTube (JOB-2 F0-6). Dulu dikunci Blog & Orang
+                    untuk semua klip, termasuk gameplay. */}
+                <select value={u.kategori ?? 'otomatis'}
+                        onChange={(e) => ubahUnggah({ kategori: e.target.value })}
+                        title="Kategori YouTube. Otomatis: klip yang dibingkai sebagai permainan masuk Game, sisanya Hiburan."
+                        style={{ ...masukan, padding: '5px 8px' }}>
+                  <option value="otomatis">Kategori: otomatis</option>
+                  <option value="24">Hiburan</option>
+                  <option value="20">Game</option>
+                  <option value="23">Komedi</option>
+                  <option value="22">Blog &amp; Orang</option>
+                  <option value="27">Pendidikan</option>
+                  <option value="25">Berita &amp; Politik</option>
+                  <option value="17">Olahraga</option>
+                </select>
               </div>
               <div style={{ ...helpText, marginTop: '12px', marginBottom: '4px' }}>
                 Deskripsi video. <code>{'{judul}'}</code>, <code>{'{sumber}'}</code>, dan{' '}

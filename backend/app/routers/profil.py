@@ -47,6 +47,8 @@ class UnggahModel(BaseModel):
     # Ditemukan 9 Oktober 2026 saat mengerjakan JOB-2 F0-5: keempat akun
     # pemiliknya tersimpan dengan setelan unggah kosong.
     jadwal_jam: Optional[float] = Field(None, ge=0, le=168)
+    # Kategori YouTube (JOB-2 F0-6): "otomatis" atau nomor kategorinya.
+    kategori: Optional[str] = Field(None, pattern=r"^(otomatis|\d{1,2})$")
 
     @field_validator("privasi")
     @classmethod

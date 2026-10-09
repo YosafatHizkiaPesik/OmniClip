@@ -58,6 +58,8 @@ UNGGAH_BAWAAN = {
     # dua kanal tetap muat di kuota itu, dan menyebar unggahan alih-alih
     # menumpuknya.
     "batas_harian": 3,
+    # Kategori YouTube (JOB-2 F0-6): "otomatis" atau nomor kategorinya.
+    "kategori": "otomatis",
     "hashtag": ["#shorts"],
 }
 

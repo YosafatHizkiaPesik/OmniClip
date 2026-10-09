@@ -38,7 +38,10 @@ def antrekan(*, clip_name: str, target: str, title: str = "", description: str =
         "upload",
         {"clip_name": clip_name, "target": target, "title": title,
          "description": description, "tags": tags or [], "privacy": privacy,
-         "folder_id": folder_id, "upload_id": upload_id, "profil_id": pid},
+         "folder_id": folder_id, "upload_id": upload_id, "profil_id": pid,
+         # Kategori YouTube (JOB-2 F0-6), ditentukan sekarang supaya yang
+         # tercatat di antrean sama dengan yang dikirim.
+         "kategori": kategori_youtube(clip_name, pid) if target == "youtube" else ""},
         # Satu klip tidak boleh naik dua kali ke tujuan yang sama.
         dedupe_key=f"upload:{pid}:{target}:{clip_name}",
         mulai_setelah=mulai_setelah,
@@ -48,6 +51,44 @@ def antrekan(*, clip_name: str, target: str, title: str = "", description: str =
     else:
         uploads_repo.drop(upload_id)
     return job_id, created
+
+
+# Kategori YouTube yang ditawarkan, dengan namanya di layar. Nomor dan namanya
+# diperiksa langsung ke YouTube Data API (videoCategories, regionCode=ID,
+# hl=id) 9 Oktober 2026: ketujuhnya sah dan `assignable`.
+KATEGORI = {
+    "24": "Hiburan",
+    "20": "Game",
+    "23": "Komedi",
+    "22": "Blog & Orang",
+    "27": "Pendidikan",
+    "25": "Berita & Politik",
+    "17": "Olahraga",
+}
+
+
+def kategori_youtube(clip_name: str, profil_id: int) -> str:
+    """
+    Nomor kategori YouTube untuk satu klip (JOB-2 F0-6).
+
+    Sampai 9 Oktober 2026 semuanya dikunci 22, People & Blogs, termasuk klip
+    gameplay. Sekarang: pilihan profil bila ada; bila "otomatis", klip yang
+    dibingkai sebagai permainan masuk Game (20), sisanya Hiburan (24).
+
+    Dikatakan jujur: YouTube tidak menyebut kategori sebagai penentu besar
+    rekomendasi. Gunanya ketepatan, supaya klip gameplay ditemukan di tempat
+    orang mencari gameplay, bukan janji tayangan.
+    """
+    from . import profil
+    from .analitik import _sidecar
+
+    pilihan = str(profil.unggah(profil_id).get("kategori") or "otomatis")
+    if pilihan in KATEGORI:
+        return pilihan
+    meta = _sidecar(clip_name, profil_id) or {}
+    if meta.get("frame_mode") == "gaming":
+        return "20"
+    return "24"
 
 
 def sumber_klip(clip_name: str, profil_id: int) -> dict:
