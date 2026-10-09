@@ -194,6 +194,41 @@ async def start_upload(req: UploadRequest):
     return {"job_id": job_id, "created": created}
 
 
+@router.get("/saran-deskripsi")
+async def saran_deskripsi(clip_name: str, judul: str = ""):
+    """
+    Deskripsi unggahan dari templat profil, lengkap dengan kredit sumbernya.
+
+    Dipakai formulir unggah manual supaya isinya SAMA dengan unggahan otomatis.
+    Sebelum JOB-2 F0-2 formulir itu membangun deskripsinya sendiri di peramban
+    dari tagar saja, jadi unggahan manual tidak pernah membawa kredit dan tidak
+    pernah memakai templat profil.
+    """
+    import asyncio
+
+    from ..services import profil
+    from ..services.analitik import _sidecar
+    from ..services.unggah import deskripsi, kredit, sumber_klip
+
+    def kerja():
+        pid = profil.kini()
+        setel = profil.unggah(pid)
+        meta = _sidecar(clip_name, pid) or {}
+        tagar = list(dict.fromkeys([*(setel.get("hashtag") or []),
+                                    *(meta.get("hashtags") or [])]))
+        sumber = sumber_klip(clip_name, pid)
+        pakai = setel.get("kredit", True) is not False
+        return {
+            "deskripsi": deskripsi(setel.get("deskripsi", ""),
+                                   judul=judul or meta.get("title") or "",
+                                   hashtag=tagar, sumber=sumber, pakai_kredit=pakai),
+            "kredit": kredit(sumber) if pakai else "",
+            "sumber": sumber,
+        }
+
+    return await asyncio.to_thread(kerja)
+
+
 @router.get("")
 async def list_uploads(clip_name: Optional[str] = None, limit: int = 60,
                        statistik: bool = False):

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   X, UploadCloud, Loader2, CheckCircle2, AlertTriangle, ExternalLink, Copy, Check,
 } from 'lucide-react';
@@ -43,6 +43,29 @@ export default function UploadModal({ clip, onClose, onDone }) {
   // ulang di sini adalah pekerjaan yang sudah selesai sekali.
   const [description, setDescription] = useState(
     () => (meta.hashtags ?? []).join(' '));
+  // Deskripsi dari templat profil, lengkap dengan kredit video sumbernya.
+  //
+  // JOB-2 F0-2. Sebelumnya formulir ini membangun deskripsinya sendiri dari
+  // tagar saja, jadi unggahan manual tidak pernah membawa kredit dan tidak
+  // pernah memakai templat profil yang dipakai unggahan otomatis. Diisi sekali
+  // saat formulir dibuka; yang sudah diketik orangnya tidak ditimpa.
+  // Ref, bukan state: janji di bawah membaca nilainya SAAT jawabannya tiba,
+  // bukan nilai saat formulir dibuka.
+  const disentuh = useRef(false);
+  useEffect(() => {
+    let batal = false;
+    apiGet(`/uploads/saran-deskripsi?clip_name=${encodeURIComponent(clip.file_name)}`
+           + `&judul=${encodeURIComponent(defaultTitle)}`)
+      .then((r) => {
+        if (!batal && r?.deskripsi) {
+          setDescription((lama) => (disentuh.current ? lama : r.deskripsi));
+        }
+      })
+      .catch(() => { /* tanpa saran, tagarnya saja tetap berguna */ });
+    return () => { batal = true; };
+    // Sekali per klip yang dibuka.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clip.file_name]);
   const [privacy, setPrivacy] = useState('private');
   const [phase, setPhase] = useState('form');   // form | sending | done | failed
   // Judul dan deskripsi yang sudah disiapkan di sini sering dipakai DI LUAR
@@ -225,8 +248,8 @@ export default function UploadModal({ clip, onClose, onDone }) {
                     <span style={{ flex: 1 }} />
                     <TombolSalin teks={description} tanda="deskripsi" />
                   </span>
-                  <textarea className="field" rows={3} value={description}
-                            onChange={(e) => setDescription(e.target.value)}
+                  <textarea className="field" rows={5} value={description}
+                            onChange={(e) => { disentuh.current = true; setDescription(e.target.value); }}
                             style={{ resize: 'vertical', fontFamily: 'inherit' }} />
                 </label>
 

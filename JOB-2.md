@@ -47,10 +47,12 @@ peninjauan YPP, tapi tidak menghapus risiko itu. Yang menghapusnya hanya izin.
 
 Murah, dan mengurangi risiko terbesar lebih dulu.
 
-- [ ] **F0-1** Simpan metadata sumber lengkap: `channel_id`, URL, lisensi
+- [x] **F0-1** Simpan metadata sumber lengkap: `channel_id`, URL, lisensi
   (medan `license` dari yt-dlp), di tabel `videos` dan sidecar klip
   (`repos/media.py`, `ytdlp.get_video_info`). Sekarang `channel_id` kosong
   karena `get_video_info` tidak mengembalikannya.
+  (selesai 9 Oktober 2026, commit fccb54e) Baris lama yang `channel_id`-nya
+  kosong terisi sendiri saat video itu diambil ulang; tidak ada pengisian massal.
 - [ ] **F0-2** Baris kredit otomatis di deskripsi unggahan:
   `Sumber: <judul> oleh <kanal>, <url>`. Bisa diubah lewat templat profil
   (`{sumber}` di templat, `unggah.deskripsi`).

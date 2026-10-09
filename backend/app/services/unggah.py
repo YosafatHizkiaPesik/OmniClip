@@ -45,9 +45,72 @@ def antrekan(*, clip_name: str, target: str, title: str = "", description: str =
     return job_id, created
 
 
-def deskripsi(templat: str, *, judul: str, hashtag: list[str]) -> str:
+def sumber_klip(clip_name: str, profil_id: int) -> dict:
+    """
+    Identitas video sumber sebuah klip jadi.
+
+    Dari sidecar klipnya dulu: klip yang dirender sesudah JOB-2 F0-1 membawa
+    `sumber` sendiri, jadi kreditnya tetap ada walau baris `videos` sudah
+    hilang. Klip yang lebih tua hanya membawa `video_id`, dan identitasnya
+    diturunkan dari tabel `videos` lewat nomor itu.
+    """
+    from .analitik import _sidecar
+    meta = _sidecar(clip_name, profil_id) or {}
+    ada = meta.get("sumber")
+    if isinstance(ada, dict) and (ada.get("judul") or ada.get("url")):
+        return ada
+    try:
+        from ..repos.media import sumber_video
+        return sumber_video(str(meta.get("video_id") or ""))
+    except Exception:                                # noqa: BLE001
+        return {}
+
+
+def kredit(sumber: Optional[dict]) -> str:
+    """
+    Baris kredit untuk video sumber, atau teks kosong bila sumbernya tak dikenal.
+
+    JOB-2 F0-2. Sampai 9 Oktober 2026 deskripsi unggahan tidak menyebut sumber
+    sama sekali, padahal judul dan kanalnya tersimpan. Kebijakan YouTube untuk
+    konten yang digunakan ulang menilai apakah klip mengakui asalnya, dan
+    penonton yang ingin menonton versi utuhnya pantas tahu ke mana.
+
+    Kredit tidak menggantikan izin. Lihat catatan izin di JOB-2.md.
+    """
+    s = sumber or {}
+    judul = (s.get("judul") or "").strip()
+    kanal = (s.get("kanal") or "").strip()
+    url = (s.get("url") or "").strip()
+    if not (judul or url):
+        return ""
+    baris = "Sumber: "
+    baris += f'"{judul}"' if judul else "video asli"
+    if kanal:
+        baris += f" oleh {kanal}"
+    return f"{baris}\n{url}" if url else baris
+
+
+def deskripsi(templat: str, *, judul: str, hashtag: list[str],
+              sumber: Optional[dict] = None, pakai_kredit: bool = True) -> str:
+    """
+    Deskripsi unggahan dari templat profil.
+
+    `{judul}`, `{hashtag}`, dan `{sumber}` diganti. Templat lama yang tidak
+    punya `{sumber}` tetap mendapat kreditnya di akhir, selama profilnya tidak
+    mematikannya: tanpa itu, setiap profil yang dibuat sebelum JOB-2 diam-diam
+    tetap mengunggah tanpa kredit.
+    """
     tagar = " ".join(h if h.startswith("#") else f"#{h}" for h in hashtag if h.strip())
-    teks = (templat or "{judul}\n\n{hashtag}").replace("{judul}", judul).replace("{hashtag}", tagar)
+    baris_kredit = kredit(sumber) if pakai_kredit else ""
+    teks = templat or "{judul}\n\n{sumber}\n\n{hashtag}"
+    if "{sumber}" not in teks and baris_kredit:
+        teks = teks.rstrip() + "\n\n{sumber}"
+    teks = (teks.replace("{judul}", judul).replace("{hashtag}", tagar)
+            .replace("{sumber}", baris_kredit))
+    # Templat yang menaruh {sumber} sendirian di satu baris meninggalkan baris
+    # kosong beruntun bila sumbernya tak dikenal.
+    while "\n\n\n" in teks:
+        teks = teks.replace("\n\n\n", "\n\n")
     return teks.strip()[:5000]
 
 
@@ -83,7 +146,9 @@ def setelah_render(*, clip_name: str, judul: str, hashtag: list[str],
         job_id, _ = antrekan(
             clip_name=clip_name, target=target, title=judul,
             description=deskripsi(setel.get("deskripsi", ""), judul=judul,
-                                  hashtag=tagar_kirim),
+                                  hashtag=tagar_kirim,
+                                  sumber=sumber_klip(clip_name, pid),
+                                  pakai_kredit=setel.get("kredit", True) is not False),
             tags=[h.lstrip("#") for h in tagar_kirim][:15],
             privacy=pilihan.get("privasi") or "private", profil_id=pid,
             mulai_setelah=jam)

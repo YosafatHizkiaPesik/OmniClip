@@ -45,7 +45,10 @@ UNGGAH_BAWAAN = {
     # Jarak jam antar unggahan otomatis; 0 = semuanya langsung naik.
     "jadwal_jam": 0,
     "privasi": "private",       # private | unlisted | public
-    "deskripsi": "{judul}\n\n{hashtag}",
+    # {sumber} = kredit video asli (JOB-2 F0-2). Templat lama tanpa {sumber}
+    # tetap mendapat kreditnya di akhir, kecuali `kredit` dimatikan.
+    "deskripsi": "{judul}\n\n{sumber}\n\n{hashtag}",
+    "kredit": True,
     "hashtag": ["#shorts"],
 }
 

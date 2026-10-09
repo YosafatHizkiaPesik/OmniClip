@@ -35,6 +35,8 @@ class UnggahModel(BaseModel):
     privasi: Optional[str] = None
     deskripsi: Optional[str] = Field(None, max_length=4000)
     hashtag: Optional[List[str]] = None
+    # Kredit video asli di deskripsi (JOB-2 F0-2). Bawaannya menyala.
+    kredit: Optional[bool] = None
 
     @field_validator("privasi")
     @classmethod
