@@ -6,6 +6,7 @@ import {
 import {
   apiPost, dijalankanDiKomputerIni, downloadToDisk, kategoriKlip,
 } from '../lib/api';
+import PeringatanIzin from './PeringatanIzin';
 
 /**
  * Menyiapkan satu klip untuk diterbitkan dengan tangan.
@@ -176,6 +177,10 @@ export default function SiapkanTerbit({ clip, onClose, onSelesai }) {
           masih bisa memilih sound dan efek, yang tidak bisa dilakukan lewat
           unggahan otomatis.
         </p>
+
+        {/* Izin kanal sumber (JOB-2 F0-3). Unggahan lewat halaman platform pun
+            terkena klaim Content ID yang sama. Tidak memblokir. */}
+        <PeringatanIzin clipName={clip.file_name} />
 
         {/* Platform */}
         <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '12px' }}>

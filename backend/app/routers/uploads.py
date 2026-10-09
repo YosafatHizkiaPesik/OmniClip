@@ -229,6 +229,52 @@ async def saran_deskripsi(clip_name: str, judul: str = ""):
     return await asyncio.to_thread(kerja)
 
 
+@router.get("/izin")
+async def lihat_izin(clip_name: str):
+    """
+    Status izin kanal sumber sebuah klip, beserta peringatannya (JOB-2 F0-3).
+
+    Tidak memblokir apa pun: pemilik belum punya izin dari kreator mana pun,
+    dan yang dibutuhkannya adalah tahu risikonya, bukan dihentikan.
+    """
+    import asyncio
+
+    from ..services import izin, profil
+    from ..services.unggah import sumber_klip
+
+    def kerja():
+        sumber = sumber_klip(clip_name, profil.kini())
+        return {"status": izin.status(sumber), "peringatan": izin.peringatan(sumber),
+                "sumber": sumber}
+
+    return await asyncio.to_thread(kerja)
+
+
+class IzinRequest(BaseModel):
+    clip_name: str
+    diizinkan: bool = True
+    catatan: str = Field("", max_length=300)
+
+
+@router.post("/izin")
+async def catat_izin(req: IzinRequest):
+    """Mencatat (atau mencabut) izin untuk kanal sumber klip ini."""
+    import asyncio
+
+    from ..services import izin, profil
+    from ..services.unggah import sumber_klip
+
+    def kerja():
+        sumber = sumber_klip(req.clip_name, profil.kini())
+        st = izin.setel(sumber, req.diizinkan, req.catatan)
+        return {"status": st, "peringatan": izin.peringatan(sumber), "sumber": sumber}
+
+    try:
+        return await asyncio.to_thread(kerja)
+    except ValueError as e:
+        raise AppError(str(e), code="IZIN_SUMBER_TAK_DIKENAL", status=422) from e
+
+
 @router.get("")
 async def list_uploads(clip_name: Optional[str] = None, limit: int = 60,
                        statistik: bool = False):

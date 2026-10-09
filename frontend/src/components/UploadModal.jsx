@@ -3,6 +3,7 @@ import {
   X, UploadCloud, Loader2, CheckCircle2, AlertTriangle, ExternalLink, Copy, Check,
 } from 'lucide-react';
 import { apiGet, apiPost } from '../lib/api';
+import PeringatanIzin from './PeringatanIzin';
 
 const TARGETS = [
   { id: 'drive', label: 'Google Drive', hint: 'Masuk ke folder OmniClip di Drive Anda.' },
@@ -203,6 +204,8 @@ export default function UploadModal({ clip, onClose, onDone }) {
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {/* Izin kanal sumber (JOB-2 F0-3). Tidak memblokir. */}
+            <PeringatanIzin clipName={clip.file_name} />
             {phase === 'failed' && (
               <div style={{
                 display: 'flex', gap: '9px', fontSize: '.83rem', lineHeight: 1.55,

@@ -53,12 +53,18 @@ Murah, dan mengurangi risiko terbesar lebih dulu.
   karena `get_video_info` tidak mengembalikannya.
   (selesai 9 Oktober 2026, commit fccb54e) Baris lama yang `channel_id`-nya
   kosong terisi sendiri saat video itu diambil ulang; tidak ada pengisian massal.
-- [ ] **F0-2** Baris kredit otomatis di deskripsi unggahan:
+- [x] **F0-2** Baris kredit otomatis di deskripsi unggahan:
   `Sumber: <judul> oleh <kanal>, <url>`. Bisa diubah lewat templat profil
   (`{sumber}` di templat, `unggah.deskripsi`).
-- [ ] **F0-3** Peringatan risiko hak cipta saat menyiapkan unggahan. Tidak
+  (selesai 9 Oktober 2026, commit 1cc9ef8) Unggah otomatis dan formulir manual
+  memakai `unggah.deskripsi` yang sama; templat lama tanpa `{sumber}` tetap
+  mendapat kredit di akhir; bisa dimatikan per profil (`kredit: false`).
+- [x] **F0-3** Peringatan risiko hak cipta saat menyiapkan unggahan. Tidak
   memblokir apa pun. Satu medan "izin" per kanal sumber (bawaan: belum), supaya
   kelak bisa diisi saat izin didapat dan peringatannya hilang untuk kanal itu.
+  (selesai 9 Oktober 2026, commit 5829d9b) Tampil di formulir unggah dan di
+  Siapkan terbit. Izin dicatat pada nomor DAN nama kanal, jadi klip lama tanpa
+  nomor kanal ikut terbaca. Belum ada izin yang tercatat untuk kanal mana pun.
 - [ ] **F0-4** Gerbang tinjau sebelum unggah PUBLIK: `fyp.periksa` + skor nilai
   tambah (F3-1) + kredit ada. Unggah otomatis yang tidak lolos gerbang turun ke
   *private*, dengan alasannya dicatat.
