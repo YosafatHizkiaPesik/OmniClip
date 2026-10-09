@@ -1,8 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import {
-  AlertTriangle, Check, Copy, Download, ExternalLink, Loader2, RefreshCw, Send, X,
+  AlertTriangle, Check, Clipboard, Copy, Download, ExternalLink, FolderOpen,
+  Loader2, RefreshCw, Send, X,
 } from 'lucide-react';
-import { apiPost, downloadToDisk, kategoriKlip } from '../lib/api';
+import {
+  apiPost, dijalankanDiKomputerIni, downloadToDisk, kategoriKlip,
+} from '../lib/api';
 
 /**
  * Menyiapkan satu klip untuk diterbitkan dengan tangan.
@@ -99,6 +102,50 @@ export default function SiapkanTerbit({ clip, onClose, onSelesai }) {
   };
 
   const sudahTerbit = terbit.includes(aktif);
+  const diKomputerIni = dijalankanDiKomputerIni();
+
+  /**
+   * Menunjuk berkasnya di pengelola berkas, lalu membuka halaman unggah.
+   *
+   * Inilah langkah yang selama ini hilang. Dilaporkan pemiliknya 9 Oktober
+   * 2026: "sering saat upload saya harus cari foldernya dahulu, jika tidak
+   * maka saya mendownload ulang hasil klip". Mengunduh ulang berkas yang sudah
+   * ada bukan cuma lambat, ia melahirkan salinan kedua dengan nama berbeda,
+   * dan dari situlah video tertukar saat diunggah.
+   *
+   * Dua jendela terbuka berdampingan: pengelola berkas dengan berkasnya sudah
+   * tersorot, dan halaman unggah platformnya. Tinggal diseret.
+   */
+  const tunjukLaluBuka = async (url) => {
+    setSibuk(true); setGalat(null);
+    try {
+      await apiPost('/berkas/tunjuk',
+                    { kategori: kategoriKlip(), nama: clip.file_name });
+      if (url) window.open(url, '_blank', 'noopener');
+    } catch (e) {
+      setGalat(e.message);
+    } finally { setSibuk(false); }
+  };
+
+  /**
+   * Menaruh BERKAS videonya di papan klip, supaya kotak unggah bisa diisi
+   * dengan Ctrl+V tanpa menelusuri folder sama sekali.
+   *
+   * Yang melakukannya server, bukan halaman ini: peramban tidak boleh menaruh
+   * berkas sembarangan di papan klip maupun mengisi kotak unggah situs lain.
+   * Itu batas keamanan peramban, bukan kekurangan yang bisa diakali.
+   */
+  const salinBerkas = async () => {
+    setSibuk(true); setGalat(null);
+    try {
+      await apiPost('/berkas/salin',
+                    { kategori: kategoriKlip(), nama: clip.file_name });
+      setDisalin('berkas');
+      setTimeout(() => setDisalin(null), 2200);
+    } catch (e) {
+      setGalat(e.message);
+    } finally { setSibuk(false); }
+  };
 
   return (
     <div onClick={onClose} style={{
@@ -121,10 +168,13 @@ export default function SiapkanTerbit({ clip, onClose, onSelesai }) {
         </div>
         <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: '0 0 14px',
                     lineHeight: 1.5 }}>
-          Semuanya sudah siap kecuali satu langkah terakhir. Salin captionnya,
-          simpan berkasnya, lalu terbitkan dari aplikasi platformnya. Di sana
-          Anda masih bisa memilih sound dan efek, yang tidak bisa dilakukan
-          lewat unggahan otomatis.
+          Semuanya sudah siap kecuali satu langkah terakhir. Tekan
+          <b> Tunjuk berkasnya</b>, dan pengelola berkas terbuka dengan video
+          ini sudah tersorot, jadi tinggal diseret ke kotak unggah. Tidak perlu
+          mencari folder, dan tidak perlu mengunduh ulang: dua salinan dengan
+          nama berbeda justru yang membuat video tertukar. Di platformnya Anda
+          masih bisa memilih sound dan efek, yang tidak bisa dilakukan lewat
+          unggahan otomatis.
         </p>
 
         {/* Platform */}
@@ -187,6 +237,21 @@ export default function SiapkanTerbit({ clip, onClose, onSelesai }) {
                       onClick={() => downloadToDisk(kategoriKlip(), clip.file_name)}>
                 <Download size={14} /> Simpan berkas
               </button>
+              {diKomputerIni && (
+                <>
+                  <button className="btn-secondary" disabled={sibuk}
+                          title="Buka folder dengan berkas ini sudah tersorot"
+                          onClick={() => tunjukLaluBuka(null)}>
+                    <FolderOpen size={14} /> Tunjuk berkasnya
+                  </button>
+                  <button className="btn-secondary" disabled={sibuk}
+                          title="Taruh berkas videonya di papan klip, lalu tempel dengan Ctrl+V"
+                          onClick={salinBerkas}>
+                    {disalin === 'berkas' ? <Check size={14} /> : <Clipboard size={14} />}
+                    {disalin === 'berkas' ? 'Berkas siap ditempel' : 'Salin berkasnya'}
+                  </button>
+                </>
+              )}
               <a className="btn-secondary" href={paket.unggah} target="_blank" rel="noreferrer"
                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px',
                           textDecoration: 'none' }}>

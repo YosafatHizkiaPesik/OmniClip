@@ -1,8 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Film, Download, Trash2, RefreshCw, Loader2, AlertTriangle, Layers, X, UploadCloud, Send, Check, Eye
+  Film, Download, Trash2, RefreshCw, Loader2, AlertTriangle, Layers, X, UploadCloud,
+  Send, Check, Eye, FolderOpen,
 } from 'lucide-react';
-import { apiGet, apiPost, apiDelete, downloadToDisk, mediaUrl, kategoriKlip } from '../lib/api';
+import {
+  apiGet, apiPost, apiDelete, dijalankanDiKomputerIni, downloadToDisk, mediaUrl, kategoriKlip,
+} from '../lib/api';
 import { formatTime } from '../utils/timeFormat';
 import UploadModal from './UploadModal';
 import SiapkanTerbit from './SiapkanTerbit';
@@ -227,6 +230,29 @@ export default function ClipsTab() {
   // menunjukkan bahwa perintahnya SEDANG dikerjakan. Tanpa ini, menekan
   // tombolnya tidak mengubah apa pun di layar sampai daftarnya dimuat ulang.
   const [sibukBaris, setSibukBaris] = useState(null);
+
+  const diKomputerIni = dijalankanDiKomputerIni();
+
+  /**
+   * Membuka pengelola berkas dengan klip ini SUDAH TERSOROT.
+   *
+   * Dilaporkan pemiliknya 9 Oktober 2026: "saat mengklik klip yang jadi
+   * disana hanya ada simpan berkas bukan membuka folder dan menunjuk video
+   * itu dimana, karena sering saat upload saya harus cari foldernya dahulu,
+   * jika tidak maka saya mendownload ulang hasil klip". Mengunduh ulang
+   * melahirkan salinan kedua dengan nama berbeda, dan dari situlah video
+   * tertukar saat diunggah.
+   */
+  const tunjukBerkas = async (name) => {
+    setSibukBaris({ nama: name, apa: 'tunjuk' });
+    try {
+      await apiPost('/berkas/tunjuk', { kategori: kategoriKlip(), nama: name });
+    } catch (e) {
+      setActionError?.(e.message);
+    } finally {
+      setSibukBaris(null);
+    }
+  };
 
   const deleteClip = async (name) => {
     if (!window.confirm(`Hapus klip "${name}"?`)) return;
@@ -460,9 +486,22 @@ export default function ClipsTab() {
                             title="Unggah ke Drive atau YouTube">
                       <UploadCloud size={14} />
                     </button>
+                    {diKomputerIni && (
+                      <button onClick={() => tunjukBerkas(clip.file_name)}
+                              disabled={sibukBaris?.nama === clip.file_name}
+                              aria-label="Tunjuk berkasnya di folder"
+                              title="Buka folder dengan berkas ini sudah tersorot, siap diseret ke mana pun"
+                              style={iconBtn}>
+                        {sibukBaris?.nama === clip.file_name && sibukBaris.apa === 'tunjuk'
+                          ? <Loader2 size={14} className="animate-spin" />
+                          : <FolderOpen size={14} />}
+                      </button>
+                    )}
                     <button onClick={() => simpanSatu(clip.file_name)}
                             disabled={sibukBaris?.nama === clip.file_name}
-                            aria-label="Simpan" style={iconBtn}>
+                            aria-label="Simpan salinan ke folder Unduhan"
+                            title="Simpan SALINAN baru ke folder Unduhan peramban"
+                            style={iconBtn}>
                       {sibukBaris?.nama === clip.file_name && sibukBaris.apa === 'unduh'
                         ? <Loader2 size={14} className="animate-spin" />
                         : <Download size={14} />}

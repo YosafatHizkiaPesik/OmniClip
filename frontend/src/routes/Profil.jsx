@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 import {
   UserRound, Plus, Trash2, Check, FolderOpen, Sparkles, UploadCloud, Loader2, X,
 } from 'lucide-react';
@@ -153,6 +153,51 @@ export default function Profil() {
       setSibuk(false);
     }
   };
+
+  /**
+   * Perubahan di halaman ini tersimpan SENDIRI.
+   *
+   * Dulu tidak: nama, warna, minat, dan seluruh bagian unggah hidup sebagai
+   * draf di peramban sampai tombol "Simpan profil" ditekan, dan tidak ada
+   * tanda apa pun bahwa ada yang belum tersimpan. Ditanyakan pemiliknya
+   * 9 Oktober 2026: "untuk apa tombol simpan jika sudah otomatis tersimpan
+   * profilnya". Ia mengira begitu karena seluruh halaman lain memang begitu,
+   * dan dugaan itulah yang seharusnya benar.
+   *
+   * Ditunda 800 milidetik: mengetik nama tidak boleh berarti satu permintaan
+   * per huruf. Draf yang baru dimuat dilewati, supaya membuka halaman ini
+   * tidak langsung menulis ulang apa yang baru saja dibacanya.
+   */
+  // Cap perubahan terakhir yang SUDAH tersimpan, per akun.
+  const tersimpanRef = useRef({ id: null, cap: '' });
+
+  const capDraf = (d) => JSON.stringify(
+    { nama: d.nama, warna: d.warna, minat: d.minat, unggah: d.unggah });
+
+  useEffect(() => {
+    if (!draf) return undefined;
+    const cap = capDraf(draf);
+    // Akun yang baru dibuka: capnya dicatat apa adanya, tanpa menyimpan.
+    // Tanpa ini, membuka halaman langsung menulis ulang apa yang baru dibaca.
+    if (tersimpanRef.current.id !== draf.id) {
+      tersimpanRef.current = { id: draf.id, cap };
+      return undefined;
+    }
+    if (tersimpanRef.current.cap === cap) return undefined;
+    const t = setTimeout(async () => {
+      try {
+        await apiPatch(`/profil/${draf.id}`,
+          { nama: draf.nama, warna: draf.warna, minat: draf.minat, unggah: draf.unggah });
+        tersimpanRef.current = { id: draf.id, cap };
+        setGalat(null);
+        setSimpan('Tersimpan.');
+        setTimeout(() => setSimpan(null), 1800);
+      } catch (e) {
+        setGalat(e.message);
+      }
+    }, 800);
+    return () => clearTimeout(t);
+  }, [draf]);
 
   const buat = async () => {
     if (!baru.nama.trim()) return;
@@ -394,16 +439,25 @@ export default function Profil() {
               </p>
             </div>
 
-            {/* Tindakan terakhir halaman ini, jadi ia selebar halaman, bukan
-                sebuah kartu yang kebetulan mendarat di kolom kanan. */}
+            {/* Tidak ada tombol simpan lagi; halaman ini menyimpan sendiri.
+                Yang tersisa keterangan keadaan, supaya perubahan yang sudah
+                tersimpan tidak hanya diyakini melainkan terlihat. */}
             <div className="lebar" style={{ ...card, display: 'flex', gap: '10px',
                                             alignItems: 'center', borderBottom: 0 }}>
-              <button className="btn-primary" onClick={simpanDraf} disabled={sibuk}>
-                {sibuk ? <Loader2 size={14} className="animate-spin" /> : null}
-                Simpan profil
-              </button>
-              {simpan && <span className="bantu" style={helpText}>{simpan}</span>}
-              {galat && <span style={{ ...helpText, color: 'var(--danger)' }}>{galat}</span>}
+              <Check size={15} style={{ color: 'var(--ok, var(--accent-cyan))' }} />
+              <span className="bantu" style={helpText}>
+                {galat ? '' : (simpan || 'Perubahan di halaman ini tersimpan sendiri.')}
+              </span>
+              {galat && (
+                <span style={{ ...helpText, color: 'var(--danger)' }}>
+                  Gagal menyimpan: {galat}{' '}
+                  <button className="btn-secondary" style={{ fontSize: '.75rem' }}
+                          onClick={simpanDraf} disabled={sibuk}>
+                    {sibuk ? <Loader2 size={13} className="animate-spin" /> : null}
+                    Coba simpan lagi
+                  </button>
+                </span>
+              )}
             </div>
           </>
         )}

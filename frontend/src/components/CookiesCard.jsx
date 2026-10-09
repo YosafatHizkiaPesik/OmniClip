@@ -43,6 +43,22 @@ export default function CookiesCard({ card, sectionTitle, helpText }) {
   };
   useEffect(() => { muat(); }, []);
 
+  /**
+   * Menyiapkan browser sebagai CADANGAN, bukan menyalakannya terus-menerus.
+   *
+   * Ini yang disarankan untuk kebanyakan orang. Terukur 9 Oktober 2026 dari
+   * jaringan yang tidak ditandai: tanpa cookies 12 format, dengan cookies 7.
+   * Jadi memakainya terus justru mengurangi pilihan resolusi. Yang
+   * menyalakannya adalah penolakan pertama dari YouTube.
+   */
+  const siapkanCadangan = async (nama) => {
+    setSibuk('simpan'); setGalat(null); setHasil(null);
+    try {
+      await apiPost('/settings/cookies/siapkan', { mode: 'browser', browser: nama });
+      await muat();
+    } catch (err) { setGalat(err.message); } finally { setSibuk(''); }
+  };
+
   const pilihBrowser = async (nama) => {
     setSibuk('simpan'); setGalat(null); setHasil(null);
     try {
@@ -114,6 +130,27 @@ export default function CookiesCard({ card, sectionTitle, helpText }) {
         </span>
       </div>
 
+      {/* Mode cadangan didahulukan karena ia yang disarankan. Sebelumnya kartu
+          ini cuma menawarkan "tanpa cookies" atau "pakai terus", dan yang
+          membacanya wajar memilih "pakai terus" lalu kehilangan resolusi. */}
+      {daftar.some((b) => !info.diperiksa || b.login) && (
+        <div style={{ display: 'flex', gap: '7px', flexWrap: 'wrap',
+                      alignItems: 'center', marginBottom: '9px' }}>
+          {daftar.filter((b) => !info.diperiksa || b.login).map((b) => (
+            <button key={b.nama} className="btn-secondary" disabled={!!sibuk}
+                    onClick={() => siapkanCadangan(b.nama)}
+                    title="Disimpan sekarang, dikirim hanya saat YouTube menuduh bot"
+                    style={{ fontSize: '0.78rem', padding: '6px 11px',
+                             borderColor: info.mode === 'mati' && info.siaga === b.nama
+                               ? 'var(--accent-cyan)' : undefined,
+                             color: info.mode === 'mati' && info.siaga === b.nama
+                               ? 'var(--accent-cyan)' : undefined }}>
+              Cadangan: {NAMA_BROWSER[b.nama] || b.nama} (disarankan)
+            </button>
+          ))}
+        </div>
+      )}
+
       <div style={{ display: 'flex', gap: '7px', flexWrap: 'wrap', alignItems: 'center' }}>
         <button className="btn-secondary" disabled={!!sibuk} onClick={matikan}
                 style={{ fontSize: '0.78rem', padding: '6px 11px',
@@ -126,7 +163,7 @@ export default function CookiesCard({ card, sectionTitle, helpText }) {
                   disabled={!!sibuk || (info.diperiksa && !b.login)}
                   title={info.diperiksa && !b.login
                     ? (b.galat || 'Cookies browser ini tidak bisa dibaca.')
-                    : 'Pakai sesi dari browser ini'}
+                    : 'Pakai sesi dari browser ini pada SETIAP permintaan'}
                   onClick={() => pilihBrowser(b.nama)}
                   style={{ fontSize: '0.78rem', padding: '6px 11px',
                            borderColor: info.mode === 'browser' && info.browser === b.nama
@@ -184,11 +221,9 @@ export default function CookiesCard({ card, sectionTitle, helpText }) {
             ? 'Dipaksa lewat OMNICLIP_COOKIES_FILE.'
             : info.mode === 'browser' ? `Memakai ${NAMA_BROWSER[info.browser] || info.browser}.`
             : info.mode === 'berkas' ? 'Memakai berkas cookies.txt.'
-            : info.siaga
-              ? `Tidak dipakai sekarang. ${NAMA_BROWSER[info.siaga] || info.siaga} `
-                + 'disiapkan sebagai cadangan dan dinyalakan sendiri bila '
-                + 'YouTube menuduh bot.'
-              : 'Sedang tidak memakai cookies.'}
+            : info.siaga ? `Cadangan siap: ${NAMA_BROWSER[info.siaga] || info.siaga}. `
+              + 'Dikirim hanya saat YouTube menuduh bot.'
+            : 'Sedang tidak memakai cookies.'}
         </span>
       </div>
 

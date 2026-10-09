@@ -787,13 +787,31 @@ async def kesehatan():
             "akibat": "Sama seperti PO Token: unduhan YouTube bisa ditolak.",
         })
 
+        # Cookies punya TIGA keadaan, bukan dua, dan menyebutnya dua membuat
+        # yang paling disarankan terbaca seperti kelalaian.
+        #
+        # Dilaporkan pemiliknya 9 Oktober 2026: ia melihat "tidak dipakai" lalu
+        # menyalakannya terus-menerus, padahal dari jaringan yang sehat cookies
+        # MENGURANGI pilihan resolusi (12 format tanpa, 7 dengan). Yang benar
+        # untuk kebanyakan orang adalah siaga: tersimpan, dikirim hanya saat
+        # YouTube menolak. Lihat `cookies.KUNCI_SIAGA`.
         aktif = ck.aktif()
-        baris.append({
-            "nama": "Cookies YouTube",
-            "nilai": "dipakai" if aktif else "tidak dipakai",
-            "baik": aktif,
-            "akibat": "Video berumur dan video yang dibatasi wilayah bisa gagal diunduh.",
-        })
+        siaga = ck.siaga()
+        if aktif:
+            nilai, baik = "dipakai terus", True
+            akibat = ("Dari jaringan yang sehat ini justru mengurangi pilihan "
+                      "resolusi. Pertimbangkan mode cadangan di Pengaturan.")
+        elif siaga:
+            nilai, baik = f"siaga ({siaga})", True
+            akibat = ("Sesi login sudah siap dan akan dipakai sendiri begitu "
+                      "YouTube menuduh bot.")
+        else:
+            nilai, baik = "belum disiapkan", False
+            akibat = ("Begitu YouTube menandai jaringan Anda sebagai bot, "
+                      "unduhan berhenti dan tidak ada sesi login untuk "
+                      "menembusnya. Siapkan di Pengaturan, bagian Cookies.")
+        baris.append({"nama": "Cookies YouTube", "nilai": nilai,
+                      "baik": baik, "akibat": akibat})
 
         g = google_upload.status()
         baris.append({
