@@ -39,6 +39,41 @@ export default function TambahAkun({ card, sectionTitle, helpText, onSelesai }) 
   const [sibuk, setSibuk] = useState(false);
   const [galat, setGalat] = useState(null);
   const [menunggu, setMenunggu] = useState(false);   // tab izin Google terbuka
+  // Akun yang aktif SEBELUM wadah dibuat. Disimpan di ref, bukan di state,
+  // karena yang memulihkannya adalah pendengar pesan dari tab sebelah dan
+  // pewaktu lima menit, dan keduanya hidup di luar alur `masuk()`.
+  const sebelumnyaRef = useRef(null);
+  // Akun wadah yang sedang menunggu izin. Dipakai saat halaman ini menyerah
+  // sendiri: tab Google yang ditutup begitu saja tidak pernah sampai ke
+  // server, jadi tidak ada jalur gagal di sana yang bisa membuangnya.
+  const wadahRef = useRef(null);
+
+  /**
+   * Kembali ke akun yang dipakai sebelum wadahnya dibuat.
+   *
+   * Server sudah membuang akun wadahnya, jadi membiarkan peramban menunjuk
+   * nomor yang sudah tidak ada berarti seluruh permintaan berikutnya berjalan
+   * atas nama akun yang hilang.
+   */
+  const kembaliKeAkunSebelumnya = () => {
+    const id = sebelumnyaRef.current;
+    sebelumnyaRef.current = null;
+    if (id) setProfilAktif(id);
+  };
+
+  /**
+   * Melepas akun wadah yang izinnya tidak jadi, lalu kembali ke akun semula.
+   *
+   * Dipanggil saat halaman ini menyerah sendiri. Servernya juga menyapu wadah
+   * seperti ini satu menit kemudian, tapi menunggu penyapu berarti "Akun baru"
+   * sempat terlihat di pemilih akun, dan itulah yang dikeluhkan.
+   */
+  const lepasWadah = async () => {
+    const wadah = wadahRef.current;
+    wadahRef.current = null;
+    kembaliKeAkunSebelumnya();
+    if (wadah) await apiDelete(`/profil/${wadah}`).catch(() => {});
+  };
 
   // Tab izin Google mengabarkan dirinya selesai lalu menutup sendiri (lihat
   // `_page` di backend/app/routers/uploads.py). Tanpa ini, satu-satunya cara
@@ -47,6 +82,20 @@ export default function TambahAkun({ card, sectionTitle, helpText, onSelesai }) 
   useEffect(() => {
     const dengar = (e) => {
       if (e.origin !== window.location.origin) return;
+      // Kegagalan juga dikabarkan sekarang (lihat `_page` di backend).
+      // Tanpa menanganinya, halaman ini menunggu lima menit penuh dengan
+      // akun wadah sebagai akun aktif, padahal server sudah membuangnya.
+      if (e.data === 'omniclip:google-gagal') {
+        // Server sudah membuang wadahnya di jalur gagal itu, jadi di sini
+        // cukup kembali ke akun semula; `wadahRef` dikosongkan supaya pewaktu
+        // lima menit tidak mencoba menghapus nomor yang sudah tidak ada.
+        wadahRef.current = null;
+        kembaliKeAkunSebelumnya();
+        setMenunggu(false);
+        setGalat('Login ke Google gagal, jadi tidak ada akun baru yang '
+                 + 'ditambahkan. Pesan dari Google ada di tab sebelah.');
+        return;
+      }
       if (e.data !== 'omniclip:google-tersambung') return;
       if (onSelesai) onSelesai(); else window.location.reload();
     };
@@ -83,7 +132,11 @@ export default function TambahAkun({ card, sectionTitle, helpText, onSelesai }) 
     // layar tanpa harapan. Akun wadahnya ikut disapu saat daftar dimuat ulang.
     const henti = setTimeout(() => {
       setMenunggu(false);
-      setGalat('Izin dari Google tidak selesai. Coba "Masuk dengan Google" lagi.');
+      // Akun wadahnya dibuang di sini juga. Tanpa ini, menyerah karena
+      // kehabisan waktu meninggalkan "Akun baru" sebagai akun aktif.
+      lepasWadah();
+      setGalat('Izin dari Google tidak selesai, jadi akun yang disiapkan '
+               + 'untuknya sudah dibuang. Coba "Masuk dengan Google" lagi.');
     }, 5 * 60 * 1000);
     return () => { batal = true; clearInterval(id); clearTimeout(henti); };
   }, [menunggu, onSelesai]);
@@ -115,6 +168,7 @@ export default function TambahAkun({ card, sectionTitle, helpText, onSelesai }) 
     setSibuk(true);
     setGalat(null);
     const sebelumnya = profilAktif();
+    sebelumnyaRef.current = sebelumnya;
     try {
       // `sementara` menandai bahwa akun ini baru sebuah wadah untuk izin yang
       // sedang diminta. Izin yang tidak pernah selesai membuatnya disapu
@@ -124,6 +178,7 @@ export default function TambahAkun({ card, sectionTitle, helpText, onSelesai }) 
       // termasuk permintaan izin di bawahnya, yang membuat tokennya tersimpan
       // ke akun yang benar.
       setProfilAktif(p.id);
+      wadahRef.current = p.id;
       try {
         const r = await apiPost('/uploads/google/connect', {});
         bukaIzinGoogle(r.authorization_url);
@@ -131,6 +186,7 @@ export default function TambahAkun({ card, sectionTitle, helpText, onSelesai }) 
         // Halaman izinnya belum sempat terbuka, jadi akun wadahnya dibuang
         // sekarang juga dan akun sebelumnya dipakai lagi. Menunggu penyapu
         // berarti membiarkan akun kosong berdiri sebagai akun aktif.
+        wadahRef.current = null;
         setProfilAktif(sebelumnya);
         await apiDelete(`/profil/${p.id}`).catch(() => {});
         throw err;

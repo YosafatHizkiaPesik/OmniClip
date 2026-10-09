@@ -546,6 +546,38 @@ def _tukar_kode(flow, full_url: str) -> None:
             time.sleep(jeda)
 
 
+def profil_menunggu(state: str) -> int:
+    """
+    Profil yang sedang menunggu izin untuk `state`, atau 0 bila tidak dikenal.
+
+    Dibaca tanpa menghapus sesinya: pemanggilnya adalah halaman balik dari
+    Google yang perlu tahu akun MANA yang gagal, dan penghapusan sesinya
+    dikerjakan `finish_authorization` atau `lupakan_sesi`.
+    """
+    with _lock:
+        tunggu = _pending.get(state)
+    return int(tunggu[1]) if tunggu else 0
+
+
+def profil_sedang_menunggu() -> set:
+    """
+    Semua profil yang punya sesi izin HIDUP saat ini.
+
+    Dipakai penyapu akun sementara. Tanpa sesi yang hidup, halaman izin yang
+    masih terbuka pun tidak bisa berhasil: `finish_authorization` menolak state
+    yang tidak dikenal. Jadi "tidak ada sesi" berarti "tidak mungkin selesai",
+    dan akun wadahnya tidak perlu ditunggu lama lama.
+    """
+    with _lock:
+        return {int(v[1]) for v in _pending.values() if v and v[1]}
+
+
+def lupakan_sesi(state: str) -> None:
+    """Membuang sesi izin yang sudah pasti tidak akan selesai."""
+    with _lock:
+        _pending.pop(state, None)
+
+
 def finish_authorization(full_url: str, state: str) -> tuple[str, int]:
     """
     Menukar kode izin jadi token. Mengembalikan (alamat surel, id profil).

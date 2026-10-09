@@ -4,7 +4,7 @@ import {
   CheckCircle2, AlertTriangle, Sparkles, Scissors, Mic,
   Trash2, Languages, UploadCloud, ShieldAlert,
 } from 'lucide-react';
-import { apiDelete, apiGet, apiPost } from '../lib/api';
+import { apiDelete, apiGet, apiPost, apiPut } from '../lib/api';
 import { Link } from 'react-router-dom';
 import SakelarSensor from './SakelarSensor';
 import SakelarGumam from './SakelarGumam';
@@ -98,6 +98,21 @@ export default function ProfileTab() {
   const [whisperModel, setWhisperModel] = useState(
     () => localStorage.getItem('omniclip_whisper_model') || 'base');
 
+  // Setelan milik akun aktif, dibaca sekali. Server yang menang atas salinan
+  // peramban: salinan itu satu untuk semua akun, dan justru itu masalahnya.
+  useEffect(() => {
+    let batal = false;
+    apiGet('/profil/setelan')
+      .then((r) => {
+        const k = r?.setelan?.klip;
+        if (batal || !k) return;
+        if (k.max_clips !== undefined) setMaxClips(Number(k.max_clips) || 0);
+        if (k.whisper_model) setWhisperModel(String(k.whisper_model));
+      })
+      .catch(() => {});
+    return () => { batal = true; };
+  }, []);
+
   // Bahasa subtitle. Tinggal di SERVER, bukan di localStorage: yang memakainya
   // adalah pengambil caption di backend, dan pilihan yang cuma ada di peramban
   // tidak akan pernah sampai ke sana.
@@ -186,14 +201,29 @@ export default function ProfileTab() {
       .catch((err) => setModelsError(err.message));
   }, []);
 
+  /**
+   * Preferensi pengklipan disimpan KE AKUN, bukan ke peramban.
+   *
+   * Dulu keduanya hanya di localStorage dengan satu nilai untuk semua akun,
+   * jadi mengubahnya untuk satu kanal mengubahnya untuk semua kanal.
+   * Dilaporkan 9 Oktober 2026: "tiap akun tidak memiliki settingnya masing
+   * masing". Nilai di peramban tetap ditulis sebagai salinan cepat supaya
+   * halaman ini tidak berkedip ke bawaan saat dibuka.
+   */
+  const simpanKlip = (nilai) => {
+    apiPut('/profil/setelan', { kelompok: 'klip', nilai }).catch(() => {});
+  };
+
   const chooseMaxClips = (v) => {
     setMaxClips(v);
     localStorage.setItem('omniclip_max_clips', String(v));
+    simpanKlip({ max_clips: v });
   };
 
   const chooseWhisper = (v) => {
     setWhisperModel(v);
     localStorage.setItem('omniclip_whisper_model', v);
+    simpanKlip({ whisper_model: v });
   };
 
   const chooseModel = (value) => {

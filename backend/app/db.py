@@ -367,6 +367,40 @@ MIGRATIONS: list[str] = [
     """
     ALTER TABLE profil ADD COLUMN foto TEXT NOT NULL DEFAULT '';
     """,
+    # Gaya subtitle dan tanda air, MILIK TIAP AKUN.
+    #
+    # Sampai sekarang gaya tersimpan di localStorage peramban dengan satu kunci
+    # untuk semua akun. Akibatnya terlapor 9 Oktober 2026: "biasa saya
+    # menggunakan watermark tapi saat beralih akun dan mencoba klip pada akun
+    # tersebut watermark tersebut settingannya masih ada". Tanda air itu nama
+    # kanal, jadi ia MILIK akun, dan satu kunci untuk semua akun berarti nama
+    # kanal satu orang menempel di klip kanal lain.
+    #
+    # Disimpan di server, bukan hanya di kunci peramban per akun. Alasannya
+    # sudah terbukti sekali di sini: localStorage terikat pada origin, dan
+    # origin memuat nomor port yang berpindah sendiri saat 8000 dipakai program
+    # lain, sehingga seluruh ingatan peramban hilang (lihat `setProfilAktif`
+    # di frontend/src/lib/api.js).
+    """
+    ALTER TABLE profil ADD COLUMN gaya_json TEXT NOT NULL DEFAULT '{}';
+    """,
+    # Setelan per akun, bukan hanya gaya.
+    #
+    # Migrasi sebelumnya menambah satu kolom khusus gaya subtitle. Pertanyaan
+    # berikutnya dari pemiliknya membuat itu terlalu sempit: "ini bukan tentang
+    # watermark saja bisa saja hal hal lain dimana tiap akun memiliki settingnya
+    # masing masing". Jadi tempatnya dibuat umum sejak sekarang: satu kantong
+    # berisi kelompok-kelompok setelan ("gaya", "klip", dan apa pun nanti),
+    # bukan satu kolom baru tiap kali ada setelan yang ternyata milik akun.
+    #
+    # `gaya_json` dibiarkan ada dan tidak dipakai lagi. Isinya dipindahkan saat
+    # pertama kali dibaca (lihat `repos/profil.setelan`), bukan lewat SQL:
+    # memindahkannya di sini menuntut fungsi JSON bawaan SQLite, dan versi
+    # SQLite yang ikut dalam bundel Windows tidak dijanjikan siapa pun.
+    # Membuang kolomnya menuntut SQLite 3.35, dengan alasan yang sama.
+    """
+    ALTER TABLE profil ADD COLUMN setelan_json TEXT NOT NULL DEFAULT '{}';
+    """,
 ]
 
 

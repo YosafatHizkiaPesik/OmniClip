@@ -145,6 +145,49 @@ async def ingat_terakhir(pid: int):
     return {"status": "ok", "terakhir": pid}
 
 
+@router.get("/setelan")
+async def lihat_setelan():
+    """
+    Setelan milik akun yang sedang aktif, per kelompok.
+
+    Kenapa di server dan bukan cukup di peramban: setelan seperti tanda air
+    adalah nama kanal, jadi ia milik AKUN. Sampai 9 Oktober 2026 semuanya
+    tersimpan di localStorage dengan satu kunci untuk semua akun, dan
+    dilaporkan "saat beralih akun dan mencoba klip pada akun tersebut watermark
+    tersebut settingannya masih ada". Kunci peramban per akun akan menutup
+    kebocoran itu, tapi localStorage terikat pada origin dan origin memuat
+    nomor port yang bisa berpindah sendiri, dan itu sudah pernah menghapus
+    ingatan peramban di sini.
+    """
+    from ..services import profil as profil_svc
+
+    pid = profil_svc.kini()
+    return {"profil_id": pid,
+            "setelan": await asyncio.to_thread(repo.setelan, pid),
+            "kelompok": list(repo.KELOMPOK)}
+
+
+class SetelanModel(BaseModel):
+    kelompok: str = Field(..., min_length=1, max_length=32)
+    nilai: Dict[str, Any] = Field(default_factory=dict)
+
+
+@router.put("/setelan")
+async def simpan_setelan(req: SetelanModel):
+    """Menyimpan satu kelompok setelan akun aktif. Kunci yang tidak dikirim dibiarkan."""
+    from ..services import profil as profil_svc
+
+    if req.kelompok not in repo.KELOMPOK:
+        raise InvalidInput(
+            f"Kelompok setelan '{req.kelompok}' tidak dikenal. "
+            f"Yang ada: {', '.join(repo.KELOMPOK)}.")
+    pid = profil_svc.kini()
+    if not await asyncio.to_thread(repo.ambil, pid):
+        raise NotFound("Profil tidak ditemukan.")
+    nilai = await asyncio.to_thread(repo.simpan_setelan, pid, req.kelompok, req.nilai)
+    return {"profil_id": pid, "kelompok": req.kelompok, "nilai": nilai}
+
+
 @router.post("")
 async def buat(req: ProfilBaru):
     if not _WARNA.match(req.warna):

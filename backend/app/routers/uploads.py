@@ -8,6 +8,7 @@ membuat kanal ditandai, dan itu bukan risiko yang boleh diambil aplikasi ini
 atas nama penggunanya.
 """
 
+import asyncio
 import logging
 from typing import List, Optional
 
@@ -61,8 +62,26 @@ async def callback(request: Request, state: str = "", error: str = ""):
     Yang dikirim balik adalah halaman kecil, bukan JSON: yang membacanya adalah
     orang di dalam tab browser, bukan program.
     """
+    # Akun wadahnya dibuang di SETIAP jalur gagal, bukan ditinggalkan untuk
+    # penyapu berumur 15 menit. Lihat `profil.buang_wadah_gagal`.
+    def _bersihkan() -> bool:
+        from ..services import profil as profil_svc
+        pid = google.profil_menunggu(state)
+        google.lupakan_sesi(state)
+        try:
+            return profil_svc.buang_wadah_gagal(pid)
+        except Exception:                            # noqa: BLE001
+            log.exception("Akun wadah gagal dibuang")
+            return False
+
     if error:
-        return _page("Izin ditolak", f"Google menjawab: {error}", ok=False)
+        dibuang = await asyncio.to_thread(_bersihkan)
+        return _page("Izin ditolak",
+                     f"Google menjawab: {error}."
+                     + (" Akun yang disiapkan untuk login ini sudah dibuang,"
+                        " jadi tidak ada akun kosong yang tertinggal."
+                        if dibuang else ""),
+                     ok=False)
     try:
         email, pid = google.finish_authorization(str(request.url), state)
         from ..services import profil as profil_svc
@@ -79,9 +98,11 @@ async def callback(request: Request, state: str = "", error: str = ""):
         # lencana huruf tetap ada sebagai jalan mundurnya.
         google.simpan_foto(pid)
     except AppError as e:
+        await asyncio.to_thread(_bersihkan)
         return _page("Gagal menyambungkan", e.message, ok=False)
     except Exception as e:  # noqa: BLE001, halaman ini tidak boleh 500
         log.exception("Callback OAuth gagal")
+        await asyncio.to_thread(_bersihkan)
         return _page("Gagal menyambungkan", google.explain_error(e), ok=False)
     return _page("Akun tersambung",
                  f"{email or 'Akun Google'} siap dipakai. Tab ini menutup "
@@ -104,11 +125,20 @@ def _page(title: str, body: str, *, ok: bool) -> HTMLResponse:
     ia memang dibuka oleh skrip, dan itu tidak selalu benar.
     """
     colour = "#07683B" if ok else "#B3182C"
+    # Tab OmniClip dikabari BAIK saat berhasil maupun saat gagal.
+    #
+    # Sebelumnya hanya keberhasilan yang dikabarkan, jadi login yang gagal
+    # meninggalkan halaman "Menunggu izin dari Google" menyala sampai lima
+    # menit, dengan akun wadah sebagai akun aktif. Yang gagal tidak menutup
+    # tabnya sendiri: pesan dari Google layak dibaca, bukan dikedipkan.
+    pesan = "omniclip:google-tersambung" if ok else "omniclip:google-gagal"
+    tutup = ("setTimeout(function(){try{window.close();}catch(e){}},1200);"
+             if ok else "")
     skrip = ("<script>try{if(window.opener&&!window.opener.closed){"
-             "window.opener.postMessage('omniclip:google-tersambung',"
+             f"window.opener.postMessage('{pesan}',"
              "window.location.origin);}"
-             "setTimeout(function(){try{window.close();}catch(e){}},1200);"
-             "}catch(e){}</script>") if ok else ""
+             f"{tutup}"
+             "}catch(e){}</script>")
     return HTMLResponse(
         "<!doctype html><meta charset='utf-8'>"
         "<title>OmniClip</title>"

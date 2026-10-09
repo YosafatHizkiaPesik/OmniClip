@@ -151,6 +151,19 @@ def folder_untuk_akun(pid: int, email: str) -> Optional[str]:
 # izin Google sendiri kedaluwarsa jauh sebelumnya.
 SEMENTARA_KEDALUWARSA = 15 * 60
 
+# Dan jauh lebih cepat bila TIDAK ADA sesi izin yang hidup untuknya.
+#
+# Dilaporkan 9 Oktober 2026: "login gagal tapi akun baru ditambahkan". Jalur
+# gagal yang sampai ke server sudah membuang wadahnya seketika (lihat
+# `buang_wadah_gagal`), tapi satu keadaan tidak pernah sampai ke server sama
+# sekali: tab izin Google ditutup begitu saja. Dulu wadahnya berdiri sebagai
+# "Akun baru" sampai lima belas menit lewat.
+#
+# Satu menit, bukan nol: antara "akun wadah dibuat" dan "sesi izin tercatat"
+# ada jeda dua permintaan, dan menyapu di celah itu akan membuang akun yang
+# baru saja akan dipakai.
+SEMENTARA_TANPA_SESI = 60
+
 
 def sapu_sementara() -> int:
     """
@@ -159,7 +172,8 @@ def sapu_sementara() -> int:
 
     Dibuang hanya bila SEMUA syarat terpenuhi: ia bertanda sementara, tidak
     punya akun Google satu pun, belum menyentuh video apa pun, dan sudah lewat
-    batas waktunya. Profil yang sengaja dibuat tanpa Google tidak pernah
+    batas waktunya. Batas waktunya sendiri tergantung apakah sesi izinnya masih
+    hidup; lihat SEMENTARA_TANPA_SESI. Profil yang sengaja dibuat tanpa Google tidak pernah
     bertanda sementara, jadi ia tidak ikut tersapu; begitu pula profil yang
     izinnya masih ditunggu di tab sebelah.
     """
@@ -167,10 +181,19 @@ def sapu_sementara() -> int:
     from . import google_upload
 
     dibuang = 0
+    try:
+        menunggu = google_upload.profil_sedang_menunggu()
+    except Exception:                                # noqa: BLE001
+        menunggu = set()
     for pr in repo.semua():
         if not pr.get("sementara") or pr["id"] == UTAMA:
             continue
-        if time.time() - float(pr.get("created_at") or 0) < SEMENTARA_KEDALUWARSA:
+        umur = time.time() - float(pr.get("created_at") or 0)
+        # Sesinya masih hidup berarti halaman izinnya masih bisa berhasil;
+        # itu tidak boleh disentuh berapa lama pun ia terbuka.
+        batas = (SEMENTARA_KEDALUWARSA if pr["id"] in menunggu
+                 else SEMENTARA_TANPA_SESI)
+        if umur < batas:
             continue
         if any(google_upload.tersambung(pr["id"], n) for n in google_upload.LAYANAN):
             repo.sahkan(pr["id"])
@@ -182,6 +205,40 @@ def sapu_sementara() -> int:
         dibuang += 1
         log.info("Profil %s dibuang: izin Google tidak pernah selesai", pr["id"])
     return dibuang
+
+
+def buang_wadah_gagal(pid: int) -> bool:
+    """
+    Membuang akun wadah yang izinnya baru saja GAGAL, saat itu juga.
+
+    Bedanya dengan `sapu_sementara`: di sini tidak ada tunggu 15 menit, karena
+    kegagalannya sudah pasti, bukan diduga dari umur. Syarat lainnya sama dan
+    tetap ketat, supaya akun sungguhan tidak pernah ikut terbuang: ia bertanda
+    sementara, bukan akun Utama, belum punya satu akun Google pun, dan belum
+    menyentuh video apa pun.
+
+    Dilaporkan 9 Oktober 2026: "login gagal tapi akun baru ditambahkan". Yang
+    terjadi, akun wadah hanya dibuang kalau permintaan izinnya gagal SEBELUM
+    halaman Google terbuka. Begitu halamannya terbuka lalu login gagal di sana,
+    wadahnya berdiri sebagai "Akun baru" sampai penyapu berumur lewat.
+    """
+    from ..repos import profil as repo
+    from . import google_upload
+
+    if not pid or pid == UTAMA:
+        return False
+    pr = repo.ambil(pid)
+    if not pr or not pr.get("sementara"):
+        return False
+    if any(google_upload.tersambung(pid, n) for n in google_upload.LAYANAN):
+        repo.sahkan(pid)
+        return False
+    if repo.video_milik(pid):
+        repo.sahkan(pid)
+        return False
+    repo.hapus(pid)
+    log.info("Akun %s dibuang: izin Google gagal", pid)
+    return True
 
 
 def kini() -> int:

@@ -1,4 +1,4 @@
-"""Profil: nama, minat, folder klip, dan setelan unggah tiap akun."""
+"""Profil: nama, minat, folder klip, setelan unggah, dan gaya teks tiap akun."""
 
 import json
 from typing import Optional
@@ -8,7 +8,8 @@ from ..db import get_conn, now, tx
 
 def _baris(r) -> dict:
     d = dict(r)
-    for k, bawaan in (("minat_json", []), ("unggah_json", {})):
+    for k, bawaan in (("minat_json", []), ("unggah_json", {}),
+                      ("gaya_json", {}), ("setelan_json", {})):
         try:
             d[k[:-5]] = json.loads(d.pop(k) or "null") or bawaan
         except json.JSONDecodeError:
@@ -49,12 +50,13 @@ def sahkan(pid: int) -> None:
 
 def ubah(pid: int, **kolom) -> None:
     sah = {"nama": "nama", "warna": "warna", "folder_klip": "folder_klip",
-           "minat": "minat_json", "unggah": "unggah_json", "foto": "foto"}
+           "minat": "minat_json", "unggah": "unggah_json", "foto": "foto",
+           "gaya": "gaya_json", "setelan": "setelan_json"}
     pasangan = []
     for k, v in kolom.items():
         if k not in sah or v is None:
             continue
-        if k in ("minat", "unggah"):
+        if k in ("minat", "unggah", "gaya", "setelan"):
             v = json.dumps(v, ensure_ascii=False)
         pasangan.append((sah[k], v))
     if not pasangan:
@@ -62,6 +64,66 @@ def ubah(pid: int, **kolom) -> None:
     with tx() as c:
         c.execute(f"UPDATE profil SET {', '.join(f'{k} = ?' for k, _ in pasangan)} WHERE id = ?",
                   (*[v for _, v in pasangan], pid))
+
+
+# Kelompok setelan yang boleh disimpan per akun.
+#
+# Dibatasi dengan sengaja. Tanpa daftar ini, satu salah ketik di sisi peramban
+# menulis kelompok baru yang tidak pernah dibaca siapa pun, dan tidak ada yang
+# memberi tahu. Menambah kelompok baru harus terlihat di sini.
+#
+#   gaya  gaya subtitle, kartu judul, dan tanda air. Tanda air itu nama kanal.
+#   klip  preferensi pengklipan: berapa klip per video, model transkrip, model AI.
+KELOMPOK = ("gaya", "klip")
+
+
+def setelan(pid: int, kelompok: str = "") -> dict:
+    """
+    Setelan milik akun ini. Tanpa `kelompok`, seluruh kantongnya.
+
+    Isi kolom gaya yang lama dipindahkan di sini, sekali, saat pertama dibaca.
+    Lihat migrasi `setelan_json` di app/db.py untuk kenapa pindahnya tidak
+    dikerjakan SQL.
+    """
+    pr = ambil(pid)
+    if not pr:
+        return {}
+    kantong = pr.get("setelan")
+    kantong = kantong if isinstance(kantong, dict) else {}
+    lama = pr.get("gaya")
+    if not kantong and isinstance(lama, dict) and lama:
+        kantong = {"gaya": lama}
+        ubah(pid, setelan=kantong, gaya={})
+    if kelompok:
+        isi = kantong.get(kelompok) or {}
+        return isi if isinstance(isi, dict) else {}
+    return kantong
+
+
+def simpan_setelan(pid: int, kelompok: str, data: dict) -> dict:
+    """
+    Menyimpan satu kelompok setelan. Yang MENIMPA hanya kunci yang dikirim.
+
+    Digabung, bukan ditukar: editor mengirim gaya utuh, tapi halaman lain bisa
+    menyimpan satu kunci saja, dan penukaran utuh akan menghapus sisanya tanpa
+    ada yang memintanya.
+    """
+    if kelompok not in KELOMPOK or not isinstance(data, dict):
+        return setelan(pid, kelompok)
+    kantong = dict(setelan(pid))
+    kantong[kelompok] = {**(kantong.get(kelompok) or {}), **data}
+    ubah(pid, setelan=kantong)
+    return kantong[kelompok]
+
+
+def gaya(pid: int) -> dict:
+    """Gaya subtitle dan tanda air milik akun ini."""
+    return setelan(pid, "gaya")
+
+
+def simpan_gaya(pid: int, data: dict) -> dict:
+    """Menyimpan gaya akun ini; lihat `simpan_setelan`."""
+    return simpan_setelan(pid, "gaya", data)
 
 
 def hapus(pid: int) -> None:

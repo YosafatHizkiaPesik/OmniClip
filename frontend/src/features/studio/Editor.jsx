@@ -4,7 +4,8 @@ import {
   AlertTriangle, Crop, Plus, Trash2, Play, Save, Tag, Undo2, Redo2, Clapperboard, RefreshCw, Wand2,
   FolderOpen,
 } from 'lucide-react';
-import { apiGet, apiPost, dijalankanDiKomputerIni, downloadToDisk, kategoriKlip } from '../../lib/api';
+import { apiGet, apiPost, apiPut, dijalankanDiKomputerIni, downloadToDisk,
+  kategoriKlip, profilAktif } from '../../lib/api';
 import { loadFonts } from '../../lib/fonts';
 import { formatDurationHuman, formatTime } from '../../utils/timeFormat';
 import { useClipEditor } from './useClipEditor';
@@ -69,7 +70,22 @@ const DEFAULT_STYLE = {
   wm_x: 92, wm_y: 95, wm_outline: 2,
 };
 
-const STYLE_KEY = 'omniclip_caption_style';
+const STYLE_KEY_LAMA = 'omniclip_caption_style';
+
+/**
+ * Kunci gaya DI PERAMBAN, satu per akun.
+ *
+ * Dulu satu kunci untuk semua akun, dan itu membuat tanda air satu kanal
+ * menempel di klip kanal lain. Dilaporkan 9 Oktober 2026: "biasa saya
+ * menggunakan watermark tapi saat beralih akun dan mencoba klip pada akun
+ * tersebut watermark tersebut settingannya masih ada". Tanda air itu nama
+ * kanal, jadi ia milik akun.
+ *
+ * Yang di peramban hanya SALINAN CEPAT supaya editor tidak terbuka dengan
+ * gaya bawaan selama sekejap. Yang menyimpannya sungguhan server, per akun;
+ * lihat `GET /api/profil/gaya`.
+ */
+const styleKey = (pid) => `omniclip_caption_style:${pid}`;
 
 /**
  * Gaya teks bertahan antar sesi.
@@ -105,10 +121,29 @@ function bersihkanWarna(gaya) {
 }
 
 function loadStoredStyle() {
+  const pid = profilAktif();
   try {
-    const raw = JSON.parse(localStorage.getItem(STYLE_KEY) || 'null');
-    return raw && typeof raw === 'object'
-      ? bersihkanWarna({ ...DEFAULT_STYLE, ...raw }) : DEFAULT_STYLE;
+    const sendiri = localStorage.getItem(styleKey(pid));
+    if (sendiri) {
+      const raw = JSON.parse(sendiri);
+      return raw && typeof raw === 'object'
+        ? bersihkanWarna({ ...DEFAULT_STYLE, ...raw }) : DEFAULT_STYLE;
+    }
+    // Gaya lama yang belum berakun DIWARISKAN, satu kali, dan hanya oleh akun
+    // yang sedang aktif saat aplikasi diperbarui. Membuangnya berarti
+    // penyetelan font, warna, dan tanda air seseorang hilang tanpa diminta;
+    // mewariskannya ke SEMUA akun berarti mengulang kebocoran yang baru saja
+    // ditutup.
+    const lama = localStorage.getItem(STYLE_KEY_LAMA);
+    if (lama) {
+      const raw = JSON.parse(lama);
+      if (raw && typeof raw === 'object') {
+        localStorage.setItem(styleKey(pid), lama);
+        localStorage.removeItem(STYLE_KEY_LAMA);
+        return bersihkanWarna({ ...DEFAULT_STYLE, ...raw });
+      }
+    }
+    return DEFAULT_STYLE;
   } catch {
     return DEFAULT_STYLE;
   }
@@ -786,11 +821,34 @@ export default function Editor({ project, onBack }) {
   useEffect(() => {
     const t = setTimeout(() => {
       try {
-        localStorage.setItem(STYLE_KEY, JSON.stringify(style));
+        localStorage.setItem(styleKey(profilAktif()), JSON.stringify(style));
       } catch { /* mode privat: gaya tetap berlaku, hanya tidak diingat */ }
+      // Dan ke server, karena di situlah ia milik akun dan bukan milik
+      // origin peramban. Gagalnya tidak mengganggu apa pun: salinan di
+      // peramban sudah cukup untuk sesi ini.
+      apiPut('/profil/setelan', { kelompok: 'gaya', nilai: style }).catch(() => {});
     }, 400);
     return () => clearTimeout(t);
   }, [style]);
+
+  // Gaya milik akun ini, dibaca dari server sekali saat editor dibuka.
+  //
+  // Server yang menang atas salinan peramban, dan urutan itu disengaja:
+  // peramban bisa kehilangan seluruh ingatannya ketika nomor port berpindah,
+  // sedangkan server tidak. Yang kosong di server tidak menimpa apa pun,
+  // supaya gaya yang baru diwariskan dari kunci lama tidak terhapus sebelum
+  // sempat tersimpan.
+  useEffect(() => {
+    let batal = false;
+    apiGet('/profil/setelan')
+      .then((r) => {
+        const g = r?.setelan?.gaya;
+        if (batal || !g || typeof g !== 'object' || !Object.keys(g).length) return;
+        setStyle(bersihkanWarna({ ...DEFAULT_STYLE, ...g }));
+      })
+      .catch(() => {});
+    return () => { batal = true; };
+  }, []);
 
   // Muat analisis tersimpan. Halaman ini hanya dibuka untuk project yang sudah
   // selesai, jadi tidak ada pekerjaan berat yang dimulai di sini.
@@ -934,6 +992,19 @@ export default function Editor({ project, onBack }) {
   const kunciJenis = (clip) => `${clip.clip_id}|${(clip.segments ?? [])
     .map((s) => `${s.start.toFixed(2)}-${s.end.toFixed(2)}`).join(',')}`;
   const jenisSekarang = selected ? jenisKlip[kunciJenis(selected)] : null;
+  /**
+   * Jenis klip ini belum dijawab server, dan pengguna belum memilih sendiri.
+   *
+   * Selama itu, `frameMode` masih berisi cara bawaan atau cara yang diingat
+   * dari video ini: biasanya "ikut wajah". Alat yang HANYA berguna untuk
+   * ikut-wajah tidak boleh ditawarkan atas dasar tebakan yang sebentar lagi
+   * diganti: pada video gameplay pemiliknya, tombol "Wajah 1/2/3" muncul di
+   * atas video mentah selama 9 sampai 27 detik sebelum sistem menjawab
+   * "main game", dan itu dilaporkan sebagai "ini kan game, kenapa ada tombol
+   * yang biasanya untuk mengikuti wajah".
+   */
+  const menungguJenis = !!selected && !selected.cara_bingkai
+    && (jenisSekarang === 'memuat' || jenisSekarang === undefined);
   useEffect(() => {
     if (!selected?.segments?.length) return;
     if (selected.cara_bingkai) { setFrameMode(selected.cara_bingkai); return; }
@@ -2062,6 +2133,7 @@ export default function Editor({ project, onBack }) {
                                style: { ...(selected.subtitle_kedua.style ?? {}), ...patch } } }) : null}
                            style={{ ...style, showHook }} videoRef={videoRef}
                            constrained={constrained} frameMode={frameModeEfektif}
+                           menungguJenis={menungguJenis}
                            boxRect={kunciBingkaiAktif?.rect ?? null}
                            reframe={reframe} reframeLoading={reframeLoading}
                            onStyleChange={patchStyle} onCardChange={patchCard}
