@@ -39,7 +39,7 @@ Pembandingnya numerik (lihat `sebagai_tuple`), jadi 1.0.10 memang lebih besar
 daripada 1.0.9 dan tidak ada yang rusak. Yang salah hanya penamaannya.
 """
 
-__version__ = "1.3.5"
+__version__ = "1.3.6"
 
 
 def sebagai_tuple(v: str) -> tuple[int, ...]:
