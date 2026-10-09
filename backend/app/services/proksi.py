@@ -194,7 +194,14 @@ def _buat(src: Path, tujuan: Path) -> None:
     saring = f"scale={_lebar_untuk(src)}:-2,fps={FPS_PROKSI}"
     if saring_gpu:
         saring += "," + saring_gpu
-    cmd = ["ffmpeg", "-y", "-hide_banner", "-nostdin", "-loglevel", "error",
+    # ffmpeg yang dipakai adalah yang DIUJI enkoder, bukan yang pertama di PATH.
+    #
+    # `enkoder.pilih()` mencoba tiap ffmpeg yang ada di mesin ini dan menyimpan
+    # yang lulus beserta jalurnya. Memanggil "ffmpeg" telanjang di sini berarti
+    # pilihan enkodernya dipakai pada binary yang mungkin bukan yang diuji, dan
+    # bila binary itu tidak punya vaapi, salinannya gagal pada setiap percobaan.
+    ffmpeg = enk.get("ffmpeg") or "ffmpeg"
+    cmd = [ffmpeg, "-y", "-hide_banner", "-nostdin", "-loglevel", "error",
            *global_gpu,
            "-threads", str(inti), "-i", str(src),
            "-vf", saring,
@@ -231,8 +238,55 @@ def _buat(src: Path, tujuan: Path) -> None:
             tujuan.with_suffix(".sumber").write_text(str(src.resolve()), encoding="utf-8")
             log.info("Salinan analisis siap: %s", src.name)
         else:
-            log.warning("Salinan analisis gagal untuk %s: %s",
-                        src.name, (hasil.stderr or "")[-300:])
+            galat = (hasil.stderr or "")[-300:]
+            log.warning("Salinan analisis gagal untuk %s: %s", src.name, galat)
+            log.info("Perintah yang gagal: %s", " ".join(str(a) for a in cmd))
+            # Gagal dengan kartu grafis bukan alasan menyerah.
+            #
+            # Sebelum ini, satu kegagalan GPU berarti salinannya tidak pernah
+            # jadi: dan karena Studio meminta lagi tiap kali halamannya dibuka,
+            # yang terlihat adalah "Menyiapkan salinan video untuk pratinjau"
+            # yang diam di tempat selamanya sambil menyalakan ffmpeg berulang
+            # kali. Terukur 8 Oktober 2026 pada mesin pemiliknya: 57 kali gagal
+            # berturut-turut untuk satu video yang sama.
+            #
+            # CPU lebih lambat, tapi ia selalu ada. Yang penting salinannya jadi.
+            if global_gpu or video_gpu:
+                # Enkodernya ditandai gagal HANYA bila ia tidak menghasilkan
+                # satu byte pun.
+                #
+                # Tanda itu berlaku untuk seluruh jalannya aplikasi, render
+                # ikut terkena, dan di mesin ini kartu grafis berarti render
+                # 41% lebih cepat. Jadi ia tidak boleh dicabut gara-gara satu
+                # sumber yang rusak di tengah penyalinan. Nol byte berarti
+                # lain: gagal sejak membaca pilihannya, yaitu ffmpeg ini
+                # memang tidak bisa dipakai begitu.
+                kosong = not sementara.is_file() or sementara.stat().st_size == 0
+                if kosong:
+                    from .enkoder import tandai_gagal
+                    try:
+                        tandai_gagal(enk)
+                    except Exception:                # noqa: BLE001
+                        pass
+                cpu = [ffmpeg, "-y", "-hide_banner", "-nostdin", "-loglevel", "error",
+                       "-threads", str(inti), "-i", str(src),
+                       "-vf", f"scale={_lebar_untuk(src)}:-2,fps={FPS_PROKSI}",
+                       "-map", "0:v:0", "-map", "0:a:0?", "-c:a", "aac",
+                       "-b:a", "128k", "-movflags", "+faststart",
+                       "-c:v", "libx264", "-preset", "veryfast", "-crf", "26",
+                       "-threads", str(inti), "-g", "30", "-keyint_min", "30",
+                       "-progress", str(sementara.with_suffix(".kemajuan")),
+                       str(sementara)]
+                log.info("Mengulang salinan analisis tanpa kartu grafis: %s", src.name)
+                hasil = jalankan(cpu, rendah=not buru)
+                if hasil.returncode == 0 and sementara.is_file():
+                    sementara.replace(tujuan)
+                    tujuan.with_suffix(".sumber").write_text(
+                        str(src.resolve()), encoding="utf-8")
+                    log.info("Salinan analisis siap tanpa kartu grafis: %s", src.name)
+                else:
+                    log.warning("Salinan analisis tetap gagal untuk %s: %s",
+                                src.name, (hasil.stderr or "")[-300:])
     finally:
         sementara.unlink(missing_ok=True)
         sementara.with_suffix(".kemajuan").unlink(missing_ok=True)

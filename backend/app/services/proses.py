@@ -16,6 +16,7 @@ Dua pengaman:
 import atexit
 import weakref
 import os
+import shutil
 import subprocess
 import sys
 import threading
@@ -90,6 +91,24 @@ def _anak_linux(rendah: bool):
     return siapkan
 
 
+def _awalan_io(cmd: list) -> list:
+    """
+    `ionice -c3` di depan perintah, bila alatnya ada.
+
+    Jalur cadangan untuk syscall di atas, yang pada sebagian kernel ditolak
+    tanpa alasan yang bisa dibaca: terukur di mesin ini: kelasnya tetap
+    terbaca "none" sesudah syscall-nya dipanggil. `ionice` dari util-linux ada
+    di hampir semua pemasangan Linux; bila tidak ada, perintahnya dijalankan
+    apa adanya dan yang hilang hanya prioritas cakramnya.
+    """
+    if not sys.platform.startswith("linux"):
+        return cmd
+    alat = shutil.which("ionice")
+    if not alat or (cmd and str(cmd[0]).endswith("ionice")):
+        return cmd
+    return [alat, "-c", "3", *cmd]
+
+
 def popen(cmd: list, *, rendah: bool = False, **kw) -> subprocess.Popen:
     """Seperti subprocess.Popen, tapi anaknya tidak bisa jadi yatim.
 
@@ -98,6 +117,8 @@ def popen(cmd: list, *, rendah: bool = False, **kw) -> subprocess.Popen:
     """
     if sys.platform.startswith("linux"):
         kw.setdefault("preexec_fn", _anak_linux(rendah))
+        if rendah:
+            cmd = _awalan_io(cmd)
     elif sys.platform == "win32" and rendah:
         kw["creationflags"] = kw.get("creationflags", 0) | BELOW_NORMAL
     proc = subprocess.Popen(cmd, **kw)
