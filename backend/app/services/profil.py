@@ -60,6 +60,8 @@ UNGGAH_BAWAAN = {
     "batas_harian": 3,
     # Kategori YouTube (JOB-2 F0-6): "otomatis" atau nomor kategorinya.
     "kategori": "otomatis",
+    # Label "konten sintetis" saat klip memuat suara TTS (JOB-2 F0-7).
+    "label_sintetis": True,
     "hashtag": ["#shorts"],
 }
 

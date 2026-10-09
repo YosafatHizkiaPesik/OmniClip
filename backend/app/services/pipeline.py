@@ -1866,6 +1866,7 @@ def run_upload(ctx: JobContext) -> dict:
                 tags=ctx.payload.get("tags") or [],
                 privacy=ctx.payload.get("privacy", "private"),
                 category_id=ctx.payload.get("kategori") or "24",
+                sintetis=bool(ctx.payload.get("sintetis")),
                 on_progress=on_progress,
                 should_cancel=lambda: ctx.cancelled,
             )

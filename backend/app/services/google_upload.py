@@ -708,6 +708,7 @@ def upload_to_youtube(path: Path, *, title: str, description: str = "",
                       tags: Optional[list[str]] = None,
                       privacy: str = "private",
                       category_id: str = "24",
+                      sintetis: bool = False,
                       on_progress: Optional[Callable[[float], None]] = None,
                       should_cancel: Optional[Callable[[], bool]] = None) -> dict:
     from googleapiclient.http import MediaFileUpload
@@ -731,6 +732,12 @@ def upload_to_youtube(path: Path, *, title: str, description: str = "",
         "status": {
             "privacyStatus": privacy,
             "selfDeclaredMadeForKids": False,
+            # Label "konten diubah atau sintetis" (JOB-2 F0-7). Medan ini ada
+            # di YouTube Data API sejak 30 Oktober 2024 dan bisa diisi saat
+            # videos.insert; diperiksa di riwayat revisi API 9 Oktober 2026.
+            # Tanpa medan ini API tidak mengeluh dan tidak bertanya apa pun,
+            # jadi unggahan lewat API diam-diam tidak pernah berlabel.
+            "containsSyntheticMedia": bool(sintetis),
         },
     }
     media = MediaFileUpload(str(path), mimetype="video/mp4", resumable=True,

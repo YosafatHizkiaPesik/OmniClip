@@ -83,8 +83,11 @@ Murah, dan mengurangi risiko terbesar lebih dulu.
   sebagai penjadwalan ke hari berikutnya pukul 10.00, bukan penolakan. Bawaan 3
   per hari. Ikut diperbaiki: "Berjarak N jam" di halaman Akun ternyata tidak
   pernah tersimpan karena `jadwal_jam` tidak ada di model PATCH profil.
-- [ ] **F0-6** `categoryId` dipilih (Hiburan 24, Game 20, dan seterusnya),
+- [x] **F0-6** `categoryId` dipilih (Hiburan 24, Game 20, dan seterusnya),
   bukan dikunci 22. Tebakan awal dari jenis video (gameplay atau bukan).
+  (selesai 9 Oktober 2026, commit 35dc611) Otomatis: dibingkai sebagai
+  permainan masuk Game (20), sisanya Hiburan (24); bisa dipilih per profil.
+  Ketujuh nomor diperiksa langsung ke API untuk wilayah ID.
 - [ ] **F0-7** Label konten sintetis saat narasi TTS dipakai. **Verifikasi dulu
   nama medan `status.containsSyntheticMedia` di dokumentasi YouTube Data API**
   sebelum dipasang.

@@ -49,6 +49,8 @@ class UnggahModel(BaseModel):
     jadwal_jam: Optional[float] = Field(None, ge=0, le=168)
     # Kategori YouTube (JOB-2 F0-6): "otomatis" atau nomor kategorinya.
     kategori: Optional[str] = Field(None, pattern=r"^(otomatis|\d{1,2})$")
+    # Label konten sintetis saat ada suara TTS (JOB-2 F0-7).
+    label_sintetis: Optional[bool] = None
 
     @field_validator("privasi")
     @classmethod

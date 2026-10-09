@@ -41,7 +41,9 @@ def antrekan(*, clip_name: str, target: str, title: str = "", description: str =
          "folder_id": folder_id, "upload_id": upload_id, "profil_id": pid,
          # Kategori YouTube (JOB-2 F0-6), ditentukan sekarang supaya yang
          # tercatat di antrean sama dengan yang dikirim.
-         "kategori": kategori_youtube(clip_name, pid) if target == "youtube" else ""},
+         "kategori": kategori_youtube(clip_name, pid) if target == "youtube" else "",
+         # Label konten sintetis (JOB-2 F0-7).
+         "sintetis": label_sintetis(clip_name, pid) if target == "youtube" else False},
         # Satu klip tidak boleh naik dua kali ke tujuan yang sama.
         dedupe_key=f"upload:{pid}:{target}:{clip_name}",
         mulai_setelah=mulai_setelah,
@@ -89,6 +91,28 @@ def kategori_youtube(clip_name: str, profil_id: int) -> str:
     if meta.get("frame_mode") == "gaming":
         return "20"
     return "24"
+
+
+def label_sintetis(clip_name: str, profil_id: int) -> bool:
+    """
+    Apakah unggahan ini diberi label "konten diubah atau sintetis" (JOB-2 F0-7).
+
+    Menyala bila klipnya memuat suara sintetis yang benar-benar terbentuk
+    (kartu judul bersuara Piper/Edge hari ini, komentar TTS di Fase 1), kecuali
+    profilnya mematikannya.
+
+    Dikatakan jujur: definisi YouTube untuk label ini menyasar konten REALISTIS
+    yang bisa menyesatkan, misalnya membuat orang sungguhan seolah mengucapkan
+    sesuatu. Suara pembaca yang jelas-jelas narator mungkin tidak wajib dilabeli.
+    Bawaannya tetap menyala karena salah ke arah melabeli lebih murah daripada
+    salah ke arah tidak melabeli; profil bisa mematikannya.
+    """
+    from . import profil
+    from .analitik import _sidecar
+
+    if profil.unggah(profil_id).get("label_sintetis", True) is False:
+        return False
+    return bool((_sidecar(clip_name, profil_id) or {}).get("suara_sintetis"))
 
 
 def sumber_klip(clip_name: str, profil_id: int) -> dict:

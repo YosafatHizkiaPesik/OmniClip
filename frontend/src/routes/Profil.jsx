@@ -457,6 +457,21 @@ export default function Profil() {
               <textarea value={u.deskripsi ?? ''} rows={3} maxLength={4000}
                         onChange={(e) => ubahUnggah({ deskripsi: e.target.value })}
                         style={{ ...masukan, width: '100%', resize: 'vertical' }} />
+              {/* JOB-2 F0-2 dan F0-7. Keduanya menyala bawaannya. */}
+              <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap', marginTop: '8px' }}>
+                <label className="studio-check"
+                       title="Menambahkan judul, kanal, dan tautan video asli ke deskripsi.">
+                  <input type="checkbox" checked={u.kredit !== false}
+                         onChange={(e) => ubahUnggah({ kredit: e.target.checked })} />
+                  Kredit video asli
+                </label>
+                <label className="studio-check"
+                       title="Memasang label YouTube &quot;konten diubah atau sintetis&quot; bila klip memuat suara pembaca buatan (TTS).">
+                  <input type="checkbox" checked={u.label_sintetis !== false}
+                         onChange={(e) => ubahUnggah({ label_sintetis: e.target.checked })} />
+                  Label konten sintetis bila ada suara TTS
+                </label>
+              </div>
               <div style={{ ...helpText, marginTop: '10px', marginBottom: '4px' }}>
                 Hashtag yang selalu ditambahkan (hashtag klip ikut di belakangnya):
               </div>

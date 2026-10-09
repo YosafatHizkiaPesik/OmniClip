@@ -2319,6 +2319,10 @@ def render_clip(
             # hidup lebih lama daripada baris sumbernya, dan kredit di deskripsi
             # unggahan tidak boleh ikut hilang bersama baris itu (JOB-2 F0-1).
             "sumber": _sumber_klip(vid),
+            # Suara sintetis yang BENAR-BENAR ikut terbentuk di klip ini, bukan
+            # sekadar disetel: `wav_path` hanya terisi bila TTS berhasil. Untuk
+            # label konten sintetis saat diunggah (JOB-2 F0-7).
+            "suara_sintetis": bool(card is not None and card.wav_path),
             "created_at": time.time(),
         }
         (folder_keluar / out_name.replace(".mp4", ".json")).write_text(
