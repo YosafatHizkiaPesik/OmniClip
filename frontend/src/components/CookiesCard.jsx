@@ -30,8 +30,15 @@ export default function CookiesCard({ card, sectionTitle, helpText }) {
   const [hasil, setHasil] = useState(null);
   const berkasRef = useRef(null);
 
+  // `periksa=1`: tiap browser DIUJI, bukan sekadar didaftar namanya.
+  //
+  // Bedanya nyata di Windows. yt-dlp 2026.08.19 belum mengerti app-bound
+  // encryption yang dipakai Chrome dan Edge sejak versi 127, jadi browser itu
+  // bisa terpasang, pemakainya login, dan pembacaan cookie-nya tetap gagal.
+  // Daftar tanpa pengujian menawarkan tombol yang pasti tidak bekerja, lalu
+  // membiarkan orangnya menyangka cookies-nya sudah menyala.
   const muat = async () => {
-    try { setInfo(await apiGet('/settings/cookies')); }
+    try { setInfo(await apiGet('/settings/cookies?periksa=1')); }
     catch (err) { setGalat(err.message); }
   };
   useEffect(() => { muat(); }, []);
@@ -115,13 +122,20 @@ export default function CookiesCard({ card, sectionTitle, helpText }) {
           Tanpa cookies
         </button>
         {daftar.map((b) => (
-          <button key={b.nama} className="btn-secondary" disabled={!!sibuk}
+          <button key={b.nama} className="btn-secondary"
+                  disabled={!!sibuk || (info.diperiksa && !b.login)}
+                  title={info.diperiksa && !b.login
+                    ? (b.galat || 'Cookies browser ini tidak bisa dibaca.')
+                    : 'Pakai sesi dari browser ini'}
                   onClick={() => pilihBrowser(b.nama)}
                   style={{ fontSize: '0.78rem', padding: '6px 11px',
                            borderColor: info.mode === 'browser' && info.browser === b.nama
                              ? 'var(--accent-cyan)' : undefined,
                            color: info.mode === 'browser' && info.browser === b.nama
                              ? 'var(--accent-cyan)' : undefined }}>
+            {info.diperiksa && b.login
+              ? <CheckCircle2 size={12} style={{ color: 'var(--accent-cyan)' }} />
+              : null}
             {NAMA_BROWSER[b.nama] || b.nama}
           </button>
         ))}
@@ -143,6 +157,18 @@ export default function CookiesCard({ card, sectionTitle, helpText }) {
         </p>
       )}
 
+      {/* Browser yang ada tapi tidak bisa dipakai, DENGAN alasannya.
+          Tombol mati tanpa keterangan hanya memindahkan kebingungannya. */}
+      {info.diperiksa && daftar.some((b) => !b.login) && (
+        <ul style={{ ...helpText, marginTop: '9px', paddingLeft: '18px' }}>
+          {daftar.filter((b) => !b.login).map((b) => (
+            <li key={b.nama}>
+              {NAMA_BROWSER[b.nama] || b.nama}: {b.galat || 'tidak bisa dibaca'}
+            </li>
+          ))}
+        </ul>
+      )}
+
       <div style={{ display: 'flex', gap: '8px', marginTop: '11px', alignItems: 'center', flexWrap: 'wrap' }}>
         <button className="btn-secondary" disabled={!!sibuk} onClick={uji}
                 style={{ fontSize: '0.78rem', padding: '6px 11px' }}>
@@ -150,11 +176,19 @@ export default function CookiesCard({ card, sectionTitle, helpText }) {
           Uji sekarang
         </button>
         <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+          {/* "Siaga" adalah keadaan ketiga, dan tanpa menyebutnya "tanpa
+              cookies" terbaca sebagai "tidak ada yang siap". Padahal sesinya
+              sudah tersimpan dan akan dinyalakan sendiri begitu YouTube
+              menolak dengan tuduhan bot. Lihat `cookies.KUNCI_SIAGA`. */}
           {info.dari_env
             ? 'Dipaksa lewat OMNICLIP_COOKIES_FILE.'
             : info.mode === 'browser' ? `Memakai ${NAMA_BROWSER[info.browser] || info.browser}.`
             : info.mode === 'berkas' ? 'Memakai berkas cookies.txt.'
-            : 'Sedang tidak memakai cookies.'}
+            : info.siaga
+              ? `Tidak dipakai sekarang. ${NAMA_BROWSER[info.siaga] || info.siaga} `
+                + 'disiapkan sebagai cadangan dan dinyalakan sendiri bila '
+                + 'YouTube menuduh bot.'
+              : 'Sedang tidak memakai cookies.'}
         </span>
       </div>
 

@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Search, Loader2, Video, RefreshCw, History, X, Scissors, CheckCircle2 } from 'lucide-react';
 import { apiDelete, apiGet, apiPost } from '../lib/api';
 import { VideoCard } from '../components/VideoCards';
+import CookiesAwal from '../components/CookiesAwal';
 
 // Tahun sengaja tidak dicantumkan: menempelkan "2024" ke setiap kueri menyaring
 // hasil ke tahun yang sudah lewat.
@@ -302,6 +303,14 @@ export default function Home() {
 
   return (
     <div className="page">
+      {/* Pertanyaan cookies, sekali saja, sebelum apa pun yang lain.
+
+          Ditaruh di Beranda dan bukan di Pengaturan karena di sinilah orangnya
+          berada saat pertama kali membuka OmniClip. Kartunya menyembunyikan
+          dirinya sendiri begitu pertanyaannya terjawab atau sistem sudah
+          memilih sendiri; lihat components/CookiesAwal.jsx. */}
+      <CookiesAwal />
+
       <div className="work-block">
         <div style={{ minWidth: 0, flex: '1 1 260px' }}>
           <h1 className="work-title">Cari video</h1>

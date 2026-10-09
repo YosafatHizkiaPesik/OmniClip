@@ -1,5 +1,7 @@
+import logging
 import re
 import os
+import random
 import json
 import subprocess
 import threading
@@ -116,6 +118,27 @@ def classify_ytdlp_error(exc: Exception) -> YtdlpError:
     return YtdlpError("YTDLP_ERROR", f"Gagal menghubungi YouTube: {raw[:200]}", raw)
 
 
+# Jeda acak antar permintaan ke YouTube, dalam detik.
+#
+# Ini pencegah, bukan penyembuh. Yang membuat sebuah IP ditandai "bot" bukan
+# satu permintaan buruk melainkan POLA permintaan: puluhan panggilan beruntun
+# tanpa jeda, dari satu alamat, berjam-jam. Dilaporkan 9 Oktober 2026 oleh
+# seorang pengguna Windows yang sudah mengklip sebulan dan baru sekarang
+# ditandai: tepat bentuk pola yang dimaksud.
+#
+# Hanya antar PERMINTAAN METADATA, bukan antar potongan unduhan: memperlambat
+# unduhan berarti memperlambat pekerjaan yang ditunggu orangnya tanpa menolong
+# apa pun.
+#
+# `sleep_interval_requests` milik yt-dlp satu angka tetap, bukan rentang: yang
+# punya pasangan `max_` hanya jeda antar UNDUHAN. Jadi angkanya diambil acak di
+# sini, sekali per operasi, supaya jedanya tidak sendiri menjadi pola yang rapi.
+#
+# Setengah sampai dua detik: pada satu video tambahannya tidak terasa, dan ia
+# tetap jauh di bawah ambang kesabaran siapa pun.
+JEDA_PERMINTAAN = (0.5, 2.0)
+
+
 def _base_opts() -> dict:
     """Opsi yt-dlp yang dipakai bersama semua pemanggilan."""
     opts = {
@@ -123,6 +146,8 @@ def _base_opts() -> dict:
         'no_warnings': True,
         'socket_timeout': 30,
         'retries': 3,
+        # Lihat JEDA_PERMINTAAN.
+        'sleep_interval_requests': random.uniform(*JEDA_PERMINTAAN),
     }
     # Cookies opsional, dipilih dari Pengaturan. Lihat services/cookies.py:
     # cookies BUKAN obat verifikasi bot dan sering justru memperburuknya.
@@ -186,6 +211,34 @@ def _tunggu_giliran(jeda: float = JEDA_MINIMUM) -> None:
         _giliran_terakhir = time.monotonic()
 
 
+def _coba_cookies_siaga() -> str:
+    """
+    Menyalakan cookies siaga karena YouTube menuduh bot. Nama browser, atau "".
+
+    Ini pasangan dari jalur sebaliknya di `_ekstrak`, yang MEMATIKAN cookies
+    ketika cookies-lah yang merugikan. Keduanya ada karena jawabannya memang
+    berbeda tergantung keadaan jaringan, dan tidak ada satu setelan tetap yang
+    benar untuk keduanya:
+
+        dari IP sehat        tanpa cookies 12 format, dengan cookies 7
+        dari IP ditandai     tanpa cookies ditolak, dengan cookies 1080p
+
+    Jadi yang memutuskan bukan setelan, melainkan kejadian: penolakan pertama
+    menyalakan sesi yang sudah disiapkan sejak aplikasi pertama dijalankan
+    (lihat `cookies.pilih_otomatis`).
+    """
+    catat = logging.getLogger("omniclip.ytdlp")
+    try:
+        nama = cookies_svc.nyalakan_siaga()
+    except Exception as e:                           # noqa: BLE001
+        catat.info("Cookies siaga tidak bisa dinyalakan: %s", str(e)[:140])
+        return ""
+    if nama:
+        catat.info("YouTube menuduh bot; cookies dari %s dinyalakan dan "
+                   "permintaannya diulang.", nama)
+    return nama
+
+
 def _punya_format_video(info: dict) -> bool:
     return any(f.get("vcodec", "none") != "none" and f.get("height")
                for f in (info.get("formats") or []))
@@ -220,8 +273,15 @@ def _ekstrak(url: str, opts: dict, **kw):
             if _galat_bot(e):
                 # IP yang sudah ditandai menolak SEMUA client. Memutar sepuluh
                 # client lagi hanya menambah permintaan yang memperdalam
-                # tandanya — terukur 21 September 2026: 5 dari 6 video ditolak
+                # tandanya: terukur 21 September 2026, 5 dari 6 video ditolak
                 # di setiap kumpulan.
+                #
+                # Tapi sebelum menyerah, sesi login yang sudah disiapkan
+                # dicoba sekali. Itu satu-satunya hal yang terbukti menembus
+                # IP yang ditandai, dan tanpa ini orangnya harus menemukan
+                # sendiri setelan cookies di Pengaturan saat sedang tertahan.
+                if _coba_cookies_siaga():
+                    return _ekstrak(url, _base_opts(), **kw)
                 raise
             continue
         if _punya_format_video(info):
@@ -281,6 +341,10 @@ def _unduh(url: str, opts: dict):
         except Exception as e:
             galat = galat or e
             if _galat_bot(e):
+                # Sesi login yang sudah disiapkan dicoba sekali; lihat
+                # `_coba_cookies_siaga`.
+                if _coba_cookies_siaga():
+                    return _unduh(url, cookies_svc.terapkan(dict(opts)))
                 raise
             pesan = str(e).lower()
             # Kegagalan yang jelas bukan soal client tidak perlu diulang: video

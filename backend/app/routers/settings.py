@@ -1113,14 +1113,75 @@ class CookiesRequest(BaseModel):
 
 
 @router.get("/cookies")
-async def lihat_cookies():
+async def lihat_cookies(periksa: bool = False):
+    """
+    Pilihan cookies yang berlaku, plus browser yang ada di komputer ini.
+
+    `periksa=1` ikut MENGUJI tiap browser: apakah ia benar-benar bisa memberi
+    sesi YouTube yang login. Itu beda penting, bukan hiasan. Di Windows,
+    yt-dlp 2026.08.19 belum mengerti app-bound encryption milik Chrome dan Edge
+    sejak versi 127, jadi browser itu bisa terpasang, pemakainya login, dan
+    pembacaan cookie-nya tetap gagal. Daftar tanpa pengujian akan menawarkan
+    pilihan yang tidak pernah bekerja.
+    """
     from ..services import cookies as ck
 
     def baca():
         s = ck.sumber()
-        return {**s, "browser_tersedia": ck.daftar_browser()}
+        if periksa:
+            return {**s, "browser_tersedia": ck.cari_yang_login(),
+                    "diperiksa": True, "sudah_ditanya": ck.sudah_ditanya(),
+                    "siaga": ck.siaga()}
+        return {**s, "browser_tersedia": ck.daftar_browser(),
+                "diperiksa": False, "sudah_ditanya": ck.sudah_ditanya(),
+                "siaga": ck.siaga()}
 
     return await asyncio.to_thread(baca)
+
+
+@router.post("/cookies/siapkan")
+async def siapkan_cookies(req: CookiesRequest):
+    """
+    Menyimpan browser sebagai cookies SIAGA: siap, tapi belum dikirim.
+
+    Beda dari `POST /cookies` yang langsung menyalakannya. Yang dipakai kartu
+    di Beranda adalah jalur ini, karena menyalakan cookies dari jaringan yang
+    sehat justru merugikan: terukur 9 Oktober 2026, tanpa cookies 12 format,
+    dengan cookies 7. Yang menyalakannya adalah penolakan pertama dari YouTube.
+    Lihat `cookies.KUNCI_SIAGA`.
+    """
+    from ..services import cookies as ck
+
+    def kerja():
+        h = ck.periksa_browser(req.browser)
+        if not h["login"]:
+            raise ValueError(h["galat"] or "Browser ini tidak sedang login ke YouTube.")
+        ck.simpan_siaga(req.browser)
+        ck.tandai_ditanya()
+        return {**ck.sumber(), "siaga": ck.siaga(), "sudah_ditanya": True}
+
+    try:
+        return await asyncio.to_thread(kerja)
+    except ValueError as e:
+        raise AppError(str(e), code="COOKIES_INVALID", status=422) from e
+
+
+@router.post("/cookies/lewati")
+async def lewati_pertanyaan_cookies():
+    """
+    "Nanti saja" pada pertanyaan di Beranda.
+
+    Pertanyaannya tidak muncul lagi, dan cookies tetap mati. Yang dicatat
+    bukan "cookies dimatikan" melainkan "sudah ditanya": keduanya dipisah
+    supaya aplikasi tidak pernah bertanya dua kali hal yang sama.
+    """
+    from ..services import cookies as ck
+
+    def kerja():
+        ck.tandai_ditanya()
+        return {**ck.sumber(), "sudah_ditanya": True, "siaga": ck.siaga()}
+
+    return await asyncio.to_thread(kerja)
 
 
 @router.post("/cookies")

@@ -46,6 +46,39 @@ KUNCI_MODE = "cookies.mode"        # "mati" | "browser" | "berkas"
 KUNCI_BROWSER = "cookies.browser"
 KUNCI_PROFIL = "cookies.profil"
 KUNCI_BERKAS = "cookies.berkas"
+# Apakah orangnya PERNAH ditanya soal cookies. Beda dari `mode == "mati"`.
+#
+# Sampai 9 Oktober 2026 keduanya satu: bawaan "mati" tidak bisa dibedakan dari
+# "sudah dipikirkan lalu dimatikan", jadi aplikasi tidak pernah berani bertanya
+# dan tidak pernah berani memilih sendiri. Akibatnya terlapor dari seorang
+# pengguna Windows yang sudah mengklip sebulan tanpa pernah membuka Pengaturan:
+# YouTube menandainya bot, dan sepanjang bulan itu OmniClip memang mengirim
+# permintaan tanpa cookies sama sekali.
+KUNCI_DITANYA = "cookies.ditanya"
+# Browser yang SIAP dipakai, tapi belum dipakai.
+#
+# Ini jawaban atas satu pengukuran yang tidak bisa diabaikan. 9 Oktober 2026,
+# dari IP yang TIDAK sedang ditandai, pada video uji yang sama:
+#
+#     tanpa cookies   12 format
+#     dengan cookies    7 format
+#
+# Jadi menyalakan cookies untuk semua orang bukan kebaikan, ia menurunkan
+# pilihan resolusi orang yang jaringannya sedang sehat. Sebaliknya, dari IP
+# yang SUDAH ditandai, permintaan polos ditolak sama sekali dan cookies satu-
+# satunya jalan masuk (terukur 21 September 2026, lihat docstring di atas).
+#
+# Dua kenyataan itu hanya cocok dengan satu perilaku: sumbernya disiapkan di
+# awal, dan dikirim saat YouTube mulai menolak. Lihat `nyalakan_siaga`, yang
+# dipanggil dari jalur galat bot di services/ytdlp.py.
+KUNCI_SIAGA = "cookies.siaga"
+
+# Nama cookie yang membuktikan sesi YouTube yang BENAR-BENAR login.
+#
+# Diperiksa, bukan diasumsikan. Browser bisa punya ribuan cookie youtube.com
+# tanpa satu pun sesi login, dan cookies tanpa sesi tidak menolong apa pun
+# melawan verifikasi bot.
+COOKIE_LOGIN = ("SID", "SAPISID", "__Secure-1PSID", "__Secure-3PAPISID", "LOGIN_INFO")
 
 
 def _dir_browser(nama: str) -> Optional[str]:
@@ -87,6 +120,161 @@ def daftar_browser() -> list[dict]:
     return keluar
 
 
+def periksa_browser(nama: str, profil: str = "") -> dict:
+    """
+    Apakah browser ini benar-benar bisa memberi sesi YouTube yang login.
+
+    Diuji dengan membaca cookie-nya, bukan dengan menebak dari nama browser.
+    Itu penting di Windows: yt-dlp 2026.08.19 belum mengerti "app-bound
+    encryption" yang dipakai Chrome dan Edge sejak versi 127, jadi untuk
+    browser itu pembacaannya sering gagal sekalipun browsernya terpasang dan
+    pemakainya login. Menebak akan menyimpan pilihan yang tidak pernah bekerja.
+
+    Hasil: {"nama", "profil", "terpasang", "login", "jumlah", "galat"}.
+    """
+    hasil = {"nama": nama, "profil": profil, "terpasang": bool(_dir_browser(nama)),
+             "login": False, "jumlah": 0, "galat": ""}
+    if not hasil["terpasang"]:
+        return hasil
+
+    class _Diam:
+        """Pencatat yt-dlp yang tidak menulis apa pun; ini pemeriksaan diam."""
+
+        def debug(self, *a, **k):
+            pass
+
+        info = warning = error = debug
+
+        def to_screen(self, *a, **k):
+            pass
+
+        trouble = to_screen
+
+    try:
+        from yt_dlp.cookies import extract_cookies_from_browser
+        jar = extract_cookies_from_browser(nama, profil or None, _Diam())
+    except Exception as e:                           # noqa: BLE001
+        hasil["galat"] = f"{type(e).__name__}: {e}"[:200]
+        return hasil
+    punya = {c.name for c in jar if (c.domain or "").endswith("youtube.com")}
+    hasil["jumlah"] = len(punya)
+    hasil["login"] = bool(set(COOKIE_LOGIN) & punya)
+    if not hasil["login"]:
+        hasil["galat"] = ("Browser ini tidak sedang login ke YouTube."
+                          if punya else "Tidak ada cookie YouTube di browser ini.")
+    return hasil
+
+
+def cari_yang_login() -> list[dict]:
+    """
+    Semua browser di komputer ini, yang bisa memberi sesi login lebih dulu.
+
+    Dipakai dua kali: untuk memilih sendiri saat pertama kali dijalankan, dan
+    untuk menampilkan pilihan yang JUJUR di Pengaturan: termasuk alasannya
+    kalau sebuah browser tidak bisa dipakai.
+    """
+    hasil = [periksa_browser(b["nama"]) for b in daftar_browser()]
+    return sorted(hasil, key=lambda h: (not h["login"], -h["jumlah"], h["nama"]))
+
+
+def sudah_ditanya() -> bool:
+    """Apakah pilihan cookies pernah ditentukan, entah oleh orang atau sistem."""
+    return bool(settings_repo.get(KUNCI_DITANYA, ""))
+
+
+def tandai_ditanya() -> None:
+    settings_repo.set_value(KUNCI_DITANYA, "1")
+
+
+def siaga() -> str:
+    """Browser yang sudah terbukti login dan siap dipakai saat dibutuhkan."""
+    return settings_repo.get(KUNCI_SIAGA, "") or ""
+
+
+def simpan_siaga(nama: str) -> None:
+    settings_repo.set_value(KUNCI_SIAGA, nama or "")
+
+
+def nyalakan_siaga() -> str:
+    """
+    Menyalakan cookies yang sudah disiapkan, karena YouTube mulai menolak.
+
+    Mengembalikan nama browsernya bila berhasil, atau "" bila tidak ada yang
+    siap atau cookies memang sudah menyala. Dipanggil dari jalur galat bot,
+    bukan dari antarmuka: saat itu terjadi, orangnya sedang menunggu hasil dan
+    tidak sedang membaca setelan.
+    """
+    nama = siaga()
+    if not nama or aktif():
+        return ""
+    if not periksa_browser(nama)["login"]:
+        # Sesinya habis sejak disiapkan. Jangan menyalakan yang sudah mati:
+        # itu hanya menukar satu kegagalan dengan kegagalan lain.
+        simpan_siaga("")
+        return ""
+    simpan("browser", browser=nama)
+    return nama
+
+
+def periksa_awal() -> dict:
+    """
+    Melihat apakah ada browser yang login, TANPA menyimpan apa pun.
+
+    Ini sengaja tidak memutuskan sendiri. Membaca basis data cookie sebuah
+    browser berarti memegang sesi Google seseorang, dan mengirimnya ke YouTube
+    berarti permintaan OmniClip berjalan atas nama akun itu. Keduanya tidak
+    boleh terjadi karena aplikasi menebak bahwa itu yang diinginkan.
+
+    Ditanyakan pemiliknya 9 Oktober 2026: "apakah diawal menjalankan sistem ada
+    pemberitahuan persetujuan untuk menggunakan cookies atau tidak". Jawaban
+    yang benar hanya satu, yaitu harus ada, dan versi sebelum ini memang
+    menyimpannya diam-diam begitu menemukan browser yang login.
+
+    Jadi yang dikerjakan di sini cuma memeriksa, supaya kartu di Beranda bisa
+    bertanya dengan menyebut browser yang memang ada. Yang menyimpan
+    `simpan_siaga`, dan hanya dipanggil sesudah orangnya menekan "Izinkan".
+    """
+    if sudah_ditanya():
+        return {"perlu_tanya": False, "alasan": "sudah pernah ditentukan",
+                **sumber()}
+    if (settings_repo.get(KUNCI_MODE, "") or "") not in ("", "mati"):
+        # Pemasangan lama yang sudah menyetelnya sebelum ada penanda ini.
+        tandai_ditanya()
+        return {"perlu_tanya": False, "alasan": "sudah disetel sebelumnya", **sumber()}
+
+    daftar = cari_yang_login()
+    ada = [h for h in daftar if h["login"]]
+    # `browser_tersedia`, bukan `browser`: `sumber()` sudah memakai `browser`
+    # untuk NAMA browser yang dipilih, dan dua arti pada satu kunci membuat
+    # yang satu menimpa yang lain tanpa suara. Tertangkap uji.
+    return {"perlu_tanya": True, "browser_tersedia": daftar,
+            "alasan": (f"{len(ada)} browser sedang login ke YouTube" if ada
+                       else "tidak ada browser yang login"),
+            **sumber()}
+
+
+def periksa_awal_di_latar() -> None:
+    """
+    Memeriksa di latar saat aplikasi menyala; tidak boleh menahan startup.
+
+    Hasilnya tidak disimpan dan tidak mengubah apa pun. Ia hanya memanaskan
+    pemeriksaan supaya kartu di Beranda tidak menunggu lama, dan supaya
+    catatan log menyebut keadaannya apa adanya.
+    """
+    def kerja():
+        import logging
+        catat = logging.getLogger("omniclip.cookies")
+        try:
+            h = periksa_awal()
+            if h.get("perlu_tanya"):
+                catat.info("Cookies belum ditentukan; Beranda akan bertanya (%s).",
+                           h.get("alasan"))
+        except Exception as e:                       # noqa: BLE001
+            catat.info("Pemeriksaan cookies awal gagal: %s", str(e)[:140])
+
+    threading.Thread(target=kerja, name="cookies-periksa", daemon=True).start()
+
+
 def sumber() -> dict:
     """Pilihan cookies yang sedang berlaku."""
     mode = settings_repo.get(KUNCI_MODE, "mati") or "mati"
@@ -118,6 +306,8 @@ def simpan(mode: str, *, browser: str = "", profil: str = "", berkas: str = "") 
     # Pilihan baru dari pengguna membatalkan pelewatan otomatis: keputusannya
     # yang menang, dan hasilnya dinilai ulang dari nol.
     _batalkan_pelewatan()
+    # Pilihan apa pun, termasuk "mati", menutup pertanyaan di Beranda.
+    settings_repo.set_value(KUNCI_DITANYA, "1")
     settings_repo.set_value(KUNCI_MODE, mode)
     settings_repo.set_value(KUNCI_BROWSER, browser)
     settings_repo.set_value(KUNCI_PROFIL, profil)

@@ -151,6 +151,34 @@ async def lifespan(app: FastAPI):
     # dinyalakan tiap startup. Di latar: tanpanya yt-dlp tetap berjalan.
     from .services import alat_yt
     alat_yt.siapkan_di_latar()
+    # Cookies: keadaannya DIPERIKSA, tidak diputuskan.
+    #
+    # Sebelum ini, pemasangan baru berjalan tanpa cookies sampai orangnya
+    # menemukan sendiri setelannya di Pengaturan, dan seorang pengguna Windows
+    # mengklip sebulan penuh tanpa pernah membukanya sampai YouTube menandainya
+    # bot. Jawabannya bukan memilih sendiri diam-diam: membaca cookie browser
+    # berarti memegang sesi Google seseorang. Jadi Beranda yang bertanya, dan
+    # yang di sini cuma memanaskan pemeriksaannya. Lihat `cookies.periksa_awal`.
+    from .services import cookies as _cookies
+    _cookies.periksa_awal_di_latar()
+
+    # Folder versi lama dibuang begitu versi baru terbukti berjalan.
+    #
+    # Sebelum ini pembuangnya cuma dipanggil saat kartu Pembaruan dibuka, jadi
+    # yang tidak pernah membuka halaman itu menumpuk satu salinan 300 MB tiap
+    # kali memperbarui. `bersihkan=False` penting: kabar berhasil atau gagalnya
+    # DIBIARKAN supaya kartu Pembaruan masih bisa melaporkannya ke orangnya.
+    def _bereskan_pembaruan():
+        try:
+            from .services import updater
+            updater.hasil_pemasangan(bersihkan=False)
+            updater.bersihkan_sisa()
+        except Exception as e:                       # noqa: BLE001
+            log.info("Sisa pembaruan tidak bisa dibereskan: %s", str(e)[:140])
+
+    import threading as _th2
+    _th2.Thread(target=_bereskan_pembaruan, name="sisa-pembaruan",
+                daemon=True).start()
     # Encoder GPU diuji di latar, supaya render pertama tidak menunggunya.
     from .services import enkoder
     enkoder.siapkan_di_latar()
