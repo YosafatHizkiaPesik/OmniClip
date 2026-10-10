@@ -1794,6 +1794,9 @@ def render_clip(
     media_layers: Optional[list] = None,
     # Subtitle kedua (biasanya terjemahan): {aktif, bahasa, lines, style}.
     subtitle_kedua: Optional[dict] = None,
+    # Komentar pemilik kanal (JOB-2 F1-5/F1-6): [{posisi, t?, teks, suara?,
+    # tampil_teks?, mode?}]. Lihat services/komentar.py.
+    komentar: Optional[list] = None,
     lock_person: Optional[int] = None,
     # Tanda linimasa dari pengguna: [{t, person}] dalam waktu KLIP.
     person_keys: Optional[list] = None,
@@ -2225,6 +2228,23 @@ def render_clip(
             graph = graph.replace("[SISIPAN_A]", aout)
             aout = sisipan_a
 
+        # Komentar pemilik kanal: sesudah subtitle dan normalisasi, supaya
+        # bingkai yang dibekukan adalah yang memang dilihat penonton, dan
+        # sebelum kartu judul, supaya kartu judul tetap yang pertama tampil.
+        from . import komentar as komentar_svc
+        komentar_siap = komentar_svc.siapkan_render(komentar, total_duration)
+        if komentar_siap:
+            n_input = len([x for x in inputs if x == "-i"])
+            k_inputs, k_graf, vout, aout, k_tambah = komentar_svc.graf_render(
+                komentar_siap, vout, aout, input_awal=n_input, fps=fps_keluar,
+                out_w=out_w, out_h=out_h, durasi=total_duration)
+            inputs += k_inputs
+            graph += ";" + k_graf
+            log.info("Komentar: %s", ", ".join(
+                f"{k['posisi']}@{k['t']:.1f}s+{k['d']:.1f}s ({k['mode']})"
+                for k in komentar_siap))
+            total_duration += k_tambah
+
         # Kartu yang MENAMBAH waktu disambung paling akhir, sesudah subtitle dan
         # normalisasi: latarnya diambil dari bingkai pertama aliran yang sudah
         # jadi, jadi yang dibekukan adalah gambar yang benar-benar akan dilihat
@@ -2311,8 +2331,11 @@ def render_clip(
             "hook_text": hook_text,
             "watermark": watermark,
             "video_filter": video_filter,
-            "subtitles": subtitles or [],
+            # Waktunya digeser sebanyak bingkai yang dibekukan komentar, supaya
+            # tetap cocok dengan video jadinya.
+            "subtitles": komentar_svc.geser_subtitle(subtitles, komentar_siap),
             "media_layers": media_layers or [],
+            "komentar": komentar_svc.ringkas_sidecar(komentar_siap),
             "subtitle_kedua": subtitle_kedua,
             # Identitas video sumbernya, ditulis di sini juga dan bukan hanya
             # diturunkan dari tabel `videos` saat diperlukan. Klip jadi bisa
@@ -2322,7 +2345,8 @@ def render_clip(
             # Suara sintetis yang BENAR-BENAR ikut terbentuk di klip ini, bukan
             # sekadar disetel: `wav_path` hanya terisi bila TTS berhasil. Untuk
             # label konten sintetis saat diunggah (JOB-2 F0-7).
-            "suara_sintetis": bool(card is not None and card.wav_path),
+            "suara_sintetis": bool(card is not None and card.wav_path)
+                              or any(k["sintetis"] for k in komentar_siap),
             "created_at": time.time(),
         }
         (folder_keluar / out_name.replace(".mp4", ".json")).write_text(

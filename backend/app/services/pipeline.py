@@ -275,6 +275,7 @@ def run_render(ctx: JobContext) -> dict:
         frame_keys=ctx.payload.get("frame_keys"),
         media_layers=ctx.payload.get("media_layers"),
         subtitle_kedua=ctx.payload.get("subtitle_kedua"),
+        komentar=ctx.payload.get("komentar"),
         lock_person=ctx.payload.get("lock_person"),
         person_keys=ctx.payload.get("person_keys"),
         title_card=ctx.payload.get("title_card"),

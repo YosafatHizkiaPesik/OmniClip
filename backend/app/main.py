@@ -22,6 +22,7 @@ from .config import ALLOWED_ORIGINS, FRONTEND_DIST, HOST, require_ffmpeg
 from .db import run_migrations
 from .errors import NotFound, register_exception_handlers
 from .routers import aset as aset_router
+from .routers import komentar as komentar_router
 from .routers import auth as auth_router
 from .routers import clips as clips_router
 from .routers import jobs as jobs_router
@@ -255,6 +256,7 @@ app.add_middleware(
 register_exception_handlers(app)
 
 app.include_router(aset_router.router)
+app.include_router(komentar_router.router)
 app.include_router(auth_router.router)
 app.include_router(jobs_router.router)
 app.include_router(judul_router.router)

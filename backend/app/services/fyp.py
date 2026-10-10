@@ -113,6 +113,15 @@ def periksa(meta: dict) -> dict:
     # --- Tiga detik pertama ----------------------------------------------------
     awal = [b for b in baris if float(b.get("start") or 0) < JENDELA_HOOK]
     teks_awal = " ".join((b.get("text") or "") for b in awal).strip()
+    # Komentar pembuka pemilik kanal (JOB-2 F1-5) mengisi awal klip sebelum
+    # subtitle pertama, yang waktunya ikut tergeser sebanyak komentarnya.
+    # Tanpa ini klip yang SUDAH diberi pembuka dinilai "awal sunyi".
+    pembuka = " ".join(
+        (k.get("teks") or "") for k in (meta.get("komentar") or [])
+        if isinstance(k, dict) and k.get("posisi") == "pembuka"
+        and (k.get("bersuara") or k.get("kartu"))).strip()
+    if pembuka:
+        teks_awal = f"{pembuka} {teks_awal}".strip()
     if baris and not teks_awal:
         catatan.append({
             "kode": "awal_sunyi", "berat": "berat", "judul": "Tiga detik pertama tanpa suara",

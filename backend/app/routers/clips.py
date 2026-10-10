@@ -345,6 +345,18 @@ class JudulVideoModel(BaseModel):
     durasi: Optional[float] = Field(None, gt=0.0, le=3600.0)
 
 
+class KomentarKlipModel(BaseModel):
+    """Satu komentar pemilik kanal (JOB-2 F1-3). Lihat services/komentar.py."""
+    posisi: Literal["pembuka", "sela", "penutup"]
+    # Waktu KLIP, hanya dibaca untuk `sela`.
+    t: Optional[float] = Field(None, ge=0.0, le=7200.0)
+    teks: str = Field("", max_length=600)
+    # Id suara komentar (rekaman atau TTS), kosong = tanpa suara.
+    suara: str = Field("", max_length=32)
+    tampil_teks: Optional[bool] = None
+    mode: Literal["bekukan", "timpa"] = "bekukan"
+
+
 class RenderClipRequest(BaseModel):
     # Referensi video, bukan path filesystem: klien tidak menentukan file mana
     # yang dibuka server.
@@ -386,6 +398,8 @@ class RenderClipRequest(BaseModel):
     frame_keys: List[FrameKeyModel] = Field(default_factory=list)
     # Sisipan: cuplikan, gambar, musik, efek suara dari luar video sumber.
     media_layers: List[MediaLayerModel] = Field(default_factory=list, max_length=60)
+    # Komentar pemilik kanal: pembuka, sela, penutup (JOB-2 F1-3).
+    komentar: List[KomentarKlipModel] = Field(default_factory=list, max_length=6)
     # Subtitle kedua — biasanya terjemahan. Gayanya sendiri; divalidasi dengan
     # model yang sama dengan gaya subtitle utama, jadi warna tetap wajib hex.
     subtitle_kedua: Optional[SubtitleKeduaModel] = None
@@ -1726,6 +1740,7 @@ async def render_clip(req: RenderClipRequest):
                              if req.frame_layout else None),
             "frame_keys": [k.model_dump(exclude_none=True) for k in req.frame_keys],
             "media_layers": [l.model_dump(exclude_none=True) for l in req.media_layers],
+            "komentar": [k.model_dump(exclude_none=True) for k in req.komentar],
             "subtitle_kedua": (req.subtitle_kedua.model_dump(exclude_none=True)
                                if req.subtitle_kedua else None),
             "clip_index": req.clip_index,

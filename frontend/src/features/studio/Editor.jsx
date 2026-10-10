@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft, Menu, X, Scissors, Type, Palette, Download, Loader2, CheckCircle2,
   AlertTriangle, Crop, Plus, Trash2, Play, Save, Tag, Undo2, Redo2, Clapperboard, RefreshCw, Wand2,
-  FolderOpen,
+  FolderOpen, MessageSquareQuote,
 } from 'lucide-react';
 import { apiGet, apiPost, apiPut, dijalankanDiKomputerIni, downloadToDisk,
   kategoriKlip, profilAktif } from '../../lib/api';
@@ -23,6 +23,7 @@ import { DEFAULT_JUDUL_VIDEO } from './JudulTema';
 import SutradaraPanel from './SutradaraPanel';
 import VideoHilang from './VideoHilang';
 import MediaPanel from './MediaPanel';
+import KomentarPanel, { komentarUntukRender } from './KomentarPanel';
 import TerjemahPanel, { buatKedua } from './TerjemahPanel';
 
 /** Sama dengan sidikUtama di TerjemahPanel: penanda terjemahan usang. */
@@ -159,6 +160,9 @@ const TABS = [
   { id: 'style', label: 'Gaya', Icon: Palette },
   { id: 'frame', label: 'Bingkai', Icon: Crop },
   { id: 'title', label: 'Judul', Icon: Tag },
+  // Pendapat pemilik kanal: yang membuat klip bukan sekadar potongan ulang
+  // di mata YouTube (JOB-2 F1-3).
+  { id: 'komentar', label: 'Komentar', Icon: MessageSquareQuote },
   // Berkas dari luar video sumber.
   { id: 'media', label: 'Sisipan', Icon: Clapperboard },
   // Sutradara berdiri sendiri: ia menyusun SELURUH klip, bukan menambahkan
@@ -1623,6 +1627,8 @@ export default function Editor({ project, onBack }) {
     person_keys: ['smart', 'otomatis'].includes(frameMode) ? (clip.person_keys ?? []) : [],
     // Sisipan milik klip INI. `id` hanya pengenal di editor; server tidak perlu.
     media_layers: (clip.media_layers ?? []).map(({ id, ...l }) => l),
+    // Komentar milik klip INI. Yang dikirim hanya yang dipakai render.
+    komentar: komentarUntukRender(clip.komentar),
     // Subtitle kedua milik klip ini. `sumber_sidik` hanya penanda usang di editor.
     subtitle_kedua: clip.subtitle_kedua
       ? (({ sumber_sidik, ...k }) => k)(clip.subtitle_kedua) : null,
@@ -2324,6 +2330,15 @@ export default function Editor({ project, onBack }) {
                             onJudulSemua={clips.length > 1 ? judulSemua : null}
                             onChange={(patch) => selected
                               && editor.updateClip(selected.clip_id, patch)} />
+              )}
+              {tab === 'komentar' && (
+                <KomentarPanel clip={selected} videoId={videoId}
+                               waktuSekarang={clipNow()}
+                               durasiKlip={(selected?.segments ?? []).reduce(
+                                 (n, sg) => n + (sg.end - sg.start), 0)}
+                               onSeek={seekClip}
+                               onChange={(next) => selected
+                                 && editor.updateClip(selected.clip_id, { komentar: next })} />
               )}
               {tab === 'media' && (
                 <MediaPanel clip={selected} videoId={videoId} aspectRatio={aspectRatio}
