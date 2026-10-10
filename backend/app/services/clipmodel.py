@@ -460,6 +460,9 @@ def build_clip_payload(
             getattr(candidate, "hashtags", [])
             or suggest_hashtags(candidate.text, video_title, channel)),
         "ai_reason": getattr(candidate, "gemini_reason", "") or "",
+        # Konteks dari model (JOB-2 F1-1): apa yang perlu diketahui penonton
+        # supaya klip ini masuk akal. Kosong untuk klip dari mesin lokal.
+        "konteks": getattr(candidate, "konteks", "") or "",
         "transcript_text": candidate.text,
         "subtitles": clip_subtitles,
         "words": [{"w": w["w"], "s": w["s"], "e": w["e"]} for w in clip_words],

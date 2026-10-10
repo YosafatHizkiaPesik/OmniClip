@@ -88,9 +88,19 @@ Murah, dan mengurangi risiko terbesar lebih dulu.
   (selesai 9 Oktober 2026, commit 35dc611) Otomatis: dibingkai sebagai
   permainan masuk Game (20), sisanya Hiburan (24); bisa dipilih per profil.
   Ketujuh nomor diperiksa langsung ke API untuk wilayah ID.
-- [ ] **F0-7** Label konten sintetis saat narasi TTS dipakai. **Verifikasi dulu
+- [x] **F0-7** Label konten sintetis saat narasi TTS dipakai. **Verifikasi dulu
   nama medan `status.containsSyntheticMedia` di dokumentasi YouTube Data API**
   sebelum dipasang.
+  (selesai 9 Oktober 2026, commit 4f99ae9) Medannya terverifikasi ada sejak
+  30 Oktober 2024. Berlaku SEKARANG untuk kartu judul bersuara, bukan baru di
+  Fase 1; komentar TTS di F1-4 cukup mengisi `suara_sintetis` di sidecar.
+  **Belum diuji dengan unggahan sungguhan** ke kanal: badan permintaannya
+  ditangkap tepat sebelum terkirim. Uji unggah private menunggu izin pemilik.
+
+**Fase 0 selesai 9 Oktober 2026**, kecuali satu hal yang hanya bisa
+dibuktikan di kanal sungguhan: mengunggah satu klip sebagai *private* lalu
+memeriksa di YouTube Studio bahwa deskripsi, kategori, dan label sintetisnya
+terpasang.
 
 ## Fase 1: Komentar dan opini
 

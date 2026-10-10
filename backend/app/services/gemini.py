@@ -594,6 +594,13 @@ def _apply_selections(data: dict, pool: list[Candidate],
         # em dash cukup membuat judulnya terbaca sebagai tulisan mesin.
         cand.suggested_title = tanpa_pisah(sel.get("suggested_title") or "")[:120]  # type: ignore[attr-defined]
         cand.hashtags = [h for h in (sel.get("hashtags") or []) if isinstance(h, str)][:8]  # type: ignore[attr-defined]
+        # Apa yang perlu diketahui penonton supaya potongan ini masuk akal.
+        #
+        # Model sudah menuliskannya sejak skema meminta `konteks` didahulukan,
+        # tapi sampai 9 Oktober 2026 medan itu dibuang di sini dan tidak pernah
+        # sampai ke klip. Ia bahan yang tepat untuk draf komentar (JOB-2 F1-2)
+        # dan kartu konteks (F2-3): ditulis dari transkripnya, bukan dikarang.
+        cand.konteks = tanpa_pisah(sel.get("konteks") or "").strip()[:600]  # type: ignore[attr-defined]
         out.append(cand)
         if len(out) >= max_clips:
             break
