@@ -25,6 +25,7 @@ import VideoHilang from './VideoHilang';
 import MediaPanel from './MediaPanel';
 import KomentarPanel, { komentarUntukRender } from './KomentarPanel';
 import PunchPanel from './PunchPanel';
+import StokPanel from './StokPanel';
 import TerjemahPanel, { buatKedua } from './TerjemahPanel';
 
 /** Sama dengan sidikUtama di TerjemahPanel: penanda terjemahan usang. */
@@ -2355,6 +2356,13 @@ export default function Editor({ project, onBack }) {
                             onSeek={seekClip}
                             onChange={(next) => selected
                               && editor.updateClip(selected.clip_id, { punch_in: next })} />
+              )}
+              {tab === 'media' && (
+                <StokPanel clip={selected} waktuSekarang={clipNow()}
+                           durasiKlip={(selected?.segments ?? []).reduce(
+                             (n, sg) => n + (sg.end - sg.start), 0)}
+                           onLayers={(next) => selected
+                             && editor.updateClip(selected.clip_id, { media_layers: next })} />
               )}
               {tab === 'komentar' && (
                 <KomentarPanel clip={selected} videoId={videoId}

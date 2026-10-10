@@ -89,6 +89,61 @@ async def ambil_soundboard(req: SoundboardRequest):
         raise AppError(str(e)[:200], status=502) from e
 
 
+class StokKunciRequest(BaseModel):
+    kunci: str = Field("", max_length=120)
+
+
+class StokCariRequest(BaseModel):
+    kata: str = Field(..., min_length=1, max_length=80)
+    orientasi: str = Field("portrait", max_length=12)
+
+
+class StokAmbilRequest(BaseModel):
+    url: str = Field(..., max_length=600)
+    nama: str = Field("", max_length=120)
+
+
+@router.get("/stok/kunci")
+async def status_kunci_stok():
+    """Apakah kunci Pexels sudah ada (JOB-2 F2-6). Kuncinya sendiri tidak dikirim."""
+    from ..services import stok
+    return {"terpasang": bool(stok.kunci())}
+
+
+@router.put("/stok/kunci")
+async def setel_kunci_stok(req: StokKunciRequest):
+    from ..services import stok
+    try:
+        await asyncio.to_thread(stok.setel_kunci, req.kunci)
+    except ValueError as e:
+        raise AppError(str(e), status=400) from e
+    return {"terpasang": bool(stok.kunci())}
+
+
+@router.post("/stok/cari")
+async def cari_stok(req: StokCariRequest):
+    from ..services import stok
+    try:
+        return {"foto": await asyncio.to_thread(stok.cari, req.kata, orientasi=req.orientasi)}
+    except PermissionError as e:
+        raise AppError(str(e), code="STOK_KUNCI", status=401) from e
+    except ValueError as e:
+        raise AppError(str(e), status=400) from e
+    except Exception as e:                           # noqa: BLE001
+        raise AppError(f"Pexels tidak bisa dihubungi: {str(e)[:160]}", status=502) from e
+
+
+@router.post("/stok/ambil")
+async def ambil_stok(req: StokAmbilRequest):
+    from ..services import stok
+    try:
+        return await asyncio.to_thread(stok.ambil, req.url, req.nama)
+    except ValueError as e:
+        raise AppError(str(e), status=400) from e
+    except Exception as e:                           # noqa: BLE001
+        raise AppError(f"Gambarnya gagal diunduh: {str(e)[:160]}", status=502) from e
+
+
 @router.get("/{aset_id}/berkas")
 async def berkas_aset(aset_id: str):
     """Untuk pratinjau di Studio. FileResponse mendukung Range, jadi bisa di-seek."""
