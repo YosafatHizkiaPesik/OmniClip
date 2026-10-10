@@ -217,6 +217,24 @@ export default function AnalitikTab() {
             </div>
           )}
 
+          {/* JOB-2 F3-2: apakah komentar pemilik kanal membuat klip lebih
+              ditonton DI KANAL INI. Tanpa angka yang cukup, ia hanya
+              menyebut berapa klip lagi yang dibutuhkan. */}
+          {data.banding_komentar && (
+            <div style={{ ...card, marginTop: '12px' }}>
+              <div style={sectionTitle}>
+                <BarChart3 size={18} style={{ color: 'var(--reh)' }} />
+                Klip dengan komentar vs tanpa komentar
+              </div>
+              <p className="bantu" style={helpText}>{data.banding_komentar.kalimat}</p>
+              <div style={{ ...helpText, fontSize: '0.74rem' }}>
+                Terbaca: {data.banding_komentar.dengan} klip dengan komentar,{' '}
+                {data.banding_komentar.tanpa} tanpa. Perbandingan memakai median dan baru
+                ditampilkan bila tiap kelompok punya paling sedikit {data.banding_komentar.minimal} klip.
+              </div>
+            </div>
+          )}
+
           <div style={{ ...card, marginTop: '12px' }}>
             <div style={sectionTitle}>
               <BarChart3 size={18} style={{ color: 'var(--reh)' }} />

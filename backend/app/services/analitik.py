@@ -119,6 +119,9 @@ def kumpulkan(profil_id: int, *, batas: int = 200) -> dict:
             "skor": (periksa or {}).get("skor"),
             "catatan": (periksa or {}).get("catatan") or [],
             "ada_catatan_isi": periksa is not None,
+            # Apakah klip ini membawa komentar pemilik kanal (JOB-2 F3-2).
+            # None untuk klip tanpa sidecar: tidak diketahui, bukan "tidak".
+            "berkomentar": (_berkomentar(meta) if meta else None),
         })
 
     klip.sort(key=lambda k: (k["tayangan"] is None, -(k["tayangan"] or 0)))
@@ -163,6 +166,51 @@ def _temuan_terkumpul(klip: list[dict]) -> list[dict]:
         hasil.append({**pos, "berapa": len(pos["klip"]), "dari": dari,
                       "dasar": "umum"})
     hasil.sort(key=lambda h: (-BOBOT.get(h["berat"], 1) * h["berapa"], h["judul"]))
+    return hasil
+
+
+def _berkomentar(meta: dict) -> bool:
+    """Klip ini membawa komentar pemilik kanal yang terdengar atau terlihat."""
+    from .nilai_tambah import hitung
+    return hitung(meta)["detik_komentar"] > 0
+
+
+def banding_komentar(klip: list[dict]) -> dict:
+    """
+    Tayangan klip yang diberi komentar dibanding yang tidak (JOB-2 F3-2).
+
+    Inilah pertanyaan yang JOB-2 ingin dijawab dengan angka, bukan dengan
+    keyakinan: apakah komentar benar-benar membuat klip lebih dilihat di kanal
+    ini. Aturannya sama dengan `_temuan_terbukti`: median, dan tidak ada
+    kesimpulan sebelum tiap kelompok punya `KELOMPOK_MIN` klip terbaca.
+    """
+    terbaca = [k for k in klip if isinstance(k.get("tayangan"), int)
+               and k.get("berkomentar") is not None]
+    dengan = [k["tayangan"] for k in terbaca if k["berkomentar"]]
+    tanpa = [k["tayangan"] for k in terbaca if not k["berkomentar"]]
+    hasil = {"dengan": len(dengan), "tanpa": len(tanpa), "minimal": KELOMPOK_MIN,
+             "median_dengan": None, "median_tanpa": None, "cukup": False, "kalimat": ""}
+    if len(dengan) < KELOMPOK_MIN or len(tanpa) < KELOMPOK_MIN:
+        kurang = []
+        if len(dengan) < KELOMPOK_MIN:
+            kurang.append(f"{KELOMPOK_MIN - len(dengan)} klip lagi yang diberi komentar")
+        if len(tanpa) < KELOMPOK_MIN:
+            kurang.append(f"{KELOMPOK_MIN - len(tanpa)} klip lagi tanpa komentar")
+        hasil["kalimat"] = ("Belum bisa dibandingkan: butuh " + " dan ".join(kurang)
+                            + " yang sudah publik dan terbaca.")
+        return hasil
+    md, mt = median(dengan), median(tanpa)
+    hasil.update(median_dengan=int(md), median_tanpa=int(mt), cukup=True)
+    if mt > 0 and abs(md - mt) / mt < SELISIH_BERARTI:
+        hasil["kalimat"] = (f"Belum terlihat beda yang berarti: median {int(md):,} tayangan "
+                            f"dengan komentar, {int(mt):,} tanpa.").replace(",", ".")
+    elif md > mt:
+        hasil["kalimat"] = (f"Klip dengan komentar lebih banyak ditonton: median {int(md):,} "
+                            f"tayangan, dibanding {int(mt):,} tanpa komentar.").replace(",", ".")
+    else:
+        hasil["kalimat"] = (f"Di kanal ini klip dengan komentar justru lebih sedikit ditonton: "
+                            f"median {int(md):,} dibanding {int(mt):,}. Periksa apakah "
+                            f"komentarnya terlalu panjang di awal klip.").replace(",", ".")
     return hasil
 
 
@@ -330,6 +378,7 @@ def laporan(profil_id: int, *, batas: int = 200) -> dict:
     return {
         **data,
         "ringkasan": _ringkasan(klip),
+        "banding_komentar": banding_komentar(klip),
         "temuan": temuan,
         "cukup_data": cukup,
         "ambang": AMBANG_BANDING,
