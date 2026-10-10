@@ -154,11 +154,19 @@ klip orang lain.
 
 ## Fase 2: Transformasi visual
 
-- [ ] **F2-1** Punch-in zoom dari lonjakan energi atau tawa
+- [x] **F2-1** Punch-in zoom dari lonjakan energi atau tawa
   (`media.energy_track`, `sutradara.cari_kejutan`, `momen.cari_momen`), sebagai
   kunci bingkai yang bisa disunting. Sekarang zoom hanya statis.
-- [ ] **F2-2** Lower-third nama penutur (dari diarisasi + nama yang diketik
+  (selesai 10 Oktober 2026, commit bbd90ae) `services/punch.py`: lonjakan
+  kekerasan suara per 50 ms dibanding median 1,5 detik sebelumnya, maksimal
+  satu tiap 8 detik. Usulan di tab Bingkai Studio (hapus, geser, kuat/lama,
+  tambah sendiri). Satu `zoompan` sesudah pembingkaian, sebelum sisipan dan
+  subtitle: tulisan tidak ikut membesar. Render uji 30 detik: +19% waktu.
+- [x] **F2-2** Lower-third nama penutur (dari diarisasi + nama yang diketik
   sekali per video).
+  (selesai 10 Oktober 2026, commit aabf9ea) Nama diketik sekali per video di
+  panel Komentar (`/api/projects/{video}/penutur`), dipasang sebagai sisipan
+  Tulisan di kiri atas saat penutur berganti, maks. tiap 15 detik per orang.
 - [x] **F2-3** Kartu konteks atau fakta otomatis dari `konteks` (siapa, sedang
   membahas apa), untuk penonton yang tidak tahu asal klipnya.
   (selesai 10 Oktober 2026, commit 3f7df78) Draf komentar AI (VERSI 3) ikut
@@ -182,9 +190,12 @@ klip orang lain.
   bingkai terakhir), intro berkas (maks. 3 dtk, intro panjang membunuh
   retensi Shorts), outro berkas (maks. 8 dtk). Tidak dihitung nilai tambah.
   Sakelar per klip "Pakai intro/outro kanal" di panel Komentar.
-- [ ] **F2-6** (Opsional) Saran gambar stok Pexels/Pixabay dari kata kunci,
+- [x] **F2-6** (Opsional) Saran gambar stok Pexels/Pixabay dari kata kunci,
   disetujui orangnya sebelum dipasang.
-
+  (selesai 10 Oktober 2026, commit 212858b) Pexels saja, `services/stok.py`.
+  Panel di tab Sisipan: isi kunci API gratis, cari, klik foto untuk memasang
+  3 detik di posisi pemutar. **Belum diuji dengan Pexels sungguhan**: pemilik
+  belum punya kuncinya; diuji dengan jawaban tiruan.
 ## Fase 3: Pengukuran
 
 - [x] **F3-1** Skor nilai tambah per klip: detik yang diberi lapisan buatan
@@ -198,11 +209,16 @@ klip orang lain.
   Klip jadi dan di panel Komentar, dan dipakai `gerbang.nilai`. Dicek pada
   klip nyata entertainyhp: klip lama tanpa komentar kini ditahan dengan
   alasan "Belum ada komentar atau tambahan dari Anda sendiri".
-- [ ] **F3-2** Analitik membandingkan klip dengan dan tanpa komentar (pakai
+- [x] **F3-2** Analitik membandingkan klip dengan dan tanpa komentar (pakai
   `analitik._temuan_terbukti`, butuh minimal 8 video terbaca).
+  (selesai 10 Oktober 2026, commit 6543bb1) `analitik.banding_komentar`,
+  tampil di halaman Analitik. Median, minimal 3 klip terbaca per kelompok;
+  sebelum cukup ia menyebut berapa klip lagi yang dibutuhkan. Pada data nyata
+  entertainyhp: 0 klip dengan komentar, jadi belum bisa dibandingkan.
 - [ ] **F3-3** (Opsional) YouTube Analytics API untuk retensi penonton. Butuh
   izin `yt-analytics.readonly` dan persetujuan ulang setiap akun.
-
+  (belum, 10 Oktober 2026) Sengaja ditunda: butuh izin OAuth baru dan setiap
+  akun Google harus menyetujui ulang. Tidak bisa diselesaikan tanpa pemilik.
 ## Bawaan dari pekerjaan sebelumnya
 
 Dicatat di sini supaya tidak hilang.
@@ -214,6 +230,31 @@ Dicatat di sini supaya tidak hilang.
   perpindahan per menit. Sebabnya belum diketahui.
 - [ ] `reframe.group_people` kehilangan `people_seen` di rentang panjang (video
   FANNY), walau YuNet mendeteksi wajahnya di 0,90-0,92.
+
+Ketiga butir bawaan belum disentuh pada sesi 10 Oktober 2026. Ketiganya soal
+mutu pembingkaian, bukan soal algoritma YouTube, dan butuh alat ukur bingkai
+kosong yang dulu dijalankan di luar repo pada sepuluh video (beban CPU berat).
+Dikerjakan di sesi tersendiri.
+
+## Cara memakai fitur JOB-2 (ringkas)
+
+1. **Akun** (sekali per akun): isi "Gaya komentar Anda", teks penutup kanal
+   ("Ikuti @kanal ..."), dan bila ada, intro/outro dari pustaka Sisipan.
+2. **Studio, tab Komentar**, per klip:
+   - "Susun draf AI" lalu sunting kata-katanya sendiri;
+   - "Rekam suara saya" (didahulukan) atau "Bacakan (TTS)";
+   - pilih "Bekukan gambar" (bawaan) atau "Timpa";
+   - pasang Kartu konteks dan Nama penutur;
+   - lihat angka "Nilai tambah": harus "cukup" supaya unggahan otomatis
+     boleh publik.
+3. **Studio, tab Bingkai**: "Cari momen otomatis" untuk punch-in, hapus yang
+   tidak pas.
+4. **Studio, tab Batas**: untuk klip beberapa potongan, pilih "Sambungan".
+5. **Studio, tab Sisipan**: gambar stok Pexels (butuh kunci gratis).
+6. Render seperti biasa. Klip tanpa komentar tetap bisa diunggah, tapi
+   unggahan OTOMATIS ke publik diturunkan ke Pribadi dengan alasannya.
+7. **Analitik**: setelah ada minimal 3 klip publik dengan komentar dan 3 tanpa,
+   halaman ini menjawab apakah komentar benar-benar menaikkan tayangan.
 
 ---
 
