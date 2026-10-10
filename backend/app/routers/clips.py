@@ -1892,6 +1892,55 @@ class SaveClipsRequest(BaseModel):
     clips: List[Dict[str, Any]]
 
 
+class NamaPenuturModel(BaseModel):
+    # {"0": "Windah", "1": "Ilham"}: nomor penutur hasil diarisasi -> nama.
+    nama: Dict[str, str] = Field(default_factory=dict)
+
+    @field_validator("nama")
+    @classmethod
+    def _bersih(cls, v):
+        out = {}
+        for k, n in list((v or {}).items())[:8]:
+            if str(k).isdigit() and 0 <= int(k) <= 7:
+                n = " ".join(str(n or "").split())[:40]
+                if n:
+                    out[str(int(k))] = n
+        return out
+
+
+def _kunci_penutur(video_id: str) -> str:
+    return f"penutur.nama:{video_id}"
+
+
+@router.get("/projects/{video_id}/penutur")
+async def nama_penutur(video_id: str):
+    """
+    Nama penutur sebuah video, diketik sekali di Studio (JOB-2 F2-2).
+
+    Disimpan per VIDEO, bukan per klip: orang yang sama bicara di kelima belas
+    klip dari video itu, dan mengetik namanya lima belas kali tidak masuk akal.
+    """
+    import json as _json
+    from ..repos import settings as settings_repo
+
+    vid = _resolve_video_id(video_id)
+    try:
+        nama = _json.loads(settings_repo.get(_kunci_penutur(vid), "") or "{}")
+    except ValueError:
+        nama = {}
+    return {"video_id": vid, "nama": nama if isinstance(nama, dict) else {}}
+
+
+@router.put("/projects/{video_id}/penutur")
+async def simpan_nama_penutur(video_id: str, req: NamaPenuturModel):
+    import json as _json
+    from ..repos import settings as settings_repo
+
+    vid = _resolve_video_id(video_id)
+    settings_repo.set_value(_kunci_penutur(vid), _json.dumps(req.nama, ensure_ascii=False))
+    return {"video_id": vid, "nama": req.nama}
+
+
 @router.put("/projects/{video_id}/clips")
 async def save_clips(video_id: str, req: SaveClipsRequest):
     """

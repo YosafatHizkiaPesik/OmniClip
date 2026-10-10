@@ -159,12 +159,29 @@ klip orang lain.
   kunci bingkai yang bisa disunting. Sekarang zoom hanya statis.
 - [ ] **F2-2** Lower-third nama penutur (dari diarisasi + nama yang diketik
   sekali per video).
-- [ ] **F2-3** Kartu konteks atau fakta otomatis dari `konteks` (siapa, sedang
+- [x] **F2-3** Kartu konteks atau fakta otomatis dari `konteks` (siapa, sedang
   membahas apa), untuk penonton yang tidak tahu asal klipnya.
-- [ ] **F2-4** Transisi antar segmen (`xfade` / `acrossfade`) di
+  (selesai 10 Oktober 2026, commit 3f7df78) Draf komentar AI (VERSI 3) ikut
+  menulis `kartu_konteks` (maks. 70 karakter); tanpa AI dipakai kalimat
+  pertama `konteks`. Panel Komentar memasangnya sebagai sisipan Tulisan di
+  atas klip selama 4 detik pertama. Diuji di proyek Windah nyata. Saat
+  mengerjakannya ditemukan bug lama: SEMUA sisipan Tulisan ditolak 422 saat
+  dirender karena `MediaLayerModel` mewajibkan `aset` (diperbaiki, 120ccf3).
+- [x] **F2-4** Transisi antar segmen (`xfade` / `acrossfade`) di
   `render._build_segment_graph`. Sekarang klip multi-segmen potong keras.
-- [ ] **F2-5** Intro dan outro bermerek per profil (sisipan tetap di awal dan
+  (selesai 10 Oktober 2026, commit e501696 + 87da68a) Sengaja BUKAN xfade:
+  xfade memendekkan klip dan menggeser semua waktu subtitle, kunci bingkai,
+  sisipan, dan komentar. Dipakai celupan di ujung potongan ("Redup sekejap"
+  hitam 0,12 dtk, atau "Kilatan putih" 0,07 dtk), panjang klip tetap.
+  Fade audio 30 ms selalu dipasang di sambungan. Pilihan di panel Batas bila
+  klip punya lebih dari satu potongan; bawaan tetap "Potong langsung".
+- [x] **F2-5** Intro dan outro bermerek per profil (sisipan tetap di awal dan
   akhir). Identitas seri kanal; sekarang belum ada intro/outro sama sekali.
+  (selesai 10 Oktober 2026, commit ac6f8f4) `services/merek.py`, kelompok
+  setelan akun `merek`, diatur di halaman Akun: outro teks (kartu di atas
+  bingkai terakhir), intro berkas (maks. 3 dtk, intro panjang membunuh
+  retensi Shorts), outro berkas (maks. 8 dtk). Tidak dihitung nilai tambah.
+  Sakelar per klip "Pakai intro/outro kanal" di panel Komentar.
 - [ ] **F2-6** (Opsional) Saran gambar stok Pexels/Pixabay dari kata kunci,
   disetujui orangnya sebelum dipasang.
 

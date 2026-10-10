@@ -51,3 +51,22 @@ describe('konteksSingkat', () => {
   });
   it('kosong tetap kosong', () => { expect(konteksSingkat('')).toBe(''); });
 });
+
+import { tagPenutur } from './KomentarPanel';
+
+describe('tagPenutur', () => {
+  const subs = [
+    { start: 0.5, end: 2, text: 'a', speaker: 0 },
+    { start: 2.5, end: 4, text: 'b', speaker: 1 },
+    { start: 4.5, end: 6, text: 'c', speaker: 0 },
+    { start: 30, end: 31, text: 'd', speaker: 1 },
+  ];
+  it('nama muncul saat ganti penutur, tidak lebih sering dari 15 detik', () => {
+    const t = tagPenutur(subs, { 0: 'Windah', 1: 'Ilham' });
+    expect(t.map((x) => [x.teks, x.t])).toEqual([['Windah', 0.5], ['Ilham', 2.5], ['Ilham', 30]]);
+    expect(t.every((x) => x.jenis === 'teks' && x.asal === 'penutur')).toBe(true);
+  });
+  it('penutur tanpa nama dilewati', () => {
+    expect(tagPenutur(subs, { 1: 'Ilham' }).map((x) => x.teks)).toEqual(['Ilham', 'Ilham']);
+  });
+});

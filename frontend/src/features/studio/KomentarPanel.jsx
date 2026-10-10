@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   Sparkles, Loader2, Mic, Square, Volume2, Trash2, Plus, Crosshair, AlertTriangle,
 } from 'lucide-react';
-import { apiGet, apiPost } from '../../lib/api';
+import { apiGet, apiPost, apiPut } from '../../lib/api';
 import { formatTime } from '../../utils/timeFormat';
 
 /**
@@ -334,6 +334,104 @@ function KartuKonteks({ clip, usulan, onLayers }) {
   );
 }
 
+const ASAL_PENUTUR = 'penutur';
+const JEDA_ULANG_NAMA = 15;      // detik sebelum nama yang sama boleh muncul lagi
+const MAKS_TAG = 6;
+
+/**
+ * Tag nama penutur dari subtitle (JOB-2 F2-2): muncul saat seseorang mulai
+ * bicara, tidak lebih sering dari tiap 15 detik untuk orang yang sama, supaya
+ * penonton tahu siapa yang bicara tanpa layar penuh tulisan.
+ */
+export function tagPenutur(subtitles, nama) {
+  const baris = [...(subtitles || [])].filter((l) => (l.text || '').trim())
+    .sort((a, b) => a.start - b.start);
+  const keluar = [];
+  const terakhir = {};
+  let sebelumnya = null;
+  for (const l of baris) {
+    const sp = String(l.speaker ?? 0);
+    const n = (nama?.[sp] || '').trim();
+    if (sp !== sebelumnya && n
+        && (terakhir[sp] === undefined || l.start - terakhir[sp] >= JEDA_ULANG_NAMA)) {
+      keluar.push({
+        id: `tp${keluar.length}${Math.round(l.start * 10)}`, jenis: 'teks', nama: 'Nama penutur',
+        teks: n, t: Math.round(l.start * 100) / 100, dur: 2.5,
+        rect: { x: 4, y: 9, w: 46, h: 4.6 }, ukuran: 3.0,
+        warna: '#FFFFFF', garis: '#000000', tebal_garis: 0, keluarga: 'Archivo Black',
+        latar: '#000000', opasitas: 1, fade_masuk: 0.2, fade_keluar: 0.2,
+        volume: 0, asal: ASAL_PENUTUR,
+      });
+      terakhir[sp] = l.start;
+      if (keluar.length >= MAKS_TAG) break;
+    }
+    sebelumnya = sp;
+  }
+  return keluar;
+}
+
+function NamaPenutur({ clip, videoId, onLayers }) {
+  const [nama, setNama] = useState(null);
+  const awal = useRef('');
+  const penutur = [...new Set((clip.subtitles || []).map((l) => String(l.speaker ?? 0)))].sort();
+
+  useEffect(() => {
+    let batal = false;
+    apiGet(`/projects/${encodeURIComponent(videoId)}/penutur`)
+      .then((r) => { if (!batal) { awal.current = JSON.stringify(r.nama || {}); setNama(r.nama || {}); } })
+      .catch(() => { if (!batal) setNama({}); });
+    return () => { batal = true; };
+  }, [videoId]);
+
+  useEffect(() => {
+    if (!nama) return undefined;
+    const cap = JSON.stringify(nama);
+    if (cap === awal.current) return undefined;
+    const t = setTimeout(() => {
+      apiPut(`/projects/${encodeURIComponent(videoId)}/penutur`, { nama })
+        .then(() => { awal.current = cap; }).catch(() => {});
+    }, 700);
+    return () => clearTimeout(t);
+  }, [nama, videoId]);
+
+  if (!nama || !penutur.length) return null;
+  const lapisan = clip.media_layers ?? [];
+  const terpasang = lapisan.filter((l) => l.asal === ASAL_PENUTUR).length;
+  const pasang = () => onLayers([
+    ...lapisan.filter((l) => l.asal !== ASAL_PENUTUR),
+    ...tagPenutur(clip.subtitles, nama),
+  ]);
+
+  return (
+    <div style={{ borderTop: '1px solid var(--line)', paddingTop: '10px',
+                  display: 'flex', flexDirection: 'column', gap: '6px' }}>
+      <b style={{ fontSize: '.8rem' }}>Nama penutur</b>
+      <span style={{ fontSize: '.74rem', color: 'var(--ink-3)' }}>
+        Diketik sekali untuk video ini, berlaku di semua klipnya. Muncul di kiri atas saat orangnya mulai bicara.
+      </span>
+      {penutur.map((sp) => (
+        <label key={sp} style={{ display: 'flex', gap: '6px', alignItems: 'center', fontSize: '.78rem' }}>
+          <span style={{ width: '70px' }}>Penutur {Number(sp) + 1}</span>
+          <input className="field" value={nama[sp] || ''} maxLength={40} placeholder="Nama"
+                 onChange={(e) => setNama((n) => ({ ...n, [sp]: e.target.value }))} />
+        </label>
+      ))}
+      <div style={{ display: 'flex', gap: '6px' }}>
+        <button className="btn-secondary" onClick={pasang}
+                disabled={!penutur.some((sp) => (nama[sp] || '').trim())}>
+          {terpasang ? `Pasang ulang (${terpasang} terpasang)` : 'Pasang nama di klip ini'}
+        </button>
+        {terpasang > 0 && (
+          <button className="btn-secondary"
+                  onClick={() => onLayers(lapisan.filter((l) => l.asal !== ASAL_PENUTUR))}>
+            Lepas
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function KomentarPanel({
   clip, videoId, waktuSekarang = 0, durasiKlip = 0, onChange, onSeek, onPakaiMerek, onLayers,
 }) {
@@ -435,6 +533,9 @@ export default function KomentarPanel({
       {onLayers && (
         <KartuKonteks key={clip.clip_id} clip={clip} onLayers={onLayers}
                       usulan={draf?.kartu_konteks || konteksSingkat(clip.konteks)} />
+      )}
+      {onLayers && videoId && (
+        <NamaPenutur clip={clip} videoId={videoId} onLayers={onLayers} />
       )}
 
       <label className="studio-check" style={{ fontSize: '.78rem' }}
