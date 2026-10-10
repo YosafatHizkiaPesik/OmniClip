@@ -12,9 +12,8 @@ Gerbangnya sengaja sederhana dan setiap alasannya bisa dibaca orang:
   1. Tidak ada temuan BERAT dari `fyp.periksa` (terlalu pendek, terlalu
      panjang, tiga detik pertama sunyi, tanpa subtitle).
   2. Kredit video sumber ada di deskripsinya (F0-2).
-  3. Skor nilai tambah (F3-1) cukup. BELUM dipasang: skornya belum ada. Akan
-     ditambahkan di sini begitu F3-1 selesai, dan sampai saat itu gerbang ini
-     tidak berpura-pura menilainya.
+  3. Skor nilai tambah (F3-1) cukup: ada komentar pemilik kanal, atau
+     lapisan buatannya sendiri cukup banyak. Lihat services/nilai_tambah.py.
 
 Yang tidak lolos tidak dibuang: unggahan OTOMATIS diturunkan ke *private*
 dengan alasannya dicatat, jadi klipnya tetap naik dan orangnya tinggal
@@ -34,12 +33,13 @@ log = logging.getLogger("omniclip.gerbang")
 def nilai(meta: Optional[dict], *, sumber: Optional[dict] = None,
           pakai_kredit: bool = True) -> dict:
     """
-    {lolos, alasan: [str], fyp: {...}} untuk satu klip.
+    {lolos, alasan: [str], fyp: {...}, nilai_tambah: {...}} untuk satu klip.
 
     `meta` adalah sidecar klipnya. Tanpa sidecar, klip itu tidak bisa dinilai
     sama sekali, dan itu sendiri alasan untuk tidak menerbitkannya otomatis.
     """
     from . import fyp
+    from .nilai_tambah import hitung
     from .unggah import kredit
 
     alasan: list[str] = []
@@ -53,7 +53,13 @@ def nilai(meta: Optional[dict], *, sumber: Optional[dict] = None,
                 alasan.append(f"{c.get('judul')}.")
     if not (pakai_kredit and kredit(sumber)):
         alasan.append("Deskripsinya tidak menyebut video sumber.")
-    return {"lolos": not alasan, "alasan": alasan, "fyp": hasil_fyp}
+    nilai_tambah = hitung(meta)
+    if meta and not nilai_tambah["cukup"]:
+        alasan.append("Belum ada komentar atau tambahan dari Anda sendiri. Tanpa itu "
+                      "YouTube menilainya sebagai potongan ulang; isi tab Komentar di "
+                      "Studio lalu render ulang.")
+    return {"lolos": not alasan, "alasan": alasan, "fyp": hasil_fyp,
+            "nilai_tambah": nilai_tambah}
 
 
 def untuk_klip(clip_name: str, profil_id: int) -> dict:

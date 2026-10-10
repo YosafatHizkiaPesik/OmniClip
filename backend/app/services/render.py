@@ -2349,6 +2349,9 @@ def render_clip(
                               or any(k["sintetis"] for k in komentar_siap),
             "created_at": time.time(),
         }
+        # Skor nilai tambah (JOB-2 F3-1), dari isi sidecar ini sendiri.
+        from .nilai_tambah import hitung as _nilai_tambah
+        meta["nilai_tambah"] = _nilai_tambah(meta)
         (folder_keluar / out_name.replace(".mp4", ".json")).write_text(
             json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
         )

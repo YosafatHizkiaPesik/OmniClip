@@ -21,6 +21,10 @@ def klip_sehat(**lain):
         "hashtags": ["#a", "#b", "#c"],
         "subtitles": [{"start": 0.2, "end": 29.5, "text": "pertanyaan yang aneh",
                        "words": [{"w": "pertanyaan", "s": 0.2, "e": 0.8}]}],
+        # Komentar pemilik kanal (F1/F3-1): tanpa ini klip tidak lolos.
+        "komentar": [{"posisi": "penutup", "t": 30.0, "d": 3.0, "mode": "bekukan",
+                      "teks": "pendapat saya", "bersuara": True, "sintetis": False,
+                      "kartu": False}],
     }
     meta.update(lain)
     return meta
@@ -30,6 +34,12 @@ class Nilai(unittest.TestCase):
     def test_klip_sehat_dengan_kredit_lolos(self):
         h = gerbang.nilai(klip_sehat(), sumber=SUMBER)
         self.assertTrue(h["lolos"], h["alasan"])
+
+    def test_tanpa_komentar_tidak_lolos(self):
+        h = gerbang.nilai(klip_sehat(komentar=[]), sumber=SUMBER)
+        self.assertFalse(h["lolos"])
+        self.assertTrue(any("komentar" in a.lower() for a in h["alasan"]))
+        self.assertEqual(h["nilai_tambah"]["skor"], 0.0)
 
     def test_tanpa_kredit_tidak_lolos(self):
         h = gerbang.nilai(klip_sehat(), sumber={})

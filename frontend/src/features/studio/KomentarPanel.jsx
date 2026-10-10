@@ -240,6 +240,40 @@ function KartuKomentar({ k, onUbah, onHapus, waktuSekarang, durasiKlip, suaraTts
   );
 }
 
+export function perkiraanNilaiTambah({ daftar, sisipan, durasiKlip, tambahan }) {
+  const detikKomentar = daftar.reduce((n, k) => {
+    const terlihat = k.suara || ((k.teks || '').trim() && (k.tampil_teks ?? true));
+    if (!terlihat) return n;
+    return n + (k.suara ? (Number(k.durasi_suara) || 0) + 0.3
+      : Math.max(2.5, Math.min(8, (k.teks || '').length / 14 + 1)));
+  }, 0);
+  const rentang = (sisipan || [])
+    .filter((l) => Number(l.dur) > 0)
+    .map((l) => [Number(l.t) || 0, (Number(l.t) || 0) + Number(l.dur)])
+    .sort((a, b) => a[0] - b[0]);
+  let detikSisipan = 0;
+  let ujung = -Infinity;
+  for (const [a, b] of rentang) {
+    if (a > ujung) { detikSisipan += b - a; ujung = b; } else if (b > ujung) { detikSisipan += b - ujung; ujung = b; }
+  }
+  const durasi = durasiKlip + tambahan;
+  const skor = durasi > 0 ? Math.min(1, (detikKomentar + 0.5 * detikSisipan) / durasi) : 0;
+  return { persen: Math.round(skor * 100), cukup: detikKomentar >= 2 || skor >= 0.08 };
+}
+
+function NilaiTambah(props) {
+  const { persen, cukup } = perkiraanNilaiTambah(props);
+  return (
+    <div style={{ fontSize: '.78rem', padding: '7px 9px', borderRadius: 'var(--radius-md)',
+                  border: `1px solid ${cukup ? 'var(--line)' : 'var(--reh)'}` }}>
+      <b>Nilai tambah ±{persen}%</b>{' '}
+      {cukup
+        ? 'Cukup untuk lolos tinjau sebelum terbit publik.'
+        : 'Belum cukup. Tanpa komentar, unggahan otomatis ke YouTube diturunkan ke Pribadi.'}
+    </div>
+  );
+}
+
 export default function KomentarPanel({
   clip, videoId, waktuSekarang = 0, durasiKlip = 0, onChange, onSeek,
 }) {
@@ -332,6 +366,11 @@ export default function KomentarPanel({
                        suaraTts={suaraTts} onSeek={onSeek}
                        onUbah={(p) => ubah(k.id, p)} onHapus={() => hapus(k.id)} />
       ))}
+
+      {/* Perkiraan skor nilai tambah (JOB-2 F3-1), rumusnya sama dengan
+          services/nilai_tambah.py: komentar penuh, sisipan setengah. */}
+      <NilaiTambah daftar={daftar} sisipan={clip.media_layers ?? []} durasiKlip={durasiKlip}
+                   tambahan={tambahanDetik} />
 
       {daftar.length > 0 && (
         <p style={{ fontSize: '.74rem', color: 'var(--ink-3)', margin: 0 }}>

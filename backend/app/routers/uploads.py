@@ -243,7 +243,8 @@ async def lihat_gerbang(clip_name: str):
     from ..services.gerbang import untuk_klip
 
     hasil = await asyncio.to_thread(untuk_klip, clip_name, profil.kini())
-    return {"lolos": hasil["lolos"], "alasan": hasil["alasan"]}
+    return {"lolos": hasil["lolos"], "alasan": hasil["alasan"],
+            "nilai_tambah": hasil.get("nilai_tambah")}
 
 
 @router.get("/izin")

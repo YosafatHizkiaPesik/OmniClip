@@ -389,6 +389,18 @@ export default function ClipsTab() {
                   <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
                     {meta.aspect_ratio || '9:16'} · {formatBytes(clip.file_size)}
                   </div>
+                  {/* Nilai tambah (JOB-2 F3-1): berapa banyak klip ini berisi
+                      komentar atau tambahan dari pemiliknya sendiri. Klip lama
+                      yang dirender sebelum skornya ada tidak diberi angka. */}
+                  {meta.nilai_tambah && (
+                    <div title={(meta.nilai_tambah.rincian || []).join(' · ')
+                                || 'Belum ada komentar atau tambahan dari Anda. Isi tab Komentar di Studio.'}
+                         style={{ fontSize: '0.7rem', fontWeight: 700,
+                                  color: meta.nilai_tambah.cukup ? 'var(--ok, var(--accent-cyan))' : 'var(--reh)' }}>
+                      Nilai tambah {meta.nilai_tambah.persen}%
+                      {meta.nilai_tambah.cukup ? '' : ' · belum ada komentar'}
+                    </div>
+                  )}
                   {/* Tayangan, kalau kuncinya disetel dan videonya publik.
                       Tidak ditampilkan sebagai nol saat tidak terbaca: nol pada
                       klip yang sebenarnya ditonton ribuan orang adalah angka
