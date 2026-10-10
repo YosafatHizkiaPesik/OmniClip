@@ -423,7 +423,9 @@ def detik_baca(teks: str) -> float:
 def siapkan_render(items, durasi: float) -> list[dict]:
     """Membersihkan daftar komentar dari Studio. Yang tak bisa dipakai dibuang."""
     keluar: list[dict] = []
-    for k in (items or [])[:MAKS_KOMENTAR]:
+    # Satu tempat lebih untuk outro teks merek (merek.py), yang ditambahkan
+    # server di belakang komentar orangnya.
+    for k in (items or [])[:MAKS_KOMENTAR + 1]:
         if not isinstance(k, dict):
             continue
         posisi = str(k.get("posisi") or "")
@@ -467,6 +469,7 @@ def siapkan_render(items, durasi: float) -> list[dict]:
             "posisi": posisi, "t": round(t, 3), "d": d, "mode": mode,
             "teks": teks, "tampil": tampil, "path": path,
             "sintetis": bool((info or {}).get("sintetis")) if path else False,
+            "merek": bool(k.get("merek")),
         })
     urut = {"pembuka": 0, "sela": 1, "penutup": 2}
     keluar.sort(key=lambda k: (k["t"], urut[k["posisi"]]))
@@ -652,4 +655,5 @@ def ringkas_sidecar(items: list[dict]) -> list[dict]:
     """Yang dicatat di sidecar: tanpa jalur berkas, dengan detiknya."""
     return [{"posisi": k["posisi"], "t": k["t"], "d": k["d"], "mode": k["mode"],
              "teks": k["teks"], "bersuara": k["path"] is not None,
-             "sintetis": k["sintetis"], "kartu": k["tampil"]} for k in items]
+             "sintetis": k["sintetis"], "kartu": k["tampil"],
+             **({"merek": True} if k.get("merek") else {})} for k in items]

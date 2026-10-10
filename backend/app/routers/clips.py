@@ -402,6 +402,8 @@ class RenderClipRequest(BaseModel):
     komentar: List[KomentarKlipModel] = Field(default_factory=list, max_length=6)
     # Sambungan antar potongan klip multi-segmen (JOB-2 F2-4).
     transisi: Literal["potong", "celup", "kilat"] = "potong"
+    # Intro/outro kanal dari setelan akun (JOB-2 F2-5). False = klip ini tanpa.
+    pakai_merek: bool = True
     # Subtitle kedua — biasanya terjemahan. Gayanya sendiri; divalidasi dengan
     # model yang sama dengan gaya subtitle utama, jadi warna tetap wajib hex.
     subtitle_kedua: Optional[SubtitleKeduaModel] = None
@@ -1744,6 +1746,7 @@ async def render_clip(req: RenderClipRequest):
             "media_layers": [l.model_dump(exclude_none=True) for l in req.media_layers],
             "komentar": [k.model_dump(exclude_none=True) for k in req.komentar],
             "transisi": req.transisi,
+            "pakai_merek": req.pakai_merek,
             "subtitle_kedua": (req.subtitle_kedua.model_dump(exclude_none=True)
                                if req.subtitle_kedua else None),
             "clip_index": req.clip_index,

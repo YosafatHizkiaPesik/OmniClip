@@ -50,7 +50,9 @@ def hitung(meta: Optional[dict]) -> dict:
     """{skor, detik_komentar, detik_sisipan, cukup, rincian} dari sidecar klip."""
     meta = meta or {}
     durasi = float(meta.get("duration") or 0.0)
-    komentar = [k for k in (meta.get("komentar") or []) if isinstance(k, dict)]
+    # Outro bermerek (F2-5) sama di setiap klip, jadi bukan nilai tambah.
+    komentar = [k for k in (meta.get("komentar") or [])
+                if isinstance(k, dict) and not k.get("merek")]
     detik_komentar = sum(float(k.get("d") or 0.0) for k in komentar
                          if k.get("bersuara") or k.get("kartu"))
     rentang = []

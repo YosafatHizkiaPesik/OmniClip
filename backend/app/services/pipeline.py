@@ -132,6 +132,12 @@ def _sane_font_size(value, default: int = 96) -> int:
     return n if n >= 40 else default
 
 
+def _merek_akun() -> dict:
+    """Setelan identitas kanal akun yang sedang merender (JOB-2 F2-5)."""
+    from . import merek, profil
+    return merek.setelan(profil.kini())
+
+
 def run_render(ctx: JobContext) -> dict:
     """
     payload: {video_id, segments:[{start,end}], subtitles, aspect_ratio,
@@ -277,6 +283,9 @@ def run_render(ctx: JobContext) -> dict:
         subtitle_kedua=ctx.payload.get("subtitle_kedua"),
         komentar=ctx.payload.get("komentar"),
         transisi=str(ctx.payload.get("transisi") or "potong"),
+        # Intro/outro kanal milik akun ini, kecuali Studio mematikannya untuk
+        # klip ini (JOB-2 F2-5).
+        merek=(_merek_akun() if ctx.payload.get("pakai_merek", True) else None),
         lock_person=ctx.payload.get("lock_person"),
         person_keys=ctx.payload.get("person_keys"),
         title_card=ctx.payload.get("title_card"),

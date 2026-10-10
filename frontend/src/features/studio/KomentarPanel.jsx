@@ -275,7 +275,7 @@ function NilaiTambah(props) {
 }
 
 export default function KomentarPanel({
-  clip, videoId, waktuSekarang = 0, durasiKlip = 0, onChange, onSeek,
+  clip, videoId, waktuSekarang = 0, durasiKlip = 0, onChange, onSeek, onPakaiMerek,
 }) {
   const [draf, setDraf] = useState(null);
   const [sibuk, setSibuk] = useState(false);
@@ -371,6 +371,13 @@ export default function KomentarPanel({
           services/nilai_tambah.py: komentar penuh, sisipan setengah. */}
       <NilaiTambah daftar={daftar} sisipan={clip.media_layers ?? []} durasiKlip={durasiKlip}
                    tambahan={tambahanDetik} />
+
+      <label className="studio-check" style={{ fontSize: '.78rem' }}
+             title="Intro, outro, dan teks penutup kanal diatur di halaman Akun.">
+        <input type="checkbox" checked={clip.pakai_merek !== false}
+               onChange={(e) => onPakaiMerek?.(e.target.checked)} />
+        Pakai intro/outro kanal (diatur di halaman Akun)
+      </label>
 
       {daftar.length > 0 && (
         <p style={{ fontSize: '.74rem', color: 'var(--ink-3)', margin: 0 }}>

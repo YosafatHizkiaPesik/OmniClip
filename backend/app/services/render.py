@@ -1828,6 +1828,9 @@ def render_clip(
     komentar: Optional[list] = None,
     # Sambungan antar potongan: potong, celup, kilat. Lihat TRANSISI.
     transisi: str = "potong",
+    # Setelan identitas kanal akun ini (kelompok `merek`), atau None untuk
+    # klip tanpa intro/outro. Lihat services/merek.py.
+    merek: Optional[dict] = None,
     lock_person: Optional[int] = None,
     # Tanda linimasa dari pengguna: [{t, person}] dalam waktu KLIP.
     person_keys: Optional[list] = None,
@@ -2264,7 +2267,11 @@ def render_clip(
         # bingkai yang dibekukan adalah yang memang dilihat penonton, dan
         # sebelum kartu judul, supaya kartu judul tetap yang pertama tampil.
         from . import komentar as komentar_svc
-        komentar_siap = komentar_svc.siapkan_render(komentar, total_duration)
+        from . import merek as merek_svc
+        merek_siap = merek_svc.siapkan(merek) if merek else merek_svc.siapkan({"aktif": False})
+        komentar_siap = komentar_svc.siapkan_render(
+            list(komentar or [])[:komentar_svc.MAKS_KOMENTAR]
+            + merek_svc.komentar_outro(merek_siap), total_duration)
         if komentar_siap:
             n_input = len([x for x in inputs if x == "-i"])
             k_inputs, k_graf, vout, aout, k_tambah = komentar_svc.graf_render(
@@ -2276,6 +2283,16 @@ def render_clip(
                 f"{k['posisi']}@{k['t']:.1f}s+{k['d']:.1f}s ({k['mode']})"
                 for k in komentar_siap))
             total_duration += k_tambah
+
+        # Intro dan outro berkas milik kanal, di luar klipnya sendiri.
+        if merek_siap["intro"] or merek_siap["outro"]:
+            n_input = len([x for x in inputs if x == "-i"])
+            m_inputs, m_graf, vout, aout, m_tambah = merek_svc.graf_render(
+                merek_siap, vout, aout, input_awal=n_input, out_w=out_w,
+                out_h=out_h, fps=fps_keluar)
+            inputs += m_inputs
+            graph += ";" + m_graf
+            total_duration += m_tambah
 
         # Kartu yang MENAMBAH waktu disambung paling akhir, sesudah subtitle dan
         # normalisasi: latarnya diambil dari bingkai pertama aliran yang sudah
@@ -2369,6 +2386,8 @@ def render_clip(
             "media_layers": media_layers or [],
             "komentar": komentar_svc.ringkas_sidecar(komentar_siap),
             "transisi": transisi if len(segments) > 1 else None,
+            "merek": {"intro": bool(merek_siap["intro"]), "outro": bool(merek_siap["outro"]),
+                      "outro_teks": merek_siap["outro_teks"]},
             "subtitle_kedua": subtitle_kedua,
             # Identitas video sumbernya, ditulis di sini juga dan bukan hanya
             # diturunkan dari tabel `videos` saat diperlukan. Klip jadi bisa

@@ -1630,6 +1630,7 @@ export default function Editor({ project, onBack }) {
     // Komentar milik klip INI. Yang dikirim hanya yang dipakai render.
     komentar: komentarUntukRender(clip.komentar),
     transisi: clip.transisi || 'potong',
+    pakai_merek: clip.pakai_merek !== false,
     // Subtitle kedua milik klip ini. `sumber_sidik` hanya penanda usang di editor.
     subtitle_kedua: clip.subtitle_kedua
       ? (({ sumber_sidik, ...k }) => k)(clip.subtitle_kedua) : null,
@@ -2351,6 +2352,8 @@ export default function Editor({ project, onBack }) {
                                durasiKlip={(selected?.segments ?? []).reduce(
                                  (n, sg) => n + (sg.end - sg.start), 0)}
                                onSeek={seekClip}
+                               onPakaiMerek={(v) => selected
+                                 && editor.updateClip(selected.clip_id, { pakai_merek: v })}
                                onChange={(next) => selected
                                  && editor.updateClip(selected.clip_id, { komentar: next })} />
               )}
