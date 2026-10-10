@@ -74,7 +74,8 @@ def ubah(pid: int, **kolom) -> None:
 #
 #   gaya  gaya subtitle, kartu judul, dan tanda air. Tanda air itu nama kanal.
 #   klip  preferensi pengklipan: berapa klip per video, model transkrip, model AI.
-KELOMPOK = ("gaya", "klip")
+#   komentar  gaya komentar pemilik kanal, untuk draf komentar AI (JOB-2 F1-2).
+KELOMPOK = ("gaya", "klip", "komentar")
 
 
 def setelan(pid: int, kelompok: str = "") -> dict:

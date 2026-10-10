@@ -6,6 +6,7 @@ import { apiDelete, apiGet, apiPatch, apiPost, pilihProfil, profilAktif } from '
 import GoogleAccountCard from '../components/GoogleAccountCard';
 import StatistikCard from '../components/StatistikCard';
 import TambahAkun from '../components/TambahAkun';
+import GayaKomentar from '../components/GayaKomentar';
 
 const card = { padding: '18px 20px', borderBottom: '1px solid var(--rule-2)' };
 const sectionTitle = {
@@ -472,6 +473,7 @@ export default function Profil() {
                   Label konten sintetis bila ada suara TTS
                 </label>
               </div>
+              <GayaKomentar style={masukan} bantu={helpText} />
               <div style={{ ...helpText, marginTop: '10px', marginBottom: '4px' }}>
                 Hashtag yang selalu ditambahkan (hashtag klip ikut di belakangnya):
               </div>

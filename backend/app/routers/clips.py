@@ -1586,6 +1586,74 @@ async def clip_keterangan(req: KeteranganRequest):
     return {**hasil, "dari_simpanan": False}
 
 
+class BarisKomentar(BaseModel):
+    start: float
+    end: float
+    text: str = Field("", max_length=600)
+
+
+class KomentarRequest(BaseModel):
+    video_id: str = Field("", max_length=64)
+    title: str = Field("", max_length=300)
+    konteks: str = Field("", max_length=1000)
+    duration: float = Field(0, ge=0, le=7200)
+    subtitles: List[BarisKomentar] = Field(default_factory=list, max_length=600)
+    # True = tulis ulang walau sudah pernah disusun untuk isi yang sama.
+    segarkan: bool = False
+
+
+@router.post("/clip-komentar")
+async def clip_komentar(req: KomentarRequest):
+    """
+    Draf komentar pemilik kanal untuk satu klip di Studio (JOB-2 F1-2).
+
+    Diambil dari yang sedang dilihat di Studio, bukan dari klip jadi: komentar
+    ditulis SEBELUM render, dan subtitle di Studio sudah mengikuti batas klip
+    yang mungkin digeser orangnya.
+
+    Disimpan menurut isinya. Klip yang sama dengan gaya yang sama tidak
+    memanggil model dua kali; begitu batasnya digeser, isinya berubah dan
+    drafnya disusun ulang.
+    """
+    import hashlib
+    import json as _json
+
+    from ..config import get_api_key, get_model_override
+    from ..repos import cache as cache_repo
+    from ..repos import profil as profil_repo
+    from ..services import komentar as km
+    from ..services import profil
+    from ..services.peringkat_model import rantai
+
+    gaya = str((profil_repo.setelan(profil.kini(), "komentar") or {}).get("gaya") or "")[:300]
+    klip = {
+        "title": req.title, "konteks": req.konteks, "duration": req.duration,
+        "subtitles": [b.model_dump() for b in req.subtitles],
+    }
+    if req.video_id:
+        video = media_repo.get_video(req.video_id) or {}
+        klip["video_title"] = video.get("title") or ""
+        klip["channel"] = video.get("channel") or ""
+
+    sidik = hashlib.sha1(_json.dumps([klip, gaya], sort_keys=True,
+                                     ensure_ascii=False).encode("utf-8")).hexdigest()
+    kunci = f"komentar:v{km.VERSI}:{sidik}"
+    tersimpan = None if req.segarkan else cache_repo.ambil(kunci, ttl=30 * 24 * 3600)
+    if tersimpan:
+        return {**tersimpan, "dari_simpanan": True}
+
+    api_key = get_api_key()
+    hasil = await asyncio.to_thread(
+        km.draf, klip, api_key=api_key,
+        models=rantai(api_key, get_model_override() or None) if api_key else [],
+        gaya=gaya)
+    # Draf kosong tidak disimpan: penyebabnya (kuota, kunci belum diisi)
+    # biasanya hilang sendiri, dan menekan tombolnya lagi harus mencoba lagi.
+    if hasil.get("sumber"):
+        cache_repo.simpan(kunci, hasil)
+    return {**hasil, "dari_simpanan": False}
+
+
 class PeriksaFypRequest(BaseModel):
     clip_name: str = Field(..., max_length=400)
 

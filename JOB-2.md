@@ -107,7 +107,10 @@ terpasang.
 Inti "nilai tambah" menurut kebijakan YPP: komentar yang menambah nilai di atas
 klip orang lain.
 
-- [ ] **F1-1** Simpan `konteks` dari Gemini ke klip (sekarang dibuang).
+- [x] **F1-1** Simpan `konteks` dari Gemini ke klip (sekarang dibuang).
+  (selesai 10 Oktober 2026, commit 488b937) Hanya untuk analisis BARU; klip
+  lama dan klip dari mesin lokal tidak punya `konteks`, jadi F1-2 harus tetap
+  bisa bekerja dari transkrip saja.
 - [ ] **F1-2** Prompt baru: draf opini atau komentar pendek per klip dari
   transkrip + `konteks`, dalam gaya kanal pengguna. **Draf, bukan final**: narasi
   generik yang sama di semua klip justru tanda "produksi massal".
