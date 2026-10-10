@@ -1629,6 +1629,7 @@ export default function Editor({ project, onBack }) {
     media_layers: (clip.media_layers ?? []).map(({ id, ...l }) => l),
     // Komentar milik klip INI. Yang dikirim hanya yang dipakai render.
     komentar: komentarUntukRender(clip.komentar),
+    transisi: clip.transisi || 'potong',
     // Subtitle kedua milik klip ini. `sumber_sidik` hanya penanda usang di editor.
     subtitle_kedua: clip.subtitle_kedua
       ? (({ sumber_sidik, ...k }) => k)(clip.subtitle_kedua) : null,
@@ -2281,6 +2282,19 @@ export default function Editor({ project, onBack }) {
                                   onClick={() => editor.removeSegment(selected.clip_id, i)} />
                         </span>
                       ))}
+                      {/* Sambungan antar potongan (JOB-2 F2-4). Panjang klip
+                          tidak berubah: gambarnya hanya meredup sekejap. */}
+                      <label style={{ width: '100%', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        Sambungan
+                        <select className="field" value={selected.transisi || 'potong'}
+                                style={{ width: 'auto', padding: '3px 6px' }}
+                                onChange={(e) => editor.updateClip(selected.clip_id,
+                                  { transisi: e.target.value })}>
+                          <option value="potong">Potong langsung</option>
+                          <option value="celup">Redup sekejap (hitam)</option>
+                          <option value="kilat">Kilatan putih</option>
+                        </select>
+                      </label>
                     </div>
                   )}
                 </>

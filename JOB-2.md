@@ -74,9 +74,8 @@ Murah, dan mengurangi risiko terbesar lebih dulu.
   tambah (F3-1) + kredit ada. Unggah otomatis yang tidak lolos gerbang turun ke
   *private*, dengan alasannya dicatat.
   (selesai 9 Oktober 2026, commit e308f25) Yang dinilai sekarang: temuan BERAT
-  `fyp.periksa` + kredit. **Skor nilai tambah belum ikut** karena F3-1 belum
-  ada; pasang di `services/gerbang.py` begitu F3-1 selesai. Unggahan manual
-  hanya diberi alasan, tidak diubah.
+  `fyp.periksa` + kredit. Skor nilai tambah ikut sejak commit 34266a6 (F3-1).
+  Unggahan manual hanya diberi alasan, tidak diubah.
 - [x] **F0-5** Batas unggah per hari per kanal (setelan profil), dipaksa di
   jalur penjadwalan `unggah._jam_tayang`.
   (selesai 9 Oktober 2026, commit ba17335) Dipasang di `unggah.antrekan`
@@ -121,18 +120,37 @@ klip orang lain.
   layak ditandai di transkrip untuk model. Frasa templat dibuang, bukan
   diperbaiki. Tanpa AI: draf kosong dengan alasannya. Gaya kanal diisi di
   Profil (kelompok setelan `komentar`). Belum ada tombolnya di Studio: itu F1-3.
-- [ ] **F1-3** Lajur "Komentar" di Studio: teks bisa disunting dan ditempatkan
+- [x] **F1-3** Lajur "Komentar" di Studio: teks bisa disunting dan ditempatkan
   di waktu tertentu (sebelum klip, di jeda, sesudah punchline).
-- [ ] **F1-4** Suara komentar, dua jalan (pilihan pemilik: keduanya):
+  (selesai 10 Oktober 2026, commit 953e6cd) Tab "Komentar" di rel ikon Studio
+  (`KomentarPanel.jsx`). Tombol "Susun draf AI" mengisi pembuka, sela, dan
+  penutup; sela bisa dipindah ke posisi pemutar. Disimpan bersama klip
+  (`clip.komentar`) dan dikirim ke render. Diuji di proyek nyata (Windah).
+  Belum: pratinjau di Studio belum memperlihatkan komentarnya; yang terlihat
+  baru di hasil render.
+- [x] **F1-4** Suara komentar, dua jalan (pilihan pemilik: keduanya):
   rekam mikrofon langsung di Studio (MediaRecorder, disimpan lewat
   `aset.simpan_unggahan`) didahulukan; TTS (`tts.synthesize`, Piper atau Edge)
   sebagai cadangan. Memakai TTS otomatis menyalakan label konten sintetis
   (F0-7).
-- [ ] **F1-5** Render: audio komentar dicampur dan suara asli diredam (pakai
+  (selesai 10 Oktober 2026, commit 953e6cd) Tidak lewat `aset` (webm dari
+  peramban terbaca sebagai "video" di sana): folder sendiri `komentar_suara/`,
+  `POST /api/komentar/rekaman` dan `/api/komentar/tts`. Semua suara diratakan
+  ke -16 LUFS. Tanda sintetis ditulis server di catatan berkasnya, dan render
+  menyalakan `suara_sintetis` di sidecar dari situ.
+- [x] **F1-5** Render: audio komentar dicampur dan suara asli diredam (pakai
   `amix` + `rumus_redam` di `render.py`), dengan opsi membekukan gambar atau
   zoom pelan selama komentar.
-- [ ] **F1-6** Kartu opini teks di layar (sisipan `jenis: teks`) untuk yang
+  (selesai 10 Oktober 2026, commit 953e6cd) Dua mode: "bekukan" (bawaan,
+  gambar ditahan, klip tidak tertimpa) dan "timpa" (klip jalan, suaranya
+  diredam dengan `rumus_redam`). Satu kali encode, disambung sebelum kartu
+  judul. Render uji: klip 8 detik + tiga komentar = 20,2 detik, tepat sama
+  dengan hitungannya. Zoom pelan saat beku BELUM ada.
+- [x] **F1-6** Kartu opini teks di layar (sisipan `jenis: teks`) untuk yang
   tidak mau bersuara.
+  (selesai 10 Oktober 2026, commit 953e6cd) Satu `drawtext` per baris dengan
+  latar gelap; tanpa suara, lamanya mengikuti waktu baca (2,5-8 detik).
+  `fyp.periksa` menghitung komentar pembuka sebagai isi tiga detik pertama.
 
 ## Fase 2: Transformasi visual
 
@@ -152,10 +170,17 @@ klip orang lain.
 
 ## Fase 3: Pengukuran
 
-- [ ] **F3-1** Skor nilai tambah per klip: detik yang diberi lapisan buatan
+- [x] **F3-1** Skor nilai tambah per klip: detik yang diberi lapisan buatan
   pengguna (komentar, kartu, sisipan) dibagi durasi. Tampil di Studio, disimpan
   di sidecar, dipakai gerbang F0-4. **Sambungkan ke `services/gerbang.nilai`**:
   sampai itu dikerjakan, gerbang F0-4 belum menilai nilai tambah sama sekali.
+  (selesai 10 Oktober 2026, commit 34266a6) `services/nilai_tambah.py`:
+  detik komentar (bobot penuh) + sisipan (bobot setengah) dibagi panjang klip.
+  Subtitle, bingkai, tema, dan kartu judul tidak dihitung karena otomatis.
+  Cukup = komentar >= 2 detik atau skor >= 8%. Tertulis di sidecar, tampil di
+  Klip jadi dan di panel Komentar, dan dipakai `gerbang.nilai`. Dicek pada
+  klip nyata entertainyhp: klip lama tanpa komentar kini ditahan dengan
+  alasan "Belum ada komentar atau tambahan dari Anda sendiri".
 - [ ] **F3-2** Analitik membandingkan klip dengan dan tanpa komentar (pakai
   `analitik._temuan_terbukti`, butuh minimal 8 video terbaca).
 - [ ] **F3-3** (Opsional) YouTube Analytics API untuk retensi penonton. Butuh

@@ -400,6 +400,8 @@ class RenderClipRequest(BaseModel):
     media_layers: List[MediaLayerModel] = Field(default_factory=list, max_length=60)
     # Komentar pemilik kanal: pembuka, sela, penutup (JOB-2 F1-3).
     komentar: List[KomentarKlipModel] = Field(default_factory=list, max_length=6)
+    # Sambungan antar potongan klip multi-segmen (JOB-2 F2-4).
+    transisi: Literal["potong", "celup", "kilat"] = "potong"
     # Subtitle kedua — biasanya terjemahan. Gayanya sendiri; divalidasi dengan
     # model yang sama dengan gaya subtitle utama, jadi warna tetap wajib hex.
     subtitle_kedua: Optional[SubtitleKeduaModel] = None
@@ -1741,6 +1743,7 @@ async def render_clip(req: RenderClipRequest):
             "frame_keys": [k.model_dump(exclude_none=True) for k in req.frame_keys],
             "media_layers": [l.model_dump(exclude_none=True) for l in req.media_layers],
             "komentar": [k.model_dump(exclude_none=True) for k in req.komentar],
+            "transisi": req.transisi,
             "subtitle_kedua": (req.subtitle_kedua.model_dump(exclude_none=True)
                                if req.subtitle_kedua else None),
             "clip_index": req.clip_index,

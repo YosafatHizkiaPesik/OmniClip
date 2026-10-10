@@ -200,8 +200,23 @@ def laju_render(src_fps: Optional[float] = None) -> int:
     return max(LAJU_MIN, min(LAJU_MAKS, n))
 
 
-def _build_segment_graph(segments: list[dict],
-                         fps: int = 30) -> tuple[list[str], str, str]:
+# Sambungan antar potongan (JOB-2 F2-4). Sengaja TIDAK `xfade`: xfade menumpuk
+# dua potongan dan memendekkan klip sebanyak lama transisinya, sehingga waktu
+# subtitle, kunci bingkai, sisipan, dan komentar yang semuanya ditulis dalam
+# waktu klip bergeser semua. Yang dipakai adalah celupan singkat di ujung tiap
+# potongan: gambarnya meredup lalu terang lagi, panjang klip tetap sama.
+TRANSISI = {
+    "potong": None,
+    "celup": (0.12, "black"),      # redup sekejap ke hitam
+    "kilat": (0.07, "white"),      # kilatan putih, untuk klip yang ramai
+}
+# Selalu, apa pun transisinya: suara yang dipotong di tengah gelombang
+# berbunyi "klik" di sambungan. 30 ms tidak terdengar sebagai fade.
+SAMBUNG_AUDIO = 0.03
+
+
+def _build_segment_graph(segments: list[dict], fps: int = 30,
+                         transisi: str = "potong") -> tuple[list[str], str, str]:
     """
     Menyusun input dan filtergraph untuk memotong lalu menyambung segmen.
 
@@ -232,12 +247,26 @@ def _build_segment_graph(segments: list[dict],
         # yang berlubang (unduhan yang kehilangan potongan) diisi bingkai
         # terakhir, jadi gambar dan suara tetap sinkron. Angkanya dari
         # `laju_render` — ikut sumber kecuali Pengaturan memintanya 30.
+        efek_v, efek_a = "", ""
+        if len(segments) > 1:
+            celup = TRANSISI.get(transisi)
+            if celup:
+                lama, warna = celup
+                lama = min(lama, dur / 3)
+                if i > 0:
+                    efek_v += f",fade=t=in:st=0:d={lama:.3f}:color={warna}"
+                if i < len(segments) - 1:
+                    efek_v += f",fade=t=out:st={dur - lama:.3f}:d={lama:.3f}:color={warna}"
+            if i > 0:
+                efek_a += f",afade=t=in:st=0:d={SAMBUNG_AUDIO}"
+            if i < len(segments) - 1:
+                efek_a += f",afade=t=out:st={max(0.0, dur - SAMBUNG_AUDIO):.3f}:d={SAMBUNG_AUDIO}"
         parts.append(
             f"[{i}:v]trim=start={pre:.3f}:duration={dur:.3f},setpts=PTS-STARTPTS,"
-            f"fps={fps}[v{i}]"
+            f"fps={fps}{efek_v}[v{i}]"
         )
         parts.append(
-            f"[{i}:a]atrim=start={pre:.3f}:duration={dur:.3f},asetpts=PTS-STARTPTS[a{i}]"
+            f"[{i}:a]atrim=start={pre:.3f}:duration={dur:.3f},asetpts=PTS-STARTPTS{efek_a}[a{i}]"
         )
         concat_labels += [f"[v{i}]", f"[a{i}]"]
 
@@ -1797,6 +1826,8 @@ def render_clip(
     # Komentar pemilik kanal (JOB-2 F1-5/F1-6): [{posisi, t?, teks, suara?,
     # tampil_teks?, mode?}]. Lihat services/komentar.py.
     komentar: Optional[list] = None,
+    # Sambungan antar potongan: potong, celup, kilat. Lihat TRANSISI.
+    transisi: str = "potong",
     lock_person: Optional[int] = None,
     # Tanda linimasa dari pengguna: [{t, person}] dalam waktu KLIP.
     person_keys: Optional[list] = None,
@@ -1856,7 +1887,8 @@ def render_clip(
         log.info("Laju bingkai render: %s fps (sumber %s)", fps_keluar,
                  f"{_fps_sumber:.0f}" if _fps_sumber else "tidak terbaca")
 
-        inputs, seg_graph, labels = _build_segment_graph(segments, fps_keluar)
+        inputs, seg_graph, labels = _build_segment_graph(
+            segments, fps_keluar, transisi if transisi in TRANSISI else "potong")
         inputs = [str(src) if x == "SRC" else x for x in inputs]
         vlabel, alabel = labels.split("|")
 
@@ -2336,6 +2368,7 @@ def render_clip(
             "subtitles": komentar_svc.geser_subtitle(subtitles, komentar_siap),
             "media_layers": media_layers or [],
             "komentar": komentar_svc.ringkas_sidecar(komentar_siap),
+            "transisi": transisi if len(segments) > 1 else None,
             "subtitle_kedua": subtitle_kedua,
             # Identitas video sumbernya, ditulis di sini juga dan bukan hanya
             # diturunkan dari tabel `videos` saat diperlukan. Klip jadi bisa
