@@ -42,7 +42,7 @@ export default class ErrorBoundary extends React.Component {
         <AlertTriangle size={30} style={{ color: 'var(--accent-red, var(--danger))', marginBottom: '10px' }} />
         <h3 style={{ fontWeight: 800, marginBottom: '8px' }}>Bagian ini gagal ditampilkan</h3>
         <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.6, margin: '0 0 6px' }}>
-          Halaman lain masih bisa dibuka lewat menu di bawah. Rincian teknisnya
+          Halaman lain masih bisa dibuka lewat tombol menu (☰) di kiri atas. Rincian teknisnya
           ada di konsol browser (F12).
         </p>
         <code style={{

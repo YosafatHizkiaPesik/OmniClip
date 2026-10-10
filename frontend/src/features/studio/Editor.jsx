@@ -1807,6 +1807,30 @@ export default function Editor({ project, onBack }) {
     return () => { batal = true; };
   }, [videoId]);
 
+  // Harus di ATAS kedua `return` lebih awal di bawah. Sampai 10 Oktober 2026
+  // ia ada di bawahnya: render pertama (partitur masih dimuat) memanggil hook
+  // lebih sedikit daripada render berikutnya, dan React menghentikan seluruh
+  // Studio dengan galat #310.
+  /**
+   * Urutan daftar klip: waktu (bawaan) atau nilai tertinggi.
+   *
+   * Diminta pemiliknya 9 Oktober 2026: "saya tidak ingin banyak video klip
+   * untuk satu video jadi saya mengambil klip dengan rating tertinggi... tapi
+   * ingat bahwa default bawaannya masih sama seperti saat ini yang mengurutkan
+   * sesuai dengan timestamp video raw".
+   *
+   * NOMORNYA TIDAK IKUT BERUBAH. Yang diurutkan hanya tampilannya; tiap baris
+   * tetap membawa nomor aslinya, yaitu urutan waktu di video mentah. Kalau
+   * nomornya ikut diurutkan, "klip 3" berarti dua klip berbeda tergantung
+   * sakelar ini, dan nama berkas hasil render memakai nomor itu.
+   */
+  const [urutNilai, setUrutNilai] = useState(false);
+  const klipTampil = useMemo(() => {
+    const dengan = clips.map((clip, i) => ({ clip, i }));
+    if (!urutNilai) return dengan;
+    return [...dengan].sort((a, b) => (Number(b.clip.score) || 0) - (Number(a.clip.score) || 0));
+  }, [clips, urutNilai]);
+
   if (error) {
     return (
       <Centered>
@@ -1834,26 +1858,6 @@ export default function Editor({ project, onBack }) {
   }
 
   const letter = selected ? nomorKlip(clips.indexOf(selected)) : '·';
-
-  /**
-   * Urutan daftar klip: waktu (bawaan) atau nilai tertinggi.
-   *
-   * Diminta pemiliknya 9 Oktober 2026: "saya tidak ingin banyak video klip
-   * untuk satu video jadi saya mengambil klip dengan rating tertinggi... tapi
-   * ingat bahwa default bawaannya masih sama seperti saat ini yang mengurutkan
-   * sesuai dengan timestamp video raw".
-   *
-   * NOMORNYA TIDAK IKUT BERUBAH. Yang diurutkan hanya tampilannya; tiap baris
-   * tetap membawa nomor aslinya, yaitu urutan waktu di video mentah. Kalau
-   * nomornya ikut diurutkan, "klip 3" berarti dua klip berbeda tergantung
-   * sakelar ini, dan nama berkas hasil render memakai nomor itu.
-   */
-  const [urutNilai, setUrutNilai] = useState(false);
-  const klipTampil = useMemo(() => {
-    const dengan = clips.map((clip, i) => ({ clip, i }));
-    if (!urutNilai) return dengan;
-    return [...dengan].sort((a, b) => (Number(b.clip.score) || 0) - (Number(a.clip.score) || 0));
-  }, [clips, urutNilai]);
 
   return (
     /* ── Studio sebagai RUANG, bukan halaman ────────────────────────────────

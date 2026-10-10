@@ -111,9 +111,16 @@ klip orang lain.
   (selesai 10 Oktober 2026, commit 488b937) Hanya untuk analisis BARU; klip
   lama dan klip dari mesin lokal tidak punya `konteks`, jadi F1-2 harus tetap
   bisa bekerja dari transkrip saja.
-- [ ] **F1-2** Prompt baru: draf opini atau komentar pendek per klip dari
+- [x] **F1-2** Prompt baru: draf opini atau komentar pendek per klip dari
   transkrip + `konteks`, dalam gaya kanal pengguna. **Draf, bukan final**: narasi
   generik yang sama di semua klip justru tanda "produksi massal".
+  (selesai 10 Oktober 2026, commit 4d5b86d) `services/komentar.py` +
+  `POST /api/clip-komentar`. Tiga bagian: pembuka, sela (opsional), penutup.
+  Sela hanya di jeda nyata antara dua baris subtitle (minimal 0,25 detik; pada
+  klip Reza Auditore hanya 4 dari 47 batas baris yang memenuhi), jadi jeda yang
+  layak ditandai di transkrip untuk model. Frasa templat dibuang, bukan
+  diperbaiki. Tanpa AI: draf kosong dengan alasannya. Gaya kanal diisi di
+  Profil (kelompok setelan `komentar`). Belum ada tombolnya di Studio: itu F1-3.
 - [ ] **F1-3** Lajur "Komentar" di Studio: teks bisa disunting dan ditempatkan
   di waktu tertentu (sebelum klip, di jeda, sesudah punchline).
 - [ ] **F1-4** Suara komentar, dua jalan (pilihan pemilik: keduanya):
