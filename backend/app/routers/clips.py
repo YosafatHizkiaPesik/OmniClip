@@ -237,8 +237,13 @@ class RectSisipanModel(BaseModel):
 class MediaLayerModel(BaseModel):
     """Satu sisipan: berkas dari luar video sumber, ditempel pada waktunya."""
 
-    # id aset dari /api/aset — BUKAN jalur berkas.
-    aset: str = Field(..., max_length=64)
+    # id aset dari /api/aset — BUKAN jalur berkas. Kosong untuk sisipan TEKS.
+    #
+    # Sampai 10 Oktober 2026 medan ini wajib dan medan teks di bawah tidak
+    # ada, jadi setiap klip yang memakai sisipan "Tulisan" ditolak dengan 422
+    # saat dirender, dan tulisannya sendiri dibuang pydantic sebelum sampai
+    # ke `render._siapkan_teks`.
+    aset: str = Field("", max_length=64)
     # Nama tampilan dan jenisnya, disimpan di sisipan supaya linimasa bisa
     # menggambarnya tanpa memuat pustaka aset lebih dulu.
     nama: Optional[str] = Field(None, max_length=120)
@@ -272,6 +277,24 @@ class MediaLayerModel(BaseModel):
     # Dari mana sisipan ini datang: "pengguna" atau "otomatis" (sutradara).
     asal: Optional[str] = Field(None, max_length=16)
     alasan: Optional[str] = Field(None, max_length=200)
+    # Sisipan TEKS (jenis "teks"): tulisannya dan gayanya. Lihat
+    # render._siapkan_teks untuk bawaan masing-masing.
+    teks: Optional[str] = Field(None, max_length=400)
+    ukuran: Optional[float] = Field(None, ge=1.0, le=40.0)
+    keluarga: Optional[str] = Field(None, max_length=80)
+    warna: Optional[str] = Field(None, max_length=32)
+    garis: Optional[str] = Field(None, max_length=32)
+    tebal_garis: Optional[float] = Field(None, ge=0.0, le=12.0)
+    latar: Optional[str] = Field(None, max_length=32)
+
+    @field_validator("teks")
+    @classmethod
+    def _teks_bersih(cls, v):
+        return v.strip() if isinstance(v, str) else v
+
+    def model_post_init(self, __context) -> None:
+        if not self.aset and not (self.jenis == "teks" and self.teks):
+            raise ValueError("Sisipan butuh aset, atau tulisan untuk sisipan teks.")
 
 
 class SubtitleKeduaModel(BaseModel):
