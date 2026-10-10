@@ -66,7 +66,7 @@ class LajuRender(unittest.TestCase):
             encoding="utf-8")
         self.assertNotIn("fps=30[v", teks)
         self.assertNotIn('"-r", "30"', teks)
-        self.assertIn('f"fps={fps}[v{i}]"', teks)
+        self.assertIn('f"fps={fps}{efek_v}[v{i}]"', teks)
         self.assertIn('"-r", str(fps_keluar)', teks)
 
     def test_keyframe_ikut_lajunya(self):
