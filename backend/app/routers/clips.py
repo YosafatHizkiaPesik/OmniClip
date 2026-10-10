@@ -380,6 +380,43 @@ class KomentarKlipModel(BaseModel):
     mode: Literal["bekukan", "timpa"] = "bekukan"
 
 
+class PunchModel(BaseModel):
+    """Satu punch-in: gambar membesar sekejap (JOB-2 F2-1)."""
+    t: float = Field(..., ge=0.0, le=7200.0)
+    dur: float = Field(1.0, gt=0.0, le=4.0)
+    skala: float = Field(1.15, ge=1.0, le=1.4)
+    asal: Optional[str] = Field(None, max_length=16)
+    alasan: Optional[str] = Field(None, max_length=120)
+
+
+class PunchCariRequest(BaseModel):
+    video_id: str
+    segments: List[SegmentModel] = Field(..., min_length=1, max_length=20)
+
+
+@router.post("/clip-punch-in")
+async def clip_punch_in(req: PunchCariRequest):
+    """
+    Usulan titik punch-in untuk satu klip, dari kekerasan suaranya (F2-1).
+
+    Cepat (hanya suaranya yang didekode), jadi langsung dijawab, bukan job.
+    """
+    from ..services import punch
+    from ..services.paths import find_local_video
+
+    vid = _resolve_video_id(req.video_id)
+    src = find_local_video(vid)
+    if src is None:
+        raise NotFound("Video sumber belum diunduh.")
+    segments = [{"start": round(s.start, 3), "end": round(s.end, 3)}
+                for s in req.segments if s.end - s.start > 0.2]
+    if not segments:
+        raise NotFound("Rentang klip tidak valid.")
+    titik = await asyncio.to_thread(punch.untuk_klip, src, segments)
+    return {"titik": [{**p, "dur": punch.LAMA_BAWAAN, "skala": punch.SKALA_BAWAAN,
+                       "asal": "otomatis"} for p in titik]}
+
+
 class RenderClipRequest(BaseModel):
     # Referensi video, bukan path filesystem: klien tidak menentukan file mana
     # yang dibuka server.
@@ -427,6 +464,8 @@ class RenderClipRequest(BaseModel):
     transisi: Literal["potong", "celup", "kilat"] = "potong"
     # Intro/outro kanal dari setelan akun (JOB-2 F2-5). False = klip ini tanpa.
     pakai_merek: bool = True
+    # Punch-in zoom (JOB-2 F2-1), dalam waktu klip.
+    punch_in: List[PunchModel] = Field(default_factory=list, max_length=12)
     # Subtitle kedua — biasanya terjemahan. Gayanya sendiri; divalidasi dengan
     # model yang sama dengan gaya subtitle utama, jadi warna tetap wajib hex.
     subtitle_kedua: Optional[SubtitleKeduaModel] = None
@@ -1770,6 +1809,7 @@ async def render_clip(req: RenderClipRequest):
             "komentar": [k.model_dump(exclude_none=True) for k in req.komentar],
             "transisi": req.transisi,
             "pakai_merek": req.pakai_merek,
+            "punch_in": [p.model_dump(exclude_none=True) for p in req.punch_in],
             "subtitle_kedua": (req.subtitle_kedua.model_dump(exclude_none=True)
                                if req.subtitle_kedua else None),
             "clip_index": req.clip_index,

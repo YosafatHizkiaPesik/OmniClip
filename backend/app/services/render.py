@@ -1831,6 +1831,8 @@ def render_clip(
     # Setelan identitas kanal akun ini (kelompok `merek`), atau None untuk
     # klip tanpa intro/outro. Lihat services/merek.py.
     merek: Optional[dict] = None,
+    # Titik punch-in [{t, dur?, skala?}] dalam waktu KLIP. Lihat punch.py.
+    punch_in: Optional[list] = None,
     lock_person: Optional[int] = None,
     # Tanda linimasa dari pengguna: [{t, person}] dalam waktu KLIP.
     person_keys: Optional[list] = None,
@@ -2226,6 +2228,15 @@ def render_clip(
             graph += f";{vlabel}" + ",".join(rantai_bingkai) + "[vbingkai]"
             vlabel = "[vbingkai]"
 
+        # Punch-in (JOB-2 F2-1): gambarnya saja yang membesar, sebelum sisipan
+        # dan subtitle digambar di atasnya.
+        from . import punch as punch_svc
+        punch_siap = punch_svc.siapkan(punch_in, total_duration)
+        if punch_siap:
+            graph += ";" + punch_svc.graf(punch_siap, vlabel, out_w=out_w,
+                                          out_h=out_h, fps=fps_keluar)
+            vlabel = "[vpunch]"
+
         # Sisipan: di atas bingkai, di bawah subtitle.
         sisipan = siapkan_sisipan(media_layers, total_duration)
         sisipan_graf, sisipan_a = "", None
@@ -2386,6 +2397,7 @@ def render_clip(
             "media_layers": media_layers or [],
             "komentar": komentar_svc.ringkas_sidecar(komentar_siap),
             "transisi": transisi if len(segments) > 1 else None,
+            "punch_in": punch_siap,
             "merek": {"intro": bool(merek_siap["intro"]), "outro": bool(merek_siap["outro"]),
                       "outro_teks": merek_siap["outro_teks"]},
             "subtitle_kedua": subtitle_kedua,

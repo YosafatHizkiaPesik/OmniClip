@@ -24,6 +24,7 @@ import SutradaraPanel from './SutradaraPanel';
 import VideoHilang from './VideoHilang';
 import MediaPanel from './MediaPanel';
 import KomentarPanel, { komentarUntukRender } from './KomentarPanel';
+import PunchPanel from './PunchPanel';
 import TerjemahPanel, { buatKedua } from './TerjemahPanel';
 
 /** Sama dengan sidikUtama di TerjemahPanel: penanda terjemahan usang. */
@@ -1631,6 +1632,9 @@ export default function Editor({ project, onBack }) {
     komentar: komentarUntukRender(clip.komentar),
     transisi: clip.transisi || 'potong',
     pakai_merek: clip.pakai_merek !== false,
+    punch_in: (clip.punch_in ?? []).map(({ t, dur, skala, asal, alasan }) => ({
+      t, dur, skala, ...(asal ? { asal } : {}), ...(alasan ? { alasan: String(alasan).slice(0, 120) } : {}),
+    })),
     // Subtitle kedua milik klip ini. `sumber_sidik` hanya penanda usang di editor.
     subtitle_kedua: clip.subtitle_kedua
       ? (({ sumber_sidik, ...k }) => k)(clip.subtitle_kedua) : null,
@@ -2345,6 +2349,12 @@ export default function Editor({ project, onBack }) {
                             onJudulSemua={clips.length > 1 ? judulSemua : null}
                             onChange={(patch) => selected
                               && editor.updateClip(selected.clip_id, patch)} />
+              )}
+              {tab === 'frame' && (
+                <PunchPanel clip={selected} videoId={videoId} waktuSekarang={clipNow()}
+                            onSeek={seekClip}
+                            onChange={(next) => selected
+                              && editor.updateClip(selected.clip_id, { punch_in: next })} />
               )}
               {tab === 'komentar' && (
                 <KomentarPanel clip={selected} videoId={videoId}
