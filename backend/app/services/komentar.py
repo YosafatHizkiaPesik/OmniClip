@@ -43,7 +43,7 @@ from .teks import tanpa_pisah
 
 log = logging.getLogger("omniclip.komentar")
 
-VERSI = 2
+VERSI = 3
 
 # Batas panjang tiap bagian, dalam karakter. Komentar yang diucapkan sekitar
 # 15 karakter per detik; pembuka 120 karakter sudah delapan detik, dan itu
@@ -51,6 +51,9 @@ VERSI = 2
 MAKS_PEMBUKA = 120
 MAKS_SELA = 140
 MAKS_PENUTUP = 160
+# Kartu konteks (F2-3) dibaca sekilas di detik pertama, di atas klip yang
+# sudah berjalan: satu baris pendek, bukan paragraf.
+MAKS_KARTU_KONTEKS = 70
 
 # Jeda di bawah ini terlalu sempit untuk disela tanpa memotong orang bicara.
 JEDA_MIN_SELA = 0.25
@@ -101,6 +104,11 @@ Tulis tiga bagian:
    kanal tentang yang baru ditonton, atau pertanyaan yang benar-benar ingin ia
    dengar jawabannya dari penonton.
 
+4. KARTU_KONTEKS, maksimal 70 karakter. Bukan pendapat: satu baris fakta
+   untuk penonton yang tidak tahu asal klipnya, siapa yang bicara dan sedang
+   membahas apa. Contoh bentuknya: "Windah ditanya penonton soal cara main
+   bareng". Kosongkan bila transkrip dan konteks tidak cukup untuk tahu.
+
 Aturan yang tidak boleh dilanggar:
   - Setiap bagian harus terikat pada isi klip INI. Kalimat yang bisa ditempel
     ke klip mana pun dianggap gagal.
@@ -118,13 +126,14 @@ Aturan yang tidak boleh dilanggar:
 def _schema() -> dict:
     return {
         "type": "OBJECT",
-        "required": ["pembuka", "sela_baris", "sela", "penutup"],
-        "property_ordering": ["pembuka", "sela_baris", "sela", "penutup"],
+        "required": ["pembuka", "sela_baris", "sela", "penutup", "kartu_konteks"],
+        "property_ordering": ["pembuka", "sela_baris", "sela", "penutup", "kartu_konteks"],
         "properties": {
             "pembuka": {"type": "STRING"},
             "sela_baris": {"type": "INTEGER"},
             "sela": {"type": "STRING"},
             "penutup": {"type": "STRING"},
+            "kartu_konteks": {"type": "STRING"},
         },
     }
 
@@ -213,12 +222,13 @@ def _bahan(klip: dict, baris: list[dict], gaya: str) -> str:
         f"Konteks: {konteks or '(tidak ada; simpulkan dari transkrip saja)'}\n"
         f"Gaya kanal pemilik: {gaya.strip() or '(tidak disebut; santai dan jujur)'}\n\n"
         f"=== TRANSKRIP KLIP, bernomor per baris ===\n{transkrip}\n\n"
-        "Tulis pembuka, sela (dengan nomor barisnya, atau -1), dan penutup.")
+        "Tulis pembuka, sela (dengan nomor barisnya, atau -1), penutup, dan "
+        "kartu konteks.")
 
 
 def kosong(catatan: str) -> dict:
-    return {"pembuka": "", "sela": None, "penutup": "", "sumber": "",
-            "catatan": [catatan], "versi": VERSI}
+    return {"pembuka": "", "sela": None, "penutup": "", "kartu_konteks": "",
+            "sumber": "", "catatan": [catatan], "versi": VERSI}
 
 
 def draf(klip: dict, *, api_key: str = "", models: Optional[list] = None,
@@ -276,8 +286,11 @@ def draf(klip: dict, *, api_key: str = "", models: Optional[list] = None,
             catatan.append("Tempat sela yang dipilih AI tidak berada di jeda "
                            "antara dua kalimat, jadi selanya tidak dipakai.")
 
+    kartu = _bersih(hasil.get("kartu_konteks"), MAKS_KARTU_KONTEKS)
+    if templat_di(kartu):
+        kartu = ""
     return {"pembuka": bagian["pembuka"], "sela": sela,
-            "penutup": bagian["penutup"], "sumber": model,
+            "penutup": bagian["penutup"], "kartu_konteks": kartu, "sumber": model,
             "catatan": catatan, "versi": VERSI}
 
 

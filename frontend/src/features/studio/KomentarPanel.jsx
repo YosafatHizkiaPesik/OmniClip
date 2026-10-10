@@ -274,8 +274,68 @@ function NilaiTambah(props) {
   );
 }
 
+/** Baris pertama konteks Gemini, dipendekkan; cadangan bila draf AI tidak ada. */
+export function konteksSingkat(konteks) {
+  const t = (konteks || '').replace(/\s+/g, ' ').trim();
+  if (!t) return '';
+  const kalimat = t.split(/(?<=[.!?])\s/)[0];
+  if (kalimat.length <= 70) return kalimat.replace(/[.]$/, '');
+  return `${kalimat.slice(0, 67).replace(/\s+\S*$/, '')}...`;
+}
+
+const ASAL_KONTEKS = 'konteks';
+
+/**
+ * Kartu konteks (JOB-2 F2-3): satu baris fakta di atas klip pada detik-detik
+ * awal, untuk penonton yang tidak tahu asal klipnya. Dipasang sebagai sisipan
+ * Tulisan biasa, jadi bisa digeser dan diubah di tab Sisipan sesudahnya.
+ */
+function KartuKonteks({ clip, usulan, onLayers }) {
+  const lapisan = clip.media_layers ?? [];
+  const terpasang = lapisan.find((l) => l.asal === ASAL_KONTEKS);
+  const [teks, setTeks] = useState(terpasang?.teks || usulan || '');
+  useEffect(() => { if (!terpasang && usulan) setTeks(usulan); }, [usulan, terpasang]);
+
+  const pasang = () => {
+    const isi = teks.trim();
+    if (!isi) return;
+    const lain = lapisan.filter((l) => l.asal !== ASAL_KONTEKS);
+    onLayers([...lain, {
+      id: terpasang?.id || `kk${Date.now().toString(36)}`, jenis: 'teks', nama: 'Kartu konteks',
+      teks: isi, t: 0.2, dur: 4, posisi: 'atas', ukuran: 3.2,
+      warna: '#FFFFFF', garis: '#000000', tebal_garis: 0, keluarga: 'Archivo Black',
+      latar: '#000000', opasitas: 1, fade_masuk: 0.3, fade_keluar: 0.3,
+      volume: 0, asal: ASAL_KONTEKS,
+    }]);
+  };
+
+  return (
+    <div style={{ borderTop: '1px solid var(--line)', paddingTop: '10px',
+                  display: 'flex', flexDirection: 'column', gap: '6px' }}>
+      <b style={{ fontSize: '.8rem' }}>Kartu konteks</b>
+      <span style={{ fontSize: '.74rem', color: 'var(--ink-3)' }}>
+        Satu baris di atas klip selama 4 detik pertama: siapa yang bicara dan sedang membahas apa.
+      </span>
+      <input className="field" value={teks} maxLength={90}
+             placeholder="Contoh: Windah ditanya penonton soal main bareng"
+             onChange={(e) => setTeks(e.target.value)} />
+      <div style={{ display: 'flex', gap: '6px' }}>
+        <button className="btn-secondary" onClick={pasang} disabled={!teks.trim()}>
+          {terpasang ? 'Perbarui kartu' : 'Pasang di awal klip'}
+        </button>
+        {terpasang && (
+          <button className="btn-secondary"
+                  onClick={() => onLayers(lapisan.filter((l) => l.asal !== ASAL_KONTEKS))}>
+            Lepas
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function KomentarPanel({
-  clip, videoId, waktuSekarang = 0, durasiKlip = 0, onChange, onSeek, onPakaiMerek,
+  clip, videoId, waktuSekarang = 0, durasiKlip = 0, onChange, onSeek, onPakaiMerek, onLayers,
 }) {
   const [draf, setDraf] = useState(null);
   const [sibuk, setSibuk] = useState(false);
@@ -371,6 +431,11 @@ export default function KomentarPanel({
           services/nilai_tambah.py: komentar penuh, sisipan setengah. */}
       <NilaiTambah daftar={daftar} sisipan={clip.media_layers ?? []} durasiKlip={durasiKlip}
                    tambahan={tambahanDetik} />
+
+      {onLayers && (
+        <KartuKonteks key={clip.clip_id} clip={clip} onLayers={onLayers}
+                      usulan={draf?.kartu_konteks || konteksSingkat(clip.konteks)} />
+      )}
 
       <label className="studio-check" style={{ fontSize: '.78rem' }}
              title="Intro, outro, dan teks penutup kanal diatur di halaman Akun.">

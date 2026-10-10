@@ -37,3 +37,17 @@ describe('perkiraanNilaiTambah', () => {
     expect(r.persen).toBe(7);
   });
 });
+
+import { konteksSingkat } from './KomentarPanel';
+
+describe('konteksSingkat', () => {
+  it('mengambil kalimat pertama yang pendek', () => {
+    expect(konteksSingkat('Windah ditanya soal mabar. Lalu chat meledek.')).toBe('Windah ditanya soal mabar');
+  });
+  it('memotong di kata, bukan di tengah kata', () => {
+    const r = konteksSingkat('kata '.repeat(40));
+    expect(r.length).toBeLessThanOrEqual(70);
+    expect(r.endsWith('...')).toBe(true);
+  });
+  it('kosong tetap kosong', () => { expect(konteksSingkat('')).toBe(''); });
+});

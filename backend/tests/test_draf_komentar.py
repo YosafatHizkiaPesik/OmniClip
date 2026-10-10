@@ -31,7 +31,8 @@ def klip(**ubah):
 def jawab(**isi):
     hasil = {"pembuka": "Pak Budi ditanya soal kasbon di hari pertama kerja.",
              "sela_baris": 1, "sela": "Jujur, gue juga pernah begini.",
-             "penutup": "Kalau kalian jadi bosnya, kasih atau tidak?"}
+             "penutup": "Kalau kalian jadi bosnya, kasih atau tidak?",
+             "kartu_konteks": "Pak Budi ditanya soal kasbon di hari pertama"}
     hasil.update(isi)
     return mock.patch("app.services.penyedia_ai.tanya",
                       return_value=(hasil, "gemini-uji", {}))
@@ -111,6 +112,19 @@ class Draf(unittest.TestCase):
         with jawab() as t:
             km.draf(klip(), api_key="k", models=["m"], gaya="santai, pakai gue")
         self.assertIn("santai, pakai gue", t.call_args[0][0][0]["teks"])
+
+
+class KartuKonteks(unittest.TestCase):
+    def test_ikut_kembali_dan_dibatasi(self):
+        with jawab():
+            d = km.draf(klip(), api_key="k", models=["m"])
+        self.assertEqual(d["kartu_konteks"], "Pak Budi ditanya soal kasbon di hari pertama")
+        with jawab(kartu_konteks="x " * 80):
+            d = km.draf(klip(), api_key="k", models=["m"])
+        self.assertLessEqual(len(d["kartu_konteks"]), km.MAKS_KARTU_KONTEKS + 3)
+
+    def test_tanpa_ai_kosong(self):
+        self.assertEqual(km.draf(klip(), api_key="", models=[])["kartu_konteks"], "")
 
 
 class TanpaAI(unittest.TestCase):

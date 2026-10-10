@@ -2354,6 +2354,8 @@ export default function Editor({ project, onBack }) {
                                onSeek={seekClip}
                                onPakaiMerek={(v) => selected
                                  && editor.updateClip(selected.clip_id, { pakai_merek: v })}
+                               onLayers={(next) => selected
+                                 && editor.updateClip(selected.clip_id, { media_layers: next })}
                                onChange={(next) => selected
                                  && editor.updateClip(selected.clip_id, { komentar: next })} />
               )}
