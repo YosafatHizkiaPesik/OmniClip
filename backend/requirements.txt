@@ -21,6 +21,13 @@ yt-dlp-ejs==0.8.0
 # --- Transkripsi lokal (cadangan bila video tidak punya caption) ---
 # Dijalankan int8 di CPU. Model 'base' butuh ~400 MB RAM, 'small' ~900 MB.
 faster-whisper>=1.2.1
+# PyAV dikunci di bawah 19. faster-whisper 1.2.1 membaca audio dengan
+# `av.open(..., metadata_errors="ignore")`, dan PyAV 19.0 (Oktober 2026)
+# menghapus argumen itu. Build v1.3.7 memasang PyAV 19 dari CI dan setiap
+# transkrip lokal gagal dengan "open() got an unexpected keyword argument
+# 'metadata_errors'", yang di layar terbaca sebagai unduhan gagal.
+# Naikkan hanya bersama faster-whisper yang sudah menyesuaikan diri.
+av>=12,<19
 
 # --- Smart reframe: mengikuti wajah pembicara saat memotong 9:16 ---
 # Versi di-pin: cv2.FaceDetectorYN stabil di 4.11 dan wheel-nya teruji.
