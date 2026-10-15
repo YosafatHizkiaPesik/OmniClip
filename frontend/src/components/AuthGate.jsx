@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { KeyRound, Loader2, Lock, ShieldCheck, Eye, EyeOff, AlertTriangle } from 'lucide-react';
 import { apiGet, apiPost } from '../lib/api';
+import { useT } from '../lib/i18n';
 
 /**
  * Pintu di depan seluruh aplikasi.
@@ -63,6 +64,7 @@ function Splash() {
 }
 
 function Gate({ mode, minLength, statusError, onDone }) {
+  const t = useT();
   const setup = mode === 'setup';
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -101,14 +103,14 @@ function Gate({ mode, minLength, statusError, onDone }) {
             ? <ShieldCheck size={20} style={{ color: 'var(--reh)' }} />
             : <Lock size={20} style={{ color: 'var(--reh)' }} />}
           <h1 style={{ fontSize: '1.05rem', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>
-            {setup ? 'Pasang kata sandi' : 'OmniClip terkunci'}
+            {setup ? t('kunci.pasang') : t('kunci.terkunci')}
           </h1>
         </div>
 
         <p style={help}>
           {setup
-            ? `Kata sandi ini menjaga seluruh aplikasi: unduhan, klip, API key, dan akses ke kanal YouTube yang tersambung. Minimal ${minLength} karakter.`
-            : 'Masukkan kata sandi untuk membuka aplikasi di perangkat ini.'}
+            ? t('kunci.pasang_ket', { n: minLength })
+            : t('kunci.masukkan')}
         </p>
 
         <div style={{ position: 'relative', marginTop: '16px' }}>
@@ -118,11 +120,11 @@ function Gate({ mode, minLength, statusError, onDone }) {
             autoFocus
             autoComplete={setup ? 'new-password' : 'current-password'}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder={setup ? 'Kata sandi baru' : 'Kata sandi'}
+            placeholder={setup ? t('kunci.baru') : t('kunci.sandi')}
             style={input}
           />
           <button type="button" onClick={() => setShow((v) => !v)}
-                  aria-label={show ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi'}
+                  aria-label={show ? t('kunci.sembunyi') : t('kunci.tampil')}
                   style={eye}>
             {show ? <EyeOff size={16} /> : <Eye size={16} />}
           </button>
@@ -134,14 +136,14 @@ function Gate({ mode, minLength, statusError, onDone }) {
             value={confirm}
             autoComplete="new-password"
             onChange={(e) => setConfirm(e.target.value)}
-            placeholder="Ulangi kata sandi"
+            placeholder={t('kunci.ulangi')}
             style={{ ...input, marginTop: '10px' }}
           />
         )}
 
         {(tooShort || mismatch) && (
           <p style={{ ...help, marginTop: '10px', color: 'var(--text-muted)' }}>
-            {tooShort ? `Masih kurang ${minLength - password.length} karakter.` : 'Ulangannya belum sama.'}
+            {tooShort ? t('kunci.kurang', { n: minLength - password.length }) : t('kunci.beda')}
           </p>
         )}
 
@@ -157,13 +159,12 @@ function Gate({ mode, minLength, statusError, onDone }) {
                 style={{ width: '100%', marginTop: '18px', justifyContent: 'center',
                          opacity: !ready || busy ? 0.5 : 1 }}>
           {busy ? <Loader2 size={15} className="animate-spin" />
-                : <><KeyRound size={15} /> {setup ? 'Pasang dan masuk' : 'Masuk'}</>}
+                : <><KeyRound size={15} /> {setup ? t('kunci.pasang_masuk') : t('kunci.masuk')}</>}
         </button>
 
         {setup && (
           <p style={{ ...help, marginTop: '14px' }}>
-            Lupa kata sandi tidak bisa dipulihkan lewat email, karena tidak ada email di
-            sini. Pemulihannya lewat terminal komputer ini; caranya ada di
+            {t('kunci.lupa')}
             <code> PANDUAN-AKSES-JARAK-JAUH.md</code>.
           </p>
         )}

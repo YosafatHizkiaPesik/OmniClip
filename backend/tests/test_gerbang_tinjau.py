@@ -10,6 +10,8 @@ yang digunakan ulang.
 import unittest
 from pathlib import Path
 
+from teks_ui import teks_ui
+
 from app.services import gerbang
 
 SUMBER = {"judul": "Video Asli", "kanal": "Kanal", "url": "https://youtu.be/x"}
@@ -93,6 +95,6 @@ class TidakDibuangHanyaDiturunkan(unittest.TestCase):
 
     def test_formulir_manual_tidak_mengubah_pilihan_orang(self):
         """Orang yang menekan tombolnya sedang meninjau; ia hanya diberi alasan."""
-        src = Path("../frontend/src/components/UploadModal.jsx").read_text(encoding="utf-8")
+        src = teks_ui(Path("../frontend/src/components/UploadModal.jsx"))
         self.assertIn("Di sini Anda tetap bisa menerbitkannya publik.", src)
         self.assertNotIn("setPrivacy('private')", src)

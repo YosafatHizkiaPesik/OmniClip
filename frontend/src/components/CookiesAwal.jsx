@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Cookie, Loader2, X, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { apiGet, apiPost } from '../lib/api';
+import { tebal, useT } from '../lib/i18n';
 
 /**
  * Pertanyaan cookies, sekali saja, di tempat orangnya memang berada.
@@ -35,6 +36,7 @@ const NAMA = {
 };
 
 export default function CookiesAwal() {
+  const t = useT();
   const [info, setInfo] = useState(null);
   const [sibuk, setSibuk] = useState('');
   const [galat, setGalat] = useState('');
@@ -64,7 +66,7 @@ export default function CookiesAwal() {
       await apiPost('/settings/cookies/siapkan', { browser: nama });
       setTutup(true);
     } catch (e) {
-      setGalat(e?.message || 'Gagal menyimpan pilihan.');
+      setGalat(e?.message || t('ca.gagal'));
     } finally { setSibuk(''); }
   };
 
@@ -80,26 +82,14 @@ export default function CookiesAwal() {
         <Cookie size={18} style={{ color: 'var(--accent-cyan)', flexShrink: 0, marginTop: 2 }} />
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ fontWeight: 600, marginBottom: 4 }}>
-            Boleh OmniClip memakai sesi YouTube Anda bila diperlukan?
+            {t('ca.tanya')}
           </div>
           <p style={{ fontSize: '.8rem', color: 'var(--ink-2)', lineHeight: 1.6, margin: '0 0 10px' }}>
-            Suatu saat YouTube bisa menandai jaringan Anda sebagai bot, dan
-            tanda itu menghentikan pengunduhan sampai ada sesi login yang bisa
-            dipakai. Kalau Anda izinkan, OmniClip menyimpan nama browser Anda
-            sebagai cadangan dan <b>baru membaca sesinya saat YouTube mulai
-            menolak</b>, bukan setiap saat.
+            {tebal(t('ca.ket'))}
           </p>
           <ul style={{ fontSize: '.76rem', color: 'var(--ink-2)', lineHeight: 1.6,
                        margin: '0 0 10px', paddingLeft: 18 }}>
-            <li>Cookies dibaca dari browser <b>di komputer ini</b> dan hanya
-                dikirim ke YouTube. Tidak ke server kami, tidak ke mana pun.</li>
-            <li>Yang terbaca adalah sesi login Google Anda, jadi sebaiknya pakai
-                <b> akun cadangan</b>: akun yang dipakai mengunduh bisa ikut
-                ditandai YouTube.</li>
-            <li>Tidak dipakai terus-menerus, dan itu demi Anda. Diukur 9 Oktober
-                2026 dari jaringan sehat: tanpa cookies 12 pilihan resolusi,
-                dengan cookies hanya 7.</li>
-            <li>Bisa dicabut kapan saja di Pengaturan, bagian Cookies YouTube.</li>
+            {['ca.p1', 'ca.p2', 'ca.p3', 'ca.p4'].map((k) => <li key={k}>{tebal(t(k))}</li>)}
           </ul>
 
           {bisa.length > 0 ? (
@@ -112,24 +102,18 @@ export default function CookiesAwal() {
                     {sibuk === b.nama
                       ? <Loader2 size={13} className="animate-spin" />
                       : <CheckCircle2 size={13} />}
-                    Izinkan, pakai {NAMA[b.nama] || b.nama}
+                    {t('ca.izinkan', { browser: NAMA[b.nama] || b.nama })}
                   </button>
                 ))}
               </div>
               <p style={{ fontSize: '.72rem', color: 'var(--ink-3)', margin: '0 0 8px' }}>
-                {bisa.length === 1 ? 'Browser ini' : 'Browser di atas'} sedang
-                login ke YouTube. Sebaiknya pakai akun Google cadangan, bukan
-                akun utama: akun yang dipakai mengunduh bisa ikut ditandai.
+                {t(bisa.length === 1 ? 'ca.satu' : 'ca.banyak')}
               </p>
             </>
           ) : (
             <p style={{ fontSize: '.78rem', color: 'var(--ink-2)', lineHeight: 1.6,
                         margin: '0 0 8px' }}>
-              Belum ada browser di komputer ini yang bisa dipakai. Buka YouTube
-              di <b>Firefox</b> dan login di sana, lalu segarkan halaman ini.
-              Firefox disebut secara khusus karena sesinya memang bisa dibaca:
-              Chrome dan Edge versi baru di Windows mengunci cookie-nya dengan
-              cara yang belum bisa dibuka alat yang kami pakai.
+              {tebal(t('ca.belum'))}
             </p>
           )}
 
@@ -139,7 +123,7 @@ export default function CookiesAwal() {
               {tidak.map((b) => (
                 <li key={b.nama}>
                   <AlertTriangle size={11} style={{ verticalAlign: '-1px', marginRight: 4 }} />
-                  {NAMA[b.nama] || b.nama}: {b.galat || 'tidak bisa dibaca'}
+                  {NAMA[b.nama] || b.nama}: {b.galat || t('ck.tak_terbaca_pendek')}
                 </li>
               ))}
             </ul>
@@ -153,11 +137,10 @@ export default function CookiesAwal() {
 
           <button className="btn-secondary" style={{ fontSize: '.75rem' }}
                   disabled={!!sibuk} onClick={nanti}>
-            <X size={13} /> {bisa.length ? 'Jangan, tanpa cookies saja' : 'Nanti saja'}
+            <X size={13} /> {bisa.length ? t('ca.jangan') : t('ca.nanti')}
           </button>
           <p style={{ fontSize: '.7rem', color: 'var(--ink-3)', margin: '8px 0 0' }}>
-            Sampai Anda menekan salah satu tombol di atas, tidak ada cookies
-            yang dibaca maupun disimpan.
+            {t('ca.catatan')}
           </p>
         </div>
       </div>

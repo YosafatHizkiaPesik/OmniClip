@@ -12,6 +12,8 @@ saat diunggah. Itu kerugian yang jauh lebih besar daripada waktunya.
 """
 
 import unittest
+
+from teks_ui import teks_ui
 from pathlib import Path
 
 
@@ -66,12 +68,12 @@ class TersediaDiLayar(unittest.TestCase):
     """Dua tempat menyebutnya, dan keduanya tempat orang mencarinya."""
 
     def test_tombol_di_daftar_klip_jadi(self):
-        src = Path("../frontend/src/components/ClipsTab.jsx").read_text(encoding="utf-8")
+        src = teks_ui(Path("../frontend/src/components/ClipsTab.jsx"))
         self.assertIn("tunjukBerkas", src)
         self.assertIn("/berkas/tunjuk", src)
 
     def test_tombol_di_panel_siapkan_terbit(self):
-        src = Path("../frontend/src/components/SiapkanTerbit.jsx").read_text(encoding="utf-8")
+        src = teks_ui(Path("../frontend/src/components/SiapkanTerbit.jsx"))
         self.assertIn("Tunjuk berkasnya", src)
         self.assertIn("Salin berkasnya", src)
 

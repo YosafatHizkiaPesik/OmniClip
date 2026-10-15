@@ -4,6 +4,7 @@ import {
   Home, Loader2, Monitor, Film,
 } from 'lucide-react';
 import { apiGet, apiPost } from '../lib/api';
+import { useT } from '../lib/i18n';
 
 const IKON = { Home, Desktop: Monitor };
 
@@ -26,6 +27,7 @@ const IKON = { Home, Desktop: Monitor };
 // `modeVideo`: memilih SATU berkas video, bukan folder. Dipakai impor video
 // dari komputer ini — berkasnya dibaca di tempatnya, tanpa disalin.
 export default function FolderPicker({ judul, awal, onPilih, onTutup, modeVideo = false }) {
+  const t = useT();
   const [isi, setIsi] = useState(null);
   const [galat, setGalat] = useState(null);
   const [sibuk, setSibuk] = useState(false);
@@ -82,7 +84,7 @@ export default function FolderPicker({ judul, awal, onPilih, onTutup, modeVideo 
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: '2px', flexWrap: 'wrap',
                     fontSize: '0.76rem', minWidth: 0 }}>
-        <button onClick={() => buka('/')} style={remahBtn} title="Akar">/</button>
+        <button onClick={() => buka('/')} style={remahBtn} title={t('folder.akar')}>/</button>
         {lewat && <span style={{ color: 'var(--text-muted)' }}>…</span>}
         {potong.map((nama, i) => {
           const jalur = '/' + pisah.slice(0, pisah.length - potong.length + i + 1).join('/');
@@ -125,7 +127,7 @@ export default function FolderPicker({ judul, awal, onPilih, onTutup, modeVideo 
           <strong style={{ fontSize: '0.88rem' }}>{judul}</strong>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
             <button onClick={() => isi?.induk && buka(isi.induk)}
-                    disabled={!isi?.induk || sibuk} style={ikonBtn} title="Naik satu tingkat">
+                    disabled={!isi?.induk || sibuk} style={ikonBtn} title={t('folder.naik')}>
               <CornerLeftUp size={15} />
             </button>
             <div style={{ flex: 1, minWidth: 0, overflowX: 'auto' }}>{remah()}</div>
@@ -143,18 +145,18 @@ export default function FolderPicker({ judul, awal, onPilih, onTutup, modeVideo 
             <div style={{ padding: '2px 14px 6px', fontSize: '0.68rem', fontWeight: 700,
                           letterSpacing: '0.04em', textTransform: 'uppercase',
                           color: 'var(--text-muted)' }}>
-              Tempat
+              {t('folder.tempat')}
             </div>
-            {(isi?.tempat_umum || []).map((t) => {
-              const Ikon = t.nama.startsWith('Cakram') ? HardDrive : (IKON[t.nama] || Folder);
-              const aktif = isi?.jalur === t.jalur;
+            {(isi?.tempat_umum || []).map((tm) => {
+              const Ikon = tm.nama.startsWith('Cakram') ? HardDrive : (IKON[tm.nama] || Folder);
+              const aktif = isi?.jalur === tm.jalur;
               return (
-                <button key={t.jalur} onClick={() => buka(t.jalur)} disabled={sibuk}
+                <button key={tm.jalur} onClick={() => buka(tm.jalur)} disabled={sibuk}
                         style={{ ...sisiBtn,
                                  background: aktif ? 'var(--hl-wash, rgba(0,0,0,0.05))' : 'transparent',
                                  fontWeight: aktif ? 700 : 500 }}>
                   <Ikon size={14} style={{ flexShrink: 0, color: 'var(--accent-cyan)' }} />
-                  <span style={potongTeks}>{t.nama.replace('Cakram: ', '')}</span>
+                  <span style={potongTeks}>{tm.nama.replace('Cakram: ', '')}</span>
                 </button>
               );
             })}
@@ -195,7 +197,7 @@ export default function FolderPicker({ judul, awal, onPilih, onTutup, modeVideo 
             })}
             {isi && !isi.folder.length && !(modeVideo && isi.berkas?.length) && (
               <p style={{ padding: '18px 16px', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                {modeVideo ? 'Tidak ada video di folder ini.' : 'Folder ini kosong. Ia tetap bisa dipilih.'}
+                {modeVideo ? t('folder.tanpa_video') : t('folder.kosong')}
               </p>
             )}
           </div>
@@ -214,7 +216,7 @@ export default function FolderPicker({ judul, awal, onPilih, onTutup, modeVideo 
                       padding: '10px 14px', display: 'flex', alignItems: 'center',
                       gap: '10px', flexWrap: 'wrap' }}>
           <span style={{ fontSize: '0.76rem', color: 'var(--text-muted)', flexShrink: 0 }}>
-            {modeVideo ? 'Video' : 'Folder'}
+            {modeVideo ? t('folder.video') : t('folder.folder')}
           </span>
           <code style={{ flex: '1 1 220px', minWidth: 0, fontSize: '0.75rem',
                          padding: '6px 9px', borderRadius: 'var(--radius-sm, 6px)',
@@ -226,30 +228,30 @@ export default function FolderPicker({ judul, awal, onPilih, onTutup, modeVideo 
           {modeVideo ? null : sedangBuat ? (
             <form onSubmit={buat} style={{ display: 'flex', gap: '6px' }}>
               <input autoFocus value={buatNama} onChange={(e) => setBuatNama(e.target.value)}
-                     placeholder="Nama folder baru" style={kolom} />
+                     placeholder={t('folder.nama_baru')} style={kolom} />
               <button type="submit" className="btn-secondary" disabled={sibuk || !buatNama.trim()}
-                      style={{ fontSize: '0.78rem' }}>Buat</button>
+                      style={{ fontSize: '0.78rem' }}>{t('folder.buat')}</button>
             </form>
           ) : (
             <button className="btn-secondary" disabled={sibuk || !isi?.bisa_ditulis}
                     onClick={() => setSedangBuat(true)}
-                    style={{ fontSize: '0.78rem' }} title="Buat folder baru di sini">
+                    style={{ fontSize: '0.78rem' }} title={t('folder.buat_judul')}>
               <FolderPlus size={14} />
             </button>
           )}
           <button className="btn-secondary" onClick={onTutup} style={{ fontSize: '0.8rem' }}>
-            Batal
+            {t('umum.batal')}
           </button>
           {modeVideo ? (
             <button className="btn-primary"
                     disabled={sibuk || !terpilih || !(isi?.berkas ?? []).some((b) => b.jalur === terpilih)}
                     onClick={() => onPilih(terpilih)} style={{ fontSize: '0.8rem' }}>
-              Pakai video ini
+              {t('folder.pakai_video')}
             </button>
           ) : (
             <button className="btn-primary" disabled={sibuk || !isi || !isi.bisa_ditulis}
                     onClick={() => onPilih(tujuan)} style={{ fontSize: '0.8rem' }}>
-              Pilih folder
+              {t('folder.pilih')}
             </button>
           )}
         </div>

@@ -14,6 +14,8 @@ Dua keluhan, 9 Oktober 2026:
 
 import unittest
 
+from teks_ui import teks_ui
+
 from app.db import run_migrations
 from app.repos import profil as repo
 from app.services import profil as layanan
@@ -276,7 +278,7 @@ class TabIzinDitutupBegituSaja(Bersih):
         wadahnya saat itu juga, supaya "Akun baru" tidak sempat terlihat.
         """
         from pathlib import Path
-        src = Path("../frontend/src/components/TambahAkun.jsx").read_text(encoding="utf-8")
+        src = teks_ui(Path("../frontend/src/components/TambahAkun.jsx"))
         self.assertIn("const lepasWadah", src)
         self.assertIn("lepasWadah()", src)
         self.assertIn("wadahRef", src)

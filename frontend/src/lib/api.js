@@ -1,4 +1,4 @@
-import { bahasa } from './i18n';
+import { bahasa, t as tr } from './i18n';
 /**
  * Satu-satunya tempat frontend berbicara dengan backend.
  *
@@ -34,12 +34,12 @@ async function toApiError(res) {
   if (!message) {
     message =
       res.status === 404
-        ? 'Data tidak ditemukan.'
+        ? tr('api.404')
         : res.status === 429
-          ? 'Terlalu banyak permintaan. Coba lagi sebentar lagi.'
+          ? tr('api.429')
           : res.status >= 500
-            ? 'Server sedang bermasalah. Cek apakah backend berjalan.'
-            : `Permintaan gagal (${res.status}).`;
+            ? tr('api.500')
+            : tr('api.gagal', { n: res.status });
   }
   return new ApiError(message, { status: res.status, code });
 }
@@ -166,16 +166,13 @@ async function request(path, options = {}) {
       // YouTube, Gemini, dan OpenRouter gagal serentak dengan galat DNS,
       // sementara layar menyuruh pemiliknya menutup tab yang tidak ada.
       throw new ApiError(
-        `Server tidak menjawab dalam ${Math.round(timeout / 1000)} detik. `
-        + 'Biasanya karena sambungan internet sedang putus, OmniClip sedang '
-        + 'sibuk memproses video, atau ada tab OmniClip lain yang memuat '
-        + 'banyak video. Periksa internet Anda lalu coba lagi.',
+        tr('api.timeout', { n: Math.round(timeout / 1000) }),
         { code: 'TIMEOUT' },
       );
     }
     if (err.name === 'AbortError') throw err;
     throw new ApiError(
-      'Tidak dapat menghubungi server. Pastikan backend berjalan di port 8000.',
+      tr('api.jaringan'),
       { code: 'NETWORK' },
     );
   } finally {
@@ -254,11 +251,11 @@ export function apiUnggah(path, formData, onProgress) {
       if (xhr.status >= 200 && xhr.status < 300) resolve(body);
       else {
         reject(new ApiError(body?.message ?? body?.detail
-          ?? `Pengiriman gagal (${xhr.status}).`, { status: xhr.status, code: body?.code }));
+          ?? tr('api.kirim_gagal', { n: xhr.status }), { status: xhr.status, code: body?.code }));
       }
     };
     xhr.onerror = () => reject(new ApiError(
-      'Pengiriman terputus. Pastikan backend berjalan.', { code: 'NETWORK' }));
+      tr('api.kirim_putus'), { code: 'NETWORK' }));
     xhr.send(formData);
   });
 }

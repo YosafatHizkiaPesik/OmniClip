@@ -7,6 +7,7 @@ import {
   apiPost, dijalankanDiKomputerIni, downloadToDisk, kategoriKlip,
 } from '../lib/api';
 import PeringatanIzin from './PeringatanIzin';
+import { tebal, useT } from '../lib/i18n';
 
 /**
  * Menyiapkan satu klip untuk diterbitkan dengan tangan.
@@ -24,6 +25,7 @@ import PeringatanIzin from './PeringatanIzin';
  * pilih sound, terbit.
  */
 export default function SiapkanTerbit({ clip, onClose, onSelesai }) {
+  const t = useT();
   const [data, setData] = useState(null);
   const [galat, setGalat] = useState(null);
   const [aktif, setAktif] = useState('tiktok');
@@ -86,7 +88,7 @@ export default function SiapkanTerbit({ clip, onClose, onSelesai }) {
       setDisalin(tanda);
       setTimeout(() => setDisalin(null), 1800);
     } catch {
-      setGalat('Peramban menolak menyalin. Tandai teksnya lalu salin sendiri.');
+      setGalat(t('unggah.tolak_salin'));
     }
   };
 
@@ -160,8 +162,8 @@ export default function SiapkanTerbit({ clip, onClose, onSelesai }) {
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
           <Send size={18} style={{ color: 'var(--reh)' }} />
-          <b style={{ fontSize: '0.96rem', flex: 1 }}>Siapkan terbit</b>
-          <button onClick={onClose} aria-label="Tutup"
+          <b style={{ fontSize: '0.96rem', flex: 1 }}>{t('terbit.judul')}</b>
+          <button onClick={onClose} aria-label={t('umum.tutup')}
                   style={{ background: 'none', border: 0, cursor: 'pointer',
                            color: 'var(--text-secondary)', display: 'flex' }}>
             <X size={18} />
@@ -169,13 +171,7 @@ export default function SiapkanTerbit({ clip, onClose, onSelesai }) {
         </div>
         <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: '0 0 14px',
                     lineHeight: 1.5 }}>
-          Semuanya sudah siap kecuali satu langkah terakhir. Tekan
-          <b> Tunjuk berkasnya</b>, dan pengelola berkas terbuka dengan video
-          ini sudah tersorot, jadi tinggal diseret ke kotak unggah. Tidak perlu
-          mencari folder, dan tidak perlu mengunduh ulang: dua salinan dengan
-          nama berbeda justru yang membuat video tertukar. Di platformnya Anda
-          masih bisa memilih sound dan efek, yang tidak bisa dilakukan lewat
-          unggahan otomatis.
+          {tebal(t('terbit.ket'))}
         </p>
 
         {/* Izin kanal sumber (JOB-2 F0-3). Unggahan lewat halaman platform pun
@@ -199,7 +195,7 @@ export default function SiapkanTerbit({ clip, onClose, onSelesai }) {
           <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)',
                       display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Loader2 size={15} className="animate-spin" />
-            Menulis caption dari isi klipnya…
+            {t('terbit.menulis')}
           </p>
         )}
 
@@ -208,8 +204,8 @@ export default function SiapkanTerbit({ clip, onClose, onSelesai }) {
             {paket.judul !== undefined && (
               <>
                 <div style={{ ...label, marginBottom: '4px' }}>
-                  Judul video <span style={{ fontWeight: 500, color: 'var(--text-muted)' }}>
-                    (di YouTube ini yang paling menentukan)
+                  {t('terbit.judul_video')} <span style={{ fontWeight: 500, color: 'var(--text-muted)' }}>
+                    {t('terbit.judul_ket')}
                   </span>
                 </div>
                 <div style={{ display: 'flex', gap: '7px', marginBottom: '12px' }}>
@@ -225,9 +221,9 @@ export default function SiapkanTerbit({ clip, onClose, onSelesai }) {
 
             <div style={{ ...label, marginBottom: '4px', display: 'flex',
                           justifyContent: 'space-between', alignItems: 'center' }}>
-              <span>Caption</span>
+              <span>{t('terbit.caption')}</span>
               <span style={{ fontWeight: 500, color: 'var(--text-muted)' }}>
-                {paket.tagar.length}/{paket.maks_tagar} tagar
+                {t('terbit.n_tagar', { n: paket.tagar.length, maks: paket.maks_tagar })}
               </span>
             </div>
             <textarea value={caption} onChange={(e) => setCaption(e.target.value)} rows={7}
@@ -236,37 +232,37 @@ export default function SiapkanTerbit({ clip, onClose, onSelesai }) {
             <div style={{ display: 'flex', gap: '7px', flexWrap: 'wrap', marginTop: '10px' }}>
               <button className="btn-primary" onClick={() => salin(caption, 'caption')}>
                 {disalin === 'caption' ? <Check size={14} /> : <Copy size={14} />}
-                {disalin === 'caption' ? ' Tersalin' : ' Salin caption'}
+                {disalin === 'caption' ? t('terbit.tersalin') : t('terbit.salin_caption')}
               </button>
               <button className="btn-secondary"
                       onClick={() => downloadToDisk(kategoriKlip(), clip.file_name)}>
-                <Download size={14} /> Simpan berkas
+                <Download size={14} /> {t('terbit.simpan')}
               </button>
               {diKomputerIni && (
                 <>
                   <button className="btn-secondary" disabled={sibuk}
-                          title="Buka folder dengan berkas ini sudah tersorot"
+                          title={t('terbit.tunjuk_judul')}
                           onClick={() => tunjukLaluBuka(null)}>
-                    <FolderOpen size={14} /> Tunjuk berkasnya
+                    <FolderOpen size={14} /> {t('terbit.tunjuk')}
                   </button>
                   <button className="btn-secondary" disabled={sibuk}
-                          title="Taruh berkas videonya di papan klip, lalu tempel dengan Ctrl+V"
+                          title={t('terbit.salin_berkas_judul')}
                           onClick={salinBerkas}>
                     {disalin === 'berkas' ? <Check size={14} /> : <Clipboard size={14} />}
-                    {disalin === 'berkas' ? 'Berkas siap ditempel' : 'Salin berkasnya'}
+                    {disalin === 'berkas' ? t('terbit.berkas_siap') : t('terbit.salin_berkas')}
                   </button>
                 </>
               )}
               <a className="btn-secondary" href={paket.unggah} target="_blank" rel="noreferrer"
                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px',
                           textDecoration: 'none' }}>
-                <ExternalLink size={14} /> Buka {paket.label}
+                <ExternalLink size={14} /> {t('terbit.buka', { platform: paket.label })}
               </a>
               <button className="btn-secondary" onClick={() => muat(true)} disabled={sibuk}
-                      title="Menulis ulang captionnya dengan AI. Memakai kuota model."
+                      title={t('terbit.ulang_judul')}
                       style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
                 {sibuk ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-                Tulis ulang dengan AI
+                {t('terbit.ulang')}
               </button>
             </div>
 
@@ -283,7 +279,7 @@ export default function SiapkanTerbit({ clip, onClose, onSelesai }) {
               <input type="checkbox" checked={sudahTerbit}
                      onChange={(e) => tandai(e.target.checked)}
                      style={{ accentColor: 'var(--accent-cyan)', width: '16px', height: '16px' }} />
-              Sudah saya terbitkan ke {paket.label}
+              {t('terbit.sudah', { platform: paket.label })}
             </label>
 
             {periksa?.catatan && (
@@ -291,7 +287,7 @@ export default function SiapkanTerbit({ clip, onClose, onSelesai }) {
                             paddingTop: '12px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px',
                               fontSize: '0.78rem', fontWeight: 800 }}>
-                  <span>Sebelum diunggah</span>
+                  <span>{t('terbit.sebelum')}</span>
                   <span style={{
                     marginLeft: 'auto', fontVariantNumeric: 'tabular-nums',
                     color: periksa.skor >= 85 ? 'var(--entry)'
@@ -301,7 +297,7 @@ export default function SiapkanTerbit({ clip, onClose, onSelesai }) {
                 {periksa.catatan.length === 0 ? (
                   <p style={{ fontSize: '0.74rem', color: 'var(--text-secondary)',
                               margin: '8px 0 0', lineHeight: 1.6 }}>
-                    Tidak ada yang mencurigakan di daftar ini.
+                    {t('terbit.aman')}
                   </p>
                 ) : (
                   <ul style={{ margin: '8px 0 0', paddingLeft: '16px',
@@ -327,10 +323,8 @@ export default function SiapkanTerbit({ clip, onClose, onSelesai }) {
 
             {data?.sumber && (
               <p style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: '10px' }}>
-                Caption disusun {data.sumber === 'lokal'
-                  ? 'mesin lokal dari kalimat klipnya sendiri (tanpa kunci AI)'
-                  : data.sumber}
-                {data.dari_simpanan ? ' · diambil dari hasil sebelumnya' : ''}
+                {t('terbit.disusun', { sumber: data.sumber === 'lokal' ? t('terbit.lokal') : data.sumber })}
+                {data.dari_simpanan ? t('terbit.simpanan') : ''}
               </p>
             )}
           </>

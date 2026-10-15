@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiPost } from '../lib/api';
+import { t as tr } from '../lib/i18n';
 
 const TERMINAL = new Set(['done', 'failed', 'cancelled']);
 
@@ -43,7 +44,7 @@ export function useJobRunner() {
       if (TERMINAL.has(data.status)) {
         es.close();
         if (sourceRef.current === es) sourceRef.current = null;
-        if (data.status === 'failed') setError(new Error(data.error || 'Pekerjaan gagal.'));
+        if (data.status === 'failed') setError(new Error(data.error || tr('tugas.gagal')));
       }
     };
 
@@ -51,7 +52,7 @@ export function useJobRunner() {
       // EventSource mencoba menyambung ulang sendiri. Biarkan, kecuali koneksi
       // sudah benar-benar ditutup.
       if (es.readyState === EventSource.CLOSED && mountedRef.current) {
-        setError(new Error('Koneksi ke server terputus.'));
+        setError(new Error(tr('tugas.koneksi_putus')));
       }
     };
   }, []);
@@ -63,7 +64,7 @@ export function useJobRunner() {
     setStarting(true);
     try {
       const res = await apiPost(path, body);
-      if (!res?.job_id) throw new Error('Server tidak mengembalikan job.');
+      if (!res?.job_id) throw new Error(tr('tugas.tanpa_job'));
       follow(res.job_id);
       return res.job_id;
     } catch (err) {

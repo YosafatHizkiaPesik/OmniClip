@@ -4,18 +4,19 @@ import {
 } from 'lucide-react';
 import { apiGet, apiPost } from '../lib/api';
 import PeringatanIzin from './PeringatanIzin';
+import { tebal, useT } from '../lib/i18n';
 
 const TARGETS = [
-  { id: 'drive', label: 'Google Drive', hint: 'Masuk ke folder OmniClip di Drive Anda.' },
-  { id: 'youtube', label: 'YouTube', hint: 'Naik sebagai video di kanal Anda sendiri.' },
+  { id: 'drive', label: 'Google Drive', hint: 'unggah.drive_ket' },
+  { id: 'youtube', label: 'YouTube', hint: 'unggah.yt_ket' },
 ];
 
-const NAMA_TUJUAN = Object.fromEntries(TARGETS.map((t) => [t.id, t.label]));
+const NAMA_TUJUAN = Object.fromEntries(TARGETS.map((tj) => [tj.id, tj.label]));
 
 const PRIVACY = [
-  { id: 'private', label: 'Privat', hint: 'Hanya Anda yang bisa melihatnya.' },
-  { id: 'unlisted', label: 'Tidak publik', hint: 'Bisa dilihat siapa pun yang punya tautannya.' },
-  { id: 'public', label: 'Publik', hint: 'Muncul di kanal dan bisa ditemukan lewat pencarian.' },
+  { id: 'private', label: 'unggah.privat', hint: 'unggah.privat_ket' },
+  { id: 'unlisted', label: 'unggah.tidak_publik', hint: 'unggah.tidak_publik_ket' },
+  { id: 'public', label: 'unggah.publik', hint: 'unggah.publik_ket' },
 ];
 
 /**
@@ -27,6 +28,7 @@ const PRIVACY = [
  * kanal ditandai YouTube. Antreannya di server pun hanya selebar satu.
  */
 export default function UploadModal({ clip, onClose, onDone }) {
+  const t = useT();
   const meta = clip.metadata || {};
   const defaultTitle = useMemo(
     () => (meta.title || meta.hook_text || clip.file_name.replace(/\.mp4$/i, ''))
@@ -92,13 +94,13 @@ export default function UploadModal({ clip, onClose, onDone }) {
       setDisalin(tanda);
       setTimeout(() => setDisalin((d) => (d === tanda ? null : d)), 1800);
     } catch {
-      setMessage('Peramban menolak menyalin. Tandai teksnya lalu salin sendiri.');
+      setMessage(t('unggah.tolak_salin'));
     }
   };
 
   const TombolSalin = ({ teks, tanda }) => (
     <button type="button" onClick={() => salin(teks, tanda)} disabled={!teks}
-            title="Salin ke papan klip"
+            title={t('unggah.salin_judul')}
             style={{
               display: 'inline-flex', alignItems: 'center', gap: '4px',
               background: 'none', border: 'none', padding: '0 2px', cursor: 'pointer',
@@ -107,7 +109,7 @@ export default function UploadModal({ clip, onClose, onDone }) {
               opacity: teks ? 1 : 0.4,
             }}>
       {disalin === tanda ? <Check size={12} /> : <Copy size={12} />}
-      {disalin === tanda ? 'Tersalin' : 'Salin'}
+      {disalin === tanda ? t('unggah.tersalin') : t('unggah.salin')}
     </button>
   );
   const [message, setMessage] = useState('');
@@ -119,7 +121,7 @@ export default function UploadModal({ clip, onClose, onDone }) {
 
   const submit = async () => {
     setPhase('sending');
-    setMessage('Mengantre…');
+    setMessage(t('unggah.mengantre'));
     setKemajuan(0);
     try {
       const { job_id: jobId } = await apiPost('/uploads', {
@@ -144,7 +146,7 @@ export default function UploadModal({ clip, onClose, onDone }) {
           return;
         }
         if (job.status === 'failed' || job.status === 'cancelled') {
-          setMessage(job.error || 'Unggahan gagal.');
+          setMessage(job.error || t('unggah.gagal'));
           setPhase('failed');
           return;
         }
@@ -165,9 +167,9 @@ export default function UploadModal({ clip, onClose, onDone }) {
            style={{ maxWidth: '520px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
           <UploadCloud size={18} style={{ color: 'var(--reh)' }} />
-          <h2 style={{ fontSize: '1.05rem', fontWeight: 800, flex: 1 }}>Unggah klip</h2>
+          <h2 style={{ fontSize: '1.05rem', fontWeight: 800, flex: 1 }}>{t('unggah.judul')}</h2>
           {phase !== 'sending' && (
-            <button onClick={onClose} aria-label="Tutup" className="rail-toggle"
+            <button onClick={onClose} aria-label={t('umum.tutup')} className="rail-toggle"
                     style={{ color: 'var(--ink-2)', borderColor: 'var(--rule-2)' }}>
               <X size={15} />
             </button>
@@ -180,22 +182,20 @@ export default function UploadModal({ clip, onClose, onDone }) {
 
         {status && !connected ? (
           <div style={{ fontSize: '.85rem', lineHeight: 1.6, color: 'var(--ink-2)' }}>
-            Akun Google belum tersambung. Buka <b>Pengaturan</b>, pasang berkas
-            OAuth client dari Google Cloud Console, lalu sambungkan akun Anda.
-            Sesudah itu tombol ini akan bekerja.
+            {tebal(t('unggah.belum_google'))}
           </div>
         ) : phase === 'done' ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div style={{ display: 'flex', gap: '9px', alignItems: 'center', fontSize: '.9rem' }}>
               <CheckCircle2 size={18} style={{ color: 'var(--entry)' }} />
-              Terunggah ke {NAMA_TUJUAN[target] || target}.
+              {t('unggah.terunggah', { tujuan: NAMA_TUJUAN[target] || target })}
             </div>
             <a href={result?.remote_url} target="_blank" rel="noreferrer"
                className="btn-secondary" style={{ textDecoration: 'none', justifyContent: 'center' }}>
-              <ExternalLink size={14} /> Buka hasilnya
+              <ExternalLink size={14} /> {t('unggah.buka_hasil')}
             </a>
             <button className="btn-primary" onClick={onClose}
-                    style={{ justifyContent: 'center' }}>Selesai</button>
+                    style={{ justifyContent: 'center' }}>{t('unggah.selesai')}</button>
           </div>
         ) : phase === 'sending' ? (
           <div style={{ padding: '14px 0' }}>
@@ -222,12 +222,11 @@ export default function UploadModal({ clip, onClose, onDone }) {
                             borderRadius: 'var(--radius-md)',
                             border: '1px solid var(--border-color)',
                             color: 'var(--text-secondary)' }}>
-                <b>Belum lolos tinjau untuk publik.</b> Unggahan otomatis akan
-                menurunkannya ke Private karena:
+                <b>{t('unggah.belum_lolos')}</b> {t('unggah.belum_lolos_ket')}
                 <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>
                   {gerbang.alasan.map((a) => <li key={a}>{a}</li>)}
                 </ul>
-                Di sini Anda tetap bisa menerbitkannya publik.
+                {t('unggah.tetap_publik')}
               </div>
             )}
             {phase === 'failed' && (
@@ -243,13 +242,13 @@ export default function UploadModal({ clip, onClose, onDone }) {
             )}
 
             <div>
-              <div className="mark" style={{ color: 'var(--ink)', marginBottom: '6px' }}>Tujuan</div>
+              <div className="mark" style={{ color: 'var(--ink)', marginBottom: '6px' }}>{t('unggah.tujuan')}</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                {TARGETS.map((t) => (
-                  <button key={t.id} onClick={() => setTarget(t.id)}
-                          className={`choice${target === t.id ? ' is-on' : ''}`}>
-                    <div className="choice-t">{t.label}</div>
-                    <div className="choice-h">{t.hint}</div>
+                {TARGETS.map((tj) => (
+                  <button key={tj.id} onClick={() => setTarget(tj.id)}
+                          className={`choice${target === tj.id ? ' is-on' : ''}`}>
+                    <div className="choice-t">{tj.label}</div>
+                    <div className="choice-h">{t(tj.hint)}</div>
                   </button>
                 ))}
               </div>
@@ -258,7 +257,7 @@ export default function UploadModal({ clip, onClose, onDone }) {
             <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
               <span className="mark" style={{ color: 'var(--ink)', display: 'flex',
                                               alignItems: 'center', gap: '8px' }}>
-                Judul <span style={{ color: 'var(--ink-3)' }}>({title.length}/100)</span>
+                {t('unggah.judul_video')} <span style={{ color: 'var(--ink-3)' }}>({title.length}/100)</span>
                 <span style={{ flex: 1 }} />
                 <TombolSalin teks={title} tanda="judul" />
               </span>
@@ -271,7 +270,7 @@ export default function UploadModal({ clip, onClose, onDone }) {
                 <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <span className="mark" style={{ color: 'var(--ink)', display: 'flex',
                                                   alignItems: 'center', gap: '8px' }}>
-                    Deskripsi
+                    {t('unggah.deskripsi')}
                     <span style={{ flex: 1 }} />
                     <TombolSalin teks={description} tanda="deskripsi" />
                   </span>
@@ -282,24 +281,20 @@ export default function UploadModal({ clip, onClose, onDone }) {
 
                 <div>
                   <div className="mark" style={{ color: 'var(--ink)', marginBottom: '6px' }}>
-                    Siapa yang boleh melihat
+                    {t('unggah.siapa')}
                   </div>
                   <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                     {PRIVACY.map((p) => (
-                      <button key={p.id} title={p.hint}
+                      <button key={p.id} title={t(p.hint)}
                               className={`chip${privacy === p.id ? ' is-on' : ''}`}
                               onClick={() => setPrivacy(p.id)}>
-                        {p.label}
+                        {t(p.label)}
                       </button>
                     ))}
                   </div>
                   <p style={{ fontSize: '.72rem', color: 'var(--ink-3)', lineHeight: 1.5, margin: '8px 0 0' }}>
-                    Bawaannya privat. Video yang sudah naik bisa diubah jadi publik
-                    kapan saja dari YouTube Studio, sebaliknya tidak semudah itu.
-                    {status?.gap_seconds > 0 && (
-                      <> Sistem memberi jeda {status.gap_seconds} detik antar
-                      unggahan YouTube dan mengirimkannya satu per satu.</>
-                    )}
+                    {t('unggah.bawaan_privat')}
+                    {status?.gap_seconds > 0 && t('unggah.jeda', { n: status.gap_seconds })}
                   </p>
                 </div>
               </>
@@ -309,7 +304,7 @@ export default function UploadModal({ clip, onClose, onDone }) {
                     disabled={!title.trim() || !status}
                     style={{ justifyContent: 'center', marginTop: '2px' }}>
               <UploadCloud size={15} />
-              Unggah ke {NAMA_TUJUAN[target] || target}
+              {t('unggah.ke', { tujuan: NAMA_TUJUAN[target] || target })}
             </button>
           </div>
         )}

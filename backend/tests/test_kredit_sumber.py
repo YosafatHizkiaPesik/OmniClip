@@ -6,6 +6,8 @@ menyebut sumber sama sekali, padahal judul dan kanalnya tersimpan.
 """
 
 import unittest
+
+from teks_ui import teks_ui
 from pathlib import Path
 
 from app.services import unggah
@@ -75,10 +77,10 @@ class DuaJalurSatuSumber(unittest.TestCase):
         self.assertIn("sumber=sumber_klip(clip_name, pid)", src)
 
     def test_formulir_manual_memakai_saran_server(self):
-        src = Path("../frontend/src/components/UploadModal.jsx").read_text(encoding="utf-8")
+        src = teks_ui(Path("../frontend/src/components/UploadModal.jsx"))
         self.assertIn("/uploads/saran-deskripsi", src)
 
     def test_ketikan_orang_tidak_ditimpa_saran(self):
         """Saran yang datang terlambat tidak boleh menimpa yang sudah diketik."""
-        src = Path("../frontend/src/components/UploadModal.jsx").read_text(encoding="utf-8")
+        src = teks_ui(Path("../frontend/src/components/UploadModal.jsx"))
         self.assertIn("disentuh.current ? lama : r.deskripsi", src)

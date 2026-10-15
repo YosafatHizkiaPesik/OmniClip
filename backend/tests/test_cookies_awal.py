@@ -14,6 +14,8 @@ bisa, tidak pernah bertanya dua kali, dan tidak pernah menimpa pilihan orang.
 
 import unittest
 
+from teks_ui import teks_ui
+
 from app.services import cookies as ck
 
 
@@ -257,16 +259,16 @@ class KartuPersetujuanAdaDiBeranda(unittest.TestCase):
 
     def test_kartu_dipasang_di_beranda(self):
         from pathlib import Path
-        src = Path("../frontend/src/routes/Home.jsx").read_text(encoding="utf-8")
+        src = teks_ui(Path("../frontend/src/routes/Home.jsx"))
         self.assertIn("<CookiesAwal />", src)
 
     def test_kartu_meminta_izin_bukan_memberitahu(self):
         from pathlib import Path
-        src = Path("../frontend/src/components/CookiesAwal.jsx").read_text(encoding="utf-8")
+        src = teks_ui(Path("../frontend/src/components/CookiesAwal.jsx"))
         self.assertIn("Boleh OmniClip memakai sesi YouTube Anda", src)
         self.assertIn("Izinkan, pakai", src)
         # Dan menyebut apa yang terjadi pada datanya.
-        self.assertIn("hanya\n                dikirim ke YouTube", src)
+        self.assertIn("hanya dikirim ke YouTube", src)
 
     def test_startup_tidak_lagi_memilih_sendiri(self):
         from pathlib import Path

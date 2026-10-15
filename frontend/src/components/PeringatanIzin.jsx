@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { AlertTriangle, Check, Loader2 } from 'lucide-react';
 import { apiGet, apiPost } from '../lib/api';
+import { useT } from '../lib/i18n';
 
 /**
  * Peringatan izin kanal sumber, sebelum sebuah klip diunggah (JOB-2 F0-3).
@@ -13,6 +14,7 @@ import { apiGet, apiPost } from '../lib/api';
  * semua klip dari kanal yang sama. Tidak ada yang dicatat tanpa ditekan.
  */
 export default function PeringatanIzin({ clipName }) {
+  const t = useT();
   const [data, setData] = useState(null);
   const [sibuk, setSibuk] = useState(false);
   const [galat, setGalat] = useState('');
@@ -32,7 +34,7 @@ export default function PeringatanIzin({ clipName }) {
     try {
       setData(await apiPost('/uploads/izin', { clip_name: clipName, diizinkan: true }));
     } catch (e) {
-      setGalat(e.message || 'Gagal mencatat izin.');
+      setGalat(e.message || t('izin.gagal'));
     } finally { setSibuk(false); }
   };
 
@@ -48,7 +50,7 @@ export default function PeringatanIzin({ clipName }) {
           <button className="btn-secondary" disabled={sibuk} onClick={catat}
                   style={{ fontSize: '0.72rem', padding: '4px 9px' }}>
             {sibuk ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
-            Saya sudah punya izin dari {kanal || 'kanal ini'}
+            {t('izin.sudah', { kanal: kanal || t('izin.kanal_ini') })}
           </button>
           {galat && <span style={{ marginLeft: 8, color: 'var(--danger)' }}>{galat}</span>}
         </div>
