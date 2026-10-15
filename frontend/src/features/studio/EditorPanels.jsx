@@ -981,7 +981,8 @@ function modeSorot(p) {
 function PresetTile({ preset, active, onPick }) {
   const t = useT();
   const p = preset.patch;
-  const words = p.uppercase ? ['AYO', 'MULAI'] : ['Ayo', 'mulai'];
+  const contoh = [t('tema_sub.contoh_a'), t('tema_sub.contoh_b')];
+  const words = p.uppercase ? contoh.map((w) => w.toUpperCase()) : contoh;
   return (
     <button onClick={onPick} title={t(preset.hint)}
             style={{
@@ -1387,18 +1388,18 @@ export function StylePanel({
         <span>
           <span style={{ display: 'block', fontSize: '0.84rem', fontWeight: 800,
                          color: 'var(--text-primary)' }}>
-            {subtitleAktif ? 'Subtitle menyala' : 'Subtitle mati'}
+            {subtitleAktif ? t('gs.sub_nyala') : t('gs.sub_mati')}
           </span>
           <span style={{ display: 'block', fontSize: '0.7rem', lineHeight: 1.45,
                          color: 'var(--text-secondary)' }}>
             {subtitleAktif
-              ? 'Matikan kalau klip ini lebih baik tanpa teks.'
-              : 'Teks tidak dibakar ke video. Baris, waktu, dan gayanya tetap tersimpan.'}
+              ? t('gs.sub_nyala_ket')
+              : t('gs.sub_mati_ket')}
           </span>
         </span>
       </button>
 
-      <Section id="preset" title="Gaya siap pakai" note={activePreset?.label ?? 'ubahan sendiri'}
+      <Section id="preset" title={t('gs.siap_pakai')} note={activePreset ? t(activePreset.label) : t('gs.ubahan')}
                openId={openId} setOpenId={setOpenId}>
         {klipUntukTema && (
           <PilihTemaAI klip={klipUntukTema} presets={STYLE_PRESETS} set={set} />
@@ -1410,19 +1411,17 @@ export function StylePanel({
           ))}
         </div>
         <p style={{ fontSize: '0.67rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
-          Tiap contoh digambar dengan font, warna, dan huruf besar-kecil yang
-          sebenarnya akan dipakai, jadi yang terlihat di sini itulah yang
-          dibakar ke video.
+          {t('gs.contoh_ket')}
         </p>
       </Section>
 
-      <Section id="warna" title="Warna" openId={openId} setOpenId={setOpenId}
+      <Section id="warna" title={t('gs.warna')} openId={openId} setOpenId={setOpenId}
                note={<span style={{ display: 'inline-flex', gap: '3px' }}>
                  <Swatch color={style.primary} size={13} />
                  <Swatch color={style.highlight} size={13} />
                </span>}>
         <div>
-          <div style={{ ...label, marginBottom: '7px' }}>Pasangan rekomendasi</div>
+          <div style={{ ...label, marginBottom: '7px' }}>{t('gs.pasangan')}</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
             {COLOR_PAIRS.map((c) => {
               const on = style.primary === c.primary && style.highlight === c.highlight;
@@ -1455,18 +1454,18 @@ export function StylePanel({
         </div>
 
         <div>
-          <div style={{ ...label, marginBottom: '6px' }}>Warna teks</div>
+          <div style={{ ...label, marginBottom: '6px' }}>{t('gs.warna_teks')}</div>
           <ColorPicker value={style.primary ?? '#FFFFFF'} onChange={(c) => set({ primary: c })} />
         </div>
 
         <div>
-          <div style={{ ...label, marginBottom: '6px' }}>Warna kata aktif</div>
+          <div style={{ ...label, marginBottom: '6px' }}>{t('gs.warna_aktif')}</div>
           <ColorPicker value={style.highlight ?? '#FFE500'} onChange={(c) => set({ highlight: c })} />
         </div>
 
         <div>
           <div style={{ ...label, marginBottom: '6px' }}>
-            Warna per narasumber
+            {t('gs.per_narasumber')}
           </div>
           {/* Sakelar keluar.
               Menebak siapa bicara kapan adalah bagian paling rapuh dari alur
@@ -1488,22 +1487,15 @@ export function StylePanel({
               style={{ width: '15px', height: '15px', accentColor: 'var(--accent-cyan)', flex: 'none' }}
             />
             <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--ink)' }}>
-              Satu warna untuk seluruh klip
+              {t('gs.satu_warna')}
             </span>
           </label>
           <p style={{ fontSize: '0.68rem', color: 'var(--text-muted)', margin: '0 0 9px', lineHeight: 1.5 }}>
             {!bolehWarnaPenutur
-              ? <>Warna per penutur sedang dimatikan, karena pemisahan penuturnya
-                  baru benar sekitar enam dari sepuluh kalimat pada podcast tiga
-                  orang. Sakelarnya ada di tab <strong>Subtitle</strong>, di atas
-                  daftar orangnya, dan juga di Pengaturan.</>
+              ? <>{t('gs.penutur_mati_a')} <strong>{t('tab.subtitle')}</strong>{t('gs.penutur_mati_b')}</>
               : seragam
-              ? <>Semua baris memakai <strong>Warna teks</strong> di atas, apa pun
-                  tebakan penuturnya. Palet di bawah tersimpan dan tidak dipakai.</>
-              : <>Berlaku untuk baris yang ditandai di tab <strong>Subtitle</strong>.
-                  Deteksi otomatis mengisinya lebih dulu; kalau meleset, setel jumlah
-                  orangnya di tab Subtitle lalu betulkan barisnya di sana, atau
-                  centang kotak di atas supaya warnanya seragam.</>}
+              ? <>{t('gs.seragam_a')} <strong>{t('gs.warna_teks')}</strong> {t('gs.seragam_b')}</>
+              : <>{t('gs.berlaku_a')} <strong>{t('tab.subtitle')}</strong>{t('gs.berlaku_b')}</>}
           </p>
           <div style={{ opacity: seragam ? 0.4 : 1, pointerEvents: seragam ? 'none' : 'auto' }}>
           {Array.from({ length: speakers }, (_, i) => (
@@ -1512,7 +1504,7 @@ export function StylePanel({
                 fontSize: '0.74rem', width: '58px', flex: 'none',
                 color: 'var(--text-secondary)', fontWeight: 700,
               }}>
-                Orang {i + 1}
+                {t('gs.orang_n', { n: i + 1 })}
               </span>
               <div style={{ flex: 1 }}>
                 <ColorPicker
@@ -1530,16 +1522,16 @@ export function StylePanel({
           <button className="btn-secondary"
                   onClick={() => set({ speaker_colors: [...DEFAULT_SPEAKER_COLORS] })}
                   style={{ fontSize: '0.73rem', padding: '6px 9px', marginTop: '4px' }}>
-            Kembalikan warna bawaan
+            {t('gs.warna_bawaan')}
           </button>
           </div>
         </div>
       </Section>
 
-      <Section id="font" title="Font & ukuran" note={fontLabel}
+      <Section id="font" title={t('gs.font_ukuran')} note={fontLabel}
                openId={openId} setOpenId={setOpenId}>
         <div>
-          <div style={{ ...label, marginBottom: '7px' }}>Font, {fonts.length} pilihan</div>
+          <div style={{ ...label, marginBottom: '7px' }}>{t('gs.font_n', { n: fonts.length })}</div>
           <div style={{
             display: 'flex', flexDirection: 'column', gap: '5px',
             maxHeight: '250px', overflowY: 'auto', paddingRight: '3px',
@@ -1569,12 +1561,12 @@ export function StylePanel({
         </div>
 
         <div>
-          <div style={{ ...label, marginBottom: '8px' }}>Ukuran teks, {style.size}</div>
+          <div style={{ ...label, marginBottom: '8px' }}>{t('gs.ukuran_n', { n: style.size })}</div>
           <input type="range" min="44" max="190" step="2" value={style.size}
                  onChange={(e) => set({ size: Number(e.target.value) })}
                  style={{ width: '100%', accentColor: 'var(--accent-cyan)' }} />
           <p style={{ fontSize: '0.67rem', color: 'var(--text-muted)', margin: '5px 0 0' }}>
-            Bisa juga ditarik langsung lewat bulatan di sudut subtitle pada pratinjau.
+            {t('gs.ukuran_ket')}
           </p>
         </div>
 
@@ -1586,7 +1578,7 @@ export function StylePanel({
               HASILNYA: pratinjau dan render memakai angka yang sama walau
               lebar spasi bawaan tiap font berbeda dua kali lipat. */}
           <div style={{ ...label, marginBottom: '8px' }}>
-            Jarak antar kata, {jarakKata(style).toFixed(2)}
+            {t('gs.jarak_n', { n: jarakKata(style).toFixed(2) })}
           </div>
           <input type="range" min={JARAK_KATA_MIN} max={JARAK_KATA_MAKS} step="0.02"
                  value={jarakKata(style)}
@@ -1594,15 +1586,14 @@ export function StylePanel({
                  style={{ width: '100%', accentColor: 'var(--accent-cyan)' }} />
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '5px' }}>
             <p style={{ fontSize: '0.67rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.5, flex: 1 }}>
-              Rapat di kiri, renggang di kanan. Pratinjau di sebelah berubah
-              seketika, dan hasil rendernya sama persis.
+              {t('gs.jarak_ket')}
             </p>
             {jarakKata(style) !== JARAK_KATA && (
               <button onClick={() => set({ jarak_kata: JARAK_KATA })}
                       style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer',
                                color: 'var(--accent-cyan)', fontWeight: 700,
                                fontSize: '0.67rem', fontFamily: 'inherit', flex: 'none' }}>
-                Kembali ke {JARAK_KATA}
+                {t('gs.kembali_ke', { n: JARAK_KATA })}
               </button>
             )}
           </div>
@@ -1610,14 +1601,13 @@ export function StylePanel({
 
         <div>
           <div style={{ ...label, marginBottom: '8px' }}>
-            Tebal garis luar, {style.outline_px ?? 7}
+            {t('gs.garis_n', { n: style.outline_px ?? 7 })}
           </div>
           <input type="range" min="0" max="14" step="1" value={style.outline_px ?? 7}
                  onChange={(e) => set({ outline_px: Number(e.target.value) })}
                  style={{ width: '100%', accentColor: 'var(--accent-cyan)' }} />
           <p style={{ fontSize: '0.67rem', color: 'var(--text-muted)', margin: '5px 0 0', lineHeight: 1.5 }}>
-            Garis hitam inilah yang menjaga teks tetap terbaca di atas latar terang.
-            Nol berarti teks polos: bagus di atas gambar gelap, hilang di atas langit.
+            {t('gs.garis_ket')}
           </p>
         </div>
 
@@ -1625,14 +1615,14 @@ export function StylePanel({
           <input type="checkbox" checked={style.uppercase}
                  onChange={(e) => set({ uppercase: e.target.checked })}
                  style={{ accentColor: 'var(--accent-cyan)', width: '16px', height: '16px' }} />
-          Huruf kapital semua
+          {t('gs.kapital')}
         </label>
       </Section>
 
-      <Section id="posisi" title="Posisi & animasi" openId={openId} setOpenId={setOpenId}
-               note={ANIMATIONS.find(([v]) => v === style.animation)?.[1]}>
+      <Section id="posisi" title={t('gs.posisi_animasi')} openId={openId} setOpenId={setOpenId}
+               note={t(ANIMATIONS.find(([v]) => v === style.animation)?.[1] ?? '')}>
         <div>
-          <div style={{ ...label, marginBottom: '8px' }}>Jangkar teks</div>
+          <div style={{ ...label, marginBottom: '8px' }}>{t('gs.jangkar')}</div>
           <Segmented columns={3} options={[['top', t('gaya.atas')], ['middle', t('gaya.tengah')], ['bottom', t('gaya.bawah')]]}
                      value={style.position} onChange={(v) => set({ position: v })} />
         </div>
@@ -1640,35 +1630,32 @@ export function StylePanel({
         {style.position !== 'middle' && (
           <div>
             <div style={{ ...label, marginBottom: '8px' }}>
-              Jarak dari tepi {style.position === 'top' ? 'atas' : 'bawah'}, {style.margin_v ?? 300}
+              {t(style.position === 'top' ? 'gs.jarak_atas_n' : 'gs.jarak_bawah_n', { n: style.margin_v ?? 300 })}
             </div>
             <input type="range" min="60" max="1200" step="10" value={style.margin_v ?? 300}
                    onChange={(e) => set({ margin_v: Number(e.target.value) })}
                    style={{ width: '100%', accentColor: 'var(--accent-cyan)' }} />
             <p style={{ fontSize: '0.67rem', color: 'var(--text-muted)', margin: '5px 0 0' }}>
-              Atau seret langsung subtitlenya di pratinjau.
+              {t('gs.seret_ket')}
             </p>
           </div>
         )}
 
         <div>
           <div style={{ ...label, marginBottom: '8px' }}>
-            Lebar kotak teks, {Math.round(style.box_w ?? 84)}%
+            {t('gs.lebar_n', { n: Math.round(style.box_w ?? 84) })}
           </div>
           <input type="range" min="20" max="100" step="1" value={style.box_w ?? 84}
                  onChange={(e) => set({ box_w: Number(e.target.value) })}
                  style={{ width: '100%', accentColor: 'var(--accent-cyan)' }} />
           <p style={{ fontSize: '0.67rem', color: 'var(--text-muted)', margin: '5px 0 0', lineHeight: 1.5 }}>
-            Menentukan di lebar berapa baris subtitle mulai dibungkus. Kotak
-            sempit memberi baris pendek yang menumpuk, gaya yang biasa dipakai
-            klip vertikal. Bisa juga ditarik langsung lewat batang di kiri/kanan
-            subtitle pada pratinjau.
+            {t('gs.lebar_ket')}
           </p>
         </div>
 
         <div>
           <div style={{ ...label, marginBottom: '8px' }}>
-            Posisi mendatar, {Math.round(style.pos_x ?? 50)}%
+            {t('gs.mendatar_n', { n: Math.round(style.pos_x ?? 50) })}
           </div>
           <input type="range" min="0" max="100" step="1" value={style.pos_x ?? 50}
                  onChange={(e) => set({ pos_x: Number(e.target.value) })}
@@ -1676,17 +1663,17 @@ export function StylePanel({
         </div>
 
         <div>
-          <div style={{ ...label, marginBottom: '8px' }}>Animasi</div>
+          <div style={{ ...label, marginBottom: '8px' }}>{t('gs.animasi')}</div>
           <Segmented columns={2} options={ANIMATIONS.map(([v, k]) => [v, t(k)])} value={style.animation}
                      onChange={(v) => set({ animation: v })} />
 
-          <div style={{ ...label, marginTop: '14px' }}>Sorotan kata yang diucapkan</div>
+          <div style={{ ...label, marginTop: '14px' }}>{t('gs.sorotan')}</div>
           <Segmented columns={2} options={SOROT.map(([v, k]) => [v, t(k)])} value={modeSorot(style)}
                      onChange={(v) => set({ sorot: v, highlight_words: v !== 'mati' })} />
 
           {(modeSorot(style) === 'kotak' || modeSorot(style) === 'kotak_pop') && (
             <div style={{ marginTop: '12px' }}>
-              <div style={label}>Warna kotak</div>
+              <div style={label}>{t('gs.warna_kotak')}</div>
               <div style={{ display: 'flex', gap: '7px', flexWrap: 'wrap' }}>
                 {[['#FFE500', '#101010'], ['#00E676', '#06210F'], ['#FF3B5C', '#FFFFFF'],
                   ['#9B5CFF', '#FFFFFF'], ['#00E5FF', '#04222A'], ['#FFFFFF', '#101010'],
@@ -1706,8 +1693,8 @@ export function StylePanel({
         </div>
       </Section>
 
-      <Section id="judul" title="Judul di atas video" openId={openId} setOpenId={setOpenId}
-               note={showHook ? 'aktif' : 'mati'}>
+      <Section id="judul" title={t('gs.judul_video')} openId={openId} setOpenId={setOpenId}
+               note={showHook ? t('gs.aktif') : t('gs.mati')}>
         <label style={{
           display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer',
           fontSize: '0.84rem',
@@ -1715,23 +1702,21 @@ export function StylePanel({
           <input type="checkbox" checked={showHook}
                  onChange={(e) => onShowHookChange(e.target.checked)}
                  style={{ accentColor: 'var(--accent-cyan)', width: '16px', height: '16px' }} />
-          Tampilkan judul
+          {t('gs.tampil_judul')}
         </label>
         {showHook ? (
           <div>
             <textarea value={hookText} rows={2}
                       onChange={(e) => onHookTextChange(e.target.value)}
-                      placeholder="Ketik judul, atau biarkan kutipan otomatis"
+                      placeholder={t('gs.judul_placeholder')}
                       style={{ ...field, resize: 'vertical', lineHeight: 1.4 }} />
             <p style={{ fontSize: '0.68rem', color: 'var(--text-muted)', margin: '6px 0 0', lineHeight: 1.5 }}>
-              Judul bawaan diambil dari kalimat pembuka klip, jadi isinya selalu
-              benar-benar diucapkan. Anda bisa menggantinya dengan teks sendiri.
+              {t('gs.judul_ket')}
             </p>
           </div>
         ) : (
           <p style={{ fontSize: '0.68rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
-            Mati secara bawaan, karena hasilnya lebih bersih. Nyalakan bila klipnya
-            butuh konteks pembuka.
+            {t('gs.judul_mati_ket')}
           </p>
         )}
       </Section>
@@ -1740,39 +1725,38 @@ export function StylePanel({
           Ikut GAYA, bukan ikut klip: ini nama kanal, dan mengetiknya ulang di
           tiap klip adalah pekerjaan tanpa guna. Sekali disetel, ia ikut ke
           setiap klip yang dirender sesudahnya. */}
-      <Section id="tanda-air" title="Tanda air"
-               note={(style?.watermark || '').trim() || 'mati'}
+      <Section id="tanda-air" title={t('gs.tanda_air')}
+               note={(style?.watermark || '').trim() || t('gs.mati')}
                openId={openId} setOpenId={setOpenId}>
         <input value={style?.watermark ?? ''}
                onChange={(e) => onChange({ ...style, watermark: e.target.value.slice(0, 40) })}
                placeholder="@namakanal"
                style={{ ...field, fontSize: '0.85rem' }} />
         <p style={{ fontSize: '0.68rem', color: 'var(--text-muted)', margin: '6px 0 10px', lineHeight: 1.5 }}>
-          Tampil sepanjang klip. Cukup untuk menandai klipnya milik siapa saat
-          ia diunggah ulang orang lain. Dikosongkan berarti tidak ada tanda air.
-          <br /><strong>Bisa diseret langsung di pratinjau.</strong>
+          {t('gs.tanda_air_ket')}
+          <br /><strong>{t('gs.tanda_air_seret')}</strong>
         </p>
 
         {(style?.watermark || '').trim() && (
           <>
-            <div style={{ ...label, marginBottom: '6px' }}>Font</div>
+            <div style={{ ...label, marginBottom: '6px' }}>{t('gaya.font')}</div>
             <select value={style?.wm_font ?? ''}
                     onChange={(e) => onChange({ ...style, wm_font: e.target.value })}
                     style={{ ...field, fontSize: '0.82rem', marginBottom: '10px' }}>
-              <option value="">Ikut font subtitle</option>
+              <option value="">{t('gs.ikut_font')}</option>
               {fonts.map((f) => (
                 <option key={f.family} value={f.family}>{f.label ?? f.family}</option>
               ))}
             </select>
 
-            <div style={{ ...label, marginBottom: '6px' }}>Warna</div>
+            <div style={{ ...label, marginBottom: '6px' }}>{t('gaya.warna')}</div>
             <div style={{ marginBottom: '10px' }}>
               <ColorPicker value={style?.wm_color ?? '#FFFFFF'}
                            onChange={(c) => onChange({ ...style, wm_color: c })} />
             </div>
 
             <div style={{ ...label, marginBottom: '4px' }}>
-              Ukuran, {style?.wm_size ?? 34}
+              {t('gs.ukuran_wm_n', { n: style?.wm_size ?? 34 })}
             </div>
             <input type="range" min="12" max="160" step="2"
                    value={style?.wm_size ?? 34}
@@ -1780,7 +1764,7 @@ export function StylePanel({
                    style={{ width: '100%', marginBottom: '10px' }} />
 
             <div style={{ ...label, marginBottom: '4px' }}>
-              Tembus pandang, {Math.round((style?.wm_opacity ?? 0.62) * 100)}%
+              {t('gs.tembus_n', { n: Math.round((style?.wm_opacity ?? 0.62) * 100) })}
             </div>
             <input type="range" min="5" max="100" step="5"
                    value={Math.round((style?.wm_opacity ?? 0.62) * 100)}
@@ -1788,7 +1772,7 @@ export function StylePanel({
                    style={{ width: '100%', marginBottom: '10px' }} />
 
             <div style={{ ...label, marginBottom: '4px' }}>
-              Garis luar, {style?.wm_outline ?? 2}
+              {t('gs.garis_wm_n', { n: style?.wm_outline ?? 2 })}
             </div>
             <input type="range" min="0" max="10" step="1"
                    value={style?.wm_outline ?? 2}
@@ -1798,7 +1782,7 @@ export function StylePanel({
             {/* Sembilan sudut sebagai jalan pintas. Menyeret di pratinjau tetap
                 yang paling cepat, tapi sudut yang persis sulit dikenai dengan
                 tangan, dan pojok adalah tempat tanda air paling sering ditaruh. */}
-            <div style={{ ...label, marginBottom: '6px' }}>Tempat cepat</div>
+            <div style={{ ...label, marginBottom: '6px' }}>{t('gs.tempat_cepat')}</div>
             <div style={{
               display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '4px',
               marginBottom: '8px',
@@ -1811,7 +1795,7 @@ export function StylePanel({
                 return (
                   <button key={`${x}-${y}`}
                           onClick={() => onChange({ ...style, wm_x: x, wm_y: y })}
-                          title={`Taruh di ${x}% , ${y}%`}
+                          title={t('gs.taruh_di', { x, y })}
                           style={{
                             height: '26px', cursor: 'pointer', borderRadius: '4px',
                             border: on ? '2px solid var(--accent-cyan)' : '1px solid var(--border-color)',
@@ -1821,13 +1805,13 @@ export function StylePanel({
               })}
             </div>
             <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
-              Sekarang di {Math.round(style?.wm_x ?? 92)}% , {Math.round(style?.wm_y ?? 95)}%
+              {t('gs.sekarang_di', { x: Math.round(style?.wm_x ?? 92), y: Math.round(style?.wm_y ?? 95) })}
             </div>
           </>
         )}
       </Section>
 
-      <Section id="rasio" title="Rasio video" note={aspectRatio}
+      <Section id="rasio" title={t('gs.rasio')} note={aspectRatio}
                openId={openId} setOpenId={setOpenId}>
         <Segmented columns={4} options={[['9:16', '9:16'], ['1:1', '1:1'], ['4:5', '4:5'], ['16:9', '16:9']]}
                    value={aspectRatio} onChange={onAspectChange} />

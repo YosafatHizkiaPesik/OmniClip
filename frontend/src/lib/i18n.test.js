@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const SRC = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
 import id from '../locales/id';
 import en from '../locales/en';
 
@@ -20,7 +23,7 @@ describe('kamus terjemahan', () => {
 
   // `tr` = fungsi `t` yang diimpor langsung, untuk fungsi di luar komponen.
   it('setiap t("kunci") di kode ada di kamus', () => {
-    const src = join(__dirname, '..');
+    const src = SRC;
     const hilang = [];
     for (const f of semuaBerkas(src)) {
       const s = readFileSync(f, 'utf8');
@@ -36,7 +39,7 @@ describe('kamus terjemahan', () => {
   // yang dikenal harus ada di kamus, supaya salah ketik tidak tampil mentah.
   it('literal kunci di tabel konstanta ada di kamus', () => {
     const ruang = new Set(Object.keys(id).map((k) => k.split('.')[0]));
-    const src = join(__dirname, '..');
+    const src = SRC;
     const hilang = [];
     for (const f of semuaBerkas(src)) {
       if (f.includes('/locales/')) continue;
@@ -54,7 +57,7 @@ describe('kamus terjemahan', () => {
   // memakai useT(), nama `t` hanya boleh untuk fungsi terjemahan itu sendiri
   // (termasuk parameter fungsi pembantu yang menerimanya).
   it('tidak ada variabel lokal bernama t di berkas yang memakai useT', () => {
-    const src = join(__dirname, '..');
+    const src = SRC;
     const temuan = [];
     const pola = [
       /\b(?:const|let|var) t\b(?! = useT\(\))/,

@@ -1,3 +1,6 @@
+// Satuan waktu ikut bahasa tampilan (JOB-3).
+import { t as tr } from '../lib/i18n';
+
 /**
  * Utility untuk konversi timestamp dari detik ke format Jam:Menit:Detik (HH:MM:SS / MM:SS)
  */
@@ -39,12 +42,12 @@ export function formatDurationHuman(seconds) {
   const secs = Math.floor(seconds % 60);
 
   if (hrs > 0) {
-    return `${hrs} jam ${mins} mnt`;
+    return tr('waktu.jam_menit', { h: hrs, m: mins });
   }
   if (mins > 0) {
-    return `${mins} mnt ${secs} dtk`;
+    return tr('waktu.menit_detik_pendek', { m: mins, s: secs });
   }
-  return `${secs} dtk`;
+  return tr('waktu.detik', { n: secs });
 }
 
 /**
