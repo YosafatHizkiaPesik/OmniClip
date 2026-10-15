@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Loader2, Video, RefreshCw, X, Scissors, CheckCircle2, Flame, Mic, MessagesSquare, GraduationCap,
-  Gamepad2, Music2, Cpu, TrendingUp, Laugh, UtensilsCrossed, Plane,
+  Gamepad2, Music2, Cpu, TrendingUp, Laugh, UtensilsCrossed, Plane, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import { bahasa, useT } from '../lib/i18n';
 import { apiGet, apiPost } from '../lib/api';
@@ -30,6 +30,68 @@ const CATEGORIES = [
   { kunci: 'kuliner', Icon: UtensilsCrossed, warna: '#F87171', q: { id: 'kuliner makanan enak indonesia', en: 'street food tour' } },
   { kunci: 'travel', Icon: Plane, warna: '#38BDF8', q: { id: 'travel wisata indonesia', en: 'travel vlog' } },
 ];
+
+/**
+ * Baris topik yang bisa digeser, seperti baris chip YouTube.
+ *
+ * Dilaporkan pemiliknya 15 Oktober 2026: topik di ujung kanan tidak bisa
+ * dicapai (bilah gulirnya disembunyikan dan roda tetikus menggulir halaman),
+ * dan pil yang disorot terpotong di atas karena wadah gulir memotong pil yang
+ * terangkat. Sekarang: panah kiri/kanan muncul hanya bila ada yang tersembunyi
+ * di sisi itu, roda tetikus menggeser baris, dan wadahnya punya ruang napas.
+ */
+function BarisTopik({ children }) {
+  const t = useT();
+  const ref = useRef(null);
+  const [sisi, setSisi] = useState({ kiri: false, kanan: false });
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return undefined;
+    const ukur = () => setSisi({
+      kiri: el.scrollLeft > 2,
+      kanan: el.scrollLeft + el.clientWidth < el.scrollWidth - 2,
+    });
+    // Roda tetikus vertikal menggeser baris ke samping, hanya bila memang ada
+    // yang bisa digeser; selebihnya halaman tetap menggulir seperti biasa.
+    const roda = (e) => {
+      if (Math.abs(e.deltaY) <= Math.abs(e.deltaX) || el.scrollWidth <= el.clientWidth) return;
+      const ujung = e.deltaY > 0
+        ? el.scrollLeft + el.clientWidth >= el.scrollWidth - 1
+        : el.scrollLeft <= 0;
+      if (ujung) return;
+      e.preventDefault();
+      el.scrollLeft += e.deltaY;
+    };
+    ukur();
+    el.addEventListener('scroll', ukur, { passive: true });
+    el.addEventListener('wheel', roda, { passive: false });
+    const ro = new ResizeObserver(ukur);
+    ro.observe(el);
+    return () => {
+      el.removeEventListener('scroll', ukur);
+      el.removeEventListener('wheel', roda);
+      ro.disconnect();
+    };
+  }, []);
+
+  const geser = (arah) => ref.current?.scrollBy({ left: arah * ref.current.clientWidth * 0.7, behavior: 'smooth' });
+  return (
+    <div className="baris-topik">
+      {sisi.kiri && (
+        <button type="button" className="baris-topik-panah kiri" aria-label={t('beranda.geser_kiri')} onClick={() => geser(-1)}>
+          <ChevronLeft size={18} />
+        </button>
+      )}
+      <div ref={ref} className="baris-topik-isi">{children}</div>
+      {sisi.kanan && (
+        <button type="button" className="baris-topik-panah kanan" aria-label={t('beranda.geser_kanan')} onClick={() => geser(1)}>
+          <ChevronRight size={18} />
+        </button>
+      )}
+    </div>
+  );
+}
 
 /**
  * Feed pencarian.
@@ -92,10 +154,19 @@ export default function Home() {
   const [feed, setFeed] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  // Dinaikkan oleh tombol Segarkan, dan dimulai dari angka acak sekali per
-  // kunjungan. Server memakainya sebagai BENIH, jadi beranda tetap berbeda
-  // tiap kali dibuka tapi tidak lagi berubah di tengah gulir.
-  const [nonce, setNonce] = useState(() => Math.floor(Math.random() * 1e6));
+  // BENIH beranda: server memakainya supaya beranda tetap berbeda tiap kali
+  // dibuka tapi tidak berubah di tengah gulir. Diminta dari server (bukan
+  // diacak di sini) supaya yang dipakai adalah beranda yang sudah disiapkan
+  // di latar: halaman langsung terisi tanpa menunggu pencarian YouTube.
+  // `null` = belum ada benih, beranda belum dimuat.
+  const [nonce, setNonce] = useState(null);
+  const ambilBenih = () => apiGet('/trending/benih', { timeout: 8000 })
+    .then((r) => setNonce(r.benih))
+    .catch(() => setNonce(Math.floor(Math.random() * 1e6)));
+  useEffect(() => {
+    if (!q && nonce === null) ambilBenih();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q, nonce]);
   const [sort, setSort] = useState('relevan');
   // Penyaring milik YouTube sendiri (parameter sp), bukan saringan di sini atas
   // data yang tidak lengkap. Kosong = semua.
@@ -143,6 +214,7 @@ export default function Home() {
   }
 
   useEffect(() => {
+    if (!q && nonce === null) return undefined;     // menunggu benih beranda
     let batal = false;
     // Muatan pertama sebuah daftar mengganti isinya; sisanya MENAMBAH.
     //
@@ -268,12 +340,9 @@ export default function Home() {
       {/* Judul dan kolom cari pindah ke header, seperti YouTube (JOB-3 J3-2).
           Kata kunci tetap dibaca dari URL (`/?q=`), jadi tidak ada yang
           berubah pada cara pencarian bekerja. */}
-      <div style={{
-        display: 'flex', gap: '8px', overflowX: 'auto',
-        paddingBottom: '8px', marginBottom: '20px', scrollbarWidth: 'none',
-      }}>
+      <BarisTopik>
         {!q && (
-          <button className="chip" disabled={loading} onClick={() => setNonce((n) => n + 1)}
+          <button className="chip" disabled={loading} onClick={ambilBenih}
                   title={t('umum.segarkan')} style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
             <RefreshCw size={13} className={loading ? 'animate-spin' : undefined} />
           </button>
@@ -288,7 +357,7 @@ export default function Home() {
             </button>
           );
         })}
-      </div>
+      </BarisTopik>
 
       {/* Penyaring hanya untuk pencarian: beranda tanpa kata kunci sudah
           mengambil kueri acak tiap muat. Pil gaya YouTube, dua bahasa. */}

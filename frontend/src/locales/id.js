@@ -730,5 +730,7 @@ export default {
   'game.bebas_f': "untuk menentukan letak dan ukurannya. Garis putus-putus di dalam kotak menandai bagian yang benar-benar tampil. Tombol dan penggeser di atas menyusun ulang keduanya dari awal. Setelan ini milik klip ini saja.",
   'game.pindah': "Kamera wajah berpindah tempat {n}× di klip ini. Kotak Reaksi ikut pindah pada detiknya. Menyeret kotak Reaksi mengubah letak yang berlaku di posisi garis main saja.",
   'game.cari_ulang': "Cari ulang letak wajah otomatis",
+  'beranda.geser_kiri': "Geser ke kiri",
+  'beranda.geser_kanan': "Geser ke kanan",
   'bahasa.pilih': 'Bahasa',
 };

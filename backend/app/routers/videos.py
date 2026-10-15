@@ -392,7 +392,7 @@ def _selang_seling(daftar: list[list], acak: random.Random) -> list:
     return hasil
 
 
-def _kolam_beranda() -> list[str]:
+def _kolam_beranda(acak: Optional[random.Random] = None) -> list[str]:
     """
     Kueri beranda untuk profil aktif: minat yang ditulis pemiliknya, lalu
     pencarian terbarunya. Profil yang belum punya keduanya memakai kolam umum.
@@ -426,8 +426,13 @@ def _kolam_beranda() -> list[str]:
     # persis keluhan pemiliknya: "saya melihat video raditya dika maka beranda
     # menyarankan raditya dika semua". Beranda yang hanya mengulang masa lalu
     # tidak pernah memperkenalkan apa pun yang baru.
-    return kolam + random.sample(TRENDING_QUERIES,
-                                 k=min(len(TRENDING_QUERIES), max(2, len(kolam) // 3)))
+    #
+    # `acak` dari benih beranda (15 Oktober 2026). Dengan `random` global,
+    # campuran ini berbeda di tiap permintaan, jadi kunci singgahan beranda
+    # ikut berbeda: langkah gulir dan beranda yang sudah disiapkan di latar
+    # meleset dari singgahannya dan memanggil YouTube lagi dari nol.
+    return kolam + (acak or random).sample(
+        TRENDING_QUERIES, k=min(len(TRENDING_QUERIES), max(2, len(kolam) // 3)))
 
 
 # Kueri beranda paling panjang, dalam kata. Di atas ini yang tersimpan hampir
@@ -476,6 +481,74 @@ async def hapus_riwayat_cari(q: Optional[str] = None):
     return {"ok": True}
 
 
+# ---------------------------------------------------------------------------
+# Beranda yang sudah disiapkan (15 Oktober 2026)
+#
+# Dilaporkan pemiliknya: "memuat beranda memakan waktu yang lumayan lama".
+# Sebabnya, tiap kunjungan memakai benih acak baru, jadi server selalu
+# menjalankan empat pencarian YouTube dari nol (terukur belasan sampai puluhan
+# detik saat sambungan ke youtube.com tersendat). Sekarang halaman lebih dulu
+# meminta BENIH: bila ada beranda yang sudah jadi di latar, benihnya diberikan
+# dan /trending menjawab dari singgahan seketika. Sesudah itu beranda
+# berikutnya langsung disiapkan di latar untuk kunjungan atau tombol Segarkan
+# berikutnya.
+# ---------------------------------------------------------------------------
+TTL_BERANDA = 6 * 3600
+BENIH_SIAP_MAKS = 2
+_MENYIAPKAN: set[int] = set()
+_TUGAS_LATAR: set = set()
+
+
+def _kunci_benih(pid: int) -> str:
+    return f"beranda.benih:{pid}"
+
+
+async def _siapkan_beranda(pid: int, tunda: float = 0.0) -> None:
+    """Menyusun satu beranda dengan benih baru dan mencatat benihnya sebagai siap."""
+    if pid in _MENYIAPKAN:
+        return
+    _MENYIAPKAN.add(pid)
+    try:
+        if tunda:
+            await asyncio.sleep(tunda)
+        benih = random.randrange(1, 10 ** 6)
+        hasil = await trending(20, benih)
+        if hasil:
+            siap = await asyncio.to_thread(cache_repo.ambil, _kunci_benih(pid), ttl=TTL_BERANDA)
+            siap = [b for b in (siap or []) if isinstance(b, int)]
+            await asyncio.to_thread(cache_repo.simpan, _kunci_benih(pid),
+                                    (siap + [benih])[-BENIH_SIAP_MAKS:])
+    except Exception as e:                            # noqa: BLE001
+        log.info("Beranda latar dilewati: %s", str(e)[:160])
+    finally:
+        _MENYIAPKAN.discard(pid)
+
+
+@router.get("/trending/benih")
+async def benih_beranda():
+    """
+    Benih beranda yang siap dipakai, atau benih baru bila belum ada.
+
+    `siap: true` berarti /trending?refresh=<benih> menjawab dari singgahan.
+    Penyiapan berikutnya ditunda bila beranda kali ini masih harus disusun
+    langsung, supaya keduanya tidak berebut sambungan ke YouTube.
+    """
+    from ..services import profil
+    pid = profil.kini()
+    daftar = await asyncio.to_thread(cache_repo.ambil, _kunci_benih(pid), ttl=TTL_BERANDA)
+    daftar = [b for b in (daftar or []) if isinstance(b, int)]
+    if daftar:
+        benih, siap = daftar.pop(0), True
+        await asyncio.to_thread(cache_repo.simpan, _kunci_benih(pid), daftar)
+    else:
+        benih, siap = random.randrange(1, 10 ** 6), False
+    if len(daftar) < BENIH_SIAP_MAKS:
+        tugas = asyncio.create_task(_siapkan_beranda(pid, 0.0 if siap else 45.0))
+        _TUGAS_LATAR.add(tugas)
+        tugas.add_done_callback(_TUGAS_LATAR.discard)
+    return {"benih": benih, "siap": siap}
+
+
 @router.get("/trending")
 async def trending(limit: int = 20, refresh: int = 0):
     """
@@ -504,7 +577,7 @@ async def trending(limit: int = 20, refresh: int = 0):
     # hanya bertambah panjang. Tombol Segarkan menaikkan nilainya — di situlah
     # tempat isi beranda memang seharusnya berganti.
     acak = random.Random(refresh)
-    kolam = await asyncio.to_thread(_kolam_beranda)
+    kolam = await asyncio.to_thread(_kolam_beranda, random.Random(f"kolam:{refresh}"))
     # BEBERAPA kueri, bukan satu.
     #
     # Sebelum ini beranda seluruhnya berasal dari satu kueri yang dipilih dari
@@ -521,8 +594,18 @@ async def trending(limit: int = 20, refresh: int = 0):
 
     from ..services import profil
     kunci = f"trending:{profil.kini()}:{refresh}:{'|'.join(kueri)}"
-    simpanan = await asyncio.to_thread(cache_repo.ambil, kunci)
+    simpanan = await asyncio.to_thread(cache_repo.ambil, kunci, ttl=TTL_BERANDA)
     simpanan = simpanan if isinstance(simpanan, dict) else {}
+    # Langkah gulir saat pelengkap 100 video untuk daftar ini masih berjalan di
+    # latar: tunggu hasilnya, jangan mencari ulang sendiri. Terukur 15 Oktober
+    # 2026: mencari ulang 14,6 detik, sementara pelengkapnya selesai lebih dulu.
+    tunggu = 0
+    while (simpanan.get("diminta", 0) < want and kunci in _PELENGKAP_JALAN
+           and tunggu < 60):
+        await asyncio.sleep(0.5)
+        tunggu += 1
+        simpanan = await asyncio.to_thread(cache_repo.ambil, kunci, ttl=TTL_BERANDA)
+        simpanan = simpanan if isinstance(simpanan, dict) else {}
     if simpanan.get("diminta", 0) >= want:
         return await asyncio.to_thread(
             _lengkapi_tanggal, (simpanan.get("items") or [])[:want])
@@ -587,14 +670,21 @@ async def trending(limit: int = 20, refresh: int = 0):
                 r = random.Random(refresh)
                 r.choice(kolam)
                 _kueri_beranda(kolam, r)
-                lebih = []
-                for i, q in enumerate(kueri):
+                # Berbarengan, bukan berurutan: berurutan terukur 43 detik
+                # untuk empat kueri (15 Oktober 2026), dan selama itu langkah
+                # gulir pertama menunggu.
+                from concurrent.futures import ThreadPoolExecutor
+
+                def satu(iq):
+                    i, q = iq
                     try:
-                        lebih.append(search_youtube_videos(
-                            q, 60, "terpopuler", None,
-                            "bulan" if i % 2 == 0 else None))
+                        return search_youtube_videos(q, 60, "terpopuler", None,
+                                                     "bulan" if i % 2 == 0 else None)
                     except Exception:               # noqa: BLE001
-                        continue
+                        return None
+
+                with ThreadPoolExecutor(max_workers=len(kueri) or 1) as ex:
+                    lebih = [x for x in ex.map(satu, enumerate(kueri)) if x]
                 if not lebih:
                     return []
                 return beranda_svc.gabung(

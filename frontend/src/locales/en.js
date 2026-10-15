@@ -729,5 +729,7 @@ export default {
   'game.bebas_f': "to set their position and size. The dashed line inside a box marks the part that is actually shown. The buttons and slider above rebuild both from scratch. These settings belong to this clip only.",
   'game.pindah': "The face cam moves {n}× in this clip. The Reaction box moves along at those moments. Dragging the Reaction box only changes the position in effect at the playhead.",
   'game.cari_ulang': "Find the face position again automatically",
+  'beranda.geser_kiri': "Scroll left",
+  'beranda.geser_kanan': "Scroll right",
   'bahasa.pilih': 'Language',
 };
