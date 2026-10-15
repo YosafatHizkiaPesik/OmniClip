@@ -1704,3 +1704,17 @@ body.is-studio .app-viewport,
 .topik-ikon { color: var(--warna-topik); }
 .topik.is-on { background: var(--ink); color: var(--ground); border-color: var(--ink); }
 .topik.is-on .topik-ikon { color: var(--warna-topik); }
+
+.baris-saring { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
+.kelompok-saring { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.judul-saring {
+  min-width: 82px; font-size: .7rem; font-weight: 750; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--ink-3);
+}
+.saring {
+  padding: 6px 13px; border-radius: 999px; cursor: pointer; font: inherit; font-size: .8rem;
+  font-weight: 600; color: var(--ink-2); background: transparent;
+  border: 1px solid var(--border-color); transition: background .12s ease, color .12s ease;
+}
+.saring:hover { background: var(--plate-2); color: var(--ink); }
+.saring.is-on { background: var(--ink); color: var(--ground); border-color: var(--ink); }

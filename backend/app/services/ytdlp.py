@@ -409,10 +409,14 @@ SEARCH_SORTS = {
 URUT_KODE = {"relevan": 0, "rating": 1, "terbaru": 2, "terpopuler": 3}
 TANGGAL_KODE = {"jam": 1, "hari": 2, "minggu": 3, "bulan": 4, "tahun": 5}
 DURASI_KODE = {"pendek": 1, "panjang": 2, "sedang": 3}
+# Jenis (JOB-3 J3-7): field 2 penyaring, kecuali Live yang field 8 ("fitur
+# siaran langsung"). Dicocokkan dengan youtube.com: "EgIQCQ" = Shorts,
+# "EgJAAQ" = Live.
+JENIS_KODE = {"video": 1, "shorts": 9, "live": None}
 
 
 def sp_pencarian(sort: str = "relevan", durasi: Optional[str] = None,
-                 tanggal: Optional[str] = None) -> Optional[str]:
+                 tanggal: Optional[str] = None, jenis: Optional[str] = None) -> Optional[str]:
     import base64
     from urllib.parse import quote
     isi = bytearray()
@@ -422,10 +426,14 @@ def sp_pencarian(sort: str = "relevan", durasi: Optional[str] = None,
     saring = bytearray()
     if tanggal in TANGGAL_KODE:
         saring += bytes([0x08, TANGGAL_KODE[tanggal]])
-    if durasi in DURASI_KODE or tanggal in TANGGAL_KODE:
+    if jenis in JENIS_KODE and JENIS_KODE[jenis]:
+        saring += bytes([0x10, JENIS_KODE[jenis]])
+    elif durasi in DURASI_KODE or tanggal in TANGGAL_KODE or jenis == "live":
         saring += bytes([0x10, 0x01])          # hanya video, bukan kanal/playlist
     if durasi in DURASI_KODE:
         saring += bytes([0x18, DURASI_KODE[durasi]])
+    if jenis == "live":
+        saring += bytes([0x40, 0x01])          # sedang siaran langsung
     if saring:
         isi += bytes([0x12, len(saring)]) + saring
     if not isi:
@@ -434,7 +442,8 @@ def sp_pencarian(sort: str = "relevan", durasi: Optional[str] = None,
 
 
 def search_youtube_videos(query: str, limit: int = 20, sort: str = "relevan",
-                          durasi: Optional[str] = None, tanggal: Optional[str] = None):
+                          durasi: Optional[str] = None, tanggal: Optional[str] = None,
+                          jenis: Optional[str] = None):
     """
     Melakukan pencarian video YouTube menggunakan yt-dlp tanpa YouTube API Key.
 
@@ -462,8 +471,8 @@ def search_youtube_videos(query: str, limit: int = 20, sort: str = "relevan",
     results = []
     channels: list[tuple[str, str]] = []
     is_url = query.startswith("http://") or query.startswith("https://")
-    sp = sp_pencarian(sort, durasi, tanggal)
-    tersaring = bool(durasi or tanggal)
+    sp = sp_pencarian(sort, durasi, tanggal, jenis)
+    tersaring = bool(durasi or tanggal or jenis)
     if is_url:
         search_target = query
     elif sp:
@@ -492,7 +501,8 @@ def search_youtube_videos(query: str, limit: int = 20, sort: str = "relevan",
                 if _looks_like_channel(video_id):
                     channels.append((video_id, entry.get('title') or ''))
                     continue
-                if video_id.startswith('PL') or not entry.get('duration'):
+                # Siaran langsung tidak punya durasi; hanya saat memang dicari.
+                if video_id.startswith('PL') or (not entry.get('duration') and jenis != "live"):
                     continue
                 title = entry.get('title', 'Untitled')
                 url = entry.get('url') or entry.get('webpage_url') or f"https://www.youtube.com/watch?v={video_id}"
@@ -512,6 +522,7 @@ def search_youtube_videos(query: str, limit: int = 20, sort: str = "relevan",
                     "duration": duration,
                     "channel": uploader,
                     "channel_id": entry.get('channel_id') or '',
+                    "jenis": jenis or None,
                     "views": view_count,
                     "thumbnail": thumbnail,
                     "description": entry.get('description', '')

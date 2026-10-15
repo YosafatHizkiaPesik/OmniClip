@@ -156,12 +156,13 @@ def _lengkapi_di_latar(kunci: str, ambil: Callable[[], list], penuh: int,
 async def search(q: str = Query(..., description="Kata kunci pencarian"),
                  limit: int = 20, sort: str = "relevan",
                  durasi: Optional[str] = None, tanggal: Optional[str] = None,
-                 catat: bool = True):
+                 jenis: Optional[str] = None, catat: bool = True):
     if not q.strip():
         return []
     if sort not in SEARCH_SORTS:
         sort = "relevan"
-    from ..services.ytdlp import DURASI_KODE, TANGGAL_KODE
+    from ..services.ytdlp import DURASI_KODE, JENIS_KODE, TANGGAL_KODE
+    jenis = jenis if jenis in JENIS_KODE else None
     durasi = durasi if durasi in DURASI_KODE else None
     tanggal = tanggal if tanggal in TANGGAL_KODE else None
     # Hanya pencarian yang DIKETIK orang yang masuk riwayat.
@@ -193,7 +194,7 @@ async def search(q: str = Query(..., description="Kata kunci pencarian"),
     # berbeda dan lima permintaan penuh ke YouTube — 20, 40, 60, 80, 100 —
     # untuk daftar yang sebagian besar isinya sama. Ledakan itulah yang
     # memicu verifikasi bot, dan gulir tak hingga membuatnya jadi kebiasaan.
-    kunci = f"search:{sort}:{durasi or '-'}:{tanggal or '-'}:{q.strip().lower()}"
+    kunci = f"search:{sort}:{durasi or '-'}:{tanggal or '-'}:{jenis or '-'}:{q.strip().lower()}"
     simpanan = await asyncio.to_thread(cache_repo.ambil, kunci)
     # Entri lama disimpan sebagai daftar telanjang. Bentuknya ditangani di sini
     # alih-alih mengosongkan cache saat mulai: menghapusnya berarti pencarian
@@ -211,7 +212,7 @@ async def search(q: str = Query(..., description="Kata kunci pencarian"),
     # berikutnya lalu dilayani dari cache tanpa menyentuh YouTube lagi.
     ambil = want if want <= 20 else 100
     try:
-        hasil = await asyncio.to_thread(search_youtube_videos, q, ambil, sort, durasi, tanggal)
+        hasil = await asyncio.to_thread(search_youtube_videos, q, ambil, sort, durasi, tanggal, jenis)
     except YtdlpError as e:
         raise _as_app_error(e) from e
 

@@ -101,6 +101,7 @@ export default function Home() {
   // data yang tidak lengkap. Kosong = semua.
   const [durasi, setDurasi] = useState('');
   const [tanggal, setTanggal] = useState('');
+  const [jenis, setJenis] = useState('');
   // Tanggal unggah datang MENYUSUL, dari panggilan terpisah: hasil pencarian
   // YouTube tidak membawanya sama sekali, dan mengambilnya berarti membuka tiap
   // videonya. Kartunya tampil dulu, tanggalnya mengisi belakangan.
@@ -127,7 +128,7 @@ export default function Home() {
 
   // Identitas daftar yang sedang ditampilkan. Kueri, urutan, atau tombol
   // Segarkan yang berubah berarti daftar yang lain sama sekali.
-  const kunci = `${q}|${sort}|${durasi}|${tanggal}|${nonce}`;
+  const kunci = `${q}|${sort}|${durasi}|${tanggal}|${jenis}|${nonce}`;
   const kunciRef = useRef(kunci);
   if (kunciRef.current !== kunci) {
     // Disetel saat render, bukan di dalam useEffect. Lewat efek, satu putaran
@@ -155,6 +156,7 @@ export default function Home() {
     const path = q
       ? `/search?q=${encodeURIComponent(q)}&limit=${batas}&sort=${sort}`
         + (durasi ? `&durasi=${durasi}` : '') + (tanggal ? `&tanggal=${tanggal}` : '')
+        + (jenis ? `&jenis=${jenis}` : '')
       : `/trending?limit=${batas}&refresh=${nonce}`;
     // 75 detik, bukan 30: beranda menunggu beberapa pencarian YouTube, dan
     // saat sambungan ke youtube.com tersendat server tetap selesai menyusun
@@ -247,10 +249,10 @@ export default function Home() {
   // Urutan dikerjakan YouTube, bukan diurutkan ulang di sini: tanpa tanggal
   // unggah di hasil pencarian, "terbaru" mustahil dijawab dari data yang ada.
   const SORTS = [
-    ['relevan', 'Paling relevan'],
-    ['terbaru', 'Terbaru'],
-    ['terpopuler', 'Tayangan terbanyak'],
-    ['rating', 'Paling disukai'],
+    ['relevan', t('saring.relevan')],
+    ['terbaru', t('saring.terbaru')],
+    ['terpopuler', t('saring.terpopuler')],
+    ['rating', t('saring.rating')],
   ];
 
   return (
@@ -288,37 +290,27 @@ export default function Home() {
         })}
       </div>
 
-      {/* Urutan hanya berlaku untuk pencarian: beranda tanpa kata kunci sudah
-          mengambil kueri acak tiap muat, dan mengurutkannya tidak berarti. */}
+      {/* Penyaring hanya untuk pencarian: beranda tanpa kata kunci sudah
+          mengambil kueri acak tiap muat. Pil gaya YouTube, dua bahasa. */}
       {q && (
-        <div style={{
-          display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center',
-          marginBottom: '18px',
-        }}>
-          <span className="mark" style={{ color: 'var(--ink-3)' }}>Urutkan</span>
-          {SORTS.map(([id, label]) => (
-            <button key={id} onClick={() => setSort(id)}
-                    className={`chip${sort === id ? ' is-on' : ''}`}>
-              {label}
-            </button>
+        <div className="baris-saring">
+          {[
+            [t('saring.jenis'), jenis, setJenis, [['', t('saring.semua')], ['video', t('saring.video')],
+              ['shorts', 'Shorts'], ['live', 'Live']]],
+            [t('saring.urutkan'), sort, setSort, SORTS],
+            [t('saring.durasi'), durasi, setDurasi, [['', t('saring.semua')], ['pendek', t('saring.pendek')],
+              ['sedang', t('saring.sedang')], ['panjang', t('saring.panjang')]]],
+            [t('saring.diunggah'), tanggal, setTanggal, [['', t('saring.kapan_saja')], ['hari', t('saring.hari')],
+              ['minggu', t('saring.minggu')], ['bulan', t('saring.bulan')], ['tahun', t('saring.tahun')]]],
+          ].map(([judul, nilai, ubah, pilihan]) => (
+            <div key={judul} className="kelompok-saring">
+              <span className="judul-saring">{judul}</span>
+              {pilihan.map(([id, label]) => (
+                <button key={id || 'semua'} onClick={() => ubah(id)}
+                        className={`saring${nilai === id ? ' is-on' : ''}`}>{label}</button>
+              ))}
+            </div>
           ))}
-        </div>
-      )}
-      {q && (
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center',
-                      marginTop: '-8px', marginBottom: '18px' }}>
-          <span className="mark" style={{ color: 'var(--ink-3)' }}>Durasi</span>
-          {[['', 'Semua'], ['pendek', '< 4 mnt'], ['sedang', '4-20 mnt'], ['panjang', '> 20 mnt']]
-            .map(([id, label]) => (
-              <button key={id || 'semua'} onClick={() => setDurasi(id)}
-                      className={`chip${durasi === id ? ' is-on' : ''}`}>{label}</button>
-            ))}
-          <span className="mark" style={{ color: 'var(--ink-3)', marginLeft: '8px' }}>Diunggah</span>
-          {[['', 'Kapan saja'], ['hari', 'Hari ini'], ['minggu', 'Minggu ini'], ['bulan', 'Bulan ini'], ['tahun', 'Tahun ini']]
-            .map(([id, label]) => (
-              <button key={id || 'kapan'} onClick={() => setTanggal(id)}
-                      className={`chip${tanggal === id ? ' is-on' : ''}`}>{label}</button>
-            ))}
         </div>
       )}
 
