@@ -75,7 +75,15 @@ commit <hash>)`. Hash = commit kodenya; centangan ikut commit berikutnya.
   Tes penjaga backend membaca komponen + kamus lewat `tests/teks_ui.py`.
   Kalimat yang dibuat server (temuan analitik, alasan nilai tambah, pesan
   galat) masih Indonesia sampai J3-11.
-- [ ] **J3-9** Terjemahkan Studio (semua panel).
+- [x] **J3-9** Terjemahkan Studio (semua panel).
+  (selesai 15 Oktober 2026, commit 29f7951; bertahap sejak 1757b90) Partitur,
+  editor, semua tab, linimasa, pratinjau, bilah proses. Tabel konstanta
+  (mode bingkai, preset, tema subtitle, gaya kartu, pasangan warna)
+  menyimpan kunci kamus. Penjaga baru di i18n.test.js: tidak ada variabel
+  lokal bernama `t` di berkas yang memakai useT(), dan literal kunci di
+  tabel konstanta harus ada di kamus. Yang masih Indonesia karena datang
+  dari server (J3-11): daftar font, tema judul, suara pembaca, alasan
+  bingkai/punch-in, pesan pekerjaan.
 - [ ] **J3-10** Terjemahkan Akun, Pengaturan, Mesin, formulir unggah.
 - [ ] **J3-11** Pesan dari server (galat, kabar pekerjaan) mengikuti bahasa
   pilihan (header `Accept-Language`).
