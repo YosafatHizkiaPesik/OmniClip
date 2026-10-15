@@ -541,6 +541,26 @@ REASON_LABELS.update({
 })
 
 
+# Bacaan sponsor dan iklan di dalam video (Indonesia dan Inggris).
+#
+# Mesin lokal tidak tahu bahwa segmen sponsor bukan isi videonya: bacaan iklan
+# diucapkan jelas, padat, dan bertopik tunggal, jadi skornya sering tinggi.
+# Ditemukan 12 Oktober 2026 saat Gemini tidak terjangkau: klip skor tertinggi
+# dari episode The Diary Of A CEO ternyata sisipan, bukan percakapannya.
+# Pola di sini hanya menangkap BACAAN IKLAN yang jelas; sisipan wawancara lain
+# di dalam episode tidak bisa dikenali dari teks saja.
+SPONSOR_POLA = re.compile(
+    r"\b(disponsori|sponsor(?:ed)? by|sponsor kita|sponsor hari ini|brought to you by|"
+    r"pakai kode|gunakan kode|kode (?:promo|voucher|diskon)|use (?:my |the )?code|promo code|"
+    r"link (?:nya )?(?:ada )?di (?:deskripsi|bio|kolom)|link in (?:the )?(?:description|bio)|"
+    r"download (?:aplikasi|sekarang)|unduh aplikasi|dapatkan diskon|today'?s sponsor|"
+    r"this (?:video|episode) is sponsored|terima kasih kepada .{0,30} (?:sudah|telah) mendukung)",
+    re.I)
+# Kandidat yang sepertiga kalimatnya bacaan sponsor kehilangan 80% skornya.
+SPONSOR_PORSI_PENUH = 0.33
+SPONSOR_POTONG = 0.8
+
+
 def _iou(a: "Candidate", b: "Candidate") -> float:
     lo = max(a.start, b.start)
     hi = min(a.end, b.end)
@@ -608,6 +628,9 @@ def generate_candidates(
     kata_kumulatif = [0] * (n + 1)
     for k, s in enumerate(sentences):
         kata_kumulatif[k + 1] = kata_kumulatif[k] + max(0, s["wi"][1] - s["wi"][0])
+    iklan_kumulatif = [0] * (n + 1)
+    for k, s in enumerate(sentences):
+        iklan_kumulatif[k + 1] = iklan_kumulatif[k] + (1 if SPONSOR_POLA.search(s["text"] or "") else 0)
 
     semua: list[Candidate] = []
 
@@ -740,6 +763,11 @@ def generate_candidates(
         if c.breakdown["salience"] > 0.97 and "topic_focus" not in c.reason_keys:
             c.reason_keys.append("topic_focus")
         c.score = sum(WEIGHTS[k] * c.breakdown[k] for k in WEIGHTS)
+        a, b = c.sentence_span
+        porsi_iklan = (iklan_kumulatif[b] - iklan_kumulatif[a]) / max(1, b - a)
+        if porsi_iklan > 0:
+            c.score *= 1.0 - SPONSOR_POTONG * min(1.0, porsi_iklan / SPONSOR_PORSI_PENUH)
+            c.breakdown["iklan"] = round(porsi_iklan, 3)
 
     # Satu wakil per titik awal: yang terpendek di antara yang sama baiknya.
     # Tanpa ini, NMS di bawah akan menerima jendela terpanjang lebih dulu
