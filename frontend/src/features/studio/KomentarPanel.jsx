@@ -4,6 +4,7 @@ import {
 } from 'lucide-react';
 import { apiGet, apiPost, apiPut } from '../../lib/api';
 import { formatTime } from '../../utils/timeFormat';
+import ReaksiKamera from './ReaksiKamera';
 
 /**
  * Komentar pemilik kanal untuk satu klip (JOB-2 F1-3 sampai F1-6).
@@ -247,8 +248,11 @@ export function perkiraanNilaiTambah({ daftar, sisipan, durasiKlip, tambahan }) 
     return n + (k.suara ? (Number(k.durasi_suara) || 0) + 0.3
       : Math.max(2.5, Math.min(8, (k.teks || '').length / 14 + 1)));
   }, 0);
+  // Reaksi kamera dihitung penuh, seperti di nilai_tambah.py.
+  const detikReaksi = (sisipan || []).filter((l) => l.asal === 'reaksi')
+    .reduce((n, l) => n + (Number(l.dur) || 0), 0);
   const rentang = (sisipan || [])
-    .filter((l) => Number(l.dur) > 0)
+    .filter((l) => Number(l.dur) > 0 && l.asal !== 'reaksi')
     .map((l) => [Number(l.t) || 0, (Number(l.t) || 0) + Number(l.dur)])
     .sort((a, b) => a[0] - b[0]);
   let detikSisipan = 0;
@@ -257,8 +261,8 @@ export function perkiraanNilaiTambah({ daftar, sisipan, durasiKlip, tambahan }) 
     if (a > ujung) { detikSisipan += b - a; ujung = b; } else if (b > ujung) { detikSisipan += b - ujung; ujung = b; }
   }
   const durasi = durasiKlip + tambahan;
-  const skor = durasi > 0 ? Math.min(1, (detikKomentar + 0.5 * detikSisipan) / durasi) : 0;
-  return { persen: Math.round(skor * 100), cukup: detikKomentar >= 2 || skor >= 0.08 };
+  const skor = durasi > 0 ? Math.min(1, (detikKomentar + detikReaksi + 0.5 * detikSisipan) / durasi) : 0;
+  return { persen: Math.round(skor * 100), cukup: detikKomentar + detikReaksi >= 2 || skor >= 0.08 };
 }
 
 function NilaiTambah(props) {
@@ -434,7 +438,7 @@ function NamaPenutur({ clip, videoId, onLayers }) {
 
 export default function KomentarPanel({
   clip, videoId, waktuSekarang = 0, durasiKlip = 0, onChange, onSeek, onPakaiMerek, onLayers,
-  onBilahProgres,
+  onBilahProgres, onPutar,
 }) {
   const [draf, setDraf] = useState(null);
   const [sibuk, setSibuk] = useState(false);
@@ -537,6 +541,10 @@ export default function KomentarPanel({
       )}
       {onLayers && videoId && (
         <NamaPenutur clip={clip} videoId={videoId} onLayers={onLayers} />
+      )}
+      {onLayers && (
+        <ReaksiKamera clip={clip} waktuSekarang={waktuSekarang} durasiKlip={durasiKlip}
+                      onLayers={onLayers} onSeek={onSeek} onPutar={onPutar} />
       )}
 
       <label className="studio-check" style={{ fontSize: '.78rem' }}

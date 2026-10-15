@@ -2375,6 +2375,11 @@ export default function Editor({ project, onBack }) {
                                  && editor.updateClip(selected.clip_id, { pakai_merek: v })}
                                onBilahProgres={(v) => selected
                                  && editor.updateClip(selected.clip_id, { bilah_progres: v })}
+                               onPutar={(main) => {
+                                 const v = videoRef.current;
+                                 if (!v) return;
+                                 if (main) v.play().catch(() => {}); else v.pause();
+                               }}
                                onLayers={(next) => selected
                                  && editor.updateClip(selected.clip_id, { media_layers: next })}
                                onChange={(next) => selected

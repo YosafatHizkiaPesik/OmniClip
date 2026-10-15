@@ -19,6 +19,8 @@ router = APIRouter(prefix="/api/komentar", tags=["komentar"])
 # Satu menit rekaman opus dari peramban kira-kira 0,5 MB; 25 MB berarti
 # sesuatu yang bukan rekaman komentar.
 BATAS_UKURAN = 25 * 1024 * 1024
+# Video kamera 3 menit 720p dari peramban: ±60-150 MB.
+BATAS_REAKSI = 300 * 1024 * 1024
 
 
 @router.post("/rekaman")
@@ -38,6 +40,30 @@ async def simpan_rekaman(berkas: UploadFile = File(...)):
                                    code="REKAMAN_TERLALU_BESAR", status=413)
                 keluar.write(blok)
         return await asyncio.to_thread(km.simpan_rekaman, tmp)
+    except ValueError as e:
+        raise AppError(str(e), code="REKAMAN_TIDAK_SAH", status=422) from e
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
+@router.post("/reaksi")
+async def simpan_reaksi(berkas: UploadFile = File(...)):
+    """Rekaman reaksi kamera dari Studio -> aset video (MP4) di pustaka Sisipan."""
+    akhiran = Path(berkas.filename or "reaksi.webm").suffix or ".webm"
+    tmp = Path(tempfile.mkstemp(prefix="omni_reaksi_", suffix=akhiran)[1])
+    total = 0
+    try:
+        with open(tmp, "wb") as keluar:
+            while True:
+                blok = await berkas.read(1 << 20)
+                if not blok:
+                    break
+                total += len(blok)
+                if total > BATAS_REAKSI:
+                    raise AppError("Rekaman terlalu besar (maksimal 300 MB).",
+                                   code="REKAMAN_TERLALU_BESAR", status=413)
+                keluar.write(blok)
+        return await asyncio.to_thread(km.simpan_reaksi, tmp)
     except ValueError as e:
         raise AppError(str(e), code="REKAMAN_TIDAK_SAH", status=422) from e
     finally:

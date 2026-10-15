@@ -55,7 +55,7 @@ def hitung(meta: Optional[dict]) -> dict:
                 if isinstance(k, dict) and not k.get("merek")]
     detik_komentar = sum(float(k.get("d") or 0.0) for k in komentar
                          if k.get("bersuara") or k.get("kartu"))
-    rentang = []
+    rentang, reaksi = [], []
     for l in meta.get("media_layers") or []:
         if not isinstance(l, dict):
             continue
@@ -65,8 +65,16 @@ def hitung(meta: Optional[dict]) -> dict:
         except (TypeError, ValueError):
             continue
         if d > 0:
-            rentang.append((t, t + d))
+            if l.get("asal") == "reaksi":
+                # Reaksi kamera pemilik kanal: wajah dan suaranya sendiri,
+                # bobotnya sama dengan komentar.
+                reaksi.append((t, t + d))
+            else:
+                rentang.append((t, t + d))
     detik_sisipan = _gabung(rentang)
+    detik_reaksi = _gabung(reaksi)
+    detik_komentar_saja = detik_komentar
+    detik_komentar += detik_reaksi
     berlapis = detik_komentar + BOBOT_SISIPAN * detik_sisipan
     skor = min(1.0, berlapis / durasi) if durasi > 0 else 0.0
     cukup = detik_komentar >= KOMENTAR_MIN or skor >= SKOR_MIN
@@ -74,8 +82,10 @@ def hitung(meta: Optional[dict]) -> dict:
     rincian = []
     if komentar:
         suara = sum(1 for k in komentar if k.get("bersuara") and not k.get("sintetis"))
-        rincian.append(f"{len(komentar)} komentar, {detik_komentar:.1f} detik"
+        rincian.append(f"{len(komentar)} komentar, {detik_komentar_saja:.1f} detik"
                        + (f", {suara} dengan suara Anda" if suara else ""))
+    if detik_reaksi:
+        rincian.append(f"reaksi kamera {detik_reaksi:.1f} detik")
     if detik_sisipan:
         rincian.append(f"sisipan {detik_sisipan:.1f} detik")
     return {"skor": round(skor, 3), "persen": int(round(skor * 100)),

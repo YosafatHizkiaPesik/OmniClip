@@ -70,3 +70,12 @@ describe('tagPenutur', () => {
     expect(tagPenutur(subs, { 1: 'Ilham' }).map((x) => x.teks)).toEqual(['Ilham', 'Ilham']);
   });
 });
+
+describe('perkiraanNilaiTambah reaksi kamera', () => {
+  it('reaksi dihitung penuh seperti komentar', () => {
+    const r = perkiraanNilaiTambah({ daftar: [], sisipan: [{ asal: 'reaksi', t: 0, dur: 4.6 }],
+      durasiKlip: 28, tambahan: 0 });
+    expect(r.persen).toBe(16);
+    expect(r.cukup).toBe(true);
+  });
+});

@@ -274,6 +274,9 @@ class MediaLayerModel(BaseModel):
     volume: float = Field(1.0, ge=0.0, le=2.0)
     # Musik latar mengecil sendiri saat orang bicara.
     redam: bool = False
+    # Kebalikannya: SUARA KLIP yang mengecil selama sisipan ini berbunyi.
+    # Dipakai rekaman reaksi kamera pemilik kanal (JOB-2, 15 Oktober 2026).
+    redam_utama: bool = False
     # Dari mana sisipan ini datang: "pengguna" atau "otomatis" (sutradara).
     asal: Optional[str] = Field(None, max_length=16)
     alasan: Optional[str] = Field(None, max_length=200)

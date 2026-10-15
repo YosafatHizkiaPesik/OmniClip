@@ -1402,6 +1402,7 @@ def siapkan_sisipan(lapisan: Optional[list], durasi: float) -> list[dict]:
             # gelang; tanpa ini sisanya senyap atau membeku.
             "ulang": ulang,
             "redam": bool(l.get("redam", False)),
+            "redam_utama": bool(l.get("redam_utama", False)),
         })
     return keluar
 
@@ -1720,6 +1721,16 @@ def build_sisipan_graph(lapisan: list[dict], vin: str, ain: str, *,
         # detik. Diseragamkan dulu, panjangnya kembali 10,0.
         bagian.append(f"{ain}aresample=48000,aformat=channel_layouts=stereo[sutama0]")
         utama = "[sutama0]"
+        # Suara klip mengecil selama sisipan bertanda `redam_utama` berbunyi,
+        # misalnya reaksi kamera pemilik kanal: komentarnya harus terdengar,
+        # bukan bertabrakan dengan orang di klip.
+        rentang_reaksi = [(l["t"], l["t"] + l["dur"]) for l in lapisan
+                          if l.get("redam_utama") and l["volume"] > 0
+                          and (l["jenis"] == "audio" or l.get("punya_suara"))]
+        rumus_reaksi = rumus_redam(rentang_reaksi) if rentang_reaksi else None
+        if rumus_reaksi:
+            bagian.append(f"{utama}volume=volume='{rumus_reaksi}':eval=frame[sutamaR]")
+            utama = "[sutamaR]"
         diredam = [lab for lab, r in suara if r]
         biasa = [lab for lab, r in suara if not r]
         if diredam:

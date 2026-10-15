@@ -670,3 +670,44 @@ def ringkas_sidecar(items: list[dict]) -> list[dict]:
              "teks": k["teks"], "bersuara": k["path"] is not None,
              "sintetis": k["sintetis"], "kartu": k["tampil"],
              **({"merek": True} if k.get("merek") else {})} for k in items]
+
+
+# =============================================================================
+# Reaksi kamera (15 Oktober 2026)
+# =============================================================================
+#
+# Pemilik kanal merekam wajah dan suaranya sendiri sambil menonton klipnya,
+# lalu rekaman itu menempel sebagai gambar-dalam-gambar. Inilah bentuk
+# transformasi yang paling jelas di mata kebijakan konten YouTube: reaksi
+# dan komentar pribadi, bukan potongan ulang.
+#
+# Rekaman MediaRecorder peramban (webm) hampir tidak pernah mencatat durasinya,
+# dan pustaka aset menolak video berdurasi nol. Jadi diubah dulu ke MP4 720p
+# dengan suara yang diratakan seperti suara komentar.
+
+BATAS_REAKSI_DETIK = 180.0
+
+
+def simpan_reaksi(sumber: Path) -> dict:
+    from . import aset as aset_svc
+    import time as _time
+
+    SUARA_DIR.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=SUARA_DIR) as d:
+        tujuan = Path(d) / f"reaksi-{int(_time.time())}.mp4"
+        try:
+            subprocess.run(
+                ["ffmpeg", "-nostdin", "-loglevel", "error", "-y", "-i", str(sumber),
+                 "-t", f"{BATAS_REAKSI_DETIK:.0f}",
+                 "-vf", "scale=-2:720:force_original_aspect_ratio=decrease,fps=30",
+                 "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p",
+                 "-af", "loudnorm=I=-16:TP=-1.5:LRA=11,aresample=48000",
+                 "-ac", "2", "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart",
+                 str(tujuan)],
+                check=True, timeout=600, capture_output=True)
+        except subprocess.CalledProcessError as e:
+            raise ValueError("Rekaman kamera ini tidak bisa dibaca.") from e
+        data = aset_svc.simpan_unggahan(tujuan, tujuan.name)
+    if float(data.get("durasi") or 0) < 0.5:
+        raise ValueError("Rekamannya kosong atau terlalu pendek.")
+    return data
