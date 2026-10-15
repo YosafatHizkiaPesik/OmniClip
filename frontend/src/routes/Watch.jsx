@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
-  Search, Download, Scissors, ArrowLeft, CheckCircle2, Sparkles, Loader2,
+  Download, Scissors, ArrowLeft, CheckCircle2, Sparkles, Loader2,
   Eye, Clock, AlertTriangle,
 } from 'lucide-react';
 import { apiDelete, apiGet, apiPost, downloadToDisk } from '../lib/api';
@@ -261,15 +261,6 @@ export default function Watch() {
   return (
     <div className="watch-layout" style={{ display: 'flex', gap: '24px', maxWidth: '100%' }}>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', gap: '10px', marginBottom: '16px' }}>
-          <button className="btn-secondary" onClick={() => navigate(-1)} style={{ padding: '0 14px' }}>
-            <ArrowLeft size={16} /> {t('umum.kembali')}
-          </button>
-          <button className="btn-secondary" onClick={() => navigate('/')} style={{ padding: '0 14px' }}>
-            <Search size={16} /> {t('tonton.cari_video')}
-          </button>
-        </div>
-
         <div style={{ background: '#000', borderRadius: '14px', overflow: 'hidden' }}>
           <iframe
             key={videoId}
