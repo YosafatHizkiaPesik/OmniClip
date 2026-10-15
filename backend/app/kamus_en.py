@@ -167,6 +167,7 @@ KATALOG = [
     ("Render tetap jalan memakai prosesor, sekitar 1,6 kali lebih lambat.",
      "Rendering still works on the CPU, about 1.6 times slower."),
     ("belum disiapkan", "not set up"),
+    ("belum", "not yet"),
     ("Tanpa ini YouTube bisa menolak unduhan dengan \"Sign in to confirm you're not a bot\".",
      "Without this, YouTube may refuse downloads with \"Sign in to confirm you're not a bot\"."),
     ("Runtime JavaScript (Deno)", "JavaScript runtime (Deno)"),
