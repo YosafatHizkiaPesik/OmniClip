@@ -3,6 +3,7 @@ import { ZoomIn, ZoomOut } from 'lucide-react';
 import BilahGeser from './BilahGeser';
 import { formatDurationHuman, formatTime, formatTimeFine } from '../../utils/timeFormat';
 import { contrastRatio } from '../../lib/contrast';
+import { useT } from '../../lib/i18n';
 
 /**
  * Sistem balok: seluruh durasi rekaman dibaca sekaligus.
@@ -96,6 +97,7 @@ export default function StaveSystem({
   // Rentang yang sedang ditandai pengguna untuk klip buatan tangan.
   mark = null,
 }) {
+  const t = useT();
   const wrapRef = useRef(null);
   const scrollRefs = useRef([]);
   const playRefs = useRef([]);
@@ -544,12 +546,12 @@ export default function StaveSystem({
     setZoom(ZOOMS[j]);
     // Dijangkarkan pada garis main, sama seperti linimasa klip: memperbesar
     // yang melompat ke awal rekaman adalah kebalikan dari yang diminta.
-    const t = videoRef?.current?.currentTime ?? 0;
+    const tk = videoRef?.current?.currentTime ?? 0;
     requestAnimationFrame(() => {
       scrollRefs.current.forEach((sc) => {
         if (!sc) return;
         const w = Math.max(320, width - 4) * ZOOMS[j];
-        sc.scrollLeft = Math.max(0, (t / (duration || 1)) * w - sc.clientWidth / 2);
+        sc.scrollLeft = Math.max(0, (tk / (duration || 1)) * w - sc.clientWidth / 2);
       });
     });
   };
@@ -613,14 +615,12 @@ export default function StaveSystem({
   return (
     <div ref={wrapRef} className="plate stave-plate">
       <div className="stave-head">
-        <span className="mark" style={{ color: 'var(--ink)' }}>Seluruh rekaman</span>
+        <span className="mark" style={{ color: 'var(--ink)' }}>{t('stave.judul')}</span>
         <span style={{ fontSize: '.72rem', color: 'var(--ink-3)' }}>
-          {'lajur Klip: tiap kotak satu klip · Dinamika: makin tinggi makin keras, '
-           + 'yang gelap di atas kebiasaan rekaman ini'
-           + (zoom > 1 ? ' · seret bilah di bawah, putar roda, atau tombol tengah' : '')}
+          {t('stave.ket') + (zoom > 1 ? t('stave.ket_zoom') : '')}
         </span>
         <span style={{ marginLeft: 'auto', display: 'flex', gap: '5px' }}>
-          <button className="btn-secondary tl-zoom" title="Perkecil"
+          <button className="btn-secondary tl-zoom" title={t('stave.perkecil')}
                   disabled={zoom <= ZOOMS[0]} onClick={() => zoomStep(-1)}>
             <ZoomOut size={13} />
           </button>
@@ -628,7 +628,7 @@ export default function StaveSystem({
             fontSize: '.7rem', color: 'var(--ink-3)', alignSelf: 'center',
             minWidth: '30px', textAlign: 'center',
           }}>{zoom}×</span>
-          <button className="btn-secondary tl-zoom" title="Perbesar"
+          <button className="btn-secondary tl-zoom" title={t('stave.perbesar')}
                   disabled={zoom >= ZOOMS[ZOOMS.length - 1]} onClick={() => zoomStep(1)}>
             <ZoomIn size={13} />
           </button>
@@ -647,9 +647,9 @@ export default function StaveSystem({
             <div className="stave-scroll" ref={(el) => { scrollRefs.current[sys] = el; }}>
             <div className="stave-inner" style={{ width: `${boardW}px` }}>
             <div className="stave-ticks tc">
-              {ticks.map((t) => (
-                <span key={t} style={{ left: `${((t - from) / span) * 100}%` }}>
-                  {formatTimeFine(t, dec)}
+              {ticks.map((tk) => (
+                <span key={tk} style={{ left: `${((tk - from) / span) * 100}%` }}>
+                  {formatTimeFine(tk, dec)}
                 </span>
               ))}
             </div>
@@ -668,8 +668,8 @@ export default function StaveSystem({
                   tempat ia bisa disandingkan dengan subtitle dan bingkainya. */}
               {[0].map((v) => (
                 <div key={v} className="stave-row">
-                  <div className="stave-name" title="Semua klip pada rekaman ini">
-                    <span className="voice-name">Klip</span>
+                  <div className="stave-name" title={t('stave.semua_klip')}>
+                    <span className="voice-name">{t('stave.klip')}</span>
                   </div>
                   <div className="stave">
                     {lettered
@@ -697,9 +697,9 @@ export default function StaveSystem({
                                    ?? ev.currentTarget.closest('.stave');
                                  if (!papan || !duration) return;
                                  const rect = papan.getBoundingClientRect();
-                                 const t = from
+                                 const tk = from
                                    + ((ev.clientX - rect.left) / rect.width) * span;
-                                 onSeek?.(Math.max(start, Math.min(end - 0.05, t)));
+                                 onSeek?.(Math.max(start, Math.min(end - 0.05, tk)));
                                }}
                                /* Klik kanan menghapus klipnya.
                                   Sebelum ini tidak ada satu pun jalan untuk
@@ -713,8 +713,8 @@ export default function StaveSystem({
                                  ev.stopPropagation();
                                  onRemoveClip?.(clip.clip_id, letter);
                                }}
-                               title={`Klip ${letter} · ${formatTime(start)} · ${formatDurationHuman(end - start)}`
-                                 + (onRemoveClip ? ', klik kanan untuk menghapus' : '')}
+                               title={t('stave.klip_judul', { huruf: letter, mulai: formatTime(start), lama: formatDurationHuman(end - start) })
+                                 + (onRemoveClip ? t('stave.klik_kanan') : '')}
                                style={{
                                  left: `${left}%`, width: `${w}%`,
                                  background: `color-mix(in srgb, ${pencil(voice)} 24%, transparent)`,
@@ -740,12 +740,12 @@ export default function StaveSystem({
                                 yang tidak terlihat pengguna. */}
                             {onTrimClip && start >= from && (
                               <span className="phrase-grip phrase-grip--l"
-                                    title="Seret untuk memajukan atau memundurkan awal klip"
+                                    title={t('stave.seret_awal')}
                                     onPointerDown={dragEdge(clip, 'start')} />
                             )}
                             {onTrimClip && end <= from + span && (
                               <span className="phrase-grip phrase-grip--r"
-                                    title="Seret untuk memanjangkan atau memendekkan akhir klip"
+                                    title={t('stave.seret_akhir')}
                                     onPointerDown={dragEdge(clip, 'end')} />
                             )}
                           </div>
@@ -762,13 +762,13 @@ export default function StaveSystem({
                   diganti. */}
               <div className="stave-row stave-row--dyn">
                 <div className="stave-name"
-                     title="Keras suaranya sepanjang rekaman: makin tinggi gelombangnya, makin keras. Bagian yang digambar gelap adalah yang di atas kebiasaan rekaman ini (teriakan, tawa, reaksi), dan itulah yang dipakai mesin untuk mencari momen menarik.">
-                  <span>Dinamika</span>
+                     title={t('stave.dinamika_judul')}>
+                  <span>{t('stave.dinamika')}</span>
                 </div>
                 <div className="dyn">
                   <canvas ref={(el) => { dynRefs.current[sys] = el; }} className="dyn-kanvas" />
                   {!dynamics.length && (
-                    <span className="dyn-empty">Dinamika belum dihitung untuk rekaman ini.</span>
+                    <span className="dyn-empty">{t('stave.dinamika_kosong')}</span>
                   )}
                 </div>
               </div>

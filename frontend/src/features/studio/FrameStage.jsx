@@ -236,7 +236,7 @@ export default function FrameStage({
           for (const f of layout?.frames ?? []) {
             const el = followRefs.current[f.id];
             if (!f.follow || !el) continue;
-            const x = followX(reframe, f, t);
+            const x = followX(reframe, f, tk);
             if (x !== null) el.style.left = `${x}%`;
           }
         }

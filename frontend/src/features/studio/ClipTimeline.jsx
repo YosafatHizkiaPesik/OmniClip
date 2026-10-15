@@ -8,6 +8,7 @@ import {
   frameInk, MODE_BINGKAI, modeBingkai, personSpans, presentPeople,
   withFrameKey, withoutFrameKey, withPersonKey,
 } from './frames';
+import { useT } from '../../lib/i18n';
 
 /**
  * Linimasa satu klip: batas potongan, tiap baris subtitle, dan arah bingkai —
@@ -177,6 +178,7 @@ export default function ClipTimeline({
   frameAiming = false,
   busy = false,
 }) {
+  const t = useT();
   // Lebar diukur dari KOLOM LAJURNYA, bukan dari pelatnya: kolom nama dan
   // padding memakan hampir seratus piksel, dan mengukur pelat membuat lajur
   // selebar itu menjulur keluar layar — ujung kanan penggaris dan pegangan
@@ -247,7 +249,7 @@ export default function ClipTimeline({
   const laneW = Math.max(320, width - 2) * zoom;
   const pxPerSec = laneW / span;
   /** Letak sebuah DETIK KLIP pada sumbu, kartu judul ikut diperhitungkan. */
-  const pct = useCallback((t) => `${((t + cardHead) / span) * 100}%`, [cardHead, span]);
+  const pct = useCallback((tk) => `${((tk + cardHead) / span) * 100}%`, [cardHead, span]);
   /** Panjang sebuah RENTANG pada sumbu. Bukan hal yang sama dengan letak:
       menambahkan kepala kartu ke sebuah lebar akan melebarkannya, bukan
       menggesernya. */
@@ -258,8 +260,8 @@ export default function ClipTimeline({
     const el = laneRef.current;
     if (!el) return 0;
     const r = el.getBoundingClientRect();
-    const t = ((clientX - r.left) / r.width) * span - cardHead;
-    return Math.max(0, Math.min(duration, t));
+    const tk = ((clientX - r.left) / r.width) * span - cardHead;
+    return Math.max(0, Math.min(duration, tk));
   }, [duration, span, cardHead]);
 
   // Garis main: satu loop rAF untuk semua lajur, digerakkan lewat transform.
@@ -272,29 +274,29 @@ export default function ClipTimeline({
         // Waktu sumber → waktu klip, dihitung ulang tiap bingkai karena
         // pengguna bebas menggeser playhead ke luar batas klip.
         let acc = 0;
-        let t = null;
+        let tk = null;
         for (const s of segments) {
           const len = Math.max(0, s.end - s.start);
           if (v.currentTime >= s.start - 0.02 && v.currentTime <= s.end + 0.02) {
-            t = acc + (v.currentTime - s.start);
+            tk = acc + (v.currentTime - s.start);
             break;
           }
           acc += len;
         }
         // Kepala kartu judul ikut dihitung: tanpa itu garis mainnya berdiri
         // di tempat yang salah persis sebanyak lama kartunya.
-        const px = t === null ? 0 : ((t + cardHead) / span) * laneW;
+        const px = tk === null ? 0 : ((tk + cardHead) / span) * laneW;
         headRefs.current.forEach((el) => {
           if (!el) return;
-          if (t === null) { el.style.opacity = '0'; return; }
+          if (tk === null) { el.style.opacity = '0'; return; }
           el.style.opacity = '1';
           el.style.transform = `translateX(${px}px)`;
         });
-        if (t !== null) {
-          nowRef.current = t;
-          if (Math.abs(t - lastPublished) > 0.12) {
-            lastPublished = t;
-            setNow(t);
+        if (tk !== null) {
+          nowRef.current = tk;
+          if (Math.abs(tk - lastPublished) > 0.12) {
+            lastPublished = tk;
+            setNow(tk);
           }
           // Menjaga garisnya tetap terlihat saat diperbesar. Tanpa ini,
           // memperbesar sampai sepersekian detik berarti gambarnya berjalan
@@ -324,8 +326,8 @@ export default function ClipTimeline({
     // Tanda terakhir dilewati bila angkanya tidak muat sebelum tepi: label yang
     // terpotong separuh terbaca sebagai kesalahan, bukan sebagai penggaris.
     for (let i = 0; i * step <= duration + 1e-6; i += 1) {
-      const t = Math.round(i * step * 1000) / 1000;
-      if (t === 0 || (duration - t) * pxPerSec > 52) out.push(t);
+      const tk = Math.round(i * step * 1000) / 1000;
+      if (tk === 0 || (duration - tk) * pxPerSec > 52) out.push(tk);
     }
     return { at: out, dec };
   }, [pxPerSec, duration]);
@@ -379,12 +381,12 @@ export default function ClipTimeline({
    */
   const setZoomAround = useCallback((next) => {
     const sc = scrollRef.current;
-    const t = nowRef.current;
+    const tk = nowRef.current;
     setZoom(next);
     if (!sc) return;
     const laneNext = Math.max(320, width - 2) * next;
     requestAnimationFrame(() => {
-      sc.scrollLeft = Math.max(0, (t / duration) * laneNext - sc.clientWidth / 2);
+      sc.scrollLeft = Math.max(0, (tk / duration) * laneNext - sc.clientWidth / 2);
     });
   }, [width, duration]);
 
@@ -510,16 +512,16 @@ export default function ClipTimeline({
 
   const potongBingkai = useCallback(() => {
     if (!onFrameKeys) return;
-    const t = nowRef.current;
+    const tk = nowRef.current;
     // Potongan baru MEWARISI cara potongan yang dibelah: membelah tidak boleh
     // mengubah apa pun yang terlihat. Yang berubah berikutnya adalah pilihan
     // pengguna, bukan efek samping dari membelah.
     const induk = frameCuts(frameKeys, duration, modeDasar)
-      .find((c) => t >= c.start - 1e-6 && t < c.end);
+      .find((c) => tk >= c.start - 1e-6 && tk < c.end);
     const mode = induk?.mode || modeDasar;
     // Susunan bingkainya ikut disalin: tanpa itu kedua belahan meminjam
     // susunan milik klip, dan mengubah yang satu ikut mengubah yang lain.
-    onFrameKeys(withFrameKey(frameKeys, t,
+    onFrameKeys(withFrameKey(frameKeys, tk,
       { mode, rect: induk?.rect, layout: induk?.layout }, mode));
   }, [onFrameKeys, frameKeys, duration, modeDasar]);
 
@@ -537,9 +539,9 @@ export default function ClipTimeline({
    */
   const setModeCut = useCallback((cut, mode) => {
     if (!onFrameKeys) return;
-    const t = nowRef.current;
-    const didalam = t > cut.start + 0.15 && t < cut.end - 0.15;
-    const di = didalam ? t : cut.start;
+    const tk = nowRef.current;
+    const didalam = tk > cut.start + 0.15 && tk < cut.end - 0.15;
+    const di = didalam ? tk : cut.start;
     // Kotak tetap butuh persegi untuk dipotong; tanpa bawaan, memilihnya tidak
     // mengubah apa pun di layar dan terasa seperti tombol yang rusak.
     const rect = cut.rect ?? (mode === 'box' ? { x: 10, y: 10, w: 80, h: 80 } : undefined);
@@ -552,20 +554,20 @@ export default function ClipTimeline({
     onFrameKeys(withoutFrameKey(frameKeys, cut.keyIndex));
   }, [onFrameKeys, frameKeys]);
 
-  const geserBingkai = useCallback((cut, t) => {
+  const geserBingkai = useCallback((cut, tk) => {
     if (!onFrameKeys || cut.keyIndex < 0) return;
     onFrameKeys((frameKeys ?? [])
       .map((k, i) => (i === cut.keyIndex
-        ? { ...k, t: Math.max(0, t), asal: undefined, alasan: undefined } : k))
+        ? { ...k, t: Math.max(0, tk), asal: undefined, alasan: undefined } : k))
       .sort((a, b) => a.t - b.t));
   }, [onFrameKeys, frameKeys]);
 
   /** Menggeser batas potongan ke detik lain. */
-  const moveCut = useCallback((cut, t) => {
+  const moveCut = useCallback((cut, tk) => {
     if (!onPersonKeys || cut.keyIndex < 0) return;
     onPersonKeys(personKeys
       .map((k, i) => (i === cut.keyIndex
-        ? { ...k, t: Math.max(0, Math.round(t * 100) / 100) } : k))
+        ? { ...k, t: Math.max(0, Math.round(tk * 100) / 100) } : k))
       .sort((a, b) => a.t - b.t));
   }, [onPersonKeys, personKeys]);
 
@@ -621,9 +623,9 @@ export default function ClipTimeline({
     [reframe, duration],
   );
 
-  const aimAt = useCallback((t, person) => {
+  const aimAt = useCallback((tk, person) => {
     if (!onPersonKeys) return;
-    onPersonKeys(withPersonKey(personKeys, t, person));
+    onPersonKeys(withPersonKey(personKeys, tk, person));
   }, [onPersonKeys, personKeys]);
 
   /* ── Subtitle duduk di baris ORANGNYA ──────────────────────────────────
@@ -705,7 +707,7 @@ export default function ClipTimeline({
            }}
            title={`${formatTime(line.start)} → ${formatTime(line.end)} · ${line.text}`
              + (onUpdateSubtitle && byPerson
-               ? '\n\nSeret tegak ke lajur orang lain untuk memindahkan penuturnya.'
+               ? t('tl.pindah_penutur')
                : '')}
            onPointerDown={(e) => {
              onSelectSubtitle?.(i);
@@ -744,12 +746,12 @@ export default function ClipTimeline({
   return (
     <div className="plate clip-tl">
       <div className="plate-head">
-        <span className="mark" style={{ color: 'var(--ink)' }}>Linimasa klip</span>
+        <span className="mark" style={{ color: 'var(--ink)' }}>{t('tl.judul')}</span>
         <span style={{ fontSize: '.72rem', color: 'var(--ink-3)' }}>
-          seret baris subtitle untuk memindahkannya · seret ujungnya untuk memanjangkan
+          {t('tl.ket')}
         </span>
         <span style={{ marginLeft: 'auto', display: 'flex', gap: '5px' }}>
-          <button className="btn-secondary tl-zoom" title="Perkecil"
+          <button className="btn-secondary tl-zoom" title={t('stave.perkecil')}
                   disabled={zoom <= ZOOMS[0]}
                   onClick={() => zoomStep(-1)}>
             <ZoomOut size={13} />
@@ -758,7 +760,7 @@ export default function ClipTimeline({
             fontSize: '.7rem', color: 'var(--ink-3)', alignSelf: 'center', minWidth: '26px',
             textAlign: 'center',
           }}>{zoom}×</span>
-          <button className="btn-secondary tl-zoom" title="Perbesar"
+          <button className="btn-secondary tl-zoom" title={t('stave.perbesar')}
                   disabled={zoom >= ZOOMS[ZOOMS.length - 1]}
                   onClick={() => zoomStep(1)}>
             <ZoomIn size={13} />
@@ -772,40 +774,40 @@ export default function ClipTimeline({
       <div className="clip-tl-body">
         <div className="clip-tl-names">
           <span className="tl-name-spacer" />
-          <span className="tl-name" style={{ height: `${LANE_H.seg}px` }}>Potongan</span>
+          <span className="tl-name" style={{ height: `${LANE_H.seg}px` }}>{t('tl.potongan')}</span>
           {!byPerson && (
-            <span className="tl-name" style={{ height: `${subLaneH}px` }}>Subtitle</span>
+            <span className="tl-name" style={{ height: `${subLaneH}px` }}>{t('tl.subtitle')}</span>
           )}
           {onFrameKeys && (
             <span className="tl-name tl-name--aim" style={{ height: `${LANE_H.bingkai}px` }}
-                  title="Cara membingkai, per potongan waktu">
-              Bingkai
+                  title={t('tl.bingkai_judul')}>
+              {t('tl.bingkai')}
             </span>
           )}
           {onMediaLayers && sisipan.length > 0 && (
             <span className="tl-name" style={{ height: `${sisipLaneH}px` }}
-                  title="Cuplikan, gambar, musik, dan efek suara dari luar video">
-              Sisipan
+                  title={t('tl.sisipan_judul')}>
+              {t('tl.sisipan')}
             </span>
           )}
           {hadir.length > 1 && (
             <>
               <span className="tl-name tl-name--aim" style={{ height: `${LANE_H.aim}px` }}>
-                Arah bingkai
+                {t('tl.arah')}
               </span>
               {hadir.map((p) => (
                 <span key={p} className="tl-name"
                       style={{ height: `${byPerson ? LANE_H.orang : LANE_H.frame}px` }}
                       title={byPerson
-                        ? `Orang ${p + 1}: ucapannya, dan kapan ia terlihat di kamera`
-                        : `Wajah ${p + 1}: kapan ia terlihat di kamera`}>
-                  {byPerson ? `Orang ${p + 1}` : `Wajah ${p + 1}`}
+                        ? t('tl.orang_judul', { n: p + 1 })
+                        : t('tl.wajah_judul', { n: p + 1 })}>
+                  {byPerson ? t('tl.orang', { n: p + 1 }) : t('tl.wajah', { n: p + 1 })}
                 </span>
               ))}
               {byPerson && byPerson.sisa.length > 0 && (
                 <span className="tl-name" style={{ height: `${LANE_H.orang}px` }}
-                      title="Baris yang penuturnya tidak bisa dipastikan wajahnya">
-                  Belum pasti
+                      title={t('tl.belum_pasti_judul')}>
+                  {t('tl.belum_pasti')}
                 </span>
               )}
             </>
@@ -815,9 +817,9 @@ export default function ClipTimeline({
           <div ref={laneRef} className="clip-tl-lanes" style={{ width: `${laneW}px` }}>
             {/* penggaris */}
             <div className="tl-ruler" onPointerDown={(e) => onSeekClip?.(timeAt(e.clientX))}>
-              {ticks.at.map((t) => (
-                <span key={t} className="tl-tick" style={{ left: pct(t) }}>
-                  <i />{formatTimeFine(t, ticks.dec)}
+              {ticks.at.map((tk) => (
+                <span key={tk} className="tl-tick" style={{ left: pct(tk) }}>
+                  <i />{formatTimeFine(tk, ticks.dec)}
                 </span>
               ))}
               <span ref={registerHead(0)} className="tl-head" style={{ opacity: 0 }}>
@@ -838,7 +840,7 @@ export default function ClipTimeline({
               {cardHead > 0 && (
                 <div className="tl-block tl-block--card"
                      style={{ left: pct(-cardHead), width: pctW(cardHead) }}
-                     title={`Kartu judul · ${cardHead.toFixed(1)} detik sebelum klip mulai`}>
+                     title={t('tl.kartu_judul', { n: cardHead.toFixed(1) })}>
                   <span className="tl-block-text">{cardText}</span>
                 </div>
               )}
@@ -848,7 +850,7 @@ export default function ClipTimeline({
                 return (
                   <div key={i} className="tl-block tl-block--seg"
                        style={{ left: pct(r.start), width: pctW(r.end - r.start) }}
-                       title={`Potongan ${i + 1} · ${formatTime(seg.start)} → ${formatTime(seg.end)}`}>
+                       title={t('tl.potongan_n', { n: i + 1, a: formatTime(seg.start), b: formatTime(seg.end) })}>
                     <span className="tl-grip tl-grip--l"
                           onPointerDown={beginDrag({
                             kind: 'seg', index: i, handle: 'start',
@@ -921,15 +923,15 @@ export default function ClipTimeline({
                            background: `color-mix(in srgb, ${m.warna} 18%, var(--plate-3))`,
                            boxShadow: `inset 0 0 0 1px ${m.warna}`,
                          }}
-                         title={`${formatTime(cut.start)} → ${formatTime(cut.end)} · ${m.nama}`
-                                + (cut.alasan ? ` · ✦ ${cut.asal === 'ai' ? 'AI' : 'otomatis'}: ${cut.alasan}` : '')
-                                + ' · klik dua kali untuk membelah di sini'}
+                         title={`${formatTime(cut.start)} → ${formatTime(cut.end)} · ${t(m.nama)}`
+                                + (cut.alasan ? ` · ✦ ${cut.asal === 'ai' ? 'AI' : t('tl.otomatis')}: ${cut.alasan}` : '')
+                                + t('tl.belah')}
                          onDoubleClick={(e) => {
                            e.stopPropagation();
-                           const t = timeAt(e.clientX);
-                           if (t > cut.start + 0.2 && t < cut.end - 0.2) {
+                           const tk = timeAt(e.clientX);
+                           if (tk > cut.start + 0.2 && tk < cut.end - 0.2) {
                              onFrameKeys?.(withFrameKey(
-                               frameKeys, t,
+                               frameKeys, tk,
                                { mode: cut.mode, rect: cut.rect, layout: cut.layout }, cut.mode));
                            }
                          }}>
@@ -942,7 +944,7 @@ export default function ClipTimeline({
                               })} />
                       )}
                       {cut.asal && (
-                        <span className="tl-aim-asal" aria-label="Disusun sutradara"
+                        <span className="tl-aim-asal" aria-label={t('tl.sutradara')}
                               style={{ position: 'absolute', top: 1, right: 3, fontSize: '0.62rem',
                                        color: m.warna, pointerEvents: 'none' }}>✦</span>
                       )}
@@ -954,9 +956,9 @@ export default function ClipTimeline({
                                     style={cut.mode === opt.id
                                       ? { background: opt.warna, borderColor: opt.warna, color: '#fff' }
                                       : undefined}
-                                    title={`${opt.nama} di potongan ini`}
+                                    title={t('tl.di_potongan', { nama: t(opt.nama) })}
                                     onPointerDown={(e) => e.stopPropagation()}
-                                    onClick={() => setModeCut(cut, opt.id)}>{opt.huruf}</button>
+                                    onClick={() => setModeCut(cut, opt.id)}>{t(opt.huruf)}</button>
                           ))}
                           {cut.keyIndex >= 0 && (
                             <button type="button" className="tl-aim-btn tl-aim-btn--x"
@@ -967,7 +969,7 @@ export default function ClipTimeline({
                         </span>
                       ) : (
                         <>
-                          <span className="tl-block-text">{m.nama}</span>
+                          <span className="tl-block-text">{t(m.nama)}</span>
                           {muatHapus && (
                             <span className="tl-aim-pick tl-aim-pick--mini">
                               <button type="button" className="tl-aim-btn tl-aim-btn--x"
@@ -1029,7 +1031,7 @@ export default function ClipTimeline({
                          }}
                          title={`${l.nama ?? l.aset} · ${formatTime(l.start)} → ${formatTime(l.end)}`
                            + (l.alasan ? `\n${l.alasan}` : '')
-                           + '\n\nSeret untuk memindah, tarik ujungnya untuk mengubah panjang.'}
+                           + t('tl.sisipan_seret')}
                          onPointerDown={(e) => {
                            onPilihSisipan?.(l.id);
                            beginDrag({
@@ -1045,7 +1047,7 @@ export default function ClipTimeline({
                             })} />
                       )}
                       <span className="tl-block-text">
-                        {l.asal === 'otomatis' ? '✦ ' : ''}{l.nama ?? (l.aset?.startsWith('efek:') ? l.aset.slice(5) : 'Sisipan')}
+                        {l.asal === 'otomatis' ? '✦ ' : ''}{l.nama ?? (l.aset?.startsWith('efek:') ? l.aset.slice(5) : t('tl.sisipan'))}
                       </span>
                       {berpegangan && (
                       <span className="tl-grip tl-grip--r"
@@ -1090,8 +1092,8 @@ export default function ClipTimeline({
                            boxShadow: `inset 0 0 0 1px ${ink}`,
                          }}
                          title={auto
-                           ? `${formatTime(cut.start)} → ${formatTime(cut.end)} · bingkai memilih sendiri`
-                           : `${formatTime(cut.start)} → ${formatTime(cut.end)} · mengambil wajah ${cut.person + 1}`}>
+                           ? `${formatTime(cut.start)} → ${formatTime(cut.end)} · ${t('tl.memilih_sendiri')}`
+                           : `${formatTime(cut.start)} → ${formatTime(cut.end)} · ${t('tl.ambil_wajah', { n: cut.person + 1 })}`}>
                       {cut.keyIndex >= 0 && (
                         <span className="tl-grip tl-grip--l"
                               title="Geser batas potongan"
@@ -1108,7 +1110,7 @@ export default function ClipTimeline({
                             ambil sebelahnya. */}
                         <button type="button"
                                 className={`tl-aim-btn${auto ? ' is-on' : ''}`}
-                                title="Biarkan bingkai memilih sendiri di potongan ini"
+                                title={t('tl.biarkan')}
                                 onPointerDown={(e) => e.stopPropagation()}
                                 onClick={() => aimCut(cut, null)}>A</button>
                         {hadir.map((pi) => (
@@ -1117,7 +1119,7 @@ export default function ClipTimeline({
                                   style={cut.person === pi
                                     ? { background: frameInk(pi), borderColor: frameInk(pi) }
                                     : undefined}
-                                  title={`Ambil wajah ${pi + 1} di potongan ini`}
+                                  title={t('tl.ambil_wajah_judul', { n: pi + 1 })}
                                   onPointerDown={(e) => e.stopPropagation()}
                                   onClick={() => aimCut(cut, pi)}>{pi + 1}</button>
                         ))}
@@ -1130,7 +1132,7 @@ export default function ClipTimeline({
                         {/* Dibaca sekali pandang, tanpa harus menafsirkan tombol
                             mana yang sedang menyala. */}
                         <span className="tl-aim-say" style={auto ? undefined : { color: ink }}>
-                          {auto ? 'otomatis' : `wajah ${cut.person + 1}`}
+                          {auto ? t('tl.otomatis') : t('tl.wajah_kecil', { n: cut.person + 1 })}
                         </span>
                       </span>
                       )}
@@ -1166,7 +1168,7 @@ export default function ClipTimeline({
                          onPointerDown={(e) => {
                            if (e.target === e.currentTarget) aimAt(timeAt(e.clientX), p);
                          }}
-                         title={`Klik ruang kosongnya untuk mengarahkan bingkai ke wajah ${p + 1} mulai detik itu`}>
+                         title={t('tl.klik_arahkan', { n: p + 1 })}>
                       {/* Kehadiran digambar sebagai pita tipis di dasar baris,
                           bukan sebagai balok penuh: yang dipegang di baris ini
                           adalah subtitle, dan pita setebal baris akan jadi
@@ -1194,7 +1196,7 @@ export default function ClipTimeline({
                        onPointerDown={(e) => {
                          if (e.target === e.currentTarget) onSeekClip?.(timeAt(e.clientX));
                        }}
-                       title="Baris yang penuturnya tidak bisa dipastikan wajahnya">
+                       title={t('tl.belum_pasti_judul')}>
                     {byPerson.sisa.map((i) => subBlock(lines[i], i, 0))}
                   </div>
                 )}
@@ -1210,8 +1212,8 @@ export default function ClipTimeline({
           <Crosshair size={12} style={{ color: 'var(--ink-3)' }} />
           <span>
             {reframeLoading
-              ? 'Menyiapkan lajur bingkai, sistem sedang mencari wajah di klip ini…'
-              : 'Klip ini hanya punya satu wajah di kamera, jadi tidak ada yang perlu ditunjuk.'}
+              ? t('tl.menyiapkan')
+              : t('tl.satu_wajah')}
           </span>
         </div>
       )}
@@ -1219,25 +1221,19 @@ export default function ClipTimeline({
       {onFrameKeys && (
         <div className="clip-tl-foot">
           <button className="btn-secondary tl-cut" onClick={potongBingkai}
-                  title="Membelah lajur Bingkai di posisi garis main">
-            <Scissors size={12} /> Potong bingkai di {formatTimeFine(now, 1)}
+                  title={t('tl.potong_bingkai_judul')}>
+            <Scissors size={12} /> {t('tl.potong_bingkai', { waktu: formatTimeFine(now, 1) })}
           </button>
           <span>
-            Menekan nama cara di dalam sebuah potongan akan <b>memotong di
-            posisi garis main</b> dan memakai cara itu mulai dari situ, jadi
-            geser garis mainnya dulu ke detik yang dimaksud, lalu tekan.
-            Menekannya saat garis main di luar potongan itu mengubah potongan
-            itu seluruhnya.
-            <b> ×</b> menghapus batas dan menyambungkannya kembali; batasnya
-            bisa diseret. Pratinjau di atas mengikuti potongan tempat garis
-            main berada. Ukuran kotak untuk <b>Kotak tetap</b> diatur di panel
-            <b>Bingkai</b> di kanan.
+            {t('tl.bingkai_ket_a')} <b>{t('tl.bingkai_ket_b')}</b> {t('tl.bingkai_ket_c')}
+            <b> ×</b> {t('tl.bingkai_ket_d')} <b>{t('bingkai.mode_box')}</b> {t('tl.bingkai_ket_e')}{' '}
+            <b>{t('tl.bingkai')}</b> {t('tl.bingkai_ket_f')}
           </span>
           {(frameKeys ?? []).length > 0 && (
             <button className="btn-secondary" style={{
               marginLeft: 'auto', fontSize: '.72rem', padding: '4px 9px', minHeight: '26px',
             }} onClick={() => onFrameKeys?.([])}>
-              Kembalikan ke satu cara
+              {t('tl.satu_cara')}
             </button>
           )}
         </div>
@@ -1246,20 +1242,19 @@ export default function ClipTimeline({
       {hadir.length > 1 && (
         <div className="clip-tl-foot">
           <button className="btn-secondary tl-cut" onClick={cutHere} disabled={!onPersonKeys}
-                  title="Membelah arah bingkai di posisi garis main">
-            <Scissors size={12} /> Potong di {formatTimeFine(now, 1)}
+                  title={t('tl.potong_arah_judul')}>
+            <Scissors size={12} /> {t('tl.potong_di', { waktu: formatTimeFine(now, 1) })}
           </button>
           <span>
-            Tiap potongan di lajur <b>Arah bingkai</b> punya nomornya sendiri:
-            tekan <b>1</b> atau <b>2</b> untuk memilih wajah mana yang diambil di
-            rentang itu, <b>A</b> untuk membiarkan sistem memilih, dan{' '}
-            <b>×</b> untuk menghapus batasnya. Batas potongan bisa diseret.
+            {t('tl.arah_ket_a')} <b>{t('tl.arah')}</b> {t('tl.arah_ket_b')}{' '}
+            <b>1</b> {t('tl.arah_ket_c')} <b>2</b> {t('tl.arah_ket_d')} <b>A</b>{' '}
+            {t('tl.arah_ket_e')}{' '}<b>×</b> {t('tl.arah_ket_f')}
           </span>
           {(personKeys ?? []).length > 0 && (
             <button className="btn-secondary" style={{
               marginLeft: 'auto', fontSize: '.72rem', padding: '4px 9px', minHeight: '26px',
             }} onClick={() => onPersonKeys?.([])}>
-              <Wand2 size={12} /> Lepas semua
+              <Wand2 size={12} /> {t('tl.lepas_semua')}
             </button>
           )}
         </div>

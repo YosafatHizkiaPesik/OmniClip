@@ -48,13 +48,13 @@ export function petakSisipan(l, boxW, boxH) {
 /** Ketembusan sisipan pada suatu detik, termasuk lembut masuk dan keluarnya. */
 function opasitasPada(l, clipTime) {
   const dasar = Number.isFinite(l?.opasitas) ? Math.max(0, Math.min(1, l.opasitas)) : 1;
-  const t = clipTime - (l.t ?? 0);
+  const rel = clipTime - (l.t ?? 0);
   const dur = l.dur ?? 0;
   const masuk = Math.max(0, Math.min(dur / 2, l.fade_masuk ?? 0));
   const keluar = Math.max(0, Math.min(dur / 2, l.fade_keluar ?? 0));
   let f = 1;
-  if (masuk > 0 && t < masuk) f = Math.max(0, t / masuk);
-  if (keluar > 0 && t > dur - keluar) f = Math.min(f, Math.max(0, (dur - t) / keluar));
+  if (masuk > 0 && rel < masuk) f = Math.max(0, rel / masuk);
+  if (keluar > 0 && rel > dur - keluar) f = Math.min(f, Math.max(0, (dur - rel) / keluar));
   return dasar * f;
 }
 

@@ -124,15 +124,15 @@ export default function BilahBingkaiAwal({ videoId }) {
   const [hilang, setHilang] = useState(false);
   useEffect(() => {
     if (!job || !SELESAI.has(job.status)) { setHilang(false); return undefined; }
-    const t = setTimeout(() => setHilang(true), 6000);
-    return () => clearTimeout(t);
+    const jeda = setTimeout(() => setHilang(true), 6000);
+    return () => clearTimeout(jeda);
   }, [job?.status, job?.job_id]);       // eslint-disable-line react-hooks/exhaustive-deps
 
   // Angka "sudah berjalan" hanya hidup kalau digambar ulang.
   useEffect(() => {
     if (!job || SELESAI.has(job.status)) return undefined;
-    const t = setInterval(() => paksaGambar((n) => n + 1), 1000);
-    return () => clearInterval(t);
+    const jeda = setInterval(() => paksaGambar((n) => n + 1), 1000);
+    return () => clearInterval(jeda);
   }, [job?.status]);       // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!job) return null;

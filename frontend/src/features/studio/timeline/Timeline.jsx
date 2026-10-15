@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import { ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
 import WaveformCanvas from './WaveformCanvas';
 import { formatTime } from '../../../utils/timeFormat';
+import { useT } from '../../../lib/i18n';
 
 /**
  * Timeline video sumber, bergaya editor video biasa.
@@ -45,6 +46,7 @@ export default function Timeline({
   onCommitSegment,
   busy = false,
 }) {
+  const t = useT();
   const trackRef = useRef(null);
   const playheadRef = useRef(null);
   const [width, setWidth] = useState(0);
@@ -66,7 +68,7 @@ export default function Timeline({
   }, []);
 
   const span = Math.max(0.001, view.end - view.start);
-  const timeToPx = useCallback((t) => ((t - view.start) / span) * width, [view.start, span, width]);
+  const timeToPx = useCallback((tk) => ((tk - view.start) / span) * width, [view.start, span, width]);
   const pxToTime = useCallback((px) => view.start + (px / Math.max(1, width)) * span,
     [view.start, span, width]);
 
@@ -137,13 +139,13 @@ export default function Timeline({
   const moveDrag = (e) => {
     if (!drag) return;
     const rect = trackRef.current.getBoundingClientRect();
-    const t = Math.max(0, Math.min(duration, pxToTime(e.clientX - rect.left)));
+    const tk = Math.max(0, Math.min(duration, pxToTime(e.clientX - rect.left)));
     setDrag((d) => {
       if (!d) return d;
       // Minimal 1,5 detik supaya klip tidak bisa diciutkan sampai nol.
       return d.edge === 'start'
-        ? { ...d, start: Math.min(t, d.end - 1.5) }
-        : { ...d, end: Math.max(t, d.start + 1.5) };
+        ? { ...d, start: Math.min(tk, d.end - 1.5) }
+        : { ...d, end: Math.max(tk, d.start + 1.5) };
     });
   };
 
@@ -160,8 +162,8 @@ export default function Timeline({
     if (!width || !span) return [];
     const step = TICK_STEPS.find((s) => (s / span) * width >= 64) ?? TICK_STEPS.at(-1);
     const out = [];
-    for (let t = Math.ceil(view.start / step) * step; t <= view.end; t += step) {
-      out.push(t);
+    for (let tk = Math.ceil(view.start / step) * step; tk <= view.end; tk += step) {
+      out.push(tk);
     }
     return out;
   }, [width, span, view.start, view.end]);
@@ -186,21 +188,21 @@ export default function Timeline({
         borderBottom: '1px solid var(--border-color)', fontSize: '0.72rem',
         color: 'var(--text-secondary)',
       }}>
-        <span style={{ fontWeight: 700 }}>Timeline video sumber</span>
+        <span style={{ fontWeight: 700 }}>{t('ts.judul')}</span>
         <span style={{ fontVariantNumeric: 'tabular-nums' }}>
           {formatTime(view.start)}-{formatTime(view.end)}
         </span>
         <div style={{ flex: 1 }} />
         <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
-          scroll = zoom · shift+scroll = geser
+          {t('ts.ket')}
         </span>
-        <IconBtn title="Perbesar" onClick={() => zoomAround((view.start + view.end) / 2, 1 / 1.5)}>
+        <IconBtn title={t('stave.perbesar')} onClick={() => zoomAround((view.start + view.end) / 2, 1 / 1.5)}>
           <ZoomIn size={14} />
         </IconBtn>
-        <IconBtn title="Perkecil" onClick={() => zoomAround((view.start + view.end) / 2, 1.5)}>
+        <IconBtn title={t('stave.perkecil')} onClick={() => zoomAround((view.start + view.end) / 2, 1.5)}>
           <ZoomOut size={14} />
         </IconBtn>
-        <IconBtn title="Tampilkan seluruh video"
+        <IconBtn title={t('ts.seluruh')}
                  onClick={() => setView({ start: 0, end: Math.max(1, duration) })}>
           <Maximize2 size={14} />
         </IconBtn>
@@ -217,14 +219,14 @@ export default function Timeline({
       >
         {/* Penggaris waktu */}
         <div style={{ position: 'relative', height: '20px', borderBottom: '1px solid var(--border-color)' }}>
-          {ticks.map((t) => (
-            <div key={t} style={{
-              position: 'absolute', left: `${timeToPx(t)}px`, top: 0, height: '100%',
+          {ticks.map((tk) => (
+            <div key={tk} style={{
+              position: 'absolute', left: `${timeToPx(tk)}px`, top: 0, height: '100%',
               borderLeft: '1px solid var(--border-color)', paddingLeft: '4px',
               fontSize: '0.62rem', color: 'var(--text-muted)',
               fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', pointerEvents: 'none',
             }}>
-              {formatTime(t)}
+              {formatTime(tk)}
             </div>
           ))}
         </div>
@@ -249,7 +251,7 @@ export default function Timeline({
                 <div
                   key={`${clip.clip_id}_${segIndex}`}
                   onClick={(e) => { e.stopPropagation(); onSelectClip?.(clip.clip_id); }}
-                  title={`Klip #${clip.index} · ${formatTime(live.start)}`}
+                  title={t('ts.klip', { n: clip.index, waktu: formatTime(live.start) })}
                   style={{
                     position: 'absolute', left: `${left}px`, width: `${Math.max(3, right - left)}px`,
                     top: 0, height: '100%', borderRadius: '5px', cursor: 'pointer',

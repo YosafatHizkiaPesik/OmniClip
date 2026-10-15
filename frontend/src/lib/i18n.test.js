@@ -49,6 +49,30 @@ describe('kamus terjemahan', () => {
     expect(hilang).toEqual([]);
   });
 
+  // Galat "t is not a function" di beranda (15 Oktober 2026) berasal dari
+  // variabel lokal bernama `t` yang menimpa fungsi terjemahan. Di berkas yang
+  // memakai useT(), nama `t` hanya boleh untuk fungsi terjemahan itu sendiri
+  // (termasuk parameter fungsi pembantu yang menerimanya).
+  it('tidak ada variabel lokal bernama t di berkas yang memakai useT', () => {
+    const src = join(__dirname, '..');
+    const temuan = [];
+    const pola = [
+      /\b(?:const|let|var) t\b(?! = useT\(\))/,
+      /\(t\) =>/,
+      /\(t, [^)]*\) =>/,
+      /\(\[[^\]]*\bt\b[^\]]*\]\) =>/,
+    ];
+    for (const f of semuaBerkas(src)) {
+      const s = readFileSync(f, 'utf8');
+      if (!s.includes('useT()')) continue;
+      s.split('\n').forEach((baris, i) => {
+        if (/^\s*(\/\/|\*)/.test(baris)) return;
+        if (pola.some((p) => p.test(baris))) temuan.push(`${f.slice(src.length + 1)}:${i + 1}: ${baris.trim()}`);
+      });
+    }
+    expect(temuan).toEqual([]);
+  });
+
   it('isian {nama} di en sama dengan di id', () => {
     const isian = (s) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort().join(',');
     const beda = Object.keys(id).filter((k) => k in en && isian(id[k]) !== isian(en[k]));

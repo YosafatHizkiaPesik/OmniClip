@@ -634,14 +634,15 @@ export function saveFraming(videoId, mode, layout) {
  * nomor orang yang terlihat di layar. Huruf tidak menunjuk apa pun. Ditanyakan
  * langsung oleh pemiliknya: "apa maksud dari w, k, g, t, b".
  */
+// `huruf` dan `nama` adalah kunci kamus, diterjemahkan saat dirender.
 export const MODE_BINGKAI = [
-  { id: 'smart', huruf: 'Wajah', nama: 'Ikuti wajah', warna: 'var(--accent-cyan)' },
-  { id: 'motion', huruf: 'Gerak', nama: 'Ikuti gerakan', warna: '#2fb6c9' },
-  { id: 'box', huruf: 'Kotak', nama: 'Kotak tetap', warna: '#e8a33d' },
-  { id: 'gaming', huruf: 'Game', nama: 'Main game', warna: '#8f7bff' },
-  { id: 'center', huruf: 'Tengah', nama: 'Potong tengah', warna: '#3dbd8a' },
-  { id: 'layout', huruf: 'Susun', nama: 'Susun sendiri', warna: '#e05c8a' },
-  { id: 'blur', huruf: 'Kabur', nama: 'Bilah kabur', warna: '#8c8c8c' },
+  { id: 'smart', huruf: 'mb.smart', nama: 'mode.smart', warna: 'var(--accent-cyan)' },
+  { id: 'motion', huruf: 'mb.motion', nama: 'mode.motion', warna: '#2fb6c9' },
+  { id: 'box', huruf: 'mb.box', nama: 'bingkai.mode_box', warna: '#e8a33d' },
+  { id: 'gaming', huruf: 'mb.gaming', nama: 'mode.gaming', warna: '#8f7bff' },
+  { id: 'center', huruf: 'mb.center', nama: 'mode.center', warna: '#3dbd8a' },
+  { id: 'layout', huruf: 'mb.layout', nama: 'mode.layout', warna: '#e05c8a' },
+  { id: 'blur', huruf: 'mb.blur', nama: 'mode.blur', warna: '#8c8c8c' },
 ];
 
 export function modeBingkai(id) {

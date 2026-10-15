@@ -284,9 +284,9 @@ function NilaiTambah(props) {
 
 /** Baris pertama konteks Gemini, dipendekkan; cadangan bila draf AI tidak ada. */
 export function konteksSingkat(konteks) {
-  const t = (konteks || '').replace(/\s+/g, ' ').trim();
-  if (!t) return '';
-  const kalimat = t.split(/(?<=[.!?])\s/)[0];
+  const isi = (konteks || '').replace(/\s+/g, ' ').trim();
+  if (!isi) return '';
+  const kalimat = isi.split(/(?<=[.!?])\s/)[0];
   if (kalimat.length <= 70) return kalimat.replace(/[.]$/, '');
   return `${kalimat.slice(0, 67).replace(/\s+\S*$/, '')}...`;
 }

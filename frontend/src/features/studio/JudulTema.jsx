@@ -108,13 +108,13 @@ export function useGambarJudul(p, jeda = 140) {
     const siap = _gambar.get(kunci);
     if (siap) { setHasil(siap); return undefined; }
     setMemuat(true);
-    const t = setTimeout(() => {
+    const jeda = setTimeout(() => {
       ambilGambar(p)
         .then((h) => { if (!batal) setHasil(h); })
         .catch(() => {})
         .finally(() => { if (!batal) setMemuat(false); });
     }, jeda);
-    return () => { batal = true; clearTimeout(t); };
+    return () => { batal = true; clearTimeout(jeda); };
   }, [kunci]);       // eslint-disable-line react-hooks/exhaustive-deps
   return { hasil, memuat };
 }
