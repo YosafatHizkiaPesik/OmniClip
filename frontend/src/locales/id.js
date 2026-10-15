@@ -1799,5 +1799,7 @@ export default {
   'ca.nanti': "Nanti saja",
   'ca.catatan': "Sampai Anda menekan salah satu tombol di atas, tidak ada cookies yang dibaca maupun disimpan.",
   'folder.tempat': "Tempat",
+  'pratinjau.lebar_kiri': "Tarik untuk melebarkan ke kiri",
+  'pratinjau.lebar_kanan': "Tarik untuk melebarkan ke kanan",
   'bahasa.pilih': 'Bahasa',
 };

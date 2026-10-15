@@ -1798,5 +1798,7 @@ export default {
   'ca.nanti': "Later",
   'ca.catatan': "Until you press one of the buttons above, no cookies are read or saved.",
   'folder.tempat': "Places",
+  'pratinjau.lebar_kiri': "Drag to widen to the left",
+  'pratinjau.lebar_kanan': "Drag to widen to the right",
   'bahasa.pilih': 'Language',
 };

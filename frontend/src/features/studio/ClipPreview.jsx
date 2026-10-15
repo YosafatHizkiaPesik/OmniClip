@@ -2528,10 +2528,11 @@ function AreaAman() {
 
 /** Gagang tepi kiri/kanan untuk melebarkan dan menyempitkan kotak teks. */
 function Handle({ side, active, visible, onPointerDown }) {
+  const t = useT();
   return (
     <span
       onPointerDown={onPointerDown}
-      title={`Tarik untuk ${side === 'left' ? 'melebarkan ke kiri' : 'melebarkan ke kanan'}`}
+      title={t(side === 'left' ? 'pratinjau.lebar_kiri' : 'pratinjau.lebar_kanan')}
       style={{
         position: 'absolute', top: '50%', transform: 'translateY(-50%)',
         [side]: '-11px',

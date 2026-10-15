@@ -310,7 +310,7 @@ function KartuKonteks({ clip, usulan, onLayers }) {
     if (!isi) return;
     const lain = lapisan.filter((l) => l.asal !== ASAL_KONTEKS);
     onLayers([...lain, {
-      id: terpasang?.id || `kk${Date.now().toString(36)}`, jenis: 'teks', nama: 'Kartu konteks',
+      id: terpasang?.id || `kk${Date.now().toString(36)}`, jenis: 'teks', nama: t('komentar.kartu_konteks'),
       teks: isi, t: 0.2, dur: 4, posisi: 'atas', ukuran: 3.2,
       warna: '#FFFFFF', garis: '#000000', tebal_garis: 0, keluarga: 'Archivo Black',
       latar: '#000000', opasitas: 1, fade_masuk: 0.3, fade_keluar: 0.3,

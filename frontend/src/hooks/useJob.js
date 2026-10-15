@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiPost } from '../lib/api';
-import { t as tr } from '../lib/i18n';
+import { bahasa, t as tr } from '../lib/i18n';
 
 const TERMINAL = new Set(['done', 'failed', 'cancelled']);
 
@@ -29,7 +29,7 @@ export function useJobRunner() {
 
   const follow = useCallback((jobId) => {
     sourceRef.current?.close();
-    const es = new EventSource(`/api/jobs/${jobId}/events`);
+    const es = new EventSource(`/api/jobs/${jobId}/events?lang=${bahasa()}`);
     sourceRef.current = es;
 
     es.onmessage = (evt) => {

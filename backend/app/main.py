@@ -16,7 +16,7 @@ _pustaka.periksa_kesehatan()
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Response
 
 from .config import ALLOWED_ORIGINS, FRONTEND_DIST, HOST, require_ffmpeg
 from .db import run_migrations
@@ -279,6 +279,23 @@ async def health():
 
 # --- Gerbang -------------------------------------------------------------------
 
+async def _terjemahkan_respons(response, kode: str):
+    """JSON keluar dengan pesan-pesan server dalam bahasa `kode` (bahasa.py)."""
+    import json as _json
+
+    from . import bahasa as _bahasa
+    tubuh = b"".join([b async for b in response.body_iterator])
+    try:
+        data = _json.loads(tubuh)
+    except ValueError:
+        data = None
+    if data is not None:
+        tubuh = _json.dumps(_bahasa.terjemahkan(data, kode), ensure_ascii=False).encode("utf-8")
+    kepala = {k: v for k, v in response.headers.items() if k.lower() != "content-length"}
+    return Response(content=tubuh, status_code=response.status_code, headers=kepala,
+                    media_type="application/json")
+
+
 @app.middleware("http")
 async def gerbang(request: Request, call_next):
     """
@@ -305,10 +322,14 @@ async def gerbang(request: Request, call_next):
         # yang cepat atau lambat dimatikan orang.
         email, _ = await cf_access.verify(request)
         if not email:
+            from . import bahasa as _bahasa_auth
+            kode = _bahasa_auth.dari_permintaan(request.query_params.get("lang"),
+                                                request.headers.get("accept-language"))
             return JSONResponse(
                 status_code=401,
                 content={"code": "AUTH_REQUIRED",
-                         "message": "Sesi berakhir. Masuk lagi dengan kata sandi."},
+                         "message": _bahasa_auth.teks("Sesi berakhir. Masuk lagi dengan kata sandi.",
+                                                      kode)},
             )
 
     # Profil aktif untuk permintaan ini — lihat services/profil.py. Diset di
@@ -317,10 +338,21 @@ async def gerbang(request: Request, call_next):
     from .services import profil as _profil
     token = _profil.setel(_profil.dari_header(request.headers.get(_profil.HEADER))
                           if path.startswith("/api/") else _profil.UTAMA)
+    # Bahasa antarmuka permintaan ini (JOB-3 J3-11): `?lang=` untuk aliran
+    # SSE yang tidak bisa membawa header, selain itu Accept-Language yang
+    # dikirim frontend. Lihat bahasa.py.
+    from . import bahasa as _bahasa
+    kode_bahasa = _bahasa.dari_permintaan(request.query_params.get("lang"),
+                                          request.headers.get("accept-language"))
+    token_bahasa = _bahasa.setel(kode_bahasa)
     try:
         response = await call_next(request)
     finally:
         _profil.pulihkan(token)
+        _bahasa.pulihkan(token_bahasa)
+    if (kode_bahasa != _bahasa.BAWAAN and path.startswith("/api/")
+            and response.headers.get("content-type", "").startswith("application/json")):
+        response = await _terjemahkan_respons(response, kode_bahasa)
     # Aplikasi ini tidak pernah pantas muncul di hasil pencarian, dan begitu ia
     # punya alamat publik, tidak diindeks adalah bagian dari tidak ditemukan.
     response.headers["X-Robots-Tag"] = "noindex, nofollow, noarchive"

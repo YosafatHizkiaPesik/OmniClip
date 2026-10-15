@@ -24,8 +24,9 @@ SSE_HEADERS = {
 }
 
 
-def _sse(event: dict) -> str:
-    return f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+def _sse(event: dict, kode: str = "id") -> str:
+    from ..bahasa import terjemahkan
+    return f"data: {json.dumps(terjemahkan(event, kode), ensure_ascii=False)}\n\n"
 
 
 async def _stream(request: Request, job_id: Optional[str]):
@@ -36,18 +37,22 @@ async def _stream(request: Request, job_id: Optional[str]):
     melihat apa pun sampai tick berikutnya — dan job yang sudah selesai tidak
     akan pernah mengirim apa pun sama sekali.
     """
+    # Bahasa dibaca sekali di awal: aliran ini terus berjalan sesudah
+    # middleware selesai, jadi bahasa permintaannya tidak lagi tersedia nanti.
+    from ..bahasa import dari_permintaan
+    kode = dari_permintaan(request.query_params.get("lang"), request.headers.get("accept-language"))
     if job_id:
         snap = queue.snapshot(job_id)
         if snap is None:
             raise NotFound("Job tidak ditemukan.")
-        yield _sse(snap)
+        yield _sse(snap, kode)
         if snap["status"] in ("done", "failed", "cancelled"):
             return
     else:
         for job in repo.active():
             snap = queue.snapshot(job["id"])
             if snap:
-                yield _sse(snap)
+                yield _sse(snap, kode)
 
     events = broker.subscribe(job_id)
     try:
@@ -62,7 +67,7 @@ async def _stream(request: Request, job_id: Optional[str]):
             except StopAsyncIteration:
                 break
 
-            yield _sse(event)
+            yield _sse(event, kode)
             if job_id and event.get("status") in ("done", "failed", "cancelled"):
                 break
     finally:

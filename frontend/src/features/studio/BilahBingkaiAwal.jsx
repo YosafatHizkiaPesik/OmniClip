@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Loader2, CheckCircle2 } from 'lucide-react';
 import { apiGet } from '../../lib/api';
-import { useT } from '../../lib/i18n';
+import { bahasa, useT } from '../../lib/i18n';
 
 /**
  * Bilah kemajuan penyiapan bingkai untuk SEMUA klip sebuah video.
@@ -97,7 +97,7 @@ export default function BilahBingkaiAwal({ videoId }) {
       })
       .catch(() => { /* gagal dibaca bukan alasan menampilkan galat */ });
 
-    const es = new EventSource('/api/jobs/events');
+    const es = new EventSource(`/api/jobs/events?lang=${bahasa()}`);
     esRef.current = es;
     es.onmessage = (evt) => {
       if (batal) return;

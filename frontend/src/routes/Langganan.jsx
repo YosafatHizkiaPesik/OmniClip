@@ -14,7 +14,7 @@ export default function Langganan() {
 
   useEffect(() => {
     apiGet('/langganan', { timeout: 120000 }).then(setData)
-      .catch((e) => setGalat(e.message || 'Gagal'));
+      .catch((e) => setGalat(e.message || t('editor.gagal')));
   }, []);
 
   return (
