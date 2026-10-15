@@ -75,6 +75,23 @@ function clockTime(seconds) {
  *    akhirnya, dan membiarkannya digeser serta diubah ukurannya langsung di
  *    atas gambar.
  */
+// Perbesaran punch-in pada detik `t`, kembar dengan backend/app/services/punch.py
+// (naik 0,12 dtk, turun 0,35 dtk, beberapa titik digabung dengan maksimum).
+const PUNCH_NAIK = 0.12;
+const PUNCH_TURUN = 0.35;
+export function zoomPunch(titik, t) {
+  let puncak = 0;
+  for (const p of titik || []) {
+    const a = Number(p.t) || 0;
+    const b = a + (Number(p.dur) || 1);
+    const k = (Number(p.skala) || 1.15) - 1;
+    const naik = Math.min(1, Math.max(0, (t - a) / PUNCH_NAIK));
+    const turun = Math.min(1, Math.max(0, (b + PUNCH_TURUN - t) / PUNCH_TURUN));
+    puncak = Math.max(puncak, k * naik * turun);
+  }
+  return 1 + puncak;
+}
+
 export default function ClipPreview({
   src, clip, aspectRatio = '9:16', style,
   videoRef: externalRef,
@@ -1031,9 +1048,80 @@ export default function ClipPreview({
       card?.voice_sig, card?.rate, card?.voice_id, cardText, cardSig,
       onCardChange, secondaries]);
 
+  // --- Komentar pemilik kanal di pratinjau (JOB-2 F1-3..F1-6) ---------------
+  // Disimulasikan seperti render: mode "bekukan" menjeda gambar selama
+  // komentar (kartu + suaranya), lalu lanjut; mode "timpa" menampilkan kartu
+  // dan suara tanpa menjeda. Sebelumnya komentar baru terlihat sesudah render.
+  const [komentarTampil, setKomentarTampil] = useState(null);
+  const komentarRef = useRef({ sudah: new Set(), beku: false, lalu: 0, timer: null, audio: null });
+
+  const hentikanKomentar = useCallback(() => {
+    const st = komentarRef.current;
+    if (st.timer) clearTimeout(st.timer);
+    st.timer = null;
+    st.beku = false;
+    if (st.audio) { st.audio.pause(); st.audio = null; }
+    setKomentarTampil(null);
+  }, []);
+
+  useEffect(() => () => hentikanKomentar(), [hentikanKomentar]);
+
+  useEffect(() => {
+    const st = komentarRef.current;
+    const daftar = clip?.komentar ?? [];
+    if (!daftar.length || !constrained) return;
+    if (clipTime < st.lalu - 0.5) st.sudah.clear();
+    st.lalu = clipTime;
+    if (!playing || st.beku || st.timer) return;
+    for (const [idx, k] of daftar.entries()) {
+      const teks = (k.teks || '').trim();
+      if ((!teks && !k.suara) || st.sudah.has(idx)) continue;
+      const t = k.posisi === 'pembuka' ? 0 : k.posisi === 'penutup' ? totalDuration : Number(k.t) || 0;
+      const kena = k.posisi === 'pembuka' ? clipTime < 0.4
+        : k.posisi === 'penutup' ? clipTime >= totalDuration - 0.25
+          : clipTime >= t && clipTime < t + 0.6;
+      if (!kena) continue;
+      st.sudah.add(idx);
+      const d = k.suara ? (Number(k.durasi_suara) || 2) + 0.3
+        : Math.max(2.5, Math.min(8, teks.length / 14 + 1));
+      const tampil = k.tampil_teks ?? !k.suara;
+      const bekukan = (k.mode || 'bekukan') === 'bekukan';
+      if (k.suara) {
+        st.audio = new Audio(`/api/komentar/suara/${k.suara}`);
+        st.audio.play().catch(() => {});
+      }
+      setKomentarTampil({ teks: tampil ? teks : '', posisi: k.posisi, bekukan, suara: !!k.suara });
+      const v = videoRef.current;
+      if (bekukan && v) {
+        st.beku = true;
+        v.pause();
+        for (const m of secondaries()) m.pause();
+      }
+      st.timer = setTimeout(() => {
+        st.timer = null;
+        st.audio = null;
+        setKomentarTampil(null);
+        if (st.beku) {
+          st.beku = false;
+          if (k.posisi !== 'penutup' && videoRef.current) {
+            videoRef.current.play().catch(() => {});
+            for (const m of secondaries()) m.play().catch(() => {});
+          }
+        }
+      }, d * 1000);
+      break;
+    }
+  }, [clipTime, playing, clip?.komentar, constrained, totalDuration, videoRef, secondaries]);
+
   const toggle = () => {
     const v = videoRef.current;
     if (!v) return;
+    // Menekan putar/jeda selama komentar berlangsung menghentikan komentarnya.
+    if (komentarRef.current.timer) {
+      const sedangBeku = komentarRef.current.beku;
+      hentikanKomentar();
+      if (sedangBeku) return;
+    }
     // Sedang di kartu judul? Menekan putar berarti membatalkannya dan langsung
     // masuk ke klipnya — bukan menjeda sesuatu yang tidak sedang berjalan.
     if (cardLeft !== null) {
@@ -1569,6 +1657,12 @@ export default function ClipPreview({
               />
             )}
 
+            {/* Punch-in (JOB-2 F2-1) ikut terlihat di pratinjau: gambar saja
+                yang membesar, subtitle dan sisipan di atasnya tidak, sama
+                dengan hasil render. Rumusnya kembar dengan punch.py. */}
+            <div style={{ position: 'absolute', inset: 0,
+                          transform: `scale(${zoomPunch(clip?.punch_in, clipTime)})`,
+                          transformOrigin: '50% 42%' }}>
             {/* Pemutar utama: SATU elemen yang tidak pernah diganti. Di mode
                 susunan ia tetap memutar (suara dan jam klip) tapi tidak
                 terlihat, gambarnya datang dari cermin di bawah. */}
@@ -1661,6 +1755,7 @@ export default function ClipPreview({
                 </div>
               );
             })}
+            </div>
 
             {/* Kotak tujuan yang bisa dipegang. Hanya hidup di tab Bingkai,
                 di tab lain ia akan berebut jari dengan kotak subtitle yang
@@ -1956,6 +2051,26 @@ export default function ClipPreview({
                         playing={playing} boxW={boxW} boxH={boxH}
                         terpilih={sisipanTerpilih} onRect={onSisipanRect}
                         onPilih={onPilihSisipan} />
+        )}
+
+        {komentarTampil && boxH > 0 && (
+          <div style={{ position: 'absolute', inset: 0, zIndex: 4, pointerEvents: 'none',
+                        display: 'flex', flexDirection: 'column', alignItems: 'center',
+                        justifyContent: 'center', gap: 8 }}>
+            {komentarTampil.teks && (
+              <div style={{ maxWidth: '86%', background: 'rgba(0,0,0,.6)', color: '#fff',
+                            fontFamily: '"Archivo Black", sans-serif', textAlign: 'center',
+                            fontSize: Math.max(11, boxH * 0.036), lineHeight: 1.35,
+                            padding: `${boxH * 0.008}px ${boxH * 0.014}px`, borderRadius: 4 }}>
+                {komentarTampil.teks}
+              </div>
+            )}
+            <div style={{ fontSize: 11, color: '#fff', background: 'rgba(14,20,32,.75)',
+                          padding: '3px 8px', borderRadius: 99 }}>
+              Komentar {komentarTampil.posisi}{komentarTampil.bekukan ? ' · gambar ditahan' : ''}
+              {komentarTampil.suara ? ' · bersuara' : ''}
+            </div>
+          </div>
         )}
 
         {/* Saklar subtitle dihormati di pratinjau juga. Pratinjau yang masih
