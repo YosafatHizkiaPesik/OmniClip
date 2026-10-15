@@ -5,6 +5,7 @@ import {
 import { apiGet, apiPost, apiPut } from '../../lib/api';
 import { formatTime } from '../../utils/timeFormat';
 import ReaksiKamera from './ReaksiKamera';
+import { useT } from '../../lib/i18n';
 
 /**
  * Komentar pemilik kanal untuk satu klip (JOB-2 F1-3 sampai F1-6).
@@ -24,9 +25,9 @@ import ReaksiKamera from './ReaksiKamera';
  */
 
 const POSISI = [
-  { id: 'pembuka', label: 'Pembuka', hint: 'sebelum klip mulai' },
-  { id: 'sela', label: 'Sela', hint: 'di tengah klip, gambar ditahan' },
-  { id: 'penutup', label: 'Penutup', hint: 'sesudah klip selesai' },
+  { id: 'pembuka', label: 'komentar.pembuka', hint: 'komentar.pembuka_ket' },
+  { id: 'sela', label: 'komentar.sela', hint: 'komentar.sela_ket' },
+  { id: 'penutup', label: 'komentar.penutup', hint: 'komentar.penutup_ket' },
 ];
 
 let urut = 0;
@@ -46,6 +47,7 @@ export function komentarUntukRender(daftar) {
 }
 
 function Rekam({ onSelesai, nonaktif }) {
+  const t = useT();
   const [rekam, setRekam] = useState(false);
   const [sibuk, setSibuk] = useState(false);
   const [detik, setDetik] = useState(0);
@@ -55,13 +57,13 @@ function Rekam({ onSelesai, nonaktif }) {
 
   useEffect(() => () => {
     clearInterval(jam.current);
-    perekam.current?.stream?.getTracks().forEach((t) => t.stop());
+    perekam.current?.stream?.getTracks().forEach((trek) => trek.stop());
   }, []);
 
   const mulai = async () => {
     setGalat('');
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
-      setGalat('Peramban ini tidak bisa merekam. Pakai Chrome, Edge, atau Firefox terbaru.');
+      setGalat(t('komentar.tak_bisa_rekam'));
       return;
     }
     try {
@@ -72,11 +74,11 @@ function Rekam({ onSelesai, nonaktif }) {
       const mr = new MediaRecorder(stream);
       mr.ondataavailable = (e) => { if (e.data.size) potongan.push(e.data); };
       mr.onstop = async () => {
-        stream.getTracks().forEach((t) => t.stop());
+        stream.getTracks().forEach((trek) => trek.stop());
         clearInterval(jam.current);
         setRekam(false);
         const blob = new Blob(potongan, { type: mr.mimeType || 'audio/webm' });
-        if (blob.size < 2000) { setGalat('Rekamannya kosong.'); return; }
+        if (blob.size < 2000) { setGalat(t('komentar.rekaman_kosong')); return; }
         setSibuk(true);
         try {
           const fd = new FormData();
@@ -84,7 +86,7 @@ function Rekam({ onSelesai, nonaktif }) {
           fd.append('berkas', blob, `rekaman.${akhiran}`);
           onSelesai(await apiPost('/komentar/rekaman', fd));
         } catch (e) {
-          setGalat(e.message || 'Rekaman gagal disimpan.');
+          setGalat(e.message || t('reaksi.gagal_simpan'));
         } finally { setSibuk(false); }
       };
       perekam.current = mr;
@@ -98,8 +100,8 @@ function Rekam({ onSelesai, nonaktif }) {
       }), 1000);
     } catch (e) {
       setGalat(e?.name === 'NotAllowedError'
-        ? 'Izin mikrofon ditolak. Izinkan mikrofon untuk halaman ini di peramban.'
-        : 'Mikrofon tidak bisa dibuka.');
+        ? t('komentar.mik_ditolak')
+        : t('komentar.mik_gagal'));
     }
   };
 
@@ -110,12 +112,12 @@ function Rekam({ onSelesai, nonaktif }) {
       {rekam ? (
         <button className="btn-secondary" onClick={berhenti}
                 style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}>
-          <Square size={13} /> Berhenti ({detik} dtk)
+          <Square size={13} /> {t('reaksi.berhenti', { n: detik })}
         </button>
       ) : (
         <button className="btn-secondary" onClick={mulai} disabled={nonaktif || sibuk}>
           {sibuk ? <Loader2 size={13} className="animate-spin" /> : <Mic size={13} />}
-          {sibuk ? 'Menyimpan…' : 'Rekam suara saya'}
+          {sibuk ? t('komentar.menyimpan') : t('komentar.rekam')}
         </button>
       )}
       {galat && <div style={{ fontSize: '.74rem', color: 'var(--danger)', width: '100%' }}>{galat}</div>}
@@ -124,6 +126,7 @@ function Rekam({ onSelesai, nonaktif }) {
 }
 
 function KartuKomentar({ k, onUbah, onHapus, waktuSekarang, durasiKlip, suaraTts, onSeek }) {
+  const t = useT();
   const [tts, setTts] = useState(false);
   const [galat, setGalat] = useState('');
   const pilih = POSISI.find((p) => p.id === k.posisi) || POSISI[0];
@@ -134,7 +137,7 @@ function KartuKomentar({ k, onUbah, onHapus, waktuSekarang, durasiKlip, suaraTts
       const r = await apiPost('/komentar/tts', { teks: k.teks, suara: k.suara_tts || '' });
       onUbah({ suara: r.id, sintetis: true, durasi_suara: r.durasi, teks_suara: k.teks });
     } catch (e) {
-      setGalat(e.message || 'TTS gagal.');
+      setGalat(e.message || t('komentar.tts_gagal'));
     } finally { setTts(false); }
   };
 
@@ -152,10 +155,10 @@ function KartuKomentar({ k, onUbah, onHapus, waktuSekarang, durasiKlip, suaraTts
                   ...(e.target.value === 'sela' && k.t == null
                     ? { t: Math.round(waktuSekarang * 10) / 10 } : {}),
                 })}>
-          {POSISI.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+          {POSISI.map((p) => <option key={p.id} value={p.id}>{t(p.label)}</option>)}
         </select>
-        <span style={{ fontSize: '.72rem', color: 'var(--ink-3)' }}>{pilih.hint}</span>
-        <button className="btn-secondary" onClick={onHapus} title="Hapus komentar ini"
+        <span style={{ fontSize: '.72rem', color: 'var(--ink-3)' }}>{t(pilih.hint)}</span>
+        <button className="btn-secondary" onClick={onHapus} title={t('komentar.hapus')}
                 style={{ marginLeft: 'auto', padding: '3px 7px' }}>
           <Trash2 size={13} />
         </button>
@@ -163,41 +166,41 @@ function KartuKomentar({ k, onUbah, onHapus, waktuSekarang, durasiKlip, suaraTts
 
       {k.posisi === 'sela' && (
         <div style={{ display: 'flex', gap: '6px', alignItems: 'center', fontSize: '.78rem' }}>
-          <span>Di detik</span>
+          <span>{t('komentar.di_detik')}</span>
           <input className="field" type="number" min={0} max={durasiKlip} step={0.1}
                  value={k.t ?? 0} style={{ width: '80px', padding: '3px 6px' }}
                  onChange={(e) => onUbah({ t: Math.max(0, Math.min(durasiKlip, Number(e.target.value) || 0)) })} />
           <button className="btn-secondary" style={{ padding: '3px 8px', fontSize: '.74rem' }}
-                  title="Pakai posisi pemutar sekarang"
+                  title={t('komentar.pakai_posisi')}
                   onClick={() => onUbah({ t: Math.round(waktuSekarang * 10) / 10 })}>
             <Crosshair size={12} /> {formatTime(waktuSekarang)}
           </button>
           <button className="btn-secondary" style={{ padding: '3px 8px', fontSize: '.74rem' }}
-                  onClick={() => onSeek?.(Number(k.t) || 0)}>Lihat</button>
+                  onClick={() => onSeek?.(Number(k.t) || 0)}>{t('komentar.lihat')}</button>
         </div>
       )}
 
       <textarea className="field" rows={3} maxLength={600} value={k.teks || ''}
-                placeholder="Pendapat Anda tentang klip ini, dengan kata-kata sendiri."
+                placeholder={t('komentar.placeholder')}
                 onChange={(e) => onUbah({ teks: e.target.value })}
                 style={{ resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }} />
 
       <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
         <Rekam onSelesai={(r) => onUbah({ suara: r.id, sintetis: false, durasi_suara: r.durasi,
                                           teks_suara: undefined })} />
-        <select className="field" value={k.suara_tts || ''} title="Suara TTS"
+        <select className="field" value={k.suara_tts || ''} title={t('komentar.suara_tts')}
                 style={{ width: 'auto', padding: '4px 6px', fontSize: '.76rem' }}
                 onChange={(e) => onUbah({ suara_tts: e.target.value })}>
-          <option value="">Suara TTS bawaan</option>
+          <option value="">{t('komentar.suara_tts_bawaan')}</option>
           {suaraTts.filter((v) => v.ready).map((v) => (
             <option key={v.id} value={v.id}>{v.label}</option>
           ))}
         </select>
         <button className="btn-secondary" onClick={bacakan}
                 disabled={tts || !(k.teks || '').trim()}
-                title="Dibacakan suara buatan. Klipnya otomatis diberi label konten sintetis saat diunggah ke YouTube.">
+                title={t('komentar.tts_judul')}>
           {tts ? <Loader2 size={13} className="animate-spin" /> : <Volume2 size={13} />}
-          Bacakan (TTS)
+          {t('komentar.bacakan')}
         </button>
       </div>
       {galat && <div style={{ fontSize: '.74rem', color: 'var(--danger)' }}>{galat}</div>}
@@ -206,34 +209,34 @@ function KartuKomentar({ k, onUbah, onHapus, waktuSekarang, durasiKlip, suaraTts
         <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
           <audio controls src={`/api/komentar/suara/${k.suara}`} style={{ height: '30px', maxWidth: '100%' }} />
           <span style={{ fontSize: '.72rem', color: 'var(--ink-3)' }}>
-            {k.sintetis ? 'TTS, diberi label sintetis' : 'Suara Anda'}
-            {k.durasi_suara ? ` · ${Number(k.durasi_suara).toFixed(1)} dtk` : ''}
+            {k.sintetis ? t('komentar.tts_label') : t('komentar.suara_anda')}
+            {k.durasi_suara ? ` · ${t('waktu.detik', { n: Number(k.durasi_suara).toFixed(1) })}` : ''}
           </span>
           <button className="btn-secondary" style={{ padding: '3px 7px', fontSize: '.72rem' }}
                   onClick={() => onUbah({ suara: '', sintetis: false, durasi_suara: null })}>
-            Lepas suara
+            {t('komentar.lepas_suara')}
           </button>
           {ttsUsang && (
             <span style={{ fontSize: '.72rem', color: 'var(--reh)', width: '100%' }}>
-              Teksnya sudah diubah sesudah dibacakan. Tekan &quot;Bacakan&quot; lagi supaya suaranya sama.
+              {t('komentar.tts_usang')}
             </span>
           )}
         </div>
       )}
 
       <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', fontSize: '.78rem' }}>
-        <label className="studio-check" title="Teks komentar tampil di tengah layar selama komentar berlangsung.">
+        <label className="studio-check" title={t('komentar.kartu_teks_judul')}>
           <input type="checkbox" checked={k.tampil_teks ?? !k.suara}
                  onChange={(e) => onUbah({ tampil_teks: e.target.checked })} />
-          Tampilkan sebagai kartu teks
+          {t('komentar.kartu_teks')}
         </label>
         <label className="studio-check"
-               title="Bekukan: gambar ditahan selama komentar, klip tidak tertimpa. Timpa: klip tetap jalan, suaranya dikecilkan.">
+               title={t('komentar.mode_judul')}>
           <select className="field" value={k.mode || 'bekukan'}
                   style={{ width: 'auto', padding: '2px 6px', fontSize: '.76rem' }}
                   onChange={(e) => onUbah({ mode: e.target.value })}>
-            <option value="bekukan">Bekukan gambar</option>
-            <option value="timpa">Timpa, klip tetap jalan</option>
+            <option value="bekukan">{t('komentar.bekukan')}</option>
+            <option value="timpa">{t('komentar.timpa')}</option>
           </select>
         </label>
       </div>
@@ -266,14 +269,15 @@ export function perkiraanNilaiTambah({ daftar, sisipan, durasiKlip, tambahan }) 
 }
 
 function NilaiTambah(props) {
+  const t = useT();
   const { persen, cukup } = perkiraanNilaiTambah(props);
   return (
     <div style={{ fontSize: '.78rem', padding: '7px 9px', borderRadius: 'var(--radius-md)',
                   border: `1px solid ${cukup ? 'var(--line)' : 'var(--reh)'}` }}>
-      <b>Nilai tambah ±{persen}%</b>{' '}
+      <b>{t('komentar.nilai_tambah', { n: persen })}</b>{' '}
       {cukup
-        ? 'Cukup untuk lolos tinjau sebelum terbit publik.'
-        : 'Belum cukup. Tanpa komentar, unggahan otomatis ke YouTube diturunkan ke Pribadi.'}
+        ? t('komentar.nilai_cukup')
+        : t('komentar.nilai_kurang')}
     </div>
   );
 }
@@ -295,6 +299,7 @@ const ASAL_KONTEKS = 'konteks';
  * Tulisan biasa, jadi bisa digeser dan diubah di tab Sisipan sesudahnya.
  */
 function KartuKonteks({ clip, usulan, onLayers }) {
+  const t = useT();
   const lapisan = clip.media_layers ?? [];
   const terpasang = lapisan.find((l) => l.asal === ASAL_KONTEKS);
   const [teks, setTeks] = useState(terpasang?.teks || usulan || '');
@@ -316,21 +321,21 @@ function KartuKonteks({ clip, usulan, onLayers }) {
   return (
     <div style={{ borderTop: '1px solid var(--line)', paddingTop: '10px',
                   display: 'flex', flexDirection: 'column', gap: '6px' }}>
-      <b style={{ fontSize: '.8rem' }}>Kartu konteks</b>
+      <b style={{ fontSize: '.8rem' }}>{t('komentar.kartu_konteks')}</b>
       <span style={{ fontSize: '.74rem', color: 'var(--ink-3)' }}>
-        Satu baris di atas klip selama 4 detik pertama: siapa yang bicara dan sedang membahas apa.
+        {t('komentar.konteks_ket')}
       </span>
       <input className="field" value={teks} maxLength={90}
-             placeholder="Contoh: Windah ditanya penonton soal main bareng"
+             placeholder={t('komentar.konteks_contoh')}
              onChange={(e) => setTeks(e.target.value)} />
       <div style={{ display: 'flex', gap: '6px' }}>
         <button className="btn-secondary" onClick={pasang} disabled={!teks.trim()}>
-          {terpasang ? 'Perbarui kartu' : 'Pasang di awal klip'}
+          {terpasang ? t('komentar.perbarui_kartu') : t('komentar.pasang_awal')}
         </button>
         {terpasang && (
           <button className="btn-secondary"
                   onClick={() => onLayers(lapisan.filter((l) => l.asal !== ASAL_KONTEKS))}>
-            Lepas
+            {t('komentar.lepas')}
           </button>
         )}
       </div>
@@ -375,6 +380,7 @@ export function tagPenutur(subtitles, nama) {
 }
 
 function NamaPenutur({ clip, videoId, onLayers }) {
+  const t = useT();
   const [nama, setNama] = useState(null);
   const awal = useRef('');
   const penutur = [...new Set((clip.subtitles || []).map((l) => String(l.speaker ?? 0)))].sort();
@@ -391,11 +397,11 @@ function NamaPenutur({ clip, videoId, onLayers }) {
     if (!nama) return undefined;
     const cap = JSON.stringify(nama);
     if (cap === awal.current) return undefined;
-    const t = setTimeout(() => {
+    const jeda = setTimeout(() => {
       apiPut(`/projects/${encodeURIComponent(videoId)}/penutur`, { nama })
         .then(() => { awal.current = cap; }).catch(() => {});
     }, 700);
-    return () => clearTimeout(t);
+    return () => clearTimeout(jeda);
   }, [nama, videoId]);
 
   if (!nama || !penutur.length) return null;
@@ -409,26 +415,26 @@ function NamaPenutur({ clip, videoId, onLayers }) {
   return (
     <div style={{ borderTop: '1px solid var(--line)', paddingTop: '10px',
                   display: 'flex', flexDirection: 'column', gap: '6px' }}>
-      <b style={{ fontSize: '.8rem' }}>Nama penutur</b>
+      <b style={{ fontSize: '.8rem' }}>{t('komentar.nama_penutur')}</b>
       <span style={{ fontSize: '.74rem', color: 'var(--ink-3)' }}>
-        Diketik sekali untuk video ini, berlaku di semua klipnya. Muncul di kiri atas saat orangnya mulai bicara.
+        {t('komentar.nama_ket')}
       </span>
       {penutur.map((sp) => (
         <label key={sp} style={{ display: 'flex', gap: '6px', alignItems: 'center', fontSize: '.78rem' }}>
-          <span style={{ width: '70px' }}>Penutur {Number(sp) + 1}</span>
-          <input className="field" value={nama[sp] || ''} maxLength={40} placeholder="Nama"
+          <span style={{ width: '70px' }}>{t('komentar.penutur_n', { n: Number(sp) + 1 })}</span>
+          <input className="field" value={nama[sp] || ''} maxLength={40} placeholder={t('komentar.nama')}
                  onChange={(e) => setNama((n) => ({ ...n, [sp]: e.target.value }))} />
         </label>
       ))}
       <div style={{ display: 'flex', gap: '6px' }}>
         <button className="btn-secondary" onClick={pasang}
                 disabled={!penutur.some((sp) => (nama[sp] || '').trim())}>
-          {terpasang ? `Pasang ulang (${terpasang} terpasang)` : 'Pasang nama di klip ini'}
+          {terpasang ? t('komentar.pasang_ulang', { n: terpasang }) : t('komentar.pasang_nama')}
         </button>
         {terpasang > 0 && (
           <button className="btn-secondary"
                   onClick={() => onLayers(lapisan.filter((l) => l.asal !== ASAL_PENUTUR))}>
-            Lepas
+            {t('komentar.lepas')}
           </button>
         )}
       </div>
@@ -440,6 +446,7 @@ export default function KomentarPanel({
   clip, videoId, waktuSekarang = 0, durasiKlip = 0, onChange, onSeek, onPakaiMerek, onLayers,
   onBilahProgres, onPutar,
 }) {
+  const t = useT();
   const [draf, setDraf] = useState(null);
   const [sibuk, setSibuk] = useState(false);
   const [galat, setGalat] = useState('');
@@ -454,7 +461,7 @@ export default function KomentarPanel({
   }, []);
   useEffect(() => { setDraf(null); setGalat(''); }, [clip?.clip_id]);
 
-  if (!clip) return <p style={{ fontSize: '.85rem' }}>Pilih klip dulu.</p>;
+  if (!clip) return <p style={{ fontSize: '.85rem' }}>{t('studio.pilih_klip_dulu')}</p>;
 
   const ubah = (id, patch) => onChange(daftar.map((k) => (k.id === id ? { ...k, ...patch } : k)));
   const hapus = (id) => onChange(daftar.filter((k) => k.id !== id));
@@ -465,7 +472,7 @@ export default function KomentarPanel({
 
   const susunDraf = async (segarkan = false) => {
     if (daftar.some((k) => (k.teks || '').trim())
-        && !window.confirm('Ganti komentar yang sudah ada dengan draf AI?')) return;
+        && !window.confirm(t('komentar.yakin_ganti'))) return;
     setSibuk(true); setGalat('');
     try {
       const r = await apiPost('/clip-komentar', {
@@ -485,7 +492,7 @@ export default function KomentarPanel({
       if (r.penutup) baru.push({ id: idBaru(), posisi: 'penutup', teks: r.penutup, suara: '', mode: 'bekukan' });
       if (baru.length) onChange(baru);
     } catch (e) {
-      setGalat(e.message || 'Draf gagal disusun.');
+      setGalat(e.message || t('komentar.draf_gagal'));
     } finally { setSibuk(false); }
   };
 
@@ -498,23 +505,21 @@ export default function KomentarPanel({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
       <p style={{ fontSize: '.78rem', lineHeight: 1.55, color: 'var(--ink-2)', margin: 0 }}>
-        Pendapat Anda tentang klip ini. Inilah yang membedakan klip Anda dari potongan ulang
-        biasa di mata YouTube. Draf AI hanya titik awal: ubah dengan kata-kata Anda sendiri,
-        lalu rekam suara Anda.
+        {t('komentar.intro')}
       </p>
 
       <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
         <button className="btn-secondary" onClick={() => susunDraf(false)} disabled={sibuk}>
           {sibuk ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
-          {sibuk ? 'Menyusun draf…' : 'Susun draf AI'}
+          {sibuk ? t('komentar.menyusun') : t('komentar.susun')}
         </button>
         {draf && (
           <button className="btn-secondary" onClick={() => susunDraf(true)} disabled={sibuk}>
-            Tulis ulang
+            {t('komentar.tulis_ulang')}
           </button>
         )}
         <button className="btn-secondary" onClick={() => tambah(daftar.length ? 'sela' : 'pembuka')}>
-          <Plus size={13} /> Tambah sendiri
+          <Plus size={13} /> {t('komentar.tambah_sendiri')}
         </button>
       </div>
       {galat && <div style={{ fontSize: '.76rem', color: 'var(--danger)' }}>{galat}</div>}
@@ -548,28 +553,28 @@ export default function KomentarPanel({
       )}
 
       <label className="studio-check" style={{ fontSize: '.78rem' }}
-             title="Intro, outro, dan teks penutup kanal diatur di halaman Akun.">
+             title={t('komentar.merek_judul')}>
         <input type="checkbox" checked={clip.pakai_merek !== false}
                onChange={(e) => onPakaiMerek?.(e.target.checked)} />
-        Pakai intro/outro kanal (diatur di halaman Akun)
+        {t('komentar.merek')}
       </label>
 
       <label style={{ fontSize: '.78rem', display: 'flex', gap: '8px', alignItems: 'center' }}
-             title="Garis tipis yang terisi selama klip berjalan. Penonton tahu tinggal berapa lama, jadi lebih banyak yang bertahan sampai habis.">
-        Bilah progres
+             title={t('komentar.progres_judul')}>
+        {t('komentar.bilah_progres')}
         <select className="field" value={clip.bilah_progres || ''}
                 style={{ width: 'auto', padding: '2px 6px', fontSize: '.76rem' }}
                 onChange={(e) => onBilahProgres?.(e.target.value || null)}>
-          <option value="">Tanpa</option>
-          <option value="bawah">Di bawah</option>
-          <option value="atas">Di atas</option>
+          <option value="">{t('komentar.tanpa')}</option>
+          <option value="bawah">{t('komentar.di_bawah')}</option>
+          <option value="atas">{t('komentar.di_atas')}</option>
         </select>
       </label>
 
       {daftar.length > 0 && (
         <p style={{ fontSize: '.74rem', color: 'var(--ink-3)', margin: 0 }}>
-          Klip jadi bertambah sekitar {tambahanDetik.toFixed(1)} detik
-          {!adaSuara ? ', dan komentarnya tampil sebagai kartu teks tanpa suara' : ''}.
+          {t('komentar.bertambah', { n: tambahanDetik.toFixed(1) })}
+          {!adaSuara ? t('komentar.tanpa_suara') : ''}.
         </p>
       )}
     </div>

@@ -85,17 +85,18 @@ export function makeFrame(label, src, dst) {
  * kebanyakan overlay streaming menaruhnya — tebakan yang salah pun tetap lebih
  * cepat digeser daripada dibuat dari nol.
  */
+// `label` dan `hint` adalah kunci kamus (locales/), diterjemahkan saat dirender.
 export const LAYOUT_PRESETS = [
   {
     id: 'single',
-    label: 'Satu bingkai',
-    hint: 'Satu potongan bebas dari video sumber, memenuhi kanvas.',
+    label: 'preset.single',
+    hint: 'preset.single_ket',
     build: () => [makeFrame('Utama', FULL, FULL)],
   },
   {
     id: 'reaction-stack',
-    label: 'Reaksi di atas, layar di bawah',
-    hint: 'Untuk klip main game: muka di atas, permainannya di bawah.',
+    label: 'preset.reaction_stack',
+    hint: 'preset.reaction_stack_ket',
     build: () => [
       makeFrame('Reaksi', { x: 0, y: 0, w: 30, h: 30 }, { x: 0, y: 0, w: 100, h: 38 }),
       makeFrame('Layar', FULL, { x: 0, y: 38, w: 100, h: 62 }),
@@ -103,8 +104,8 @@ export const LAYOUT_PRESETS = [
   },
   {
     id: 'pip-corner',
-    label: 'Penuh + sisipan pojok',
-    hint: 'Reaksi memenuhi layar, mediashare jadi kotak kecil di pojok kiri bawah.',
+    label: 'preset.pip_corner',
+    hint: 'preset.pip_corner_ket',
     build: () => [
       makeFrame('Reaksi', FULL, FULL),
       makeFrame('Mediashare', { x: 0, y: 0, w: 40, h: 40 },
@@ -116,8 +117,8 @@ export const LAYOUT_PRESETS = [
   // wajah yang sebenarnya; kotak sumber di sini hanya titik awal manual.
   {
     id: 'reaction-2',
-    label: 'Reaksi 2 orang',
-    hint: 'Dua wajah bertumpuk, atas dan bawah, untuk tawa atau kaget bersama.',
+    label: 'preset.reaction_2',
+    hint: 'preset.reaction_2_ket',
     build: () => [
       makeFrame('Orang 1', { x: 10, y: 10, w: 36, h: 64 }, { x: 0, y: 0, w: 100, h: 50 }),
       makeFrame('Orang 2', { x: 54, y: 10, w: 36, h: 64 }, { x: 0, y: 50, w: 100, h: 50 }),
@@ -125,8 +126,8 @@ export const LAYOUT_PRESETS = [
   },
   {
     id: 'reaction-3',
-    label: 'Reaksi 3 orang',
-    hint: 'Tiga wajah bertumpuk.',
+    label: 'preset.reaction_3',
+    hint: 'preset.reaction_3_ket',
     build: () => [
       makeFrame('Orang 1', { x: 4, y: 12, w: 28, h: 50 }, { x: 0, y: 0, w: 100, h: 33.333 }),
       makeFrame('Orang 2', { x: 36, y: 12, w: 28, h: 50 }, { x: 0, y: 33.333, w: 100, h: 33.334 }),
@@ -135,8 +136,8 @@ export const LAYOUT_PRESETS = [
   },
   {
     id: 'reaction-4',
-    label: 'Reaksi 4 orang',
-    hint: 'Empat wajah dalam kisi 2×2.',
+    label: 'preset.reaction_4',
+    hint: 'preset.reaction_4_ket',
     build: () => [
       makeFrame('Orang 1', { x: 2, y: 10, w: 22, h: 70 }, { x: 0, y: 0, w: 50, h: 50 }),
       makeFrame('Orang 2', { x: 26, y: 10, w: 22, h: 70 }, { x: 50, y: 0, w: 50, h: 50 }),
@@ -146,8 +147,8 @@ export const LAYOUT_PRESETS = [
   },
   {
     id: 'split-even',
-    label: 'Dua tumpuk sama besar',
-    hint: 'Membelah sumber jadi atas dan bawah, keduanya setengah kanvas.',
+    label: 'preset.split_even',
+    hint: 'preset.split_even_ket',
     build: () => [
       makeFrame('Atas', { x: 0, y: 0, w: 100, h: 50 }, { x: 0, y: 0, w: 100, h: 50 }),
       makeFrame('Bawah', { x: 0, y: 50, w: 100, h: 50 }, { x: 0, y: 50, w: 100, h: 50 }),

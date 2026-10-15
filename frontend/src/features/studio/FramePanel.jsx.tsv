@@ -1,0 +1,48 @@
+bingkai.siapkan_bingkai_semua_klip	Siapkan bingkai semua klip di awal	
+bingkai.hitung_ulang_bingkai_dari	Hitung ulang bingkai dari nol	
+bingkai.hitung_ulang_dari_nol	Hitung ulang dari nol: buang bingkai otomatis semua klip video ini lalu hitung lagi. Bingkai yang Anda atur sendiri tidak ikut terbuang.	
+bingkai.cara_membingkai	Cara membingkai	
+bingkai.membaca_isi_klip_game	Membaca isi klip: game, wajah, atau tanpa wajah…	
+bingkai.kembali_ke_otomatis	Kembali ke otomatis	
+bingkai.kembalikan	Kembalikan	
+bingkai.perpindahan_bingkai	Perpindahan bingkai	
+bingkai.arahkan_bingkai_dari_detik	Arahkan bingkai dari detik ini	
+ulang.otomatis	Otomatis	Automatic
+bingkai.tombol_ini_memasang	Tombol ini memasang	
+bingkai.tanda	tanda	
+bingkai.di_posisi_playhead_mulai	di posisi playhead: mulai detik itu bingkai menoleh ke orang yang dipilih, sampai tanda berikutnya. Jadi satu bagian yang meleset bisa dibetulkan tanpa mengambil alih seluruh klip. Tandanya terlihat dan bisa dihapus di lajur	
+bingkai.wajah	Wajah	
+bingkai.pada_linimasa_klip_nomornya	pada linimasa klip. Nomornya diurut dari kiri ke kanan layar, bukan nomor	
+bingkai.orang	Orang	
+bingkai.di_partitur_yang_itu	di partitur, yang itu hasil memisahkan suara.	
+ulang.otomatis	Otomatis	Automatic
+bingkai.mencocokkan_wajah_dengan_suara	mencocokkan wajah dengan suara: sistem sudah tahu kapan tiap orang bicara, lalu mencari mulut siapa yang ikut bergerak saat itu. Ia bisa keliru: mulut yang tertutup mikrofon hampir tidak bergerak di gambar. Kalau begitu, tunjuk saja orangnya.	
+bingkai.mode_ikut_wajah_menganalisis	Mode ikut-wajah menganalisis klip sebelum render. Bila wajah jarang terlihat, misalnya rekaman layar, sistem otomatis memakai bilah kabur. Untuk klip main game atau reaksi streamer, pakai	
+bingkai.susun_sendiri	Susun sendiri	
+bingkai.mulai_dari_susunan	Mulai dari susunan	
+bingkai.isi_celah_antar_bingkai	Isi celah antar bingkai	
+judul.tambah	Tambah	Add
+bingkai.naikkan	Naikkan	
+bingkai.turunkan	Turunkan	
+bingkai.hapus_bingkai	Hapus bingkai	
+bingkai.urutan_daftar_adalah_urutan	Urutan daftar adalah urutan tumpukan: yang paling bawah tergambar paling atas. Seret kotak di video sumber untuk memilih bagian yang diambil, dan kotak di kanvas hasil untuk menaruhnya.	
+bingkai.ikuti_orang	Ikuti orang:	
+bingkai.taruh_kotaknya_di_atas	taruh kotaknya di atas orang yang Anda mau, lalu tekan ikon wajah pada baris bingkai itu. Bingkainya akan membuntuti	
+bingkai.orang_itu	orang itu	
+bingkai.untuk_klip_ini_wajah	Untuk klip ini wajah belum terlacak, jadi bingkai pengikut akan diam di tempat kotaknya.	
+bingkai.diambil_dari_video_sumber	Diambil dari video sumber	
+bingkai.ditaruh_di_kanvas_hasil	Ditaruh di kanvas hasil	
+bingkai.isi_kotak	Isi kotak:	
+bingkai.susunan_main_game	Susunan main game	
+bingkai.tinggi_bidang_wajah	Tinggi bidang wajah	
+bingkai.angka_yang_sama_bisa	Angka yang sama bisa diseret langsung di	
+bingkai.pratinjau	pratinjau	
+bingkai.ada_garis_di_batas	: ada garis di batas antara wajah dan permainan, dan menyeretnya ke atas memperbesar permainan. Kedua bidang bergerak bersama, karena batas itu memang satu angka.	
+bingkai.kedua_bingkai_juga_bebas	Kedua bingkai juga bebas diatur seperti	
+bingkai.susun_sendiri_2	Susun sendiri	
+bingkai.seret_dan_tarik_sudut	: seret dan tarik sudut kotak di	
+bingkai.video_sumber	video sumber	
+bingkai.untuk_memilih_bagian_yang	untuk memilih bagian yang diambil, dan di	
+bingkai.layar_hasil	layar hasil	
+bingkai.untuk_menentukan_letak_dan	untuk menentukan letak dan ukurannya. Garis putus-putus di dalam kotak menandai bagian yang benar-benar tampil. Tombol dan penggeser di atas menyusun ulang keduanya dari awal. Setelan ini milik klip ini saja.	
+bingkai.cari_ulang_letak_wajah	Cari ulang letak wajah otomatis	

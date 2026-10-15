@@ -450,7 +450,7 @@ class SakelarDiPanelBingkai(unittest.TestCase):
         jsx = self.PANEL.read_text(encoding="utf-8")
         badan = jsx[jsx.index("export default function FramePanel"):]
         self.assertLess(badan.index("<PemanasanBingkai"),
-                        badan.index("Cara membingkai"),
+                        badan.index("bingkai.cara"),
                         "sakelarnya harus berdiri sebelum daftar cara membingkai")
         self.assertEqual(badan.count("<PemanasanBingkai"), 1)
 
