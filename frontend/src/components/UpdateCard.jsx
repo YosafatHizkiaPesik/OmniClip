@@ -5,6 +5,7 @@ import {
 import { apiGet, apiPost } from '../lib/api';
 import { useJobRunner } from '../hooks/useJob';
 
+import { tebal, useT } from '../lib/i18n';
 /**
  * Pembaruan aplikasi.
  *
@@ -15,6 +16,7 @@ import { useJobRunner } from '../hooks/useJob';
  * lebih buruk daripada tombol yang tidak ada.
  */
 export default function UpdateCard({ card, sectionTitle, helpText }) {
+  const t = useT();
   const [info, setInfo] = useState(null);
   const [memeriksa, setMemeriksa] = useState(false);
   const [galat, setGalat] = useState(null);
@@ -79,13 +81,11 @@ export default function UpdateCard({ card, sectionTitle, helpText }) {
     <div style={card}>
       <div style={sectionTitle}>
         <ArrowDownToLine size={18} style={{ color: 'var(--reh)' }} />
-        Pembaruan aplikasi
+        {t('perbarui.judul')}
       </div>
 
       <p className="bantu" style={helpText}>
-        OmniClip yang sudah terpasang tidak berubah sendiri saat kodenya
-        diperbaiki, versinya dibekukan saat dibangun. Di sini ia menanyakan ke
-        GitHub apakah ada versi yang lebih baru.
+        {t('perbarui.ket')}
       </p>
 
       <div style={{ ...helpText, marginTop: '12px', display: 'flex',
@@ -94,7 +94,7 @@ export default function UpdateCard({ card, sectionTitle, helpText }) {
           <>
             <ArrowDownToLine size={15} style={{ color: 'var(--reh)' }} />
             <span>
-              Versi <strong>{info.versi_terbaru}</strong> tersedia. Anda memakai{' '}
+              {tebal(t('perbarui.tersedia', { baru: info.versi_terbaru }))}{' '}
               <code>{info.versi_sekarang}</code>
               {info.ukuran ? ` · ${(info.ukuran / 1e6).toFixed(0)} MB` : ''}
             </span>
@@ -102,12 +102,12 @@ export default function UpdateCard({ card, sectionTitle, helpText }) {
         ) : info?.versi_terbaru ? (
           <>
             <CheckCircle2 size={15} style={{ color: 'var(--entry)' }} />
-            Sudah versi terbaru (<code>{info.versi_sekarang}</code>).
+            {t('perbarui.terbaru')} (<code>{info.versi_sekarang}</code>).
           </>
         ) : (
           <>
             <Info size={15} style={{ color: 'var(--text-muted)' }} />
-            Versi terpasang <code>{info?.versi_sekarang || 'tidak diketahui'}</code>
+            {t('perbarui.terpasang')} <code>{info?.versi_sekarang || t('perbarui.tak_diketahui')}</code>
             {info?.galat ? ` · ${info.galat}` : ''}
           </>
         )}
@@ -117,7 +117,7 @@ export default function UpdateCard({ card, sectionTitle, helpText }) {
         <details style={{ marginTop: '11px' }}>
           <summary style={{ ...helpText, cursor: 'pointer', fontWeight: 700,
                             color: 'var(--text-primary)' }}>
-            Apa yang berubah
+            {t('perbarui.berubah')}
           </summary>
           <pre style={{
             ...helpText, marginTop: '8px', whiteSpace: 'pre-wrap',
@@ -133,7 +133,7 @@ export default function UpdateCard({ card, sectionTitle, helpText }) {
           <div style={{ ...helpText, display: 'flex', gap: '8px',
                         alignItems: 'center', marginBottom: '7px' }}>
             <Loader2 size={15} className="animate-spin" />
-            {pekerjaan.message || 'Menyiapkan…'}
+            {pekerjaan.message || t('perbarui.menyiapkan')}
           </div>
           <div style={{ height: '5px', borderRadius: '3px',
                         background: 'var(--border-color)', overflow: 'hidden' }}>
@@ -144,10 +144,7 @@ export default function UpdateCard({ card, sectionTitle, helpText }) {
           </div>
           {menunggu && (
             <p style={{ ...helpText, marginTop: '9px' }}>
-              OmniClip menutup sebentar untuk menukar berkasnya, lalu terbuka
-              kembali pada versi baru. Halaman ini memuat ulang sendiri begitu
-              servernya hidup lagi; sambungan yang terputus di antaranya memang
-              harus terjadi. Klip dan setelan Anda tidak tersentuh.
+              {t('perbarui.menunggu')}
             </p>
           )}
         </div>
@@ -158,19 +155,19 @@ export default function UpdateCard({ card, sectionTitle, helpText }) {
                 style={{ ...ghost, opacity: memeriksa || sedangPasang ? 0.5 : 1 }}>
           {memeriksa ? <Loader2 size={14} className="animate-spin" />
                      : <RefreshCw size={14} />}
-          Periksa sekarang
+          {t('perbarui.periksa')}
         </button>
 
         {ada && info.bisa_pasang_sendiri && (
           <button className="btn-primary" onClick={pasang} disabled={sedangPasang}
                   style={{ opacity: sedangPasang ? 0.5 : 1 }}>
-            <ArrowDownToLine size={15} /> Unduh dan pasang
+            <ArrowDownToLine size={15} /> {t('perbarui.pasang')}
           </button>
         )}
 
         {ada && (
           <a href={info.halaman} target="_blank" rel="noreferrer" style={ghost}>
-            Buka halaman rilis
+            {t('perbarui.halaman')}
           </a>
         )}
       </div>
@@ -180,7 +177,7 @@ export default function UpdateCard({ card, sectionTitle, helpText }) {
                     alignItems: 'flex-start' }}>
           <AlertTriangle size={15} style={{ flexShrink: 0, marginTop: '2px',
                                             color: 'var(--text-muted)' }} />
-          <span>Pemasangan otomatis tidak tersedia di sini: {info.alasan_tidak_bisa}</span>
+          <span>{t('perbarui.tak_bisa', { alasan: info.alasan_tidak_bisa })}</span>
         </p>
       )}
 
@@ -189,7 +186,7 @@ export default function UpdateCard({ card, sectionTitle, helpText }) {
                     alignItems: 'flex-start',
                     color: 'var(--accent-red, var(--danger))' }}>
           <AlertTriangle size={15} style={{ flexShrink: 0, marginTop: '2px' }} />
-          <span>{galat || pekerjaan.error || 'Pemasangan gagal.'}</span>
+          <span>{galat || pekerjaan.error || t('perbarui.gagal')}</span>
         </p>
       )}
 
@@ -212,6 +209,7 @@ export default function UpdateCard({ card, sectionTitle, helpText }) {
  * ke sini ia tinggal di folder sementara yang tidak akan dibuka siapa pun.
  */
 function KabarPemasangan({ hasil, helpText }) {
+  const t = useT();
   const ok = hasil.berhasil;
   return (
     <div style={{
@@ -224,9 +222,8 @@ function KabarPemasangan({ hasil, helpText }) {
             : <AlertTriangle size={15} style={{ flexShrink: 0, marginTop: '2px' }} />}
         <span>
           {ok
-            ? `Pembaruan ke ${hasil.versi} berhasil dipasang.`
-            : `Pemasangan ${hasil.versi} tidak jadi: yang berjalan sekarang masih `
-              + `${hasil.sekarang}.`}
+            ? t('perbarui.berhasil', { v: hasil.versi })
+            : t('perbarui.tidak_jadi', { v: hasil.versi, sekarang: hasil.sekarang })}
         </span>
       </div>
       {!ok && hasil.ekor && (
@@ -237,7 +234,7 @@ function KabarPemasangan({ hasil, helpText }) {
       )}
       {!ok && hasil.log && (
         <p style={{ ...helpText, marginTop: '6px' }}>
-          Catatan lengkapnya ada di <code>{hasil.log}</code>
+          {t('perbarui.log')} <code>{hasil.log}</code>
         </p>
       )}
     </div>
@@ -254,6 +251,7 @@ function KabarPemasangan({ hasil, helpText }) {
  * sendiri tiap dua belas jam.
  */
 function PustakaOtomatis({ helpText }) {
+  const t = useT();
   const [data, setData] = useState(null);
   const [sibuk, setSibuk] = useState(false);
   const [kabar, setKabar] = useState(null);
@@ -269,9 +267,8 @@ function PustakaOtomatis({ helpText }) {
       const r = await apiPost('/settings/pustaka/periksa', {});
       const dipasang = (r.hasil || []).filter((h) => h.dipasang);
       setKabar(dipasang.length
-        ? `${dipasang.map((h) => `${h.paket} ${h.terbaru}`).join(', ')} dipasang. `
-          + 'Berlaku setelah OmniClip dijalankan ulang.'
-        : 'Semua pustaka sudah mutakhir.');
+        ? t('pustaka.dipasang', { daftar: dipasang.map((h) => `${h.paket} ${h.terbaru}`).join(', ') })
+        : t('pustaka.mutakhir'));
       await muat();
     } catch (err) {
       setKabar(err.message);
@@ -283,18 +280,16 @@ function PustakaOtomatis({ helpText }) {
   return (
     <div style={{ marginTop: '16px', paddingTop: '14px',
                   borderTop: '1px solid var(--rule-2, var(--border-color))' }}>
-      <strong style={{ fontSize: '0.82rem' }}>Pustaka YouTube &amp; suara</strong>
+      <strong style={{ fontSize: '0.82rem' }}>{t('pustaka.judul')}</strong>
       <p style={{ ...helpText, margin: '4px 0 9px' }}>
-        Diperbarui sendiri tiap dua belas jam. Inilah yang menjaga unduhan tetap
-        bekerja saat YouTube berubah. Perbaikannya datang dari pustakanya, bukan
-        dari versi OmniClip.
+        {t('pustaka.ket')}
       </p>
       <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap', fontSize: '0.78rem' }}>
         {data.paket.map((p) => (
           <span key={p.nama} style={{ color: 'var(--text-secondary)' }}>
-            {p.nama} <code>{p.versi || 'tidak diketahui'}</code>
+            {p.nama} <code>{p.versi || t('perbarui.tak_diketahui')}</code>
             {p.dari_pembaruan && (
-              <em style={{ color: 'var(--text-muted)', fontStyle: 'normal' }}> (hasil pembaruan)</em>
+              <em style={{ color: 'var(--text-muted)', fontStyle: 'normal' }}>{t('pustaka.hasil')}</em>
             )}
           </span>
         ))}
@@ -302,7 +297,7 @@ function PustakaOtomatis({ helpText }) {
       <button style={{ ...ghost, marginTop: '10px', fontSize: '0.78rem', padding: '7px 11px' }}
               onClick={periksa} disabled={sibuk}>
         {sibuk ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-        Periksa pustaka sekarang
+        {t('pustaka.periksa')}
       </button>
       {kabar && <p style={{ ...helpText, marginTop: '8px' }}>{kabar}</p>}
     </div>

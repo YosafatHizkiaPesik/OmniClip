@@ -7,6 +7,7 @@ import { useJobRunner } from '../hooks/useJob';
 import FolderPicker from './FolderPicker';
 import JobProgress from './JobProgress';
 
+import { tebal, useT } from '../lib/i18n';
 function ukuran(bita) {
   if (!bita) return '0 MB';
   const gb = bita / 1073741824;
@@ -24,6 +25,7 @@ function ukuran(bita) {
  * mengunduhnya satu per satu lewat peramban.
  */
 export default function StorageCard({ card, sectionTitle, helpText }) {
+  const t = useT();
   const [info, setInfo] = useState(null);
   const [sibuk, setSibuk] = useState(false);
   const [galat, setGalat] = useState(null);
@@ -86,12 +88,12 @@ export default function StorageCard({ card, sectionTitle, helpText }) {
       const r = await apiPost('/settings/penyimpanan/folder',
         { jenis, folder: (folder || '').trim() });
       if (r.sudah_di_sana) {
-        setPesan(`${judul} memang sudah ada di folder itu.`);
+        setPesan(t('simpan.sudah_di_sana', { judul }));
       } else if (r.job_id) {
         setJudulPindah(judul);
         pekerjaan.follow(r.job_id);
       } else {
-        setPesan(`${judul} diarahkan ke ${r.folder}. Jalankan ulang OmniClip agar berlaku.`);
+        setPesan(t('simpan.diarahkan', { judul, folder: r.folder }));
       }
       await muat();
     } catch (err) {
@@ -108,8 +110,8 @@ export default function StorageCard({ card, sectionTitle, helpText }) {
     try {
       const r = await apiPost('/settings/penyimpanan', { folder });
       setPesan(r.perlu_restart
-        ? `Akan dipindahkan ke ${r.folder} saat OmniClip dijalankan lagi. Tutup dan buka aplikasinya.`
-        : 'Folder sudah dipakai.');
+        ? t('simpan.akan_pindah', { folder: r.folder })
+        : t('simpan.sudah_dipakai'));
       await muat();
     } catch (err) {
       setGalat(err.message);
@@ -122,9 +124,9 @@ export default function StorageCard({ card, sectionTitle, helpText }) {
 
   return (
     <div style={card}>
-      <h3 style={sectionTitle}><HardDrive size={15} /> Tempat penyimpanan</h3>
+      <h3 style={sectionTitle}><HardDrive size={15} /> {t('simpan.judul')}</h3>
       <p className="bantu" style={helpText}>
-        Semua unduhan, klip jadi, dan basis data tinggal di satu folder ini.
+        {t('simpan.ket')}
       </p>
 
       <div style={{
@@ -135,16 +137,16 @@ export default function StorageCard({ card, sectionTitle, helpText }) {
       }}>
         <code>{info.folder}</code>
         <div style={{ color: 'var(--text-muted)', fontSize: '0.72rem', marginTop: '5px' }}>
-          Sisa ruang: {ukuran(info.sisa_ruang)}
+          {t('simpan.sisa', { n: ukuran(info.sisa_ruang) })}
         </div>
       </div>
 
       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
         <button className="btn-secondary" onClick={buka} style={{ fontSize: '0.8rem' }}>
-          <FolderOpen size={14} /> Buka folder
+          <FolderOpen size={14} /> {t('simpan.buka_folder')}
         </button>
         <button className="btn-secondary" onClick={muat} style={{ fontSize: '0.8rem' }}>
-          <RefreshCw size={14} /> Segarkan
+          <RefreshCw size={14} /> {t('umum.segarkan')}
         </button>
       </div>
 
@@ -152,13 +154,11 @@ export default function StorageCard({ card, sectionTitle, helpText }) {
           di tempat lain. Ukuran dan jumlah berkasnya ditampilkan supaya
           membersihkannya jadi keputusan, bukan tebakan. */}
       <p style={{ ...helpText, marginTop: '14px', marginBottom: 0 }}>
-        Memindahkan salah satunya akan MEMINDAHKAN berkas yang sudah ada, bukan
-        hanya menunjuk tempat baru. Berlaku langsung, tanpa menjalankan ulang
-        OmniClip.
+        {t('simpan.pindah_ket')}
       </p>
       <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-        {[['unduhan', 'Video sumber terunduh', info.unduhan],
-          ['klip', 'Klip jadi', info.klip]].map(([jenis, judul, d]) => d && (
+        {[['unduhan', t('simpan.unduhan'), info.unduhan],
+          ['klip', t('klip.judul'), info.klip]].map(([jenis, judul, d]) => d && (
           <div key={jenis} style={{
             padding: '10px 12px', borderRadius: 'var(--radius-sm, 8px)',
             background: 'var(--plate-3, rgba(255,255,255,0.04))',
@@ -168,7 +168,7 @@ export default function StorageCard({ card, sectionTitle, helpText }) {
                           alignItems: 'baseline', gap: '10px', flexWrap: 'wrap' }}>
               <strong style={{ fontSize: '0.78rem' }}>{judul}</strong>
               <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                {d.jumlah} berkas · {ukuran(d.ukuran)}
+                {t('simpan.n_berkas', { n: d.jumlah, ukuran: ukuran(d.ukuran) })}
               </span>
             </div>
             <code style={{ display: 'block', fontSize: '0.71rem', marginTop: '5px',
@@ -178,17 +178,17 @@ export default function StorageCard({ card, sectionTitle, helpText }) {
             <div style={{ display: 'flex', gap: '7px', marginTop: '8px', flexWrap: 'wrap' }}>
               <button className="btn-secondary" style={{ fontSize: '0.75rem', padding: '5px 9px' }}
                       onClick={() => bukaFolder(jenis)}>
-                <FolderOpen size={13} /> Buka
+                <FolderOpen size={13} /> {t('simpan.buka')}
               </button>
               <button className="btn-secondary" style={{ fontSize: '0.75rem', padding: '5px 9px' }}
                       disabled={sibuk || pekerjaan.active}
                       onClick={() => setMemilih({ jenis, judul, awal: d.folder })}>
-                Pindahkan ke…
+                {t('simpan.pindahkan_ke')}
               </button>
               <button className="btn-secondary" style={{ fontSize: '0.75rem', padding: '5px 9px' }}
                       disabled={sibuk || pekerjaan.active}
                       onClick={() => simpanFolder(jenis, judul, '')}>
-                Kembali ke bawaan
+                {t('simpan.bawaan')}
               </button>
             </div>
           </div>
@@ -200,15 +200,13 @@ export default function StorageCard({ card, sectionTitle, helpText }) {
       {(pekerjaan.active || pekerjaan.job) && (
         <div style={{ marginTop: '12px' }}>
           <div style={{ fontSize: '0.75rem', fontWeight: 700, marginBottom: '6px' }}>
-            Memindahkan {judulPindah.toLowerCase()}
+            {t('simpan.memindahkan', { nama: judulPindah.toLowerCase() })}
           </div>
           <JobProgress job={pekerjaan.job} error={pekerjaan.error}
                        onCancel={pekerjaan.cancel} />
           {pekerjaan.job?.status === 'running' && (
             <p style={{ ...helpText, marginTop: '6px' }}>
-              Boleh dibatalkan kapan saja. Berkas yang sudah pindah tetap di
-              tempat barunya, dan menekan tombol yang sama nanti melanjutkan
-              dari situ.
+              {t('simpan.batal_ket')}
             </p>
           )}
         </div>
@@ -216,22 +214,20 @@ export default function StorageCard({ card, sectionTitle, helpText }) {
 
       {info.dari_sumber && (
         <p style={{ ...helpText, marginTop: '10px' }}>
-          Dijalankan dari kode sumber, jadi <em>akar</em> penyimpanan mengikuti
-          folder proyek. Kedua folder di atas tetap bisa ditaruh di mana saja.
+          {tebal(t('simpan.dari_sumber'))}
         </p>
       )}
 
       {info.dikunci_env && (
         <p style={{ ...helpText, marginTop: '10px' }}>
-          Lokasi sedang dipaksa lewat <code>OMNICLIP_STORAGE</code>.
+          {t('simpan.dikunci')} <code>OMNICLIP_STORAGE</code>.
         </p>
       )}
 
       {info.saran && !info.menunggu_pindah && (
         <div style={{ marginTop: '12px' }}>
           <p style={{ ...helpText, marginBottom: '8px' }}>
-            Bisa dipindahkan ke sebelah aplikasi, supaya berkasnya langsung
-            terlihat saat foldernya dibuka, tanpa perlu mengunduh satu per satu:
+            {t('simpan.saran')}
           </p>
           <code style={{ fontSize: '0.74rem', wordBreak: 'break-all' }}>{info.saran}</code>
           <div style={{ marginTop: '9px' }}>
@@ -239,7 +235,7 @@ export default function StorageCard({ card, sectionTitle, helpText }) {
                     onClick={() => pindah(info.saran)}
                     style={{ fontSize: '0.8rem', color: 'var(--accent-cyan)' }}>
               {sibuk ? <Loader2 size={14} className="animate-spin" /> : <HardDrive size={14} />}
-              Pindahkan ke sana
+              {t('simpan.pindah_sana')}
             </button>
           </div>
         </div>
@@ -254,9 +250,7 @@ export default function StorageCard({ card, sectionTitle, helpText }) {
         }}>
           <CheckCircle2 size={15} style={{ flexShrink: 0, color: 'var(--accent-cyan)' }} />
           <span>
-            Pemindahan sudah dijadwalkan. Tutup OmniClip lalu buka lagi. Berkasnya
-            dipindahkan sebelum aplikasi menyala, dan yang sudah pindah tidak
-            diulang kalau sempat terputus.
+            {t('simpan.dijadwalkan')}
           </span>
         </div>
       )}
@@ -275,7 +269,7 @@ export default function StorageCard({ card, sectionTitle, helpText }) {
 
       {memilih && (
         <FolderPicker
-          judul={`Pilih folder untuk ${memilih.judul}`}
+          judul={t('simpan.pilih_folder', { nama: memilih.judul })}
           awal={memilih.awal}
           onTutup={() => setMemilih(null)}
           onPilih={(jalur) => simpanFolder(memilih.jenis, memilih.judul, jalur)}

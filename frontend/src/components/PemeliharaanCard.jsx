@@ -4,8 +4,9 @@ import {
 } from 'lucide-react';
 import { apiDelete, apiGet, apiPost } from '../lib/api';
 
+import { tebal, useT, lokal } from '../lib/i18n';
 const gb = (n) => (n >= 1e9 ? `${(n / 1e9).toFixed(2)} GB` : `${Math.round(n / 1e6)} MB`);
-const tanggal = (t) => new Date(t * 1000).toLocaleString('id-ID',
+const tanggal = (detik) => new Date(detik * 1000).toLocaleString(lokal(),
   { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 
 /**
@@ -21,6 +22,7 @@ const tanggal = (t) => new Date(t * 1000).toLocaleString('id-ID',
  * jadi.
  */
 export default function PemeliharaanCard({ card, sectionTitle, helpText }) {
+  const t = useT();
   const [ruang, setRuang] = useState(null);
   const [cadangan, setCadangan] = useState([]);
   const [pilih, setPilih] = useState(new Set());
@@ -51,13 +53,12 @@ export default function PemeliharaanCard({ card, sectionTitle, helpText }) {
     const daftar = [...pilih];
     if (!daftar.length) return;
     if (!window.confirm(
-      `Hapus ${daftar.length} berkas video sumber?\n\nKlip yang sudah dirender TIDAK ikut terhapus. `
-      + 'Untuk mengklip ulang videonya nanti, ia harus diunduh lagi.')) return;
+      t('pelihara.yakin_hapus', { n: daftar.length }))) return;
     setSibuk('buang');
     try {
       const r = await apiPost('/settings/ruang/buang', { folder: 'unduhan', berkas: daftar },
                               { timeout: 300000 });
-      setKabar({ ok: true, teks: `${r.dibuang} berkas dihapus. ${gb(r.ukuran)} kembali.` });
+      setKabar({ ok: true, teks: t('pelihara.dihapus', { n: r.dibuang, ukuran: gb(r.ukuran) }) });
       setPilih(new Set());
       muat();
     } catch (e) {
@@ -71,7 +72,7 @@ export default function PemeliharaanCard({ card, sectionTitle, helpText }) {
     setSibuk('cadang');
     try {
       const r = await apiPost('/settings/cadangan', {}, { timeout: 180000 });
-      setKabar({ ok: true, teks: `Cadangan dibuat: ${r.berkas} (${gb(r.ukuran)}).` });
+      setKabar({ ok: true, teks: t('pelihara.cadangan_dibuat', { berkas: r.berkas, ukuran: gb(r.ukuran) }) });
       muat();
     } catch (e) {
       setKabar({ ok: false, teks: e.message });
@@ -82,9 +83,7 @@ export default function PemeliharaanCard({ card, sectionTitle, helpText }) {
 
   const pulihkan = async (berkas) => {
     if (!window.confirm(
-      `Pulihkan basis data dari ${berkas}?\n\nSemua analisis, klip, dan setelan akan kembali ke `
-      + 'keadaan saat cadangan itu dibuat. Pertukarannya terjadi saat OmniClip dibuka berikutnya, '
-      + 'dan keadaan sekarang tetap disimpan sebagai omniclip.db.sebelum-pulih.')) return;
+      t('pelihara.yakin_pulih', { berkas }))) return;
     setSibuk(berkas);
     try {
       const r = await apiPost('/settings/cadangan/pulihkan', { berkas });
@@ -99,7 +98,7 @@ export default function PemeliharaanCard({ card, sectionTitle, helpText }) {
   const batal = async () => {
     try {
       await apiDelete('/settings/cadangan/pulihkan');
-      setKabar({ ok: true, teks: 'Rencana pemulihan dibatalkan.' });
+      setKabar({ ok: true, teks: t('pelihara.batal_pulih') });
     } catch (e) {
       setKabar({ ok: false, teks: e.message });
     }
@@ -112,12 +111,12 @@ export default function PemeliharaanCard({ card, sectionTitle, helpText }) {
     <div style={card}>
       <div style={sectionTitle}>
         <HardDrive size={18} style={{ color: 'var(--reh)' }} />
-        Ruang cakram
+        {t('pelihara.judul')}
       </div>
       {ruang ? (
         <>
           <p className="bantu" style={helpText}>
-            Terpakai {gb(ruang.total)}, sisa {gb(ruang.sisa_ruang)} di cakram ini.
+            {t('pelihara.terpakai', { total: gb(ruang.total), sisa: gb(ruang.sisa_ruang) })}
           </p>
 
           {/* Usulan, bukan penghapus otomatis. Mengklip ulang video yang sudah
@@ -132,16 +131,13 @@ export default function PemeliharaanCard({ card, sectionTitle, helpText }) {
               background: 'color-mix(in srgb, var(--accent-cyan) 10%, transparent)',
               border: '1px solid color-mix(in srgb, var(--accent-cyan) 30%, transparent)',
             }}>
-              <b>{ruang.usul.jumlah} video sumber bisa dibuang, {gb(ruang.usul.ukuran)}.</b>
+              <b>{t('pelihara.usul', { n: ruang.usul.jumlah, ukuran: gb(ruang.usul.ukuran) })}</b>
               <div style={{ ...helpText, marginTop: '4px' }}>
-                Semuanya sudah menghasilkan klip jadi, diunduh lebih dari{' '}
-                {ruang.usul.syarat.umur_hari} hari lalu, dan lebih besar dari{' '}
-                {gb(ruang.usul.syarat.besar_min)}. Klipnya tidak ikut terhapus.
-                Mengklip ulang video ini nanti berarti mengunduhnya lagi.
+                {t('pelihara.usul_ket', { hari: ruang.usul.syarat.umur_hari, besar: gb(ruang.usul.syarat.besar_min) })}
               </div>
               <button className="btn-secondary" style={{ marginTop: '8px', fontSize: '0.76rem' }}
                       onClick={() => setPilih(new Set(ruang.usul.berkas))}>
-                Tandai semuanya
+                {t('pelihara.tandai')}
               </button>
             </div>
           )}
@@ -154,9 +150,7 @@ export default function PemeliharaanCard({ card, sectionTitle, helpText }) {
           </div>
 
           <p style={{ ...helpText, marginTop: '12px' }}>
-            Video sumber terbesar. <b>Klip</b> menunjukkan berapa klip jadi yang sudah
-            dirender dari video itu, yang angkanya 0 dan sudah lama tidak dibuka
-            biasanya sisa percobaan.
+            {tebal(t('pelihara.terbesar'))}
           </p>
           <div style={{ maxHeight: '220px', overflowY: 'auto', marginTop: '8px' }}>
             {(ruang.sumber || []).map((s) => (
@@ -176,7 +170,7 @@ export default function PemeliharaanCard({ card, sectionTitle, helpText }) {
                   {s.berkas}
                 </span>
                 <span style={{ fontSize: '0.68rem', color: s.klip ? 'var(--entry)' : 'var(--text-muted)' }}>
-                  {s.klip ? `${s.klip} klip` : 'belum ada klip'}
+                  {s.klip ? t('pelihara.n_klip', { n: s.klip }) : t('pelihara.belum_klip')}
                 </span>
               </label>
             ))}
@@ -187,7 +181,7 @@ export default function PemeliharaanCard({ card, sectionTitle, helpText }) {
                            gap: '6px', alignItems: 'center',
                            opacity: pilih.size ? 1 : 0.5 }}>
             {sibuk === 'buang' ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-            Hapus {pilih.size || ''} berkas terpilih{terpilih ? ` (${gb(terpilih)})` : ''}
+            {t('pelihara.hapus_terpilih', { n: pilih.size || '' })}{terpilih ? ` (${gb(terpilih)})` : ''}
           </button>
         </>
       ) : gagalRuang ? (
@@ -196,26 +190,23 @@ export default function PemeliharaanCard({ card, sectionTitle, helpText }) {
           <AlertTriangle size={14} style={{ color: 'var(--accent-red)', flexShrink: 0 }} />
           <span style={{ flex: '1 1 220px', minWidth: 0 }}>{gagalRuang}</span>
           <button className="btn-secondary" onClick={muat} style={{ fontSize: '0.76rem' }}>
-            Hitung ulang
+            {t('pelihara.hitung_ulang')}
           </button>
         </div>
-      ) : <p className="bantu" style={helpText}>Menghitung…</p>}
+      ) : <p className="bantu" style={helpText}>{t('pelihara.menghitung')}</p>}
 
       <div style={{ ...sectionTitle, marginTop: '20px' }}>
         <DatabaseBackup size={18} style={{ color: 'var(--reh)' }} />
-        Cadangan basis data
+        {t('pelihara.cadangan')}
       </div>
       <p className="bantu" style={helpText}>
-        Seluruh pekerjaan Anda (analisis, klip, transkrip, profil, dan setelan) ada
-        di satu berkas. Cadangan dibuat dengan cara SQLite sendiri, bukan disalin
-        begitu saja, supaya isinya utuh walau dibuat saat aplikasi sedang bekerja.
-        Sepuluh cadangan terakhir disimpan.
+        {t('pelihara.cadangan_ket')}
       </p>
       <button className="btn-primary" onClick={cadangkan} disabled={sibuk === 'cadang'}
               style={{ marginTop: '10px', fontSize: '0.78rem', display: 'inline-flex',
                        gap: '6px', alignItems: 'center' }}>
         {sibuk === 'cadang' ? <Loader2 size={14} className="animate-spin" /> : <DatabaseBackup size={14} />}
-        Cadangkan sekarang
+        {t('pelihara.cadangkan')}
       </button>
 
       {cadangan.length > 0 && (
@@ -232,7 +223,7 @@ export default function PemeliharaanCard({ card, sectionTitle, helpText }) {
                       style={{ background: 'none', border: 'none', cursor: 'pointer',
                                fontSize: '0.73rem', fontWeight: 700, fontFamily: 'inherit',
                                color: 'var(--reh)' }}>
-                {sibuk === c.berkas ? 'Menyiapkan…' : 'Pulihkan'}
+                {sibuk === c.berkas ? t('pelihara.menyiapkan') : t('pelihara.pulihkan')}
               </button>
             </div>
           ))}
@@ -240,7 +231,7 @@ export default function PemeliharaanCard({ card, sectionTitle, helpText }) {
                   style={{ marginTop: '8px', background: 'none', border: 'none',
                            cursor: 'pointer', padding: 0, fontSize: '0.72rem',
                            fontFamily: 'inherit', color: 'var(--text-muted)' }}>
-            Batalkan rencana pemulihan
+            {t('pelihara.batalkan_pulih')}
           </button>
         </div>
       )}

@@ -4,6 +4,7 @@ import {
 } from 'lucide-react';
 import { apiDelete, apiGet, apiPost } from '../lib/api';
 
+import { tebal, useT } from '../lib/i18n';
 /**
  * Kata sandi dan sesi.
  *
@@ -12,6 +13,7 @@ import { apiDelete, apiGet, apiPost } from '../lib/api';
  * kata sandi bisa dipasang SEBELUM terowongan dinyalakan, bukan sesudahnya.
  */
 export default function SecurityCard({ card, sectionTitle, helpText }) {
+  const t = useT();
   const [status, setStatus] = useState(null);
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
@@ -37,8 +39,8 @@ export default function SecurityCard({ card, sectionTitle, helpText }) {
       else await apiPost('/auth/setup', { new_password: next });
       setCurrent(''); setNext(''); setConfirm('');
       setMsg({ kind: 'ok', text: has
-        ? 'Kata sandi diganti. Semua perangkat lain harus masuk ulang.'
-        : 'Kata sandi dipasang. Aplikasi ini sekarang terkunci.' });
+        ? t('aman.diganti')
+        : t('aman.dipasang') });
       load();
     } catch (err) {
       setMsg({ kind: 'error', text: err.message });
@@ -52,7 +54,7 @@ export default function SecurityCard({ card, sectionTitle, helpText }) {
     setMsg(null);
     try {
       await apiDelete('/auth/password');
-      setMsg({ kind: 'ok', text: 'Kata sandi dilepas. Aplikasi kembali ke mode lokal.' });
+      setMsg({ kind: 'ok', text: t('aman.dilepas') });
       load();
     } catch (err) {
       setMsg({ kind: 'error', text: err.message });
@@ -70,13 +72,10 @@ export default function SecurityCard({ card, sectionTitle, helpText }) {
     <div style={card}>
       <div style={sectionTitle}>
         <Lock size={18} style={{ color: 'var(--reh)' }} />
-        Kata sandi &amp; akses
+        {t('aman.judul')}
       </div>
       <p className="bantu" style={helpText}>
-        Kata sandi menjaga seluruh aplikasi: unduhan, klip, API key, dan kanal
-        YouTube yang tersambung. Wajib dipasang sebelum OmniClip dibuka lewat
-        Cloudflare. Tanpa itu, siapa pun yang tahu alamatnya bisa memakai
-        semuanya.
+        {t('aman.ket')}
       </p>
 
       {cf?.configured && (
@@ -87,15 +86,14 @@ export default function SecurityCard({ card, sectionTitle, helpText }) {
           <Cloud size={16} style={{ color: 'var(--reh)', flexShrink: 0, marginTop: '2px' }} />
           <div>
             <div style={{ fontWeight: 700, color: 'var(--text-primary)', marginBottom: '3px' }}>
-              Cloudflare Access, tim <code>{cf.team}</code>
+              {t('aman.cf_tim')} <code>{cf.team}</code>
             </div>
             {cf.email ? (
-              <>Masuk sebagai <strong>{cf.email}</strong> lewat Google. Kata sandi di
-                bawah tidak diminta selama Anda datang dari alamat Cloudflare.</>
+              <>{tebal(t('aman.cf_masuk', { email: cf.email }))}</>
             ) : (
-              <>Disetel, tapi permintaan ini tidak membawa identitas Access:{' '}
-                <span style={{ color: 'var(--text-muted)' }}>{cf.reason}</span>.
-                Wajar kalau Anda sedang membuka dari komputer ini langsung.</>
+              <>{t('aman.cf_tanpa')}{' '}
+                <span style={{ color: 'var(--text-muted)' }}>{cf.reason}</span>
+                {t('aman.cf_wajar')}</>
             )}
           </div>
         </div>
@@ -105,12 +103,12 @@ export default function SecurityCard({ card, sectionTitle, helpText }) {
         <div style={{ ...helpText, marginTop: '10px', display: 'flex',
                       alignItems: 'center', gap: '8px' }}>
           {has ? (
-            <><CheckCircle2 size={15} style={{ color: 'var(--entry)' }} /> Terpasang, aplikasi terkunci.</>
+            <><CheckCircle2 size={15} style={{ color: 'var(--entry)' }} /> {t('aman.terkunci')}</>
           ) : (
-            <><Info size={15} style={{ color: 'var(--text-muted)' }} /> Belum ada. Mode lokal: siapa pun yang sampai ke port ini bisa masuk.</>
+            <><Info size={15} style={{ color: 'var(--text-muted)' }} /> {t('aman.belum')}</>
           )}
           {status.mode === 'on' && (
-            <span style={{ color: 'var(--text-muted)' }}>· dipaksa menyala</span>
+            <span style={{ color: 'var(--text-muted)' }}>{t('aman.dipaksa')}</span>
           )}
         </div>
       )}
@@ -119,14 +117,14 @@ export default function SecurityCard({ card, sectionTitle, helpText }) {
         {has && (
           <input type={show ? 'text' : 'password'} value={current} autoComplete="current-password"
                  onChange={(e) => setCurrent(e.target.value)}
-                 placeholder="Kata sandi sekarang" style={input} />
+                 placeholder={t('aman.sekarang')} style={input} />
         )}
         <div style={{ position: 'relative' }}>
           <input type={show ? 'text' : 'password'} value={next} autoComplete="new-password"
                  onChange={(e) => setNext(e.target.value)}
-                 placeholder={`Kata sandi baru (min. ${minLength} karakter)`} style={input} />
+                 placeholder={t('aman.baru', { n: minLength })} style={input} />
           <button type="button" onClick={() => setShow((v) => !v)}
-                  aria-label={show ? 'Sembunyikan' : 'Tampilkan'}
+                  aria-label={show ? t('stat.sembunyikan') : t('stat.tampilkan')}
                   style={{ position: 'absolute', right: '10px', top: '50%',
                            transform: 'translateY(-50%)', background: 'none',
                            border: 'none', cursor: 'pointer', color: 'var(--text-muted)',
@@ -136,23 +134,23 @@ export default function SecurityCard({ card, sectionTitle, helpText }) {
         </div>
         <input type={show ? 'text' : 'password'} value={confirm} autoComplete="new-password"
                onChange={(e) => setConfirm(e.target.value)}
-               placeholder="Ulangi kata sandi baru" style={input} />
+               placeholder={t('aman.ulangi')} style={input} />
       </div>
 
       <div style={{ display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap' }}>
         <button className="btn-primary" onClick={save} disabled={!ready || busy}
                 style={{ opacity: !ready || busy ? 0.5 : 1 }}>
           {busy ? <Loader2 size={15} className="animate-spin" />
-                : (has ? 'Ganti kata sandi' : 'Pasang kata sandi')}
+                : (has ? t('aman.ganti') : t('aman.pasang'))}
         </button>
         {has && (
           <>
             <button onClick={logout} style={ghost}>
-              <LogOut size={14} /> Keluar di perangkat ini
+              <LogOut size={14} /> {t('aman.keluar')}
             </button>
             {status?.mode !== 'on' && (
               <button onClick={remove} disabled={busy} style={{ ...ghost, color: 'var(--danger)' }}>
-                Lepas kata sandi
+                {t('aman.lepas')}
               </button>
             )}
           </>
@@ -170,10 +168,8 @@ export default function SecurityCard({ card, sectionTitle, helpText }) {
       )}
 
       <p style={{ ...helpText, marginTop: '12px' }}>
-        Mengganti kata sandi mencabut sesi di semua perangkat lain. Itulah cara
-        mengeluarkan HP yang hilang atau orang yang tidak lagi perlu akses.
-        {cf?.configured && ' Tidak mencabut akses Cloudflare Access: itu dicabut '
-          + 'dengan menghapus email dari kebijakan Access.'}
+        {t('aman.catatan')}
+        {cf?.configured && t('aman.catatan_cf')}
       </p>
     </div>
   );

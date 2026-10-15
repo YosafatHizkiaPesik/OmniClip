@@ -1,4 +1,9 @@
 import React from 'react';
+import {
+  Activity, ArrowDownToLine, DatabaseBackup, Gauge, HardDrive, Lock,
+} from 'lucide-react';
+import { useT } from '../lib/i18n';
+import HalamanSetelan from './HalamanSetelan';
 import KesehatanCard from './KesehatanCard';
 import PemakaianAiCard from './PemakaianAiCard';
 import PemeliharaanCard from './PemeliharaanCard';
@@ -43,51 +48,27 @@ const helpText = {
   lineHeight: 1.6,
 };
 
-function Kelompok({ judul, nota, children }) {
-  return (
-    <section className="setelan-kelompok">
-      <div className="setelan-kelompok-kepala">
-        <h2>{judul}</h2>
-        {nota && <p>{nota}</p>}
-      </div>
-      <div className="petak-setelan">{children}</div>
-    </section>
-  );
-}
-
 export default function MesinTab() {
+  const t = useT();
   const alat = { card, sectionTitle, helpText };
   return (
-    <div className="page">
-      <div className="work-block" style={{ alignItems: 'center' }}>
-        <div style={{ minWidth: 0 }}>
-          <h1 className="work-title">Mesin</h1>
-          <div className="sub">
-            Keadaan aplikasinya sendiri. Tidak ada di halaman ini yang mengubah
-            cara klip dibuat.
-          </div>
-        </div>
-      </div>
-
-      <Kelompok judul="Ruang dan berkas"
-                nota="Di mana semuanya tinggal, dan berapa yang tersisa.">
-        <StorageCard {...alat} />
-        <PemeliharaanCard {...alat} />
-        <SampahCard {...alat} />
-      </Kelompok>
-
-      <Kelompok judul="Kesehatan dan pemakaian"
-                nota="Apa yang sedang berjalan, dan berapa kuota AI yang sudah terpakai.">
-        <KesehatanCard {...alat} />
-        <PemakaianAiCard {...alat} />
-      </Kelompok>
-
-      <Kelompok judul="Aplikasi"
-                nota="Versi, akses dari luar, dan cara mematikannya.">
-        <UpdateCard {...alat} />
-        <SecurityCard {...alat} />
-        <KeluarCard {...alat} />
-      </Kelompok>
-    </div>
+    <HalamanSetelan
+      judul={t('mesin.judul')}
+      sub={t('mesin.sub')}
+      bagian={[
+        { id: 'penyimpanan', judul: t('mesin.b_simpan'), nota: t('mesin.b_simpan_nota'), Ikon: HardDrive,
+          isi: <><StorageCard {...alat} /><SampahCard {...alat} /></> },
+        { id: 'ruang', judul: t('mesin.b_ruang'), nota: t('mesin.b_ruang_nota'), Ikon: DatabaseBackup,
+          isi: <PemeliharaanCard {...alat} /> },
+        { id: 'kesehatan', judul: t('mesin.b_sehat'), nota: t('mesin.b_sehat_nota'), Ikon: Activity,
+          isi: <KesehatanCard {...alat} /> },
+        { id: 'ai', judul: t('mesin.b_ai'), nota: t('mesin.b_ai_nota'), Ikon: Gauge,
+          isi: <PemakaianAiCard {...alat} /> },
+        { id: 'pembaruan', judul: t('mesin.b_perbarui'), nota: t('mesin.b_perbarui_nota'), Ikon: ArrowDownToLine,
+          isi: <UpdateCard {...alat} /> },
+        { id: 'keamanan', judul: t('mesin.b_aman'), nota: t('mesin.b_aman_nota'), Ikon: Lock,
+          isi: <><SecurityCard {...alat} /><KeluarCard {...alat} /></> },
+      ]}
+    />
   );
 }

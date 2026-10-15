@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { AlertTriangle, Loader2, Power } from 'lucide-react';
 import { apiPost } from '../lib/api';
 
+import { useT } from '../lib/i18n';
 /**
  * Mematikan OmniClip dari halamannya sendiri.
  *
@@ -11,14 +12,14 @@ import { apiPost } from '../lib/api';
  * untuk menutup aplikasinya akan menyimpulkan aplikasinya rusak.
  */
 export default function KeluarCard({ card, sectionTitle, helpText }) {
+  const t = useT();
   const [sibuk, setSibuk] = useState(false);
   const [mati, setMati] = useState(false);
   const [galat, setGalat] = useState(null);
 
   const keluar = async () => {
     if (!window.confirm(
-      'Matikan OmniClip?\n\nPekerjaan yang sedang berjalan (unduhan, render, unggahan) '
-      + 'akan berhenti dan dilanjutkan dari awal saat dibuka lagi.')) return;
+      t('keluar.yakin'))) return;
     setSibuk(true);
     setGalat(null);
     try {
@@ -35,10 +36,10 @@ export default function KeluarCard({ card, sectionTitle, helpText }) {
       <div style={card}>
         <div style={sectionTitle}>
           <Power size={18} style={{ color: 'var(--entry)' }} />
-          OmniClip berhenti
+          {t('keluar.berhenti')}
         </div>
         <p className="bantu" style={helpText}>
-          Tab ini boleh ditutup. Untuk memakainya lagi, buka OmniClip seperti biasa.
+          {t('keluar.berhenti_ket')}
         </p>
       </div>
     );
@@ -48,18 +49,16 @@ export default function KeluarCard({ card, sectionTitle, helpText }) {
     <div style={card}>
       <div style={sectionTitle}>
         <Power size={18} style={{ color: 'var(--reh)' }} />
-        Keluar
+        {t('keluar.judul')}
       </div>
       <p className="bantu" style={helpText}>
-        OmniClip berjalan di latar belakang selama komputer menyala. Itu yang
-        membuat render dan unggahan tetap jalan walau tab ini ditutup. Menutup
-        tab saja TIDAK mematikannya; tombol inilah yang mematikannya.
+        {t('keluar.ket')}
       </p>
       <button className="btn-secondary" onClick={keluar} disabled={sibuk}
               style={{ marginTop: '12px', display: 'inline-flex', gap: '7px',
                        alignItems: 'center', color: 'var(--danger)' }}>
         {sibuk ? <Loader2 size={15} className="animate-spin" /> : <Power size={15} />}
-        Matikan OmniClip
+        {t('keluar.matikan')}
       </button>
       {galat && (
         <div style={{ ...helpText, marginTop: '10px', color: 'var(--accent-red)',

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Activity, AlertTriangle, CheckCircle2, Loader2, RefreshCw } from 'lucide-react';
 import { apiGet } from '../lib/api';
 
+import { useT } from '../lib/i18n';
 /**
  * Kesehatan sistem: satu layar untuk "apakah semuanya baik-baik saja".
  *
@@ -14,6 +15,7 @@ import { apiGet } from '../lib/api';
  * tidak berarti apa-apa bagi yang tidak menulis kodenya.
  */
 export default function KesehatanCard({ card, sectionTitle, helpText }) {
+  const t = useT();
   const [data, setData] = useState(null);
   const [sibuk, setSibuk] = useState(false);
 
@@ -33,14 +35,14 @@ export default function KesehatanCard({ card, sectionTitle, helpText }) {
       <div style={{ ...sectionTitle, justifyContent: 'space-between' }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
           <Activity size={18} style={{ color: 'var(--reh)' }} />
-          Kesehatan sistem
+          {t('sehat.judul')}
           {data?.versi && (
             <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-muted)' }}>
-              versi {data.versi}
+              {t('sehat.versi', { v: data.versi })}
             </span>
           )}
         </span>
-        <button onClick={muat} disabled={sibuk} aria-label="Periksa lagi"
+        <button onClick={muat} disabled={sibuk} aria-label={t('sehat.periksa_lagi')}
                 style={{ background: 'none', border: 'none', cursor: 'pointer',
                          color: 'var(--text-secondary)', display: 'flex', padding: '3px' }}>
           {sibuk ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
@@ -48,13 +50,12 @@ export default function KesehatanCard({ card, sectionTitle, helpText }) {
       </div>
       <p className="bantu" style={helpText}>
         {data?.galat
-          ? `${data.galat} Tekan ikon segarkan di kanan untuk memeriksa lagi.`
+          ? t('sehat.galat', { galat: data.galat })
           : data
           ? (buruk === 0
-            ? 'Semua bagian yang diperiksa dalam keadaan baik.'
-            : `${buruk} hal belum siap. Yang belum siap tidak membuat OmniClip berhenti, `
-              + 'dan tiap baris menyebut apa akibatnya.')
-          : 'Memeriksa…'}
+            ? t('sehat.baik')
+            : t('sehat.buruk', { n: buruk }))
+          : t('sehat.memeriksa')}
       </p>
 
       <div style={{ marginTop: '10px' }}>

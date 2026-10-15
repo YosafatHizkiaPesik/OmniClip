@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Activity, Gauge, Loader2, RefreshCw } from 'lucide-react';
 import { apiGet } from '../lib/api';
 
+import { t as tr, tebal, useT, angka } from '../lib/i18n';
 /**
  * Berapa jatah AI yang sudah terpakai hari ini, dan untuk apa.
  *
@@ -14,7 +15,15 @@ import { apiGet } from '../lib/api';
  * Yang ditampilkan angka NYATA dari tiap panggilan, bukan perkiraan. Sisa
  * jatahnya perkiraan, dan dikatakan begitu: yang menghitung sebenarnya Google.
  */
+/** Nama pekerjaan AI dari server, diterjemahkan bila dikenal. */
+function namaPekerjaan(nama) {
+  const kunci = `pekerjaan_ai.${String(nama).toLowerCase().replace(/[^a-z]+/g, '_')}`;
+  const hasil = tr(kunci);
+  return hasil === kunci ? nama : hasil;
+}
+
 export default function PemakaianAiCard({ card, sectionTitle, helpText }) {
+  const t = useT();
   const [data, setData] = useState(null);
   const [sibuk, setSibuk] = useState(false);
 
@@ -36,9 +45,9 @@ export default function PemakaianAiCard({ card, sectionTitle, helpText }) {
       <div style={{ ...sectionTitle, justifyContent: 'space-between' }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
           <Gauge size={18} style={{ color: 'var(--reh)' }} />
-          Pemakaian AI
+          {t('ai.judul')}
         </span>
-        <button onClick={muat} disabled={sibuk} aria-label="Hitung ulang"
+        <button onClick={muat} disabled={sibuk} aria-label={t('ai.hitung_ulang')}
                 style={{ background: 'none', border: 'none', cursor: 'pointer',
                          color: 'var(--text-secondary)', display: 'flex', padding: '3px' }}>
           {sibuk ? <Loader2 size={15} className="animate-spin" />
@@ -47,14 +56,13 @@ export default function PemakaianAiCard({ card, sectionTitle, helpText }) {
       </div>
 
       {!data ? (
-        <p className="bantu" style={helpText}>Menghitung…</p>
+        <p className="bantu" style={helpText}>{t('ai.menghitung')}</p>
       ) : (
         <>
           <p className="bantu" style={helpText}>
-            Hari ini <b>{hari.panggilan}</b> panggilan
-            {hari.token > 0 && <> · <b>{hari.token.toLocaleString('id-ID')}</b> token</>}.
-            Jatah gratis Google <b>{data.jatah_per_model} panggilan per model per hari</b>,
-            dan berputar tengah malam waktu Pasifik (sekitar pukul 14.00 WIB).
+            {tebal(t('ai.hari_ini', { n: hari.panggilan }))}
+            {hari.token > 0 && tebal(t('ai.token', { n: angka(hari.token) }))}
+            {tebal(t('ai.jatah', { n: data.jatah_per_model }))}
           </p>
 
           {hari.sisa.length > 0 && (
@@ -69,7 +77,7 @@ export default function PemakaianAiCard({ card, sectionTitle, helpText }) {
                       <span>{s.model}</span>
                       <span style={{ color: s.pasti ? 'var(--accent-red)' : 'var(--text-muted)',
                                      fontVariantNumeric: 'tabular-nums' }}>
-                        {s.terpakai}/{s.jatah}{s.pasti ? ' · penuh' : ''}
+                        {s.terpakai}/{s.jatah}{s.pasti ? t('ai.penuh') : ''}
                       </span>
                     </div>
                     <div style={{ height: '5px', borderRadius: '3px',
@@ -84,16 +92,9 @@ export default function PemakaianAiCard({ card, sectionTitle, helpText }) {
                 );
               })}
               <p style={{ ...helpText, marginTop: '2px' }}>
-                Sisa <b>{sisaTotal}</b> panggilan pada model yang sudah dipakai
-                hari ini{belumTersentuh > 0 && <>, ditambah model lain yang belum
-                tersentuh sama sekali</>}.{' '}
-                {hari.sisa.some((s) => s.pasti)
-                  ? 'Model yang penuh sudah ditolak Google sendiri, jadi untuk '
-                    + 'yang itu angkanya pasti.'
-                  : 'Perkiraan: Google tidak pernah mengirim sisa kuotanya, jadi '
-                    + 'yang dihitung di sini panggilan yang keluar dari OmniClip. '
-                    + 'Batasnya sendiri diambil dari jawaban Google saat jatah '
-                    + 'sebuah model pertama kali habis.'}
+                {tebal(t('ai.sisa', { n: sisaTotal }))}
+                {belumTersentuh > 0 && t('ai.sisa_lain')}.{' '}
+                {hari.sisa.some((s) => s.pasti) ? t('ai.pasti') : t('ai.perkiraan')}
               </p>
             </div>
           )}
@@ -102,13 +103,13 @@ export default function PemakaianAiCard({ card, sectionTitle, helpText }) {
             <>
               <div style={{ ...helpText, marginTop: '14px', fontWeight: 800,
                             color: 'var(--text-secondary)' }}>
-                Terpakai untuk apa ({data.rentang_hari} hari terakhir)
+                {t('ai.untuk_apa', { n: data.rentang_hari })}
               </div>
               <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap',
                             marginTop: '6px' }}>
                 {data.per_pekerjaan.map((p) => (
                   <span key={p.pekerjaan} className="chip" style={{ fontSize: '0.7rem' }}>
-                    {p.pekerjaan} · {p.panggilan}×
+                    {namaPekerjaan(p.pekerjaan)} · {p.panggilan}×
                   </span>
                 ))}
               </div>
@@ -119,8 +120,7 @@ export default function PemakaianAiCard({ card, sectionTitle, helpText }) {
             <p style={{ ...helpText, marginTop: '12px', display: 'flex',
                         alignItems: 'center', gap: '7px' }}>
               <Activity size={14} style={{ flexShrink: 0 }} />
-              Rata-rata <b>{data.rata_per_video.panggilan}</b> panggilan per video,
-              dari {data.rata_per_video.video} video.
+              {tebal(t('ai.rata', { n: data.rata_per_video.panggilan, video: data.rata_per_video.video }))}
             </p>
           )}
         </>
