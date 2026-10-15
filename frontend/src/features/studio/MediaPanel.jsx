@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { apiDelete, apiGet, apiPatch, apiPost } from '../../lib/api';
 import { formatTime } from '../../utils/timeFormat';
+import { useT } from '../../lib/i18n';
 
 /**
  * Tiga rak pustaka.
@@ -17,12 +18,9 @@ import { formatTime } from '../../utils/timeFormat';
  * Pembagiannya sama persis dengan `KATEGORI` di backend/app/services/aset.py.
  */
 const RAK = [
-  { id: 'musik', label: 'Musik',
-    kosong: 'Belum ada musik latar. Impor berkas mp3 atau wav milik Anda sendiri.' },
-  { id: 'efek', label: 'Efek suara',
-    kosong: 'Belum ada efek suara. Berkas suara pendek masuk ke sini sendiri.' },
-  { id: 'media', label: 'Video & foto',
-    kosong: 'Belum ada. Contohnya cuplikan pertandingan untuk podcast bola, atau logo kanal.' },
+  { id: 'musik', label: 'rak.musik', kosong: 'rak.musik_kosong' },
+  { id: 'efek', label: 'rak.efek', kosong: 'rak.efek_kosong' },
+  { id: 'media', label: 'rak.media', kosong: 'rak.media_kosong' },
 ];
 
 const IKON = { video: Film, gambar: ImageIcon, audio: Music, teks: Type };
@@ -36,11 +34,11 @@ const FONT_TEKS = [
 ];
 
 export const POSISI = [
-  ['penuh', 'Penuh'],
-  ['atas', 'Separuh atas'],
-  ['bawah', 'Separuh bawah'],
-  ['tengah', 'Tengah'],
-  ['sudut', 'Pojok'],
+  ['penuh', 'petak.penuh'],
+  ['atas', 'petak.atas'],
+  ['bawah', 'petak.bawah'],
+  ['tengah', 'petak.tengah'],
+  ['sudut', 'petak.sudut'],
 ];
 
 const RASIO = { '9:16': 9 / 16, '1:1': 1, '4:5': 4 / 5, '16:9': 16 / 9 };
@@ -105,6 +103,7 @@ export default function MediaPanel({
   clip, videoId, aspectRatio, waktuSekarang = 0, durasiKlip = 0,
   onLayers, frameKeys = [], onFrameKeys, sorot = null, onSorot = null,
 }) {
+  const t = useT();
   const [aset, setAset] = useState(null);
   const [rak, setRak] = useState('media');
   const [galat, setGalat] = useState(null);
@@ -139,15 +138,15 @@ export default function MediaPanel({
   };
 
   const tambah = (a) => {
-    const t = Math.max(0, Math.min(waktuSekarang, Math.max(0, durasiKlip - 0.2)));
-    const sisa = Math.max(0.2, durasiKlip - t);
+    const mulai = Math.max(0, Math.min(waktuSekarang, Math.max(0, durasiKlip - 0.2)));
+    const sisa = Math.max(0.2, durasiKlip - mulai);
     const id = idBaru();
     // Langsung terpilih: kotaknya muncul di pratinjau tanpa harus dicari dan
     // diklik dulu, dan menaruh sesuatu lalu langsung menggesernya adalah urutan
     // yang dilakukan orang setiap kali.
     onSorot?.(id);
     onLayers([...lapisan, {
-      id, aset: a.id, jenis: a.jenis, nama: a.nama, t: Number(t.toFixed(2)),
+      id, aset: a.id, jenis: a.jenis, nama: a.nama, t: Number(mulai.toFixed(2)),
       // Gambar tidak punya panjang sendiri: bawaannya empat detik. Video dan
       // suara sepanjang berkasnya, dipotong di akhir klip.
       dur: a.jenis === 'gambar' ? Math.min(4, sisa) : Number(Math.min(a.durasi || sisa, sisa).toFixed(2)),
@@ -173,14 +172,14 @@ export default function MediaPanel({
    * diatur seperti tempelan lain.
    */
   const tambahTeks = () => {
-    const t = Math.max(0, Math.min(waktuSekarang, Math.max(0, durasiKlip - 0.2)));
+    const mulai = Math.max(0, Math.min(waktuSekarang, Math.max(0, durasiKlip - 0.2)));
     const id = idBaru();
     onSorot?.(id);
     onLayers([...lapisan, {
-      id, jenis: 'teks', nama: 'Tulisan', teks: '@namakanal',
-      t: Number(t.toFixed(2)),
+      id, jenis: 'teks', nama: t('sisipan.tulisan'), teks: '@namakanal',
+      t: Number(mulai.toFixed(2)),
       // Sepanjang sisa klip: syarat kampanye hampir selalu "sepanjang video".
-      dur: Number(Math.max(0.2, durasiKlip - t).toFixed(2)),
+      dur: Number(Math.max(0.2, durasiKlip - mulai).toFixed(2)),
       posisi: 'sudut', ukuran: 4.5,
       warna: '#FFFFFF', garis: '#000000', tebal_garis: 3,
       keluarga: 'Archivo Black', opasitas: 0.85,
@@ -236,7 +235,7 @@ export default function MediaPanel({
   };
 
   const hapusAset = async (a) => {
-    if (!window.confirm(`Hapus "${a.nama}" dari pustaka? Klip yang memakainya kehilangan sisipan ini.`)) return;
+    if (!window.confirm(t('sisipan.yakin_hapus', { nama: a.nama }))) return;
     try { await apiDelete(`/aset/${a.id}`); await muat(); } catch (err) { setGalat(err.message); }
   };
 
@@ -250,7 +249,7 @@ export default function MediaPanel({
   };
 
 
-  if (!clip) return <p style={kecil}>Pilih klip dulu.</p>;
+  if (!clip) return <p style={kecil}>{t('studio.pilih_klip_dulu')}</p>;
 
   const efek = (aset ?? []).filter((a) => a.bawaan);
   const milik = (aset ?? []).filter((a) => !a.bawaan);
@@ -278,17 +277,16 @@ export default function MediaPanel({
       {galat && <p style={{ ...kecil, color: 'var(--danger)' }}>{galat}</p>}
 
       {/* --- Sisipan di klip ini ------------------------------------------- */}
-      <div style={judul}>Di klip ini ({urut.length})</div>
+      <div style={judul}>{t('sisipan.di_klip', { n: urut.length })}</div>
       {!urut.length && (
         <p style={{ ...kecil, margin: '0 0 12px' }}>
-          Belum ada sisipan. Tambahkan dari pustaka di bawah, dan ia ditaruh di posisi
-          garis main sekarang ({formatTime(waktuSekarang)}).
+          {t('sisipan.kosong', { waktu: formatTime(waktuSekarang) })}
         </p>
       )}
       {urut.map((l) => {
         const teksLayer = l.jenis === 'teks';
         const a = teksLayer
-          ? { jenis: 'teks', nama: l.nama || 'Tulisan', durasi: l.dur }
+          ? { jenis: 'teks', nama: l.nama || t('sisipan.tulisan'), durasi: l.dur }
           : asetById[l.aset];
         // Indeks di daftar ASLI, bukan di daftar yang sudah diurut waktu:
         // yang menentukan tumpukan adalah urutan daftarnya.
@@ -305,12 +303,12 @@ export default function MediaPanel({
               <Ikon size={14} style={{ flexShrink: 0, color: 'var(--text-secondary)' }} />
               <b style={{ fontSize: '0.78rem', flex: 1, minWidth: 0, overflow: 'hidden',
                           textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {a?.nama ?? 'Aset hilang'}
+                {a?.nama ?? t('sisipan.aset_hilang')}
               </b>
               {l.asal === 'otomatis' && (
                 <span style={{ fontSize: '0.62rem', fontWeight: 800, padding: '1px 6px',
                                borderRadius: '99px', background: 'var(--hl-wash)',
-                               color: 'var(--accent-cyan)' }}>otomatis</span>
+                               color: 'var(--accent-cyan)' }}>{t('sisipan.otomatis')}</span>
               )}
               {/* Urutan tumpuk. Yang di BAWAH daftar digambar paling akhir,
                   jadi ia yang menutupi. Urutan daftar itu sendiri yang dipakai
@@ -319,66 +317,66 @@ export default function MediaPanel({
               {visual && (
                 <>
                   <button className="btn-secondary studio-icon"
-                          title="Pindahkan ke belakang (tertutup sisipan lain)"
+                          title={t('sisipan.ke_belakang')}
                           disabled={indeks <= 0}
                           onClick={() => geser(l.id, -1)}><ChevronDown size={13} /></button>
                   <button className="btn-secondary studio-icon"
-                          title="Pindahkan ke depan (menutupi sisipan lain)"
+                          title={t('sisipan.ke_depan')}
                           disabled={indeks >= lapisan.length - 1}
                           onClick={() => geser(l.id, 1)}><ChevronUp size={13} /></button>
                 </>
               )}
-              <button className="btn-secondary studio-icon" title="Hapus sisipan ini"
+              <button className="btn-secondary studio-icon" title={t('sisipan.hapus')}
                       onClick={() => hapus(l.id)}><X size={13} /></button>
             </div>
             {l.alasan && <p style={{ ...kecil, margin: '4px 0 0' }}>{l.alasan}</p>}
             {!a && (
               <p style={{ ...kecil, color: 'var(--danger)', margin: '4px 0 0' }}>
-                Berkasnya sudah dihapus dari pustaka. Sisipan ini akan dilewati saat render.
+                {t('sisipan.berkas_hilang')}
               </p>
             )}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center',
                           marginTop: '7px', fontSize: '0.72rem' }}>
-              <label>Mulai <input type="number" step="0.1" min="0" style={angka}
+              <label>{t('sisipan.mulai')} <input type="number" step="0.1" min="0" style={angka}
                                   value={l.t ?? 0}
                                   onChange={(e) => ubah(l.id, { t: Math.max(0, Number(e.target.value) || 0) })} /></label>
               <button className="btn-secondary" style={{ fontSize: '0.68rem', padding: '3px 7px' }}
-                      title="Pindahkan awalnya ke garis main"
+                      title={t('sisipan.ke_sini_judul')}
                       onClick={() => ubah(l.id, { t: Number(waktuSekarang.toFixed(2)) })}>
-                <Crosshair size={11} /> ke sini
+                <Crosshair size={11} /> {t('sisipan.ke_sini')}
               </button>
-              <label>Lama <input type="number" step="0.1" min="0.1" style={angka}
+              <label>{t('sisipan.lama')} <input type="number" step="0.1" min="0.1" style={angka}
                                  value={l.dur ?? ''}
                                  onChange={(e) => ubah(l.id, { dur: Math.max(0.1, Number(e.target.value) || 0.1) })} /></label>
               {a?.jenis === 'video' && (
-                <label title="Detik keberapa di dalam berkasnya cuplikan ini dimulai">
-                  Dari detik <input type="number" step="0.1" min="0" style={angka}
+                <label title={t('sisipan.dari_detik_judul')}>
+                  {t('sisipan.dari_detik')} <input type="number" step="0.1" min="0" style={angka}
                                     value={l.mulai_sumber ?? 0}
                                     onChange={(e) => ubah(l.id, { mulai_sumber: Math.max(0, Number(e.target.value) || 0) })} />
                 </label>
               )}
               {bersuara && (
                 <label style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                  Volume
+                  {t('sisipan.volume')}
                   <input type="range" min="0" max="2" step="0.05" value={l.volume ?? 1}
                          onChange={(e) => ubah(l.id, { volume: Number(e.target.value) })} />
                   <span style={{ width: '32px' }}>{Math.round((l.volume ?? 1) * 100)}%</span>
                 </label>
               )}
               {bersuara && (
-                <label title="Suara ini mengecil sendiri saat ada orang bicara"
+                <label title={t('sisipan.redam_judul')}
                        style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                   <input type="checkbox" checked={!!l.redam}
                          onChange={(e) => ubah(l.id, { redam: e.target.checked })} />
-                  Kecilkan saat orang bicara
+                  {t('sisipan.redam')}
                 </label>
               )}
               {a?.jenis !== 'gambar' && (
-                <label title="Berkas yang lebih pendek daripada petaknya diputar berulang sampai penuh"
+                <label title={t('sisipan.ulang_judul')}
                        style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                   <input type="checkbox" checked={!!l.ulang}
                          onChange={(e) => ubah(l.id, { ulang: e.target.checked })} />
-                  Putar berulang
+                  {t('sisipan.ulang')}
                 </label>
               )}
             </div>
@@ -389,13 +387,13 @@ export default function MediaPanel({
                 bukan gambar di bawahnya. */}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center',
                           marginTop: '6px', fontSize: '0.72rem' }}>
-              <label title="Detik untuk muncul berangsur di awalnya">
-                Lembut masuk <input type="number" step="0.1" min="0" max="10" style={angka}
+              <label title={t('sisipan.fade_masuk_judul')}>
+                {t('sisipan.fade_masuk')} <input type="number" step="0.1" min="0" max="10" style={angka}
                                     value={l.fade_masuk ?? 0}
                                     onChange={(e) => ubah(l.id, { fade_masuk: Math.max(0, Number(e.target.value) || 0) })} />
               </label>
-              <label title="Detik untuk menghilang berangsur di akhirnya">
-                Lembut keluar <input type="number" step="0.1" min="0" max="10" style={angka}
+              <label title={t('sisipan.fade_keluar_judul')}>
+                {t('sisipan.fade_keluar')} <input type="number" step="0.1" min="0" max="10" style={angka}
                                      value={l.fade_keluar ?? 0}
                                      onChange={(e) => ubah(l.id, { fade_keluar: Math.max(0, Number(e.target.value) || 0) })} />
               </label>
@@ -417,28 +415,27 @@ export default function MediaPanel({
                 <div style={{ marginTop: '8px', paddingTop: '8px',
                               borderTop: '1px solid var(--border-color)' }}>
                   <div style={{ ...kecil, marginBottom: '6px' }}>
-                    <b style={{ color: 'var(--text-primary)' }}>Petak di layar.</b>{' '}
-                    Seret kotaknya langsung di pratinjau, atau mulai dari salah satu
-                    bentuk di bawah lalu geser sendiri.
+                    <b style={{ color: 'var(--text-primary)' }}>{t('sisipan.petak_judul')}</b>{' '}
+                    {t('sisipan.petak_ket')}
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginBottom: '7px' }}>
-                    {POSISI.map(([v, t]) => (
+                    {POSISI.map(([v, kunciLabel]) => (
                       <button key={v} className="btn-secondary"
                               style={{ fontSize: '0.68rem', padding: '3px 8px' }}
                               onClick={() => ubah(l.id, { posisi: v, rect: rectDariPreset(v, aspectRatio) })}>
-                        {t}
+                        {t(kunciLabel)}
                       </button>
                     ))}
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center',
                                 fontSize: '0.72rem' }}>
-                    <label>Kiri % <input type="number" step="1" style={angka} value={petak.x}
+                    <label>{t('sisipan.kiri_p')} <input type="number" step="1" style={angka} value={petak.x}
                                          onChange={(e) => setPetak({ x: Number(e.target.value) || 0 })} /></label>
-                    <label>Atas % <input type="number" step="1" style={angka} value={petak.y}
+                    <label>{t('sisipan.atas_p')} <input type="number" step="1" style={angka} value={petak.y}
                                          onChange={(e) => setPetak({ y: Number(e.target.value) || 0 })} /></label>
-                    <label>Lebar % <input type="number" step="1" style={angka} value={petak.w}
+                    <label>{t('sisipan.lebar_p')} <input type="number" step="1" style={angka} value={petak.w}
                                           onChange={(e) => setPetak({ w: Number(e.target.value) || 2 })} /></label>
-                    <label>Tinggi % <input type="number" step="1" style={angka} value={petak.h}
+                    <label>{t('sisipan.tinggi_p')} <input type="number" step="1" style={angka} value={petak.h}
                                            onChange={(e) => setPetak({ h: Number(e.target.value) || 2 })} /></label>
                   </div>
                   {teksLayer && (
@@ -455,27 +452,27 @@ export default function MediaPanel({
                                  resize: 'vertical', fontFamily: 'inherit' }} />
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '9px',
                                     alignItems: 'center', fontSize: '0.72rem', marginTop: '7px' }}>
-                        <label>Font{' '}
+                        <label>{t('gaya.font')}{' '}
                           <select value={l.keluarga ?? 'Archivo Black'}
                                   onChange={(e) => ubah(l.id, { keluarga: e.target.value })}
                                   style={{ ...angka, width: 'auto' }}>
                             {FONT_TEKS.map((f) => <option key={f} value={f}>{f}</option>)}
                           </select>
                         </label>
-                        <label title="Tinggi huruf, dalam persen tinggi layar">
-                          Ukuran %{' '}
+                        <label title={t('sisipan.ukuran_judul')}>
+                          {t('sisipan.ukuran_p')}{' '}
                           <input type="number" step="0.5" min="1" max="40" style={angka}
                                  value={l.ukuran ?? 4.5}
                                  onChange={(e) => ubah(l.id, { ukuran: Number(e.target.value) || 4.5 })} />
                         </label>
-                        <label>Warna{' '}
+                        <label>{t('gaya.warna')}{' '}
                           <input type="color" value={l.warna ?? '#FFFFFF'}
                                  onChange={(e) => ubah(l.id, { warna: e.target.value })}
                                  style={{ width: '32px', height: '22px', padding: 0, border: 'none',
                                           background: 'none', verticalAlign: 'middle' }} />
                         </label>
-                        <label title="Garis luar huruf. Nol berarti tanpa garis.">
-                          Garis{' '}
+                        <label title={t('sisipan.garis_judul')}>
+                          {t('sisipan.garis')}{' '}
                           <input type="color" value={l.garis ?? '#000000'}
                                  onChange={(e) => ubah(l.id, { garis: e.target.value })}
                                  style={{ width: '32px', height: '22px', padding: 0, border: 'none',
@@ -484,10 +481,10 @@ export default function MediaPanel({
                                  value={l.tebal_garis ?? 3}
                                  onChange={(e) => ubah(l.id, { tebal_garis: Number(e.target.value) || 0 })} />
                         </label>
-                        <label title="Kotak di belakang tulisan. Kosongkan untuk tanpa kotak.">
+                        <label title={t('sisipan.latar_judul')}>
                           <input type="checkbox" checked={!!l.latar}
                                  onChange={(e) => ubah(l.id, { latar: e.target.checked ? '#000000' : '' })} />
-                          {' '}Kotak latar
+                          {' '}{t('sisipan.latar')}
                           {l.latar ? (
                             <input type="color" value={l.latar}
                                    onChange={(e) => ubah(l.id, { latar: e.target.value })}
@@ -501,18 +498,18 @@ export default function MediaPanel({
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center',
                                 marginTop: '7px', fontSize: '0.72rem' }}>
                     {!teksLayer && (
-                    <label title="Penuh memotong sisi yang kelebihan; Muat memuat semuanya dengan ruang kosong di sisanya">
-                      Isi petak{' '}
+                    <label title={t('sisipan.isi_judul')}>
+                      {t('sisipan.isi')}{' '}
                       <select value={l.isi ?? (a?.jenis === 'gambar' ? 'muat' : 'penuh')}
                               onChange={(e) => ubah(l.id, { isi: e.target.value })}
                               style={{ ...angka, width: 'auto' }}>
-                        <option value="penuh">Penuhi, potong sisanya</option>
-                        <option value="muat">Muat utuh</option>
+                        <option value="penuh">{t('sisipan.penuhi')}</option>
+                        <option value="muat">{t('sisipan.muat')}</option>
                       </select>
                     </label>
                     )}
                     <label style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                      Ketembusan
+                      {t('sisipan.ketembusan')}
                       <input type="range" min="0.05" max="1" step="0.05"
                              value={l.opasitas ?? 1}
                              onChange={(e) => ubah(l.id, { opasitas: Number(e.target.value) })} />
@@ -521,9 +518,9 @@ export default function MediaPanel({
                     {bebas && (
                       <button className="btn-secondary"
                               style={{ fontSize: '0.68rem', padding: '3px 8px' }}
-                              title="Kembali memakai bentuk baku, membuang petak yang Anda geser"
+                              title={t('sisipan.kembalikan_judul')}
                               onClick={() => ubah(l.id, { rect: null })}>
-                        Kembalikan
+                        {t('bingkai.kembalikan')}
                       </button>
                     )}
                   </div>
@@ -535,31 +532,29 @@ export default function MediaPanel({
       })}
 
       {/* --- Pustaka ------------------------------------------------------- */}
-      <div style={{ ...judul, marginTop: '16px' }}>Berkas Anda</div>
+      <div style={{ ...judul, marginTop: '16px' }}>{t('sisipan.berkas_anda')}</div>
       <button className="btn-secondary" onClick={() => berkasRef.current?.click()} disabled={unggah}
               style={{ fontSize: '0.8rem', display: 'inline-flex', gap: '6px', alignItems: 'center',
                        marginBottom: '9px' }}>
         {unggah ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
-        {unggah ? 'Mengunggah…' : 'Impor video, gambar, atau musik'}
+        {unggah ? t('sisipan.mengunggah') : t('sisipan.impor')}
       </button>
       <input ref={berkasRef} type="file" hidden onChange={kirimBerkas}
              accept="video/*,audio/*,image/png,image/jpeg,image/webp,image/gif" />
       <button className="btn-secondary" onClick={tambahTeks}
-              title="Tulisan yang menempel di atas video, terpisah dari judul klip"
+              title={t('sisipan.tulisan_judul')}
               style={{ fontSize: '0.8rem', display: 'inline-flex', gap: '6px',
                        alignItems: 'center', marginBottom: '9px', marginLeft: '7px' }}>
-        <Type size={14} /> Tambah tulisan
+        <Type size={14} /> {t('sisipan.tambah_tulisan')}
       </button>
       {/* Papan suara. Ditaruh sebelum daftar rak karena inilah cara pustaka
           suara terisi sekarang: tidak ada lagi efek bawaan. */}
       <div style={{ ...kartu, padding: '10px 11px', marginBottom: '10px' }}>
         <div style={{ fontSize: '0.78rem', fontWeight: 800, marginBottom: '5px' }}>
-          Ambil dari papan suara
+          {t('sisipan.papan_suara')}
         </div>
         <p style={{ ...kecil, margin: '0 0 7px', lineHeight: 1.55 }}>
-          Tempel tautan halaman papan suara (misalnya hasil pencarian di
-          myinstants.com) atau tautan langsung ke berkas mp3. Berkasnya diunduh
-          ke pustaka Anda sendiri di komputer ini.
+          {t('sisipan.papan_ket')}
         </p>
         <div style={{ display: 'flex', gap: '6px' }}>
           <input
@@ -572,19 +567,18 @@ export default function MediaPanel({
                      background: 'var(--plate-3)', color: 'var(--ink)' }} />
           <button className="btn-secondary" onClick={cariSoundboard} disabled={sbSibuk}
                   style={{ fontSize: '0.76rem', padding: '5px 10px', flex: 'none' }}>
-            {sbSibuk ? <Loader2 size={13} className="animate-spin" /> : 'Cari'}
+            {sbSibuk ? <Loader2 size={13} className="animate-spin" /> : t('umum.cari')}
           </button>
         </div>
         {sbHasil && sbHasil.length === 0 && (
           <p style={{ ...kecil, margin: '7px 0 0' }}>
-            Tidak ada berkas suara yang terbaca di halaman itu.
+            {t('sisipan.papan_kosong')}
           </p>
         )}
         {sbHasil && sbHasil.length > 0 && (
           <>
             <p style={{ ...kecil, margin: '8px 0 5px' }}>
-              {sbHasil.length} suara. Tekan untuk mengunduhnya dan langsung
-              menaruhnya di klip ini.
+              {t('sisipan.papan_n', { n: sbHasil.length })}
             </p>
             <div style={{ maxHeight: '190px', overflowY: 'auto', display: 'flex',
                           flexDirection: 'column', gap: '3px' }}>
@@ -611,12 +605,9 @@ export default function MediaPanel({
       </div>
 
       <p style={{ ...kecil, margin: '0 0 10px', lineHeight: 1.55 }}>
-        Tulisan di sini BUKAN judul klip. Judul punya tema dan animasinya
-        sendiri di panel Judul; yang ini tempelan biasa yang bisa ditaruh di
-        mana saja dan selama apa saja, misalnya nama kanal yang diminta sebuah
-        kampanye. Ketembusannya diatur seperti sisipan lain.
+        {t('sisipan.bukan_judul')}
       </p>
-      {aset === null && <p style={kecil}><Loader2 size={12} className="animate-spin" /> Memuat…</p>}
+      {aset === null && <p style={kecil}><Loader2 size={12} className="animate-spin" /> {t('umum.memuat')}</p>}
 
       {/* Tiga rak. Selalu tergambar, juga saat kosong: rak yang hilang karena
           belum ada isinya menyembunyikan tempat berkas itu nanti mendarat. */}
@@ -625,14 +616,14 @@ export default function MediaPanel({
           <button key={r.id} onClick={() => setRak(r.id)}
                   className={`chip${rak === r.id ? ' is-on' : ''}`}
                   style={{ flex: 1, justifyContent: 'center' }}>
-            {r.label}{jumlahRak[r.id] ? ` (${jumlahRak[r.id]})` : ''}
+            {t(r.label)}{jumlahRak[r.id] ? ` (${jumlahRak[r.id]})` : ''}
           </button>
         ))}
       </div>
 
       {aset && !diRak.length && (
         <p style={{ ...kecil, margin: '0 0 12px' }}>
-          {RAK.find((r) => r.id === rak)?.kosong}
+          {t(RAK.find((r) => r.id === rak)?.kosong ?? '')}
         </p>
       )}
       {diRak.map((a) => {
@@ -643,10 +634,10 @@ export default function MediaPanel({
             <Ikon size={14} style={{ color: 'var(--text-secondary)', flexShrink: 0 }} />
             <span style={{ fontSize: '0.76rem', flex: 1, minWidth: 0, overflow: 'hidden',
                            textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.nama}</span>
-            <span style={kecil}>{a.jenis === 'gambar' ? 'gambar' : formatTime(a.durasi)}</span>
+            <span style={kecil}>{a.jenis === 'gambar' ? t('sisipan.gambar') : formatTime(a.durasi)}</span>
             {a.jenis === 'audio' && (
               <button className="btn-secondary studio-icon" onClick={() => putar(a)}
-                      title="Dengarkan">{dengar === a.id ? <Square size={12} /> : <Play size={12} />}</button>
+                      title={t('sisipan.dengarkan')}>{dengar === a.id ? <Square size={12} /> : <Play size={12} />}</button>
             )}
             {/* Berkas suara ditaruh di raknya dengan menebak dari durasi, dan
                 durasi tidak tahu apa-apa soal maksud: jingle lima detik itu
@@ -656,16 +647,16 @@ export default function MediaPanel({
             {a.jenis === 'audio' && (
               <button className="btn-secondary" style={{ fontSize: '0.7rem', padding: '3px 8px' }}
                       title={rak === 'musik'
-                        ? 'Pindahkan ke rak Efek suara'
-                        : 'Pindahkan ke rak Musik'}
+                        ? t('sisipan.ke_efek')
+                        : t('sisipan.ke_musik')}
                       onClick={() => pindahRak(a, rak === 'musik' ? 'efek' : 'musik')}>
-                → {rak === 'musik' ? 'Efek' : 'Musik'}
+                → {rak === 'musik' ? t('sisipan.efek') : t('rak.musik')}
               </button>
             )}
             <button className="btn-secondary" style={{ fontSize: '0.7rem', padding: '3px 8px' }}
-                    onClick={() => tambah(a)}>+ Tambah</button>
+                    onClick={() => tambah(a)}>{t('sisipan.tambah')}</button>
             <button className="btn-secondary studio-icon" onClick={() => hapusAset(a)}
-                    title="Hapus dari pustaka"><Trash2 size={12} /></button>
+                    title={t('sisipan.hapus_pustaka')}><Trash2 size={12} /></button>
           </div>
         );
       })}
@@ -675,11 +666,7 @@ export default function MediaPanel({
           Dikatakan di tempat berkasnya dicari, bukan di halaman bantuan. */}
       {rak === 'musik' && (
         <p style={{ ...kecil, margin: '10px 0 0', lineHeight: 1.6 }}>
-          OmniClip tidak membawa lagu apa pun. Lagu yang biasa dipakai pembuat
-          klip hampir semuanya berhak cipta, dan menyalinkannya ke sini berarti
-          menaruh masalah hak cipta di kanal Anda, bukan di aplikasinya. Impor
-          berkas milik Anda sendiri, atau ambil dari pustaka bebas royalti
-          seperti YouTube Audio Library, Pixabay Music, atau Free Music Archive.
+          {t('sisipan.tanpa_lagu')}
         </p>
       )}
 
@@ -689,16 +676,16 @@ export default function MediaPanel({
           ada bagian sama sekali. */}
       {efek.length > 0 && (
         <>
-          <div style={{ ...judul, marginTop: '16px' }}>Efek suara bawaan</div>
+          <div style={{ ...judul, marginTop: '16px' }}>{t('sisipan.efek_bawaan')}</div>
           <p style={{ ...kecil, margin: '0 0 7px' }}>
-            Dibuat sendiri oleh sistem, jadi bebas dipakai dan tidak butuh internet.
+            {t('sisipan.efek_bawaan_ket')}
           </p>
         </>
       )}
       {efek.map((a) => (
         <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: '7px',
                                  padding: '6px 0', borderBottom: '1px solid var(--border-color)' }}>
-          <button className="btn-secondary studio-icon" onClick={() => putar(a)} title="Dengarkan">
+          <button className="btn-secondary studio-icon" onClick={() => putar(a)} title={t('sisipan.dengarkan')}>
             {dengar === a.id ? <Square size={12} /> : <Play size={12} />}
           </button>
           <span style={{ flex: 1, minWidth: 0 }}>
@@ -706,7 +693,7 @@ export default function MediaPanel({
             <span style={kecil}>{a.catatan}</span>
           </span>
           <button className="btn-secondary" style={{ fontSize: '0.7rem', padding: '3px 8px' }}
-                  onClick={() => tambah(a)}>+ Tambah</button>
+                  onClick={() => tambah(a)}>{t('sisipan.tambah')}</button>
         </div>
       ))}
     </div>
