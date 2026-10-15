@@ -434,6 +434,7 @@ function NamaPenutur({ clip, videoId, onLayers }) {
 
 export default function KomentarPanel({
   clip, videoId, waktuSekarang = 0, durasiKlip = 0, onChange, onSeek, onPakaiMerek, onLayers,
+  onBilahProgres,
 }) {
   const [draf, setDraf] = useState(null);
   const [sibuk, setSibuk] = useState(false);
@@ -543,6 +544,18 @@ export default function KomentarPanel({
         <input type="checkbox" checked={clip.pakai_merek !== false}
                onChange={(e) => onPakaiMerek?.(e.target.checked)} />
         Pakai intro/outro kanal (diatur di halaman Akun)
+      </label>
+
+      <label style={{ fontSize: '.78rem', display: 'flex', gap: '8px', alignItems: 'center' }}
+             title="Garis tipis yang terisi selama klip berjalan. Penonton tahu tinggal berapa lama, jadi lebih banyak yang bertahan sampai habis.">
+        Bilah progres
+        <select className="field" value={clip.bilah_progres || ''}
+                style={{ width: 'auto', padding: '2px 6px', fontSize: '.76rem' }}
+                onChange={(e) => onBilahProgres?.(e.target.value || null)}>
+          <option value="">Tanpa</option>
+          <option value="bawah">Di bawah</option>
+          <option value="atas">Di atas</option>
+        </select>
       </label>
 
       {daftar.length > 0 && (

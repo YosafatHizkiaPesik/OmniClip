@@ -1872,6 +1872,8 @@ def render_clip(
     merek: Optional[dict] = None,
     # Titik punch-in [{t, dur?, skala?}] dalam waktu KLIP. Lihat punch.py.
     punch_in: Optional[list] = None,
+    # Bilah progres {posisi: "bawah"|"atas", warna: "#RRGGBB"}; None = tanpa.
+    bilah_progres: Optional[dict] = None,
     lock_person: Optional[int] = None,
     # Tanda linimasa dari pengguna: [{t, person}] dalam waktu KLIP.
     person_keys: Optional[list] = None,
@@ -2334,6 +2336,21 @@ def render_clip(
                 for k in komentar_siap))
             total_duration += k_tambah
 
+        # Bilah progres: garis tipis yang terisi selama klip berjalan. Di Shorts
+        # ia memberi tahu penonton tinggal berapa lama, dan itu yang membuat
+        # orang bertahan sampai habis. Dipasang sesudah komentar (jadi ikut
+        # berjalan selama gambar ditahan) dan sebelum intro/outro kanal.
+        # `drawbox` di ffmpeg 6.1 tidak mengevaluasi `t` per bingkai, jadi
+        # bilahnya overlay warna yang digeser, bukan kotak yang melebar.
+        if bilah_progres:
+            tebal = max(6, _even(out_h * 0.006))
+            warna_bilah = _warna_ff(str(bilah_progres.get("warna") or "#F5C400"), "0xF5C400")
+            y_bilah = "0" if bilah_progres.get("posisi") == "atas" else "H-h"
+            graph += (f";color=c={warna_bilah}:s={out_w}x{tebal}:r={fps_keluar}:d={total_duration:.3f}[bilahw]"
+                      f";{vout}[bilahw]overlay=x='-w+w*t/{max(0.1, total_duration):.3f}':y={y_bilah}"
+                      f":eval=frame:shortest=0[vbilah]")
+            vout = "[vbilah]"
+
         # Intro dan outro berkas milik kanal, di luar klipnya sendiri.
         if merek_siap["intro"] or merek_siap["outro"]:
             n_input = len([x for x in inputs if x == "-i"])
@@ -2437,6 +2454,7 @@ def render_clip(
             "komentar": komentar_svc.ringkas_sidecar(komentar_siap),
             "transisi": transisi if len(segments) > 1 else None,
             "punch_in": punch_siap,
+            "bilah_progres": bilah_progres or None,
             "merek": {"intro": bool(merek_siap["intro"]), "outro": bool(merek_siap["outro"]),
                       "outro_teks": merek_siap["outro_teks"]},
             "subtitle_kedua": subtitle_kedua,

@@ -380,6 +380,11 @@ class KomentarKlipModel(BaseModel):
     mode: Literal["bekukan", "timpa"] = "bekukan"
 
 
+class BilahProgresModel(BaseModel):
+    posisi: Literal["bawah", "atas"] = "bawah"
+    warna: str = Field("#F5C400", pattern=r"^#[0-9A-Fa-f]{6}$")
+
+
 class PunchModel(BaseModel):
     """Satu punch-in: gambar membesar sekejap (JOB-2 F2-1)."""
     t: float = Field(..., ge=0.0, le=7200.0)
@@ -466,6 +471,8 @@ class RenderClipRequest(BaseModel):
     pakai_merek: bool = True
     # Punch-in zoom (JOB-2 F2-1), dalam waktu klip.
     punch_in: List[PunchModel] = Field(default_factory=list, max_length=12)
+    # Bilah progres di tepi video (retensi Shorts). None = tanpa.
+    bilah_progres: Optional[BilahProgresModel] = None
     # Subtitle kedua — biasanya terjemahan. Gayanya sendiri; divalidasi dengan
     # model yang sama dengan gaya subtitle utama, jadi warna tetap wajib hex.
     subtitle_kedua: Optional[SubtitleKeduaModel] = None
@@ -1810,6 +1817,7 @@ async def render_clip(req: RenderClipRequest):
             "transisi": req.transisi,
             "pakai_merek": req.pakai_merek,
             "punch_in": [p.model_dump(exclude_none=True) for p in req.punch_in],
+            "bilah_progres": req.bilah_progres.model_dump() if req.bilah_progres else None,
             "subtitle_kedua": (req.subtitle_kedua.model_dump(exclude_none=True)
                                if req.subtitle_kedua else None),
             "clip_index": req.clip_index,

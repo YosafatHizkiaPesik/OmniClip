@@ -1633,6 +1633,7 @@ export default function Editor({ project, onBack }) {
     komentar: komentarUntukRender(clip.komentar),
     transisi: clip.transisi || 'potong',
     pakai_merek: clip.pakai_merek !== false,
+    bilah_progres: clip.bilah_progres ? { posisi: clip.bilah_progres, warna: '#F5C400' } : null,
     punch_in: (clip.punch_in ?? []).map(({ t, dur, skala, asal, alasan }) => ({
       t, dur, skala, ...(asal ? { asal } : {}), ...(alasan ? { alasan: String(alasan).slice(0, 120) } : {}),
     })),
@@ -2372,6 +2373,8 @@ export default function Editor({ project, onBack }) {
                                onSeek={seekClip}
                                onPakaiMerek={(v) => selected
                                  && editor.updateClip(selected.clip_id, { pakai_merek: v })}
+                               onBilahProgres={(v) => selected
+                                 && editor.updateClip(selected.clip_id, { bilah_progres: v })}
                                onLayers={(next) => selected
                                  && editor.updateClip(selected.clip_id, { media_layers: next })}
                                onChange={(next) => selected

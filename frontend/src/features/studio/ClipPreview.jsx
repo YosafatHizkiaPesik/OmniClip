@@ -2053,6 +2053,13 @@ export default function ClipPreview({
                         onPilih={onPilihSisipan} />
         )}
 
+        {clip?.bilah_progres && totalDuration > 0 && (
+          <div style={{ position: 'absolute', left: 0, zIndex: 3, pointerEvents: 'none',
+                        [clip.bilah_progres === 'atas' ? 'top' : 'bottom']: 0,
+                        height: Math.max(3, boxH * 0.006), background: '#F5C400',
+                        width: `${Math.min(100, (clipTime / totalDuration) * 100)}%` }} />
+        )}
+
         {komentarTampil && boxH > 0 && (
           <div style={{ position: 'absolute', inset: 0, zIndex: 4, pointerEvents: 'none',
                         display: 'flex', flexDirection: 'column', alignItems: 'center',

@@ -284,6 +284,7 @@ def run_render(ctx: JobContext) -> dict:
         komentar=ctx.payload.get("komentar"),
         transisi=str(ctx.payload.get("transisi") or "potong"),
         punch_in=ctx.payload.get("punch_in"),
+        bilah_progres=ctx.payload.get("bilah_progres"),
         # Intro/outro kanal milik akun ini, kecuali Studio mematikannya untuk
         # klip ini (JOB-2 F2-5).
         merek=(_merek_akun() if ctx.payload.get("pakai_merek", True) else None),
