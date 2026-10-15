@@ -10,8 +10,11 @@ jadi pekerjaan baru. Rincian tiap fitur ada di `JOB-2.md`.
 
 ## Yang masih kurang
 
-- [ ] **Pratinjau Studio belum memperlihatkan komentar, kartu konteks, nama
-  penutur, dan punch-in.** Semuanya baru terlihat di video hasil render.
+- [x] **Pratinjau Studio belum memperlihatkan komentar dan punch-in.**
+  Selesai 15 Oktober 2026, commit d123bd2. Kartu konteks dan nama penutur
+  ternyata sudah tampil (sisipan Tulisan). Komentar "bekukan" menjeda
+  pratinjau selama komentar, "timpa" tampil tanpa menjeda. Suara klip yang
+  diredam oleh reaksi kamera BELUM ikut diredam di pratinjau, hanya di render.
 - [ ] **F3-3 retensi YouTube Analytics.** Butuh izin `yt-analytics.readonly`
   dan persetujuan ulang setiap akun Google, jadi menunggu pemilik.
 - [ ] **Tiga masalah pembingkaian lama** (bawaan JOB-2). Butuh alat ukur
@@ -94,6 +97,22 @@ Urutannya sama dengan jalur pemakaian normal.
   - Langkah: auto-clip video yang tidak punya caption.
   - Diharapkan: tidak ada lagi galat "unexpected keyword argument
     'metadata_errors'".
+- [ ] **11. Pratinjau komentar dan punch-in.**
+  - Langkah: di klip yang punya komentar pembuka + sela dan titik punch-in,
+    putar pratinjau dari awal.
+  - Diharapkan: kartu pembuka muncul dan gambar diam dulu, lalu klip jalan;
+    di detik sela gambar berhenti lagi; di titik punch-in gambar membesar
+    sekejap tanpa subtitle ikut membesar.
+- [ ] **12. Reaksi kamera.**
+  - Langkah: tab Komentar, "Nyalakan kamera", izinkan kamera dan mikrofon,
+    "Rekam dari 00:00", bicara 5-10 detik, "Berhenti". Pakai headset.
+  - Diharapkan: muncul "Reaksi 00:00 · N dtk", wajah Anda tampil di pojok
+    pratinjau, nilai tambah naik. Sesudah render: wajah di pojok, suara Anda
+    jelas, suara klip mengecil selama Anda bicara.
+- [ ] **13. Bilah progres.**
+  - Langkah: tab Komentar, "Bilah progres: Di bawah", putar lalu render.
+  - Diharapkan: garis kuning tipis terisi dari kiri ke kanan sampai penuh di
+    akhir klip, juga selama gambar ditahan untuk komentar.
 - [ ] **8. (Opsional) Pexels.**
   - Langkah: isi kunci API gratis di tab Sisipan, cari gambar, pasang satu.
   - Diharapkan: gambar masuk sebagai sisipan 3 detik di posisi pemutar.
