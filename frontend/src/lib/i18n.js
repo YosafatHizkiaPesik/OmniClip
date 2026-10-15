@@ -11,7 +11,7 @@
  * belum menyeluruh (JOB-3 Fase C), mengikuti peramban berbahasa Inggris
  * menghasilkan layar setengah Inggris setengah Indonesia.
  */
-import { useSyncExternalStore } from 'react';
+import { createElement, Fragment, useSyncExternalStore } from 'react';
 import id from '../locales/id';
 import en from '../locales/en';
 
@@ -86,4 +86,16 @@ export function angkaRingkas(n) {
   } catch {
     return String(n);
   }
+}
+
+/**
+ * Teks kamus dengan `**tebal**` dirender sebagai <b>. Supaya satu kalimat
+ * yang punya kata tebal di tengahnya tetap satu kunci kamus, dan susunan
+ * kalimat tiap bahasa bebas mengikuti tata bahasanya sendiri.
+ */
+export function tebal(teks) {
+  const bagian = String(teks).split(/\*\*(.+?)\*\*/g);
+  if (bagian.length === 1) return teks;
+  return createElement(Fragment, null,
+    ...bagian.map((b, i) => (i % 2 ? createElement('b', { key: i }, b) : b)));
 }

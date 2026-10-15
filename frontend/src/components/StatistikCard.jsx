@@ -4,6 +4,7 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { apiGet, apiPost } from '../lib/api';
+import { tebal, useT } from '../lib/i18n';
 
 /**
  * Kunci YouTube Data API, untuk membaca tayangan klip yang sudah diunggah.
@@ -20,6 +21,7 @@ import { apiGet, apiPost } from '../lib/api';
  * sini apa adanya.
  */
 export default function StatistikCard({ card, sectionTitle, helpText }) {
+  const t = useT();
   const [adaKunci, setAdaKunci] = useState(null);
   const [kunci, setKunci] = useState('');
   const [lihat, setLihat] = useState(false);
@@ -38,7 +40,7 @@ export default function StatistikCard({ card, sectionTitle, helpText }) {
       const r = await apiPost('/settings/youtube-key', { api_key: nilai });
       setKunci('');
       setAdaKunci(!!r?.terpasang);
-      setKabar({ ok: true, teks: r?.terpasang ? 'Kunci tersimpan dan terbaca.' : 'Kunci dihapus.' });
+      setKabar({ ok: true, teks: r?.terpasang ? t('stat.tersimpan') : t('stat.dihapus') });
     } catch (e) {
       setKabar({ ok: false, teks: e.message });
     } finally {
@@ -50,13 +52,10 @@ export default function StatistikCard({ card, sectionTitle, helpText }) {
     <div style={card}>
       <div style={sectionTitle}>
         <BarChart3 size={18} style={{ color: 'var(--reh)' }} />
-        Tayangan klip
+        {t('stat.judul')}
       </div>
       <p className="bantu" style={helpText}>
-        Dengan kunci ini, Klip jadi menampilkan berapa kali tiap klip yang sudah
-        diunggah ditonton. Kuncinya hanya bisa MEMBACA angka video publik: ia
-        tidak bisa mengunggah, mengubah, atau melihat apa pun yang privat, dan
-        tidak menyentuh izin akun Google Anda sama sekali.
+        {t('stat.ket')}
       </p>
 
       {adaKunci === null ? null : adaKunci ? (
@@ -64,12 +63,12 @@ export default function StatistikCard({ card, sectionTitle, helpText }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px',
                       fontSize: '0.8rem' }}>
           <CheckCircle2 size={15} style={{ color: 'var(--entry)' }} />
-          <span>Kunci terpasang.</span>
+          <span>{t('stat.terpasang')}</span>
           <button className="btn-secondary" disabled={sibuk} onClick={() => kirim('')}
                   style={{ marginLeft: 'auto', display: 'inline-flex', gap: '6px',
                            alignItems: 'center' }}>
             {sibuk ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-            Hapus
+            {t('umum.hapus')}
           </button>
         </div>
         {/* Kunci yang terpasang tanpa tempat melihat hasilnya adalah persis
@@ -77,28 +76,26 @@ export default function StatistikCard({ card, sectionTitle, helpText }) {
             saja". Tautannya ada di sini supaya jalannya terlihat dari tempat
             kuncinya dipasang. */}
         <p className="bantu" style={{ ...helpText, marginTop: '8px' }}>
-          Angkanya terbaca di{' '}
-          <Link to="/analitik" style={{ color: 'var(--reh)' }}>Analitik</Link>:
-          tayangan tiap klip, mana yang paling jalan, dan apa yang masih kurang
-          dari klip yang sudah naik.
+          {t('stat.di_analitik_a')}{' '}
+          <Link to="/analitik" style={{ color: 'var(--reh)' }}>{t('analitik.judul')}</Link>
+          {t('stat.di_analitik_b')}
         </p>
         </>
       ) : (
         <>
           <ol style={{ ...helpText, margin: '10px 0 0', paddingLeft: '18px', lineHeight: 1.75 }}>
             <li>
-              Buka{' '}
+              {t('stat.l1_a')}{' '}
               <a href="https://console.cloud.google.com/apis/credentials" target="_blank"
                  rel="noreferrer" style={{ color: 'var(--reh)' }}>
                 Credentials <ExternalLink size={11} style={{ verticalAlign: '-1px' }} />
               </a>{' '}
-              di project Google yang sama dengan yang Anda pakai untuk unggah.
+              {t('stat.l1_b')}
             </li>
             <li>
-              <b>Create credentials &rarr; API key</b>. Tidak perlu disetel apa-apa
-              lagi; kalau Anda membatasinya, sertakan <b>YouTube Data API v3</b>.
+              {tebal(t('stat.l2'))}
             </li>
-            <li>Salin kuncinya, tempel di bawah ini.</li>
+            <li>{t('stat.l3')}</li>
           </ol>
           <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
             <div style={{ position: 'relative', flex: 1 }}>
@@ -114,7 +111,7 @@ export default function StatistikCard({ card, sectionTitle, helpText }) {
                   color: 'var(--ink)',
                 }} />
               <button type="button" onClick={() => setLihat((v) => !v)}
-                      aria-label={lihat ? 'Sembunyikan' : 'Tampilkan'}
+                      aria-label={lihat ? t('stat.sembunyikan') : t('stat.tampilkan')}
                       style={{ position: 'absolute', right: '6px', top: '50%',
                                transform: 'translateY(-50%)', background: 'none',
                                border: 0, cursor: 'pointer', display: 'flex',
@@ -126,7 +123,7 @@ export default function StatistikCard({ card, sectionTitle, helpText }) {
                     onClick={() => kirim(kunci.trim())}
                     style={{ display: 'inline-flex', gap: '7px', alignItems: 'center' }}>
               {sibuk ? <Loader2 size={15} className="animate-spin" /> : null}
-              Simpan
+              {t('umum.simpan')}
             </button>
           </div>
         </>

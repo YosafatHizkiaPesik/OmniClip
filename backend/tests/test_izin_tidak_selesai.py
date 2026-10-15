@@ -147,7 +147,8 @@ class HalamanTidakMenggantung(unittest.TestCase):
     """
 
     def _baca(self, nama: str) -> str:
-        return (AKAR / "frontend" / "src" / nama).read_text(encoding="utf-8")
+        from teks_ui import teks_ui
+        return teks_ui(AKAR / "frontend" / "src" / nama)
 
     def test_tab_izin_dibuka_tanpa_noopener(self):
         pembuka = self._baca("lib/izinGoogle.js")

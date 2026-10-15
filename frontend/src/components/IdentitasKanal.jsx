@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { apiGet, apiPut } from '../lib/api';
+import { useT } from '../lib/i18n';
 
 /**
  * Identitas kanal: outro teks, intro, dan outro berkas (JOB-2 F2-5).
@@ -13,6 +14,7 @@ import { apiGet, apiPut } from '../lib/api';
  * pertama yang menentukan orang bertahan atau pergi.
  */
 export default function IdentitasKanal({ style, bantu }) {
+  const t = useT();
   const [nilai, setNilai] = useState(null);
   const [aset, setAset] = useState([]);
   const awal = useRef('');
@@ -37,12 +39,12 @@ export default function IdentitasKanal({ style, bantu }) {
     if (!nilai) return undefined;
     const cap = JSON.stringify(nilai);
     if (cap === awal.current) return undefined;
-    const t = setTimeout(() => {
+    const jeda = setTimeout(() => {
       apiPut('/profil/setelan', { kelompok: 'merek', nilai })
         .then(() => { awal.current = cap; })
         .catch(() => {});
     }, 800);
-    return () => clearTimeout(t);
+    return () => clearTimeout(jeda);
   }, [nilai]);
 
   if (!nilai) return null;
@@ -50,10 +52,10 @@ export default function IdentitasKanal({ style, bantu }) {
   const pilihan = (id) => (
     <select value={nilai[id] || ''} onChange={(e) => ubah({ [id]: e.target.value })}
             style={{ ...style, padding: '5px 8px' }}>
-      <option value="">Tanpa {id}</option>
+      <option value="">{t(id === 'intro' ? 'ik.tanpa_intro' : 'ik.tanpa_outro')}</option>
       {aset.map((a) => (
         <option key={a.id} value={a.id}>
-          {a.nama} ({a.jenis}{a.durasi ? `, ${Number(a.durasi).toFixed(1)} dtk` : ''})
+          {a.nama} ({t(a.jenis === 'gambar' ? 'ik.jenis_gambar' : 'ik.jenis_video')}{a.durasi ? `, ${t('waktu.detik', { n: Number(a.durasi).toFixed(1) })}` : ''})
         </option>
       ))}
     </select>
@@ -62,19 +64,19 @@ export default function IdentitasKanal({ style, bantu }) {
   return (
     <>
       <div style={{ ...bantu, marginTop: '12px', marginBottom: '4px' }}>
-        Penutup setiap klip, tampil di atas bingkai terakhir (kosongkan bila tidak perlu):
+        {t('ik.penutup')}
       </div>
       <input value={nilai.outro_teks || ''} maxLength={160}
-             placeholder="Contoh: Ikuti @namakanal untuk klip lainnya"
+             placeholder={t('ik.contoh')}
              onChange={(e) => ubah({ outro_teks: e.target.value })}
              style={{ ...style, width: '100%' }} />
       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '8px', alignItems: 'center' }}>
-        <span style={bantu}>Intro (maks. 3 detik):</span> {pilihan('intro')}
-        <span style={bantu}>Outro:</span> {pilihan('outro')}
+        <span style={bantu}>{t('ik.intro')}</span> {pilihan('intro')}
+        <span style={bantu}>{t('ik.outro')}</span> {pilihan('outro')}
       </div>
       {!aset.length && (
         <div style={{ ...bantu, marginTop: '4px' }}>
-          Untuk intro/outro berupa video atau logo, impor berkasnya dulu di Studio, tab Sisipan.
+          {t('ik.impor_dulu')}
         </div>
       )}
     </>

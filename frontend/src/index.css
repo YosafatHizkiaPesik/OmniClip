@@ -1646,6 +1646,49 @@ body.is-studio .app-viewport,
 }
 .tombol-ringkas:hover { border-color: var(--ink-3); }
 
+/* Halaman setelan (Akun, Pengaturan, Mesin): daftar bagian di kiri, isi satu
+   bagian di kanan dalam satu kolom. Lihat components/HalamanSetelan.jsx. */
+.halaman-setelan { max-width: 1180px; }
+.setelan-tata {
+  display: grid; grid-template-columns: 216px minmax(0, 1fr);
+  gap: 28px; align-items: start;
+}
+.setelan-nav {
+  position: sticky; top: 76px;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.setelan-nav-item {
+  display: flex; align-items: center; gap: 11px; width: 100%;
+  padding: 9px 12px; border-radius: 10px; border: 0; cursor: pointer;
+  background: transparent; color: var(--ink-2); font: inherit;
+  font-size: .86rem; font-weight: 600; text-align: left;
+  transition: background .12s ease, color .12s ease;
+}
+.setelan-nav-item:hover { background: var(--plate-2); color: var(--ink); }
+.setelan-nav-item.is-on { background: var(--plate-2); color: var(--ink); font-weight: 750; }
+.setelan-nav-item.is-on svg { color: var(--reh); }
+.setelan-isi { max-width: 860px; min-width: 0; }
+.setelan-isi-kepala { margin-bottom: 14px; }
+.setelan-isi-kepala h2 { font-size: 1.05rem; font-weight: 800; margin: 0; color: var(--ink); }
+.setelan-isi-kepala p { font-size: .8rem; color: var(--text-secondary); line-height: 1.5; margin: 4px 0 0; }
+.ringkas .setelan-isi-kepala p { display: none; }
+.setelan-kartu { display: flex; flex-direction: column; gap: 14px; }
+.setelan-kartu > * {
+  background: var(--plate); border: 1px solid var(--rule-2);
+  border-radius: var(--r-md, 12px); min-width: 0;
+}
+@media (max-width: 900px) {
+  .setelan-tata { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .setelan-nav {
+    position: static; flex-direction: row; overflow-x: auto; gap: 6px;
+    scrollbar-width: none; padding-bottom: 2px;
+  }
+  .setelan-nav-item {
+    width: auto; flex: none; border-radius: 999px; padding: 7px 13px;
+    border: 1px solid var(--border-color); font-size: .8rem;
+  }
+}
+
 
 /* Bilah kemajuan perhitungan bingkai satu klip. Lihat BilahBingkaiKlip.jsx. */
 .bingkai-kira { margin: 7px 6px 0; }

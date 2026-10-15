@@ -4,6 +4,7 @@ import {
 } from 'lucide-react';
 import { apiGet, apiPost } from '../lib/api';
 import { bukaIzinGoogle } from '../lib/izinGoogle';
+import { tebal, useT } from '../lib/i18n';
 
 /**
  * Menyambungkan akun Google untuk mengunggah klip.
@@ -21,6 +22,7 @@ const LAYANAN = ['youtube', 'drive'];
 const LABEL = { youtube: 'YouTube', drive: 'Drive' };
 
 export default function GoogleAccountCard({ card, sectionTitle, helpText }) {
+  const t = useT();
   const [status, setStatus] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -55,9 +57,8 @@ export default function GoogleAccountCard({ card, sectionTitle, helpText }) {
       const text = await file.text();
       const res = await apiPost('/uploads/google/client', text, { raw: true });
       setNote(res.redirect_uri_needed
-        ? 'Berkas tersimpan. Karena ini OAuth client jenis Web, tambahkan alamat '
-          + 'pengalihan di bawah ke daftar Authorized redirect URIs di Cloud Console.'
-        : 'Berkas tersimpan. Sekarang sambungkan akun Anda.');
+        ? t('google.web_tersimpan')
+        : t('google.tersimpan'));
       await refresh();
     } catch (err) {
       setError(err.message);
@@ -116,8 +117,7 @@ export default function GoogleAccountCard({ card, sectionTitle, helpText }) {
         { layanan });
       bukaIzinGoogle(url);
       setMenunggu(layanan);
-      setNote(`Halaman izin ${LABEL[layanan]} terbuka di tab baru. Selesaikan di `
-        + 'sana, lalu kembali ke sini. Status di bawah akan ikut berubah.');
+      setNote(t('google.izin_terbuka', { layanan: LABEL[layanan] }));
     } catch (err) {
       setError(err.message);
     } finally {
@@ -141,18 +141,15 @@ export default function GoogleAccountCard({ card, sectionTitle, helpText }) {
     <div style={card}>
       <div style={sectionTitle}>
         <UploadCloud size={18} style={{ color: 'var(--reh)' }} />
-        Unggah ke Google Drive &amp; YouTube
+        {t('google.judul')}
       </div>
       <p className="bantu" style={helpText}>
-        Klip yang sudah jadi bisa dikirim langsung ke Drive atau naik sebagai
-        video di kanal Anda, satu per satu, tidak pernah berombongan.{' '}
-        <b>Keduanya disambungkan terpisah</b>, karena Google menolak izin YouTube
-        dan Drive yang diminta bersamaan. Sambungkan yang Anda pakai saja.
+        {tebal(t('google.ket'))}
       </p>
 
       {!status ? (
         <div style={{ ...helpText, display: 'flex', gap: '8px', alignItems: 'center', marginTop: '12px' }}>
-          <Loader2 size={15} className="animate-spin" /> Membaca status…
+          <Loader2 size={15} className="animate-spin" /> {t('google.membaca')}
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '14px' }}>
@@ -160,8 +157,9 @@ export default function GoogleAccountCard({ card, sectionTitle, helpText }) {
             const st = status.layanan?.[l] ?? { connected: status.connected };
             return (
               <StatusLine key={l} ok={st.connected}
-                okText={`${LABEL[l]} tersambung${st.email ? ` sebagai ${st.email}` : ''}.`}
-                offText={`${LABEL[l]} belum tersambung.`} />
+                okText={st.email ? t('google.tersambung_sebagai', { layanan: LABEL[l], email: st.email })
+                  : t('google.tersambung', { layanan: LABEL[l] })}
+                offText={t('google.belum', { layanan: LABEL[l] })} />
             );
           })}
 
@@ -175,7 +173,7 @@ export default function GoogleAccountCard({ card, sectionTitle, helpText }) {
                    onChange={pickFile} style={{ display: 'none' }} />
             {!status.client_configured && (
               <span className="bantu" style={helpText}>
-                Aplikasi Google belum didaftarkan. Lihat kartu <b>Tambah akun</b> di atas.
+                {tebal(t('google.belum_daftar'))}
               </span>
             )}
             {status.client_configured && LAYANAN.map((l) => {
@@ -183,12 +181,12 @@ export default function GoogleAccountCard({ card, sectionTitle, helpText }) {
               return tersambung ? (
                 <button key={l} className="btn-secondary" disabled={busy}
                         onClick={() => disconnect(l)}>
-                  <LogOut size={14} /> Putuskan {LABEL[l]}
+                  <LogOut size={14} /> {t('google.putuskan', { layanan: LABEL[l] })}
                 </button>
               ) : (
                 <button key={l} className="btn-primary" disabled={busy}
                         onClick={() => connect(l)}>
-                  <ExternalLink size={14} /> Sambungkan {LABEL[l]}
+                  <ExternalLink size={14} /> {t('google.sambungkan', { layanan: LABEL[l] })}
                 </button>
               );
             })}
@@ -210,20 +208,12 @@ export default function GoogleAccountCard({ card, sectionTitle, helpText }) {
 
           <details style={{ fontSize: '.8rem', color: 'var(--ink-2)' }}>
             <summary style={{ cursor: 'pointer', fontWeight: 650, color: 'var(--ink)' }}>
-              Cara mendapatkan berkas OAuth client
+              {t('google.cara')}
             </summary>
             <ol style={{ margin: '10px 0 0', paddingLeft: '20px', lineHeight: 1.7 }}>
-              <li>Buka <b>console.cloud.google.com</b>, buat satu project.</li>
-              <li>APIs &amp; Services → Library → aktifkan <b>YouTube Data API v3</b>
-                {' '}dan <b>Google Drive API</b>.</li>
-              <li>OAuth consent screen: pilih External, isi seadanya, lalu tambahkan
-                akun Google Anda sendiri sebagai <b>Test user</b>. Selama aplikasinya
-                masih berstatus Testing, hanya akun yang terdaftar di situ yang bisa
-                memberi izin.</li>
-              <li>Credentials → Create credentials → OAuth client ID → jenis
-                <b> Desktop app</b> (paling sederhana), lalu unduh JSON-nya.</li>
-              <li>Kalau Anda memilih jenis <b>Web application</b>, tambahkan alamat
-                ini ke Authorized redirect URIs:</li>
+              {['google.c1', 'google.c2', 'google.c3', 'google.c4', 'google.c5'].map((k) => (
+                <li key={k}>{tebal(t(k))}</li>
+              ))}
             </ol>
             <code style={{
               display: 'block', marginTop: '8px', padding: '8px 10px', fontSize: '.74rem',
@@ -231,10 +221,8 @@ export default function GoogleAccountCard({ card, sectionTitle, helpText }) {
               borderRadius: 'var(--r-sm)', wordBreak: 'break-all',
             }}>{status.redirect_uri}</code>
             <p style={{ marginTop: '10px', lineHeight: 1.6 }}>
-              Kuota unggah YouTube lewat API terbatas per hari dan per project,
-              biasanya cukup untuk beberapa video sehari, bukan puluhan. Karena
-              itu OmniClip mengunggah satu per satu
-              {status.gap_seconds > 0 && `, dengan jeda ${status.gap_seconds} detik antar video`}.
+              {t('google.kuota')}
+              {status.gap_seconds > 0 && t('google.jeda', { n: status.gap_seconds })}.
             </p>
           </details>
         </div>

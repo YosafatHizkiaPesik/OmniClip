@@ -4,6 +4,7 @@ import {
 } from 'lucide-react';
 import { apiDelete, apiGet, apiPost, profilAktif, setProfilAktif } from '../lib/api';
 import { bukaIzinGoogle } from '../lib/izinGoogle';
+import { tebal, useT } from '../lib/i18n';
 
 /**
  * Menambah akun: masuk dengan Google, sekali jalan.
@@ -34,6 +35,7 @@ const SCOPES_TEKS = [
 ].join('\n');
 
 export default function TambahAkun({ card, sectionTitle, helpText, onSelesai }) {
+  const t = useT();
   const [status, setStatus] = useState(null);
   const [buka, setBuka] = useState(false);
   const [sibuk, setSibuk] = useState(false);
@@ -92,8 +94,7 @@ export default function TambahAkun({ card, sectionTitle, helpText, onSelesai }) 
         wadahRef.current = null;
         kembaliKeAkunSebelumnya();
         setMenunggu(false);
-        setGalat('Login ke Google gagal, jadi tidak ada akun baru yang '
-                 + 'ditambahkan. Pesan dari Google ada di tab sebelah.');
+        setGalat(t('tambah.login_gagal'));
         return;
       }
       if (e.data !== 'omniclip:google-tersambung') return;
@@ -135,8 +136,7 @@ export default function TambahAkun({ card, sectionTitle, helpText, onSelesai }) 
       // Akun wadahnya dibuang di sini juga. Tanpa ini, menyerah karena
       // kehabisan waktu meninggalkan "Akun baru" sebagai akun aktif.
       lepasWadah();
-      setGalat('Izin dari Google tidak selesai, jadi akun yang disiapkan '
-               + 'untuknya sudah dibuang. Coba "Masuk dengan Google" lagi.');
+      setGalat(t('tambah.izin_habis'));
     }, 5 * 60 * 1000);
     return () => { batal = true; clearInterval(id); clearTimeout(henti); };
   }, [menunggu, onSelesai]);
@@ -173,7 +173,7 @@ export default function TambahAkun({ card, sectionTitle, helpText, onSelesai }) 
       // `sementara` menandai bahwa akun ini baru sebuah wadah untuk izin yang
       // sedang diminta. Izin yang tidak pernah selesai membuatnya disapu
       // kembali, jadi kegagalan tidak meninggalkan "Akun baru" yang kosong.
-      const p = await apiPost('/profil', { nama: 'Akun baru', minat: [], sementara: true });
+      const p = await apiPost('/profil', { nama: t('tambah.akun_baru'), minat: [], sementara: true });
       // Sejak baris ini, semua permintaan berjalan atas nama akun yang baru,
       // termasuk permintaan izin di bawahnya, yang membuat tokennya tersimpan
       // ke akun yang benar.
@@ -205,7 +205,7 @@ export default function TambahAkun({ card, sectionTitle, helpText, onSelesai }) 
       setSalinS(true);
       setTimeout(() => setSalinS(false), 1800);
     } catch {
-      setGalat('Peramban tidak mengizinkan menyalin. Tandai teksnya dan salin sendiri.');
+      setGalat(t('tambah.tak_bisa_salin'));
     }
   };
 
@@ -215,7 +215,7 @@ export default function TambahAkun({ card, sectionTitle, helpText, onSelesai }) 
       setSalin(true);
       setTimeout(() => setSalin(false), 1800);
     } catch {
-      setGalat('Peramban tidak mengizinkan menyalin. Tandai teksnya dan salin sendiri.');
+      setGalat(t('tambah.tak_bisa_salin'));
     }
   };
 
@@ -226,12 +226,10 @@ export default function TambahAkun({ card, sectionTitle, helpText, onSelesai }) 
       <div style={card}>
         <div style={sectionTitle}>
           <Loader2 size={18} className="animate-spin" style={{ color: 'var(--reh)' }} />
-          Menunggu izin dari Google
+          {t('tambah.menunggu')}
         </div>
         <p className="bantu" style={helpText}>
-          Pilih akun Google yang ingin Anda tambahkan di tab sebelah, lalu
-          izinkan OmniClip mengunggah. Halaman ini akan memperbarui dirinya
-          sendiri begitu Google selesai, dan akunnya muncul dengan nama surelnya.
+          {t('tambah.menunggu_ket')}
         </p>
         {/* Tombolnya tetap ada, tapi sebagai jalan keluar, bukan sebagai
             langkah. Tab izin bisa saja dibuka di jendela lain atau ditutup
@@ -240,12 +238,12 @@ export default function TambahAkun({ card, sectionTitle, helpText, onSelesai }) 
         <div style={{ display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap' }}>
           <button className="btn-secondary"
                   onClick={() => (onSelesai ? onSelesai() : window.location.reload())}>
-            Tidak berpindah sendiri? Segarkan sekarang
+            {t('tambah.segarkan')}
           </button>
           {/* Jalan keluar. Tanpa ini, menutup tab izin di tengah jalan berarti
               panel ini menahan halaman Akun sampai halamannya dimuat ulang. */}
           <button className="btn-secondary" onClick={() => setMenunggu(false)}>
-            Batalkan
+            {t('tambah.batalkan')}
           </button>
         </div>
       </div>
@@ -256,11 +254,10 @@ export default function TambahAkun({ card, sectionTitle, helpText, onSelesai }) 
     <div style={card}>
       <div style={sectionTitle}>
         <UserPlus size={18} style={{ color: 'var(--reh)' }} />
-        Tambah akun
+        {t('tambah.judul')}
       </div>
       <p className="bantu" style={helpText}>
-        Tiap akun punya folder klip, riwayat pencarian, beranda, dan kanal
-        YouTube-nya sendiri. Menambah akun berarti masuk dengan akun Google lain.
+        {t('tambah.ket')}
       </p>
 
       {siap ? (
@@ -269,15 +266,12 @@ export default function TambahAkun({ card, sectionTitle, helpText, onSelesai }) 
                   style={{ marginTop: '12px', display: 'inline-flex', gap: '7px',
                            alignItems: 'center' }}>
             {sibuk ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />}
-            Masuk dengan Google
+            {t('tambah.masuk')}
           </button>
           <p style={{ ...helpText, marginTop: '10px' }}>
             {status?.client_bawaan
-              ? 'OmniClip sudah membawa identitas aplikasinya sendiri, jadi tidak '
-                + 'ada yang perlu didaftarkan. Langkah ini tinggal diulang untuk '
-                + 'tiap akun baru.'
-              : 'Aplikasi Google Anda sudah terdaftar, jadi langkah ini tinggal '
-                + 'diulang untuk tiap akun baru.'}
+              ? t('tambah.bawaan')
+              : t('tambah.terdaftar')}
           </p>
           {/* Jalan memakai project sendiri tetap ada, dan bukan sekadar
               kelengkapan: kuota Google dihitung per project, jadi pemilik yang
@@ -285,12 +279,12 @@ export default function TambahAkun({ card, sectionTitle, helpText, onSelesai }) 
               semua pemakai OmniClip yang lain. */}
           {status?.client_bawaan && (
             <p style={{ ...helpText, marginTop: '6px' }}>
-              Punya project Google sendiri dan ingin jatah unggah terpisah?{' '}
+              {t('tambah.project_sendiri')}{' '}
               <button onClick={() => setBuka((v) => !v)}
                       style={{ background: 'none', border: 0, padding: 0,
                                cursor: 'pointer', color: 'var(--reh)',
                                font: 'inherit' }}>
-                Pasang berkas OAuth sendiri
+                {t('tambah.pasang_sendiri')}
               </button>.
             </p>
           )}
@@ -302,14 +296,10 @@ export default function TambahAkun({ card, sectionTitle, helpText, onSelesai }) 
             border: '1px solid var(--border-color)', background: 'var(--hl-wash)',
           }}>
             <div style={{ fontSize: '0.8rem', fontWeight: 800, marginBottom: '4px' }}>
-              Sebelum akun pertama: daftarkan aplikasinya
+              {t('tambah.sebelum')}
             </div>
             <p style={{ ...helpText, margin: 0 }}>
-              Google hanya menerima unggahan dari aplikasi terdaftar, dan kuota
-              unggah YouTube dihitung per aplikasi. Itulah sebabnya OmniClip
-              tidak membawa kunci bawaan. Dikerjakan <b>sekali saja</b>, gratis,
-              sekitar sepuluh menit. Sesudah itu Anda tinggal menekan "Masuk
-              dengan Google" untuk akun kedua, ketiga, dan seterusnya.
+              {tebal(t('tambah.sebelum_ket'))}
             </p>
           </div>
 
@@ -322,43 +312,33 @@ export default function TambahAkun({ card, sectionTitle, helpText, onSelesai }) 
                   }}>
             <ChevronRight size={14} style={{
               transform: buka ? 'rotate(90deg)' : 'none', transition: 'transform 120ms' }} />
-            {buka ? 'Sembunyikan langkahnya' : 'Tunjukkan langkahnya'}
+            {buka ? t('tambah.sembunyi_langkah') : t('tambah.tunjuk_langkah')}
           </button>
 
           {buka && (
             <ol style={{ ...helpText, margin: '8px 0 0', paddingLeft: '18px', lineHeight: 1.75 }}>
               <li>
-                Buka{' '}
+                {t('tambah.l1_a')}{' '}
                 <a href="https://console.cloud.google.com/projectcreate" target="_blank"
                    rel="noreferrer" style={{ color: 'var(--reh)' }}>
                   console.cloud.google.com <ExternalLink size={11} style={{ verticalAlign: '-1px' }} />
                 </a>{' '}
-                dan buat satu project. Namanya bebas, misalnya <b>OmniClip</b>.
+                {tebal(t('tambah.l1_b'))}
               </li>
               <li>
-                Di menu <b>APIs &amp; Services → Library</b>, cari dan nyalakan{' '}
-                <b>YouTube Data API v3</b> dan <b>Google Drive API</b>.
+                {tebal(t('tambah.l2'))}
               </li>
               <li>
-                Buka <b>Google Auth Platform</b> (nama baru "OAuth consent
-                screen"), lalu isi tiga bagiannya:
+                {tebal(t('tambah.l3'))}
                 <ul style={{ paddingLeft: '16px', margin: '4px 0 0' }}>
-                  <li><b>Branding</b>: nama aplikasi dan surel dukungan.</li>
-                  <li><b>Audience</b>: pilih <b>External</b>. Di halaman yang
-                    sama, bagian <b>Test users → Add users</b>, tambahkan setiap
-                    alamat Gmail yang akan Anda pakai di OmniClip. Tanpa itu
-                    Google menolak akun tersebut saat login, dengan pesan yang
-                    tidak menyebut sebabnya.</li>
-                  <li><b>Data access → Add or remove scopes</b>. Daftarnya
-                    panjang dan tidak punya kotak cari, jadi jangan dicari satu
-                    per satu: gulir ke bawah sampai <b>Manually add scopes</b>,
-                    lalu tempel tiga baris ini sekaligus dan tekan{' '}
-                    <b>Add to table</b>:
+                  <li>{tebal(t('tambah.l3_a'))}</li>
+                  <li>{tebal(t('tambah.l3_b'))}</li>
+                  <li>{tebal(t('tambah.l3_c'))}
                     <div style={{ display: 'flex', alignItems: 'flex-start', gap: '7px',
                                   marginTop: '5px' }}>
                       <code style={{ fontSize: '0.67rem', lineHeight: 1.6,
                                      wordBreak: 'break-all' }}>{SCOPES_TEKS}</code>
-                      <button onClick={salinScopes} title="Salin ketiganya"
+                      <button onClick={salinScopes} title={t('tambah.salin_tiga')}
                               style={{ background: 'none', border: 'none', cursor: 'pointer',
                                        color: 'var(--text-secondary)', display: 'flex' }}>
                         {salinS ? <Check size={13} style={{ color: 'var(--entry)' }} />
@@ -369,15 +349,12 @@ export default function TambahAkun({ card, sectionTitle, helpText, onSelesai }) 
                 </ul>
               </li>
               <li>
-                Di <b>Clients → Create client</b> (dulu "Credentials → OAuth
-                client ID"), pilih jenis <b>Desktop app</b>. Kalau Anda memilih{' '}
-                <b>Web application</b>,
-                tambahkan alamat ini ke <b>Authorized redirect URIs</b>:
+                {tebal(t('tambah.l4'))}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '7px', marginTop: '5px' }}>
                   <code style={{ fontSize: '0.7rem', wordBreak: 'break-all' }}>
                     {status?.redirect_uri || '…'}
                   </code>
-                  <button onClick={salinAlamat} title="Salin alamat"
+                  <button onClick={salinAlamat} title={t('tambah.salin_alamat')}
                           style={{ background: 'none', border: 'none', cursor: 'pointer',
                                    color: 'var(--text-secondary)', display: 'flex' }}>
                     {salin ? <Check size={13} style={{ color: 'var(--entry)' }} /> : <Copy size={13} />}
@@ -385,7 +362,7 @@ export default function TambahAkun({ card, sectionTitle, helpText, onSelesai }) 
                 </div>
               </li>
               <li>
-                Unduh berkas JSON-nya, lalu pasang di bawah ini.
+                {t('tambah.l5')}
               </li>
             </ol>
           )}
@@ -397,7 +374,7 @@ export default function TambahAkun({ card, sectionTitle, helpText, onSelesai }) 
                     onClick={() => berkasRef.current?.click()}
                     style={{ display: 'inline-flex', gap: '7px', alignItems: 'center' }}>
               {sibuk ? <Loader2 size={15} className="animate-spin" /> : null}
-              Pasang berkas OAuth client
+              {t('tambah.pasang')}
             </button>
           </div>
         </>
@@ -409,14 +386,12 @@ export default function TambahAkun({ card, sectionTitle, helpText, onSelesai }) 
       {siap && status?.client_bawaan && buka && (
         <div style={{ marginTop: '12px' }}>
           <p style={{ ...helpText, margin: '0 0 8px' }}>
-            Kuota unggah YouTube dihitung per project Google. Dengan project
-            sendiri, jatah Anda tidak dibagi dengan pemakai OmniClip yang lain.
-            Langkahnya ada di{' '}
+            {t('tambah.kuota_a')}{' '}
             <a href="https://console.cloud.google.com/auth/clients" target="_blank"
                rel="noreferrer" style={{ color: 'var(--reh)' }}>
               Google Cloud Console <ExternalLink size={11} style={{ verticalAlign: '-1px' }} />
             </a>{' '}
-            (jenis <b>Desktop app</b>), lalu pasang JSON-nya di sini.
+            {tebal(t('tambah.kuota_b'))}
           </p>
           <input ref={berkasRef} type="file" accept="application/json,.json"
                  onChange={pasangBerkas} style={{ display: 'none' }} />
@@ -424,7 +399,7 @@ export default function TambahAkun({ card, sectionTitle, helpText, onSelesai }) 
                   onClick={() => berkasRef.current?.click()}
                   style={{ display: 'inline-flex', gap: '7px', alignItems: 'center' }}>
             {sibuk ? <Loader2 size={15} className="animate-spin" /> : null}
-            Pasang berkas OAuth client
+            {t('tambah.pasang')}
           </button>
         </div>
       )}

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { apiGet, apiPut } from '../lib/api';
+import { useT } from '../lib/i18n';
 
 /**
  * Gaya komentar kanal ini, untuk draf komentar AI di Studio (JOB-2 F1-2).
@@ -12,6 +13,7 @@ import { apiGet, apiPut } from '../lib/api';
  * sesudah berhenti mengetik, seperti isian lain di halaman ini.
  */
 export default function GayaKomentar({ style, bantu }) {
+  const t = useT();
   const [gaya, setGaya] = useState(null);
   const awal = useRef(null);
 
@@ -30,22 +32,22 @@ export default function GayaKomentar({ style, bantu }) {
 
   useEffect(() => {
     if (gaya === null || gaya === awal.current) return undefined;
-    const t = setTimeout(() => {
+    const jeda = setTimeout(() => {
       apiPut('/profil/setelan', { kelompok: 'komentar', nilai: { gaya } })
         .then(() => { awal.current = gaya; })
         .catch(() => {});
     }, 800);
-    return () => clearTimeout(t);
+    return () => clearTimeout(jeda);
   }, [gaya]);
 
   if (gaya === null) return null;
   return (
     <>
       <div style={{ ...bantu, marginTop: '12px', marginBottom: '4px' }}>
-        Gaya komentar Anda, dipakai saat AI menyusun draf komentar di Studio:
+        {t('gk.ket')}
       </div>
       <input value={gaya} maxLength={300}
-             placeholder='Contoh: santai, pakai "gue", suka nanya balik ke penonton'
+             placeholder={t('gk.contoh')}
              onChange={(e) => setGaya(e.target.value)}
              style={{ ...style, width: '100%' }} />
     </>
