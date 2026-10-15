@@ -1,34 +1,34 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  Loader2, Video, RefreshCw, X, Scissors, CheckCircle2, Flame, Mic, MessagesSquare, GraduationCap,
-  Gamepad2, Music2, Cpu, TrendingUp, Laugh, UtensilsCrossed, Plane, ChevronLeft, ChevronRight, SlidersHorizontal,
+  Loader2, Video, RefreshCw, X, Scissors, CheckCircle2, Flame, Gamepad2, Music2, Clapperboard, Laugh,
+  Users, Trophy, Newspaper, FlaskConical, Lightbulb, Film, PawPrint, Car, ChevronLeft, ChevronRight,
+  SlidersHorizontal,
 } from 'lucide-react';
-import { bahasa, useT } from '../lib/i18n';
+import { useT, wilayah } from '../lib/i18n';
 import { apiGet, apiPost } from '../lib/api';
 import { VideoCard } from '../components/VideoCards';
 import CookiesAwal from '../components/CookiesAwal';
 
-// Tahun sengaja tidak dicantumkan: menempelkan "2024" ke setiap kueri menyaring
-// hasil ke tahun yang sudah lewat.
-// Emoji dibuang: ia bukan sistem ikon, dan sebelas emoji dari sebelas keluarga
-// gambar yang berbeda membuat baris ini terbaca sebagai tempelan, bukan kendali.
-// Topik beranda (JOB-3): pil gaya YouTube dengan ikon dan warna khas.
-// Kata kuncinya mengikuti bahasa pilihan: mode Inggris mencari video
-// berbahasa Inggris. Untuk Gaming, BUKAN "gaming highlights": di YouTube
-// Indonesia kata "highlights" dikuasai sorotan olahraga (5 dari 6 hasil).
+// Topik = kategori resmi YouTube (diminta pemilik 15 Oktober 2026: "buat saja
+// topiknya mengikuti YouTube, jangan membuat sendiri dengan manipulasi search
+// bar"). Isinya daftar populer YouTube untuk kategori itu di negara pengguna
+// (/api/topik, lihat backend services/beranda.py TOPIK). Topik disimpan di
+// alamat sebagai `?topik=`, jadi kotak cari tetap kosong.
 const CATEGORIES = [
-  { kunci: 'trending', Icon: Flame, warna: '#FF4D4D', q: { id: 'trending viral indonesia', en: 'trending viral today' } },
-  { kunci: 'podcast', Icon: Mic, warna: '#A78BFA', q: { id: 'podcast indonesia terbaru', en: 'podcast full episode' } },
-  { kunci: 'wawancara', Icon: MessagesSquare, warna: '#60A5FA', q: { id: 'wawancara eksklusif indonesia', en: 'exclusive interview' } },
-  { kunci: 'edukasi', Icon: GraduationCap, warna: '#34D399', q: { id: 'edukasi menarik indonesia', en: 'educational explained' } },
-  { kunci: 'gaming', Icon: Gamepad2, warna: '#F472B6', q: { id: 'gameplay game indonesia', en: 'gameplay walkthrough funny' } },
-  { kunci: 'musik', Icon: Music2, warna: '#FBBF24', q: { id: 'musik viral indonesia', en: 'music video viral' } },
-  { kunci: 'tech', Icon: Cpu, warna: '#22D3EE', q: { id: 'teknologi AI indonesia', en: 'tech AI news' } },
-  { kunci: 'finance', Icon: TrendingUp, warna: '#4ADE80', q: { id: 'investasi tips keuangan indonesia', en: 'investing personal finance' } },
-  { kunci: 'komedi', Icon: Laugh, warna: '#FB923C', q: { id: 'komedi lucu indonesia', en: 'stand up comedy' } },
-  { kunci: 'kuliner', Icon: UtensilsCrossed, warna: '#F87171', q: { id: 'kuliner makanan enak indonesia', en: 'street food tour' } },
-  { kunci: 'travel', Icon: Plane, warna: '#38BDF8', q: { id: 'travel wisata indonesia', en: 'travel vlog' } },
+  { kunci: 'tren', Icon: Flame, warna: '#FF4D4D' },
+  { kunci: 'gaming', Icon: Gamepad2, warna: '#F472B6' },
+  { kunci: 'musik', Icon: Music2, warna: '#FBBF24' },
+  { kunci: 'hiburan', Icon: Clapperboard, warna: '#A78BFA' },
+  { kunci: 'komedi', Icon: Laugh, warna: '#FB923C' },
+  { kunci: 'orang', Icon: Users, warna: '#60A5FA' },
+  { kunci: 'olahraga', Icon: Trophy, warna: '#4ADE80' },
+  { kunci: 'berita', Icon: Newspaper, warna: '#94A3B8' },
+  { kunci: 'sains', Icon: FlaskConical, warna: '#22D3EE' },
+  { kunci: 'gaya', Icon: Lightbulb, warna: '#F9A8D4' },
+  { kunci: 'film', Icon: Film, warna: '#F87171' },
+  { kunci: 'hewan', Icon: PawPrint, warna: '#FCD34D' },
+  { kunci: 'otomotif', Icon: Car, warna: '#38BDF8' },
 ];
 
 /**
@@ -102,6 +102,7 @@ function BarisTopik({ children }) {
  */
 const LANGKAH = 20;   // kartu per langkah gulir
 const PLAFON = 100;   // batas atas ytsearchN yang masih murah
+const PLAFON_TOPIK = 200;   // daftar populer satu kategori YouTube
 
 export default function Home() {
   const [params, setParams] = useSearchParams();
@@ -151,6 +152,9 @@ export default function Home() {
     setHasilAntre({ masuk, sudah, gagal });
   };
   const q = params.get('q') ?? '';
+  const topik = q ? '' : (params.get('topik') ?? '');
+  const negara = wilayah();
+  const plafon = topik ? PLAFON_TOPIK : PLAFON;
   const [feed, setFeed] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -160,11 +164,11 @@ export default function Home() {
   // di latar: halaman langsung terisi tanpa menunggu pencarian YouTube.
   // `null` = belum ada benih, beranda belum dimuat.
   const [nonce, setNonce] = useState(null);
-  const ambilBenih = () => apiGet('/trending/benih', { timeout: 8000 })
+  const ambilBenih = () => apiGet(`/trending/benih?wilayah=${negara}`, { timeout: 8000 })
     .then((r) => setNonce(r.benih))
     .catch(() => setNonce(Math.floor(Math.random() * 1e6)));
   useEffect(() => {
-    if (!q && nonce === null) ambilBenih();
+    if (!q && !topik && nonce === null) ambilBenih();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q, nonce]);
   const [sort, setSort] = useState('relevan');
@@ -205,7 +209,7 @@ export default function Home() {
 
   // Identitas daftar yang sedang ditampilkan. Kueri, urutan, atau tombol
   // Segarkan yang berubah berarti daftar yang lain sama sekali.
-  const kunci = `${q}|${sort}|${durasi}|${tanggal}|${jenis}|${nonce}`;
+  const kunci = `${q}|${topik}|${negara}|${sort}|${durasi}|${tanggal}|${jenis}|${nonce}`;
   const kunciRef = useRef(kunci);
   if (kunciRef.current !== kunci) {
     // Disetel saat render, bukan di dalam useEffect. Lewat efek, satu putaran
@@ -220,7 +224,7 @@ export default function Home() {
   }
 
   useEffect(() => {
-    if (!q && nonce === null) return undefined;     // menunggu benih beranda
+    if (!q && !topik && nonce === null) return undefined;     // menunggu benih beranda
     let batal = false;
     // Muatan pertama sebuah daftar mengganti isinya; sisanya MENAMBAH.
     //
@@ -235,7 +239,9 @@ export default function Home() {
       ? `/search?q=${encodeURIComponent(q)}&limit=${batas}&sort=${sort}`
         + (durasi ? `&durasi=${durasi}` : '') + (tanggal ? `&tanggal=${tanggal}` : '')
         + (jenis ? `&jenis=${jenis}` : '')
-      : `/trending?limit=${batas}&refresh=${nonce}`;
+      : topik
+        ? `/topik?nama=${topik}&wilayah=${negara}&limit=${batas}`
+        : `/trending?limit=${batas}&refresh=${nonce}&wilayah=${negara}`;
     // 75 detik, bukan 30: beranda menunggu beberapa pencarian YouTube, dan
     // saat sambungan ke youtube.com tersendat server tetap selesai menyusun
     // tapi lewat 30 detik (15 Oktober 2026).
@@ -308,21 +314,19 @@ export default function Home() {
     // `menambah` tidak pernah jalan. Hasilnya tulisan "Memuat lagi…" yang
     // menyala selamanya di dasar halaman: persis seperti gulir tak hingga
     // yang macet, padahal daftarnya memang sudah habis.
-    if (!el || habis || loading || !feed.length || batas >= PLAFON) return undefined;
+    if (!el || habis || loading || !feed.length || batas >= plafon) return undefined;
     const obs = new IntersectionObserver((entries) => {
       if (entries[0]?.isIntersecting) {
         setMenambah(true);
-        setBatas((b) => Math.min(PLAFON, b + LANGKAH));
+        setBatas((b) => Math.min(plafon, b + LANGKAH));
       }
     }, { rootMargin: '400px' });
     obs.observe(el);
     return () => obs.disconnect();
-  }, [habis, loading, feed.length, batas]);
+  }, [habis, loading, feed.length, batas, plafon]);
 
 
   const t = useT();
-  const kueriTopik = (c) => c.q[bahasa()] ?? c.q.id;
-  const activeCategory = CATEGORIES.findIndex((c) => Object.values(c.q).includes(q));
 
   // Urutan dikerjakan YouTube, bukan diurutkan ulang di sini: tanpa tanggal
   // unggah di hasil pencarian, "terbaru" mustahil dijawab dari data yang ada.
@@ -347,16 +351,19 @@ export default function Home() {
           Kata kunci tetap dibaca dari URL (`/?q=`), jadi tidak ada yang
           berubah pada cara pencarian bekerja. */}
       <BarisTopik>
-        {!q && (
+        {!q && !topik && (
           <button className="chip" disabled={loading} onClick={ambilBenih}
                   title={t('umum.segarkan')} style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
             <RefreshCw size={13} className={loading ? 'animate-spin' : undefined} />
           </button>
         )}
-        {CATEGORIES.map((cat, i) => {
-          const aktif = activeCategory === i;
+        {topik && (
+          <button className="topik" onClick={() => setParams({})}>{t('topik.semua')}</button>
+        )}
+        {CATEGORIES.map((cat) => {
+          const aktif = topik === cat.kunci;
           return (
-            <button key={cat.kunci} onClick={() => setParams({ q: kueriTopik(cat) })}
+            <button key={cat.kunci} onClick={() => setParams(aktif ? {} : { topik: cat.kunci })}
                     className={`topik${aktif ? ' is-on' : ''}`} style={{ '--warna-topik': cat.warna }}>
               <cat.Icon size={15} strokeWidth={2.2} className="topik-ikon" />
               {t(`topik.${cat.kunci}`)}
@@ -495,7 +502,7 @@ export default function Home() {
               </span>
             : menambah || (loading && feed.length)
               ? <><RefreshCw size={14} className="animate-spin" style={{ verticalAlign: '-2px' }} /> {t('umum.memuat_lagi')}</>
-              : habis || batas >= PLAFON
+              : habis || batas >= plafon
                 ? t('beranda.ujung')
                 : ''}
         </div>

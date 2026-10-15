@@ -81,7 +81,52 @@ def _lengkapi_tanggal(hasil: list[dict]) -> list[dict]:
         r = dikenal.get(v.get("id"))
         if r and r["upload_date"] and not v.get("upload_date"):
             v["upload_date"] = r["upload_date"]
+    _lengkapi_kanal(hasil)
     return hasil
+
+
+# Video kolaborasi: "Liputan6 and Glen Joshua", "BeritaSatu and 3 more".
+_KOLABORASI = re.compile(r"\s+(?:and|dan|&|x)\s+.*$", re.I)
+
+
+def _nama_kanal(nama: str) -> str:
+    return _KOLABORASI.sub("", (nama or "").strip()).strip().lower()
+
+
+def _lengkapi_kanal(hasil: list[dict]) -> None:
+    """
+    Mengisi `channel_id` yang kosong supaya kartu tetap punya avatar.
+
+    Dilaporkan pemiliknya 15 Oktober 2026: dua video Windah Basudara di satu
+    Beranda, satu berfoto profil dan satu hanya inisial "WI". Kartu tanpa id
+    channel tidak bisa meminta avatar. Ada dua sumbernya: beranda tersimpan
+    dari sebelum kartu "sedang ramai" membawa id, dan video kolaborasi, yang
+    oleh pencarian YouTube diberi nama gabungan tanpa id sama sekali.
+
+    Id diambil dari kartu lain bernama sama di daftar ini, lalu dari ingatan
+    nama ke id (`kanal.id:` di singgahan, diisi `_catat_hasil`). Untuk video
+    kolaborasi dipakai channel pertama, seperti YouTube menampilkannya.
+    """
+    kurang = [v for v in hasil if not v.get("channel_id") and v.get("channel")]
+    if not kurang:
+        return
+    peta = {}
+    for v in hasil:
+        if v.get("channel_id") and v.get("channel"):
+            peta.setdefault(_nama_kanal(v["channel"]), v["channel_id"])
+    for v in kurang:
+        nama = _nama_kanal(v["channel"])
+        if not nama:
+            continue
+        cid = peta.get(nama)
+        if not cid:
+            try:
+                cid = cache_repo.ambil(f"kanal.id:{nama}", ttl=30 * 86400)
+            except Exception:                         # noqa: BLE001
+                cid = None
+        if isinstance(cid, str) and cid:
+            v["channel_id"] = cid
+            peta[nama] = cid
 
 
 # ---------------------------------------------------------------------------
@@ -237,6 +282,16 @@ async def search(q: str = Query(..., description="Kata kunci pencarian"),
 
 def _catat_hasil(hasil: list[dict]) -> None:
     """Menyimpan metadata ringan tiap hasil pencarian. Judul yang kosong dilewati."""
+    kanal_baru = {}
+    for v in hasil:
+        if v.get("channel_id") and v.get("channel") and not _KOLABORASI.search(v["channel"]):
+            kanal_baru[_nama_kanal(v["channel"])] = v["channel_id"]
+    for nama, cid in kanal_baru.items():
+        try:
+            if cache_repo.ambil(f"kanal.id:{nama}", ttl=30 * 86400) != cid:
+                cache_repo.simpan(f"kanal.id:{nama}", cid)
+        except Exception:                             # noqa: BLE001
+            break
     for v in hasil:
         if not v.get("id") or not (v.get("title") or "").strip():
             continue
@@ -306,6 +361,27 @@ TRENDING_QUERIES = [
     "kisah inspiratif indonesia",
     "podcast teknologi indonesia",
 ]
+
+# Kolam umum untuk antarmuka berbahasa Inggris. OmniClip tidak hanya dipakai
+# orang Indonesia (pemiliknya, 15 Oktober 2026), jadi profil baru yang memilih
+# English tidak disuguhi podcast berbahasa Indonesia.
+TRENDING_QUERIES_EN = [
+    "podcast full episode",
+    "long form interview",
+    "talk show full episode",
+    "comedy podcast",
+    "business podcast",
+    "tech podcast",
+    "life story interview",
+    "debate full",
+    "educational podcast",
+    "inspiring story interview",
+]
+
+
+def _kueri_umum() -> list[str]:
+    from .. import bahasa
+    return TRENDING_QUERIES_EN if bahasa.kini() == "en" else TRENDING_QUERIES
 
 
 # Berapa kueri yang menyusun satu beranda, dan berapa video paling banyak dari
@@ -418,8 +494,9 @@ def _kolam_beranda(acak: Optional[random.Random] = None) -> list[str]:
     # yang memang dicari, supaya tidak perlu mengetik kata yang sama tiap hari.
     kolam = minat * 3 + [q for q in sering if _layak_beranda(q)] * 2 \
         + [q for q in riwayat if _layak_beranda(q)]
+    umum = _kueri_umum()
     if not kolam:
-        return TRENDING_QUERIES
+        return umum
     # SELALU dicampur kueri umum, berapa pun banyaknya riwayat.
     #
     # Tanpa ini beranda hanya berisi apa yang sudah pernah dicari, dan itu
@@ -432,7 +509,7 @@ def _kolam_beranda(acak: Optional[random.Random] = None) -> list[str]:
     # ikut berbeda: langkah gulir dan beranda yang sudah disiapkan di latar
     # meleset dari singgahannya dan memanggil YouTube lagi dari nol.
     return kolam + (acak or random).sample(
-        TRENDING_QUERIES, k=min(len(TRENDING_QUERIES), max(2, len(kolam) // 3)))
+        umum, k=min(len(umum), max(2, len(kolam) // 3)))
 
 
 # Kueri beranda paling panjang, dalam kata. Di atas ini yang tersimpan hampir
@@ -503,7 +580,7 @@ def _kunci_benih(pid: int) -> str:
     return f"beranda.benih:{pid}"
 
 
-async def _siapkan_beranda(pid: int, tunda: float = 0.0) -> None:
+async def _siapkan_beranda(pid: int, tunda: float = 0.0, wilayah: str = "ID") -> None:
     """Menyusun satu beranda dengan benih baru dan mencatat benihnya sebagai siap."""
     if pid in _MENYIAPKAN:
         return
@@ -512,7 +589,7 @@ async def _siapkan_beranda(pid: int, tunda: float = 0.0) -> None:
         if tunda:
             await asyncio.sleep(tunda)
         benih = random.randrange(1, 10 ** 6)
-        hasil = await trending(20, benih)
+        hasil = await trending(20, benih, wilayah)
         if hasil:
             siap = await asyncio.to_thread(cache_repo.ambil, _kunci_benih(pid), ttl=TTL_BERANDA)
             siap = [b for b in (siap or []) if isinstance(b, int)]
@@ -525,7 +602,7 @@ async def _siapkan_beranda(pid: int, tunda: float = 0.0) -> None:
 
 
 @router.get("/trending/benih")
-async def benih_beranda():
+async def benih_beranda(wilayah: str = "ID"):
     """
     Benih beranda yang siap dipakai, atau benih baru bila belum ada.
 
@@ -543,14 +620,14 @@ async def benih_beranda():
     else:
         benih, siap = random.randrange(1, 10 ** 6), False
     if len(daftar) < BENIH_SIAP_MAKS:
-        tugas = asyncio.create_task(_siapkan_beranda(pid, 0.0 if siap else 45.0))
+        tugas = asyncio.create_task(_siapkan_beranda(pid, 0.0 if siap else 45.0, wilayah))
         _TUGAS_LATAR.add(tugas)
         tugas.add_done_callback(_TUGAS_LATAR.discard)
     return {"benih": benih, "siap": siap}
 
 
 @router.get("/trending")
-async def trending(limit: int = 20, refresh: int = 0):
+async def trending(limit: int = 20, refresh: int = 0, wilayah: str = "ID"):
     """
     Rekomendasi beranda.
 
@@ -593,7 +670,8 @@ async def trending(limit: int = 20, refresh: int = 0):
     kueri = _kueri_beranda(kolam, acak)
 
     from ..services import profil
-    kunci = f"trending:{profil.kini()}:{refresh}:{'|'.join(kueri)}"
+    wilayah = beranda_svc.wilayah_sah(wilayah)
+    kunci = f"trending:{profil.kini()}:{wilayah}:{refresh}:{'|'.join(kueri)}"
     simpanan = await asyncio.to_thread(cache_repo.ambil, kunci, ttl=TTL_BERANDA)
     simpanan = simpanan if isinstance(simpanan, dict) else {}
     # Langkah gulir saat pelengkap 100 video untuk daftar ini masih berjalan di
@@ -629,9 +707,9 @@ async def trending(limit: int = 20, refresh: int = 0):
                               None, "bulan" if i % 2 == 0 else None)
             for i, q in enumerate(kueri)
         ], return_exceptions=True)
-        # Daftar populer YouTube untuk Indonesia, kalau kuncinya terpasang.
+        # Daftar populer YouTube untuk negara pengguna, kalau kuncinya terpasang.
         # Gagalnya tidak menjatuhkan beranda: yang hilang hanya lapis ini.
-        panas = await asyncio.to_thread(beranda_svc.ramai)
+        panas = await asyncio.to_thread(beranda_svc.ramai, wilayah=wilayah)
     except YtdlpError as e:
         raise _as_app_error(e) from e
     galat = [x for x in kolam_hasil if isinstance(x, Exception)]
@@ -639,7 +717,7 @@ async def trending(limit: int = 20, refresh: int = 0):
     if not daftar:
         if galat and isinstance(galat[0], YtdlpError):
             raise _as_app_error(galat[0]) from galat[0]
-        raise AppError("Pencarian tidak menghasilkan apa pun.", status_code=502)
+        raise AppError("Pencarian tidak menghasilkan apa pun.", status=502)
 
     mentah = _selang_seling(daftar, acak)
     # Saringan mutu berlaku untuk hasil pencarian: panjang yang masuk akal
@@ -693,6 +771,26 @@ async def trending(limit: int = 20, refresh: int = 0):
             _lengkapi_di_latar(kunci, penuh, 100, hasil,
                                gabung=lambda d: _batasi_kanal(d))
     return await asyncio.to_thread(_lengkapi_tanggal, hasil[:want])
+
+
+@router.get("/topik")
+async def topik(nama: str, wilayah: str = "ID", limit: int = 20):
+    """
+    Satu topik Beranda: daftar populer resmi YouTube untuk kategori itu di
+    negara pengguna (lihat `beranda.TOPIK`).
+
+    Tanpa kunci YouTube Data API, cadangannya pencarian nama kategorinya,
+    tanpa cookies dan tanpa masuk riwayat. Kotak cari tetap kosong.
+    """
+    if nama not in beranda_svc.TOPIK:
+        raise AppError("Topik tidak dikenal.", status=404)
+    want = max(1, min(limit, beranda_svc.TOPIK_MAKS))
+    hasil = await asyncio.to_thread(beranda_svc.topik, nama, wilayah, want)
+    if hasil is not None:
+        return hasil
+    return await search(q=beranda_svc.TOPIK_CADANGAN[nama], limit=min(want, 100),
+                        sort="terpopuler", durasi=None, tanggal=None, jenis=None,
+                        catat=False)
 
 
 # Info video disimpan satu jam. Judul, kanal, durasi, dan daftar resolusinya
@@ -933,6 +1031,54 @@ async def impor_jalur(req: ImporJalurRequest):
     return {"video_id": vid, "title": judul, "file_name": path.name,
             "file_size": path.stat().st_size, "duration": info.get("duration"),
             "width": info.get("width"), "height": info.get("height")}
+
+
+class ImporTautanRequest(BaseModel):
+    url: str = Field(..., min_length=4, max_length=2048)
+
+
+@router.post("/impor/tautan")
+async def impor_tautan(req: ImporTautanRequest):
+    """
+    Tautan video dari situs mana pun yang dikenal yt-dlp.
+
+    Tautan YouTube dikembalikan sebagai id YouTube biasa. Tautan lain dicatat
+    sebagai video impor (`KANAL_TAUTAN`) dengan alamat aslinya; berkasnya
+    diunduh oleh tahap unduh pipeline, dengan kemajuan di kartu Partitur.
+    """
+    from ..services.paths import KANAL_TAUTAN
+    from ..services.paths import extract_youtube_id
+    from ..services.ytdlp import adalah_tautan_youtube, info_tautan
+
+    url = req.url.strip()
+    if adalah_tautan_youtube(url) or re.fullmatch(r"[\w-]{11}", url):
+        vid = extract_youtube_id(url)
+        if not vid:
+            raise AppError("Video sumber tidak dikenali.", status=422)
+        return {"video_id": vid, "title": vid, "youtube": True}
+    if not re.match(r"https?://", url, re.I):
+        raise AppError("Tempel alamat lengkap yang diawali https://", status=422)
+    try:
+        info = await asyncio.to_thread(info_tautan, url)
+    except YtdlpError as e:
+        raise _as_app_error(e) from e
+    # Tautan yang sama ditempel lagi: pakai kartu yang lama.
+    for r in get_conn().execute("SELECT id, title, meta_json FROM videos WHERE channel = ?",
+                                (KANAL_TAUTAN,)):
+        try:
+            if json.loads(r["meta_json"] or "{}").get("sumber_url") in (url, info["alamat"]):
+                return {"video_id": r["id"], "title": r["title"], "sudah_ada": True}
+        except Exception:
+            continue
+    vid = _id_lokal()
+    judul = info["judul"] or info["situs"] or "Video"
+    media_repo.upsert_video({
+        "id": vid, "title": judul, "channel": KANAL_TAUTAN,
+        "duration": info["durasi"], "thumbnail": info["sampul"] or None,
+        "sumber_url": info["alamat"], "pengunggah": info["pengunggah"],
+        "situs": info["situs"],
+    })
+    return {"video_id": vid, "title": judul, "situs": info["situs"]}
 
 
 @router.get("/impor/{video_id}/berkas")

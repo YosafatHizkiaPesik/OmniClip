@@ -158,14 +158,23 @@ def list_projects(limit: int = 60, profil_id: Optional[int] = None) -> list[dict
         else:
             status = "unknown"
 
+        kanal = video["channel"] if video else None
+        if kanal == "Tautan web":
+            # Video dari situs lain: pengunggah dan situsnya, "nama · TikTok".
+            try:
+                meta = json.loads(video["meta_json"] or "{}")
+            except (TypeError, ValueError):
+                meta = {}
+            kanal = " · ".join(x for x in (meta.get("pengunggah"), meta.get("situs")) if x) or kanal
         projects.append({
             "video_id": vid,
             "title": (video["title"] if video else None) or result.get("title") or vid,
-            "channel": video["channel"] if video else None,
+            "channel": kanal,
             # Video impor tidak punya sampul YouTube: diambil dari berkasnya.
             "thumbnail": ((video["thumbnail_url"] if video else None)
                           or (f"/api/impor/{vid}/sampul"
-                              if video and video["channel"] == "Impor lokal" else None)),
+                              if video and video["channel"] in ("Impor lokal", "Tautan web")
+                              else None)),
             "duration": (video["duration"] if video else None) or result.get("duration"),
             "status": status,
             "clip_count": len(result.get("clips") or []),

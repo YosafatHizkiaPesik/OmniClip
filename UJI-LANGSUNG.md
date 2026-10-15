@@ -50,6 +50,14 @@ jadi pekerjaan baru. Rincian tiap fitur ada di `JOB-2.md`.
   dirender dengan v1.3.7 ke atas; klip lama tanpa komentar akan ditahan
   gerbang tinjau untuk unggah otomatis ke publik.
 
+- [ ] **Kunci Gemini tidak bisa dipakai (15 Oktober 2026, bukan bug kode).**
+  Kunci 1 menjawab 429 (kuota gratis harian habis), kunci 2 menjawab 403
+  "Your project has been denied access" (proyek Google-nya diblokir). Akibatnya
+  semua video memakai mesin lokal. Perlu kunci baru dari aistudio.google.com
+  dengan proyek Google lain, isi di Pengaturan > Mesin AI. Kartu Partitur
+  kini menulis alasannya ("Kuota harian Gemini habis", "Kunci Gemini ditolak
+  Google"), bukan hanya "Gemini gagal".
+
 ## Yang harus dites langsung oleh pemilik
 
 Urutannya sama dengan jalur pemakaian normal.
@@ -119,49 +127,94 @@ Urutannya sama dengan jalur pemakaian normal.
 
 ### Tambahan JOB-3 (15 Oktober 2026): tampilan seperti YouTube dan dua bahasa
 
-- [ ] **14. Beranda cepat.**
+- [x] **14. Beranda cepat.**
   - Langkah: tutup tab OmniClip, buka lagi Beranda. Tekan tombol segarkan
     (ikon putar di kiri topik), lalu gulir ke bawah.
   - Diharapkan: kartu tampil dalam 1-2 detik (kecuali kunjungan pertama
     sesudah aplikasi baru dinyalakan); gulir ke bawah langsung menambah kartu.
-- [ ] **15. Baris topik.**
+- [x] **15. Baris topik.**
   - Langkah: sorot sebuah pil topik; putar roda tetikus di atas baris topik;
     tekan panah kanan/kiri.
-  - Diharapkan: pil tidak terpotong; baris bergeser sampai topik terakhir
-    ("Jalan-jalan"), halaman tidak ikut menggulir.
-- [ ] **16. Filter pencarian.**
+  - Diharapkan: pil tidak terpotong; baris bergeser sampai topik terakhir,
+    halaman tidak ikut menggulir. (Topiknya kini kategori resmi YouTube, tes 22.)
+- [x] **16. Filter pencarian.**
   - Langkah: cari sesuatu, tekan tombol **Filter**, pilih Shorts.
   - Diharapkan: panel filter baru muncul setelah tombol ditekan; tombolnya
     menunjukkan angka 1; "Hapus filter" mengembalikan semuanya.
-- [ ] **17. Halaman Tonton.**
+- [x] **17. Halaman Tonton.**
   - Langkah: buka video dari kartu, tunggu ±10 detik, tekan "Selengkapnya".
   - Diharapkan: tidak ada tombol Kembali/Cari video; deskripsi terbuka utuh
     (bukan cuplikan satu-dua baris); avatar dan nama channel bisa diklik.
-- [ ] **18. Channel, Langganan, Riwayat.**
+- [x] **18. Channel, Langganan, Riwayat.**
   - Langkah: klik nama channel → Ikuti → buka menu Langganan → buka Riwayat.
   - Diharapkan: halaman channel dengan banner, tab Video/Shorts/Live; channel
     muncul di menu samping; video yang dibuka tercatat di Riwayat.
-- [ ] **19. Ganti bahasa ke English.**
+- [x] **19. Ganti bahasa ke English.**
   - Langkah: pilih English di pemilih bahasa header (atau Settings >
     Appearance and language). Buka Beranda, Tonton, Studio (semua tab),
     Klip jadi, Unduhan, Analitik, Akun, Pengaturan, Mesin.
   - Diharapkan: semua menu, tombol, dan penjelasan berbahasa Inggris. Yang
     masih Indonesia hanya: judul/isi video, sebagian teks dari server
     (temuan Analitik, nama tema/suara/font), dan teks buatan AI (J3-12).
-- [ ] **20. Kabar pekerjaan berbahasa Inggris.**
+- [x] **20. Kabar pekerjaan berbahasa Inggris.**
   - Langkah: dalam mode English, potong satu video jadi klip, lalu render satu
     klip di Studio.
   - Diharapkan: bilah kemajuan bertuliskan "Downloading…", "Finding the most
     interesting moments…", "Rendering clip… 45%", dst.
-- [ ] **21. Tata letak Akun, Pengaturan, Mesin.**
+- [x] **21. Tata letak Akun, Pengaturan, Mesin.**
   - Langkah: buka ketiganya di layar laptop dan di layar sempit (perkecil
     jendela < 900 px).
   - Diharapkan: daftar bagian di kiri, isi satu kolom tanpa lubang kosong; di
     layar sempit daftarnya jadi pil yang bisa digeser.
 
+### Tambahan 15 Oktober 2026 (malam): temuan pemilik dari tes 14-21
+
+- [ ] **22. Topik resmi YouTube.**
+  - Langkah: di Beranda tekan Gaming, lalu Musik, Olahraga, Sedang tren.
+    Ganti Pengaturan > Tampilan dan bahasa > **Negara konten** ke Amerika
+    Serikat, kembali ke Beranda, tekan Gaming lagi.
+  - Diharapkan: kotak cari tetap KOSONG; isi Gaming benar-benar video game
+    (daftar populer YouTube untuk negara itu); ganti negara = isi ikut
+    berganti. Pil "Semua" mengembalikan Beranda biasa.
+- [ ] **23. Riwayat pencarian YouTube Anda bersih.**
+  - Langkah: cari beberapa kata di OmniClip dan tekan beberapa topik. Buka
+    youtube.com > Riwayat > Riwayat penelusuran di peramban yang login.
+  - Diharapkan: kata-kata dari OmniClip TIDAK muncul lagi di sana
+    (pencarian sekarang dikirim tanpa cookies akun).
+- [ ] **24. Avatar channel.**
+  - Langkah: gulir Beranda dan hasil cari, perhatikan kartu "SEDANG RAMAI" dan
+    video kolaborasi ("X and Y").
+  - Diharapkan: foto profil tampil; inisial berwarna hanya untuk channel yang
+    memang tidak dikenal.
+- [ ] **25. Tempel tautan dari situs lain.**
+  - Langkah: Partitur > **Tempel tautan** > tempel tautan TikTok, Instagram
+    Reels, atau X > Potong jadi klip.
+  - Diharapkan: kartu baru dengan judul dan "pengunggah · TikTok"; tahap Unduh
+    berjalan dengan persen; klip bisa dibuka di Studio. Vimeo diblokir
+    Internet Positif: pesannya menyarankan VPN.
+  - Langkah: **Dari komputer** > Pilih dari komputer ini.
+- [ ] **26. Cari klip lagi tidak ikut antre.**
+  - Langkah: saat satu video baru sedang dianalisis, buka video LAIN yang
+    sudah punya klip > Cari klip lagi > Gemini.
+  - Diharapkan: langsung jalan (tidak "menunggu giliran analisis").
+- [ ] **27. Unggah sambil pindah halaman.**
+  - Langkah: Studio > centang unggah YouTube (Pribadi) > Render > pindah ke
+    Beranda > kembali ke Studio, lalu buka Klip jadi.
+  - Diharapkan: bilah render muncul lagi di Studio; di Klip jadi ada lencana
+    "Mengunggah ke YouTube… N%" lalu berganti tautan ↗ YouTube.
+
+### Jalur fitur unggulan (urutan disarankan, ±30 menit)
+
+Satu video podcast pendek (10-20 menit) cukup untuk semuanya:
+**Tempel/klip video → 2 (draf komentar AI) → 12 (reaksi kamera) → 3 (punch-in)
+→ 13 (bilah progres) → 5 (render, paling penting) → 6 (nilai tambah) → 7
+(unggah Pribadi) → 27.** Butuh kunci Gemini yang hidup: lihat catatan Gemini
+di atas.
+
 ## Riwayat hasil tes
 
 | Tanggal | Tes | Hasil | Catatan |
 |---|---|---|---|
+| 15 Okt 2026 | 14-21 (pemilik) | Lolos dengan temuan | Temuan: avatar kadang kosong, kueri topik terlihat di kotak cari dan terikat Indonesia, topik Gaming (English) isinya bukan game, kueri OmniClip masuk riwayat YouTube, kotak tautan Partitur terlalu besar, sebagian kabar masih Indonesia, cari ulang menunggu antrean. Semua dikerjakan (tes 22-27). |
 | 12 Okt 2026 | 5 (sebagian, oleh Claude di akun Demo Studio) | Lolos | Klip Kai Cenat dirender lewat `/api/render-clip` dengan komentar pembuka + penutup (kartu teks, bekukan) dan kartu konteks: durasi 26,93 dtk sesuai hitungan, nilai tambah 41% "cukup", gerbang lolos. Klip MrBeast dengan punch-in otomatis: zoom terlihat di titiknya. Suara komentar (rekaman/TTS) belum dicoba di jalur ini. |
 | 12 Okt 2026 | Gerbang tinjau (bagian dari 7) | Lolos | `/api/uploads/gerbang`: klip tanpa komentar ditahan dengan alasan "Belum ada komentar…", klip berkomentar lolos. |

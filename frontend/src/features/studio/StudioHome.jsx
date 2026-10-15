@@ -176,6 +176,7 @@ export default function StudioHome({ onOpen, onFindVideos }) {
           </p>
         </div>
         <div style={{ flex: 1 }} />
+        <ImportBar onDone={load} />
         <button className="btn-secondary" onClick={load} style={{ fontSize: '0.8rem' }}>
           <RefreshCw size={14} /> {t('umum.segarkan')}
         </button>
@@ -183,8 +184,6 @@ export default function StudioHome({ onOpen, onFindVideos }) {
           <Search size={14} /> {t('tonton.cari_video')}
         </button>
       </header>
-
-      <ImportBar onDone={load} />
 
       {error && (
         <div style={{
@@ -271,7 +270,7 @@ export default function StudioHome({ onOpen, onFindVideos }) {
                     background: 'var(--hl)', borderRadius: '99px',
                     fontSize: '0.68rem', fontWeight: 800, color: '#1A1400',
                   }}>
-                    {p.clip_count} klip
+                    {t('ulang.n_klip', { n: p.clip_count })}
                   </span>
                 )}
               </div></div>

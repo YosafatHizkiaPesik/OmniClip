@@ -84,6 +84,10 @@ def safe_media_path(category: str, filename: str) -> Path:
 
 
 KANAL_IMPOR = "Impor lokal"
+# Video dari tautan situs lain (TikTok, Instagram, X, ...): diperlakukan seperti
+# impor, berkasnya diunduh ke folder impor oleh tahap unduh pipeline. Alamat
+# aslinya di metadata video (`sumber_url`).
+KANAL_TAUTAN = "Tautan web"
 
 
 def adalah_impor(video_id: str) -> bool:
@@ -101,7 +105,7 @@ def adalah_impor(video_id: str) -> bool:
         row = media_repo.get_video(video_id) or {}
     except Exception:
         return False
-    return row.get("channel") == KANAL_IMPOR
+    return row.get("channel") in (KANAL_IMPOR, KANAL_TAUTAN)
 
 
 def jalur_luar(video_id: str) -> Path | None:

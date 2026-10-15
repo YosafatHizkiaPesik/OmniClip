@@ -1,6 +1,7 @@
 import logging
 import re
 import os
+from pathlib import Path
 import random
 import json
 import subprocess
@@ -139,8 +140,16 @@ def classify_ytdlp_error(exc: Exception) -> YtdlpError:
 JEDA_PERMINTAAN = (0.5, 2.0)
 
 
-def _base_opts() -> dict:
-    """Opsi yt-dlp yang dipakai bersama semua pemanggilan."""
+def _base_opts(cookies: bool = True) -> dict:
+    """
+    Opsi yt-dlp yang dipakai bersama semua pemanggilan.
+
+    `cookies=False` untuk pencarian: dengan cookies akun yang login, setiap
+    kueri tercatat di riwayat pencarian YouTube pemiliknya. Dilaporkan 15
+    Oktober 2026: riwayat YouTube-nya penuh "komedi lucu indonesia" dan kueri
+    beranda lain yang tidak pernah ia ketik. Daftar hasil pencarian tidak butuh
+    login; yang butuh hanya pengambilan format video.
+    """
     opts = {
         'quiet': True,
         'no_warnings': True,
@@ -152,7 +161,8 @@ def _base_opts() -> dict:
     # Cookies opsional, dipilih dari Pengaturan. Lihat services/cookies.py:
     # cookies BUKAN obat verifikasi bot dan sering justru memperburuknya.
     try:
-        cookies_svc.terapkan(opts)
+        if cookies:
+            cookies_svc.terapkan(opts)
     except Exception:
         # Pengaturan yang tidak terbaca tidak boleh mematikan pencarian.
         pass
@@ -452,7 +462,7 @@ def search_youtube_videos(query: str, limit: int = 20, sort: str = "relevan",
     sekali (lihat `fetch_upload_dates`), jadi "terbaru" hanya bisa dijawab oleh
     YouTube.
     """
-    ydl_opts = _base_opts()
+    ydl_opts = _base_opts(cookies=False)
     ydl_opts.update({
         'extract_flat': 'in_playlist',
         'skip_download': True,
@@ -1153,6 +1163,103 @@ def download_youtube_media(url_or_id: str, resolution: str = "720p", on_progress
         err = classify_ytdlp_error(e)
         print(f"[OmniClip] Unduhan gagal ({err.code}): {err.original[:300]}")
         return {"success": False, "error": err.message, "code": err.code}
+
+# --- Tautan dari situs lain ------------------------------------------------
+#
+# Diminta pemilik 15 Oktober 2026: kotak tautan di Partitur dialihkan untuk
+# video dari platform mana pun (TikTok, Instagram, X, Facebook, Vimeo, Twitch,
+# dan ratusan situs lain yang dikenal yt-dlp), karena tautan YouTube sudah bisa
+# ditempel di kotak cari Beranda. Video seperti ini diperlakukan seperti video
+# impor: id lokal, berkasnya di folder impor, lalu jalur klip yang sama.
+
+def adalah_tautan_youtube(teks: str) -> bool:
+    return bool(re.search(r"(^|[/.])(youtube\.com|youtu\.be|youtube-nocookie\.com)/", teks or "", re.I))
+
+
+def _galat_tautan(e: Exception) -> YtdlpError:
+    """Galat situs non-YouTube: pesan klasifikasi YouTube ("Gagal menghubungi
+    YouTube") menyesatkan di sini, jadi alasannya disebut apa adanya."""
+    teks = str(e)
+    if "safesurf" in teks or "internetpositif" in teks.lower():
+        return YtdlpError("TAUTAN_DIBLOKIR",
+                          "Situs ini diblokir oleh penyedia internet Anda. Coba lewat VPN.", teks)
+    if "Unsupported URL" in teks:
+        return YtdlpError("TAUTAN_TIDAK_DIDUKUNG", "Situs ini tidak didukung.", teks)
+    if re.search(r"\b(404|Not found|does not exist|removed)\b", teks, re.I):
+        return YtdlpError("TAUTAN_KOSONG", "Video di tautan ini tidak ditemukan atau sudah dihapus.", teks)
+    if re.search(r"login|log in|sign in|private", teks, re.I):
+        return YtdlpError("TAUTAN_PRIVAT",
+                          "Video ini hanya bisa dibuka setelah login di situsnya, atau privat.", teks)
+    ringkas = re.sub(r"^ERROR:\s*(\[[^\]]+\]\s*)?", "", teks.strip().splitlines()[0] if teks.strip() else "")
+    return YtdlpError("TAUTAN_GAGAL", f"Video dari tautan ini tidak bisa dibaca: {ringkas[:160]}", teks)
+
+
+def info_tautan(url: str) -> dict:
+    """Judul, pengunggah, durasi, sampul, dan nama situs sebuah tautan non-YouTube."""
+    opts = _base_opts()
+    opts.update({'skip_download': True, 'noplaylist': True, 'socket_timeout': 15,
+                 'retries': 1})
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+    except Exception as e:
+        raise _galat_tautan(e) from e
+    # Tautan ke daftar (profil, playlist): ambil video pertamanya.
+    if info.get('_type') == 'playlist' or info.get('entries'):
+        pertama = next((e for e in (info.get('entries') or []) if e), None)
+        if not pertama:
+            raise YtdlpError("TAUTAN_KOSONG", "Tautan ini tidak berisi video.")
+        info = pertama
+    if not (info.get('formats') or info.get('url')):
+        raise YtdlpError("TAUTAN_KOSONG", "Tautan ini tidak berisi video.")
+    return {
+        "judul": (info.get('title') or info.get('fulltitle') or '').strip()[:120],
+        "pengunggah": info.get('uploader') or info.get('channel') or info.get('creator') or '',
+        "durasi": info.get('duration') or 0,
+        "sampul": info.get('thumbnail') or '',
+        "situs": info.get('extractor_key') or info.get('extractor') or '',
+        "alamat": info.get('webpage_url') or url,
+    }
+
+
+def unduh_tautan(url: str, folder: str, nama_dasar: str, on_progress=None) -> dict:
+    """Mengunduh video dari tautan non-YouTube ke `folder/nama_dasar.<ext>`."""
+    opts = _base_opts()
+    opts.update({
+        'format': (f"bv*[height<=?{MAX_BEST_HEIGHT}]+ba/b[height<=?{MAX_BEST_HEIGHT}]/bv*+ba/b"),
+        'format_sort': ['res', 'fps', 'vcodec:h264', 'ext:mp4:m4a', 'br'],
+        'outtmpl': os.path.join(folder, nama_dasar + '.%(ext)s'),
+        'noplaylist': True,
+        'playlist_items': '1',
+        'fragment_retries': 15,
+        'skip_unavailable_fragments': False,
+        'merge_output_format': 'mp4',
+        'noprogress': True,
+    })
+    pp_hook = None
+    if on_progress is not None:
+        opts['progress_hooks'] = [_make_progress_hook(on_progress)]
+        pp_hook = _make_pp_hook(on_progress)
+        opts['postprocessor_hooks'] = [pp_hook]
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            ydl.extract_info(url, download=True)
+    except Exception as e:
+        if type(e).__name__ == "JobCancelled":
+            raise
+        err = _galat_tautan(e)
+        return {"success": False, "error": err.message, "code": err.code}
+    finally:
+        if pp_hook is not None:
+            pp_hook.berhenti()
+    for f in sorted(Path(folder).glob(nama_dasar + ".*")):
+        if f.suffix.lower() in (".mp4", ".mkv", ".webm", ".mov", ".m4v") and f.is_file():
+            pr = probe_media(str(f))
+            return {"success": True, "file_path": str(f), "file_name": f.name,
+                    "duration": pr.get("duration"), "width": pr.get("width"),
+                    "height": pr.get("height"), "file_size": f.stat().st_size}
+    return {"success": False, "error": "File unduhan tidak ditemukan setelah proses selesai."}
+
 
 def delete_local_download(filename: str) -> dict:
     """Menghapus file unduhan lokal."""

@@ -203,7 +203,11 @@ export default function ClipsTab() {
         // September 2026: kotak YouTube dicentang, klipnya sampai di Drive,
         // dan tidak ada apa pun yang menyebutkan bahwa unggahan YouTube-nya
         // ditolak dengan alasan yang jelas ("akun ini belum punya kanal").
-        if (u.status !== 'done' && u.status !== 'failed') continue;
+        // Yang masih berjalan ikut juga (15 Oktober 2026), dengan kemajuannya:
+        // unggahan dari Studio berjalan di server, dan tanpa ini tidak ada
+        // satu layar pun yang menunjukkan bahwa ia sedang dikerjakan.
+        if (u.status !== 'done' && u.status !== 'failed' && !u.job) continue;
+        if (u.job && u.job.status !== 'queued' && u.job.status !== 'running') continue;
         (map[u.clip_name] ??= []).push(u);
       }
       setSent(map);
@@ -211,6 +215,14 @@ export default function ClipsTab() {
   };
 
   useEffect(() => { load(); loadUploads(); }, []);
+  // Selama ada unggahan yang berjalan, riwayatnya dibaca ulang tiap 4 detik.
+  const adaJalan = Object.values(sent).some((d) => d.some((u) => u.job));
+  useEffect(() => {
+    if (!adaJalan) return undefined;
+    const j = setInterval(loadUploads, 4000);
+    return () => clearInterval(j);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adaJalan]);
 
   const toggle = (name) => setSelected((prev) => {
     const next = new Set(prev);
@@ -453,7 +465,17 @@ export default function ClipsTab() {
                       yang sama. */}
                   {sent[clip.file_name]?.length > 0 && (
                     <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
-                      {sent[clip.file_name].map((u) => (u.status === 'done' ? (
+                      {sent[clip.file_name].map((u) => (u.job ? (
+                        <span key={u.id} className="chip" title={u.job.message || ''}
+                              style={{ fontSize: '.64rem', padding: '2px 7px', color: 'var(--accent-cyan)',
+                                       display: 'inline-flex', gap: '4px', alignItems: 'center' }}>
+                          <Loader2 size={10} className="animate-spin" />
+                          {u.job.status === 'running'
+                            ? t('klip.mengunggah_ke', { target: u.target === 'youtube' ? 'YouTube' : 'Drive',
+                              n: Math.round((u.job.progress || 0) * 100) })
+                            : t('klip.antre_unggah', { target: u.target === 'youtube' ? 'YouTube' : 'Drive' })}
+                        </span>
+                      ) : u.status === 'done' ? (
                         <a key={u.id} href={u.remote_url} target="_blank" rel="noreferrer"
                            className="chip" style={{
                              fontSize: '.64rem', padding: '2px 7px', textDecoration: 'none',

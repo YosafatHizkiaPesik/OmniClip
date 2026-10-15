@@ -308,6 +308,17 @@ async def list_uploads(clip_name: Optional[str] = None, limit: int = 60,
     from ..services import profil
     daftar = uploads_repo.list_recent(min(limit, 200), clip_name,
                                       profil_id=profil.kini())
+    # Unggahan yang masih berjalan membawa kemajuan pekerjaannya, supaya Klip
+    # jadi bisa menunjukkannya. Ditanyakan pemilik 15 Oktober 2026: render +
+    # unggah dari Studio, pindah ke Beranda, lalu kembali; apakah tetap jalan?
+    # Ya (pekerjaannya di server), tapi sebelumnya tidak terlihat di mana pun
+    # sampai selesai atau gagal.
+    from ..repos import jobs as jobs_repo
+    for u in daftar:
+        if u.get("status") in ("done", "failed") or not u.get("job_id"):
+            continue
+        j = jobs_repo.get(u["job_id"]) or {}
+        u["job"] = {k: j.get(k) for k in ("status", "progress", "message", "mulai_setelah")}
     if not statistik:
         return {"uploads": daftar}
 

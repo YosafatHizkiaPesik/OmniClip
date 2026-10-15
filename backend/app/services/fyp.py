@@ -164,7 +164,7 @@ def periksa(meta: dict) -> dict:
         catatan.append({
             "kode": "tanpa_teks", "berat": "berat", "judul": "Tidak ada subtitle sama sekali",
             "saran": "Tanpa tulisan, klip ini hanya bisa dinikmati penonton yang "
-                     "menyalakan suaranya — dan sebagian besar tidak.",
+                     "menyalakan suaranya, dan sebagian besar tidak.",
         })
 
     # --- Judul dan tagar -------------------------------------------------------

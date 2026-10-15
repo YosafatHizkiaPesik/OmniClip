@@ -99,3 +99,47 @@ export function tebal(teks) {
   return createElement(Fragment, null,
     ...bagian.map((b, i) => (i % 2 ? createElement('b', { key: i }, b) : b)));
 }
+
+/*
+ * Negara konten (diminta pemilik 15 Oktober 2026: pengguna OmniClip belum
+ * tentu orang Indonesia). Dipakai untuk daftar populer YouTube di Beranda dan
+ * topik. Bawaan dari peramban (`en-GB` -> GB); bila peramban tidak menyebut
+ * negara, dari bahasa pilihan. Bisa diganti di Pengaturan > Tampilan dan bahasa.
+ */
+const KUNCI_WILAYAH = 'omniclip.wilayah';
+export const NEGARA = [
+  'ID', 'US', 'GB', 'IN', 'MY', 'SG', 'PH', 'AU', 'CA', 'DE', 'FR', 'ES', 'IT',
+  'NL', 'BR', 'MX', 'JP', 'KR', 'TH', 'VN', 'TR', 'SA', 'AE', 'NG', 'ZA',
+];
+
+function wilayahPeramban() {
+  try {
+    for (const l of navigator.languages || [navigator.language]) {
+      const m = /-([A-Za-z]{2})$/.exec(l || '');
+      if (m) return m[1].toUpperCase();
+    }
+  } catch { /* tidak ada navigator */ }
+  return null;
+}
+
+export function wilayah() {
+  try {
+    const s = localStorage.getItem(KUNCI_WILAYAH);
+    if (s && /^[A-Z]{2}$/.test(s)) return s;
+  } catch { /* abaikan */ }
+  return wilayahPeramban() || (kini === 'id' ? 'ID' : 'US');
+}
+
+export function setWilayah(kode) {
+  try { localStorage.setItem(KUNCI_WILAYAH, kode); } catch { /* abaikan */ }
+  pendengar.forEach((f) => f());
+}
+
+/** Nama negara dalam bahasa antarmuka: "Indonesia", "Amerika Serikat". */
+export function namaNegara(kode) {
+  try {
+    return new Intl.DisplayNames([lokal()], { type: 'region' }).of(kode) || kode;
+  } catch {
+    return kode;
+  }
+}

@@ -4,7 +4,7 @@ import {
   CheckCircle2, AlertTriangle, Sparkles, Scissors, Mic,
   Trash2, Languages, UploadCloud, ShieldAlert, Captions, Volume2, Palette, Globe,
 } from 'lucide-react';
-import { BAHASA, bahasa, setBahasa, tebal, useT } from '../lib/i18n';
+import { BAHASA, NEGARA, bahasa, namaNegara, setBahasa, setWilayah, tebal, useT, wilayah } from '../lib/i18n';
 import HalamanSetelan from './HalamanSetelan';
 import { apiDelete, apiGet, apiPost, apiPut } from '../lib/api';
 import { Link } from 'react-router-dom';
@@ -100,6 +100,7 @@ export default function ProfileTab() {
   // tidak akan pernah sampai ke sana.
   const [langs, setLangs] = useState([]);
   const [bahasaUmum, setBahasaUmum] = useState(null);
+  const [negara, setNegara] = useState(wilayah);
   const [langDraft, setLangDraft] = useState('');
   const [langError, setLangError] = useState(null);
 
@@ -478,6 +479,23 @@ export default function ProfileTab() {
             </button>
           ))}
         </div>
+        <label style={{ display: 'block', marginTop: '18px', fontWeight: 700, fontSize: '0.85rem' }}
+               htmlFor="pilih-negara">
+          {t('set.negara')}
+        </label>
+        <p className="bantu" style={helpText}>{t('set.negara_ket')}</p>
+        <select id="pilih-negara" value={negara}
+                onChange={(e) => { setWilayah(e.target.value); setNegara(e.target.value); }}
+                style={{
+                  width: '100%', maxWidth: '320px', marginTop: '8px', padding: '11px 12px',
+                  borderRadius: 'var(--radius-md)', fontSize: '0.86rem',
+                  border: '1px solid var(--border-color)',
+                  background: 'var(--bg-glass)', color: 'var(--text-primary)',
+                }}>
+          {(NEGARA.includes(negara) ? NEGARA : [negara, ...NEGARA]).map((k) => (
+            <option key={k} value={k}>{namaNegara(k)}</option>
+          ))}
+        </select>
       </div>
     </>
   );

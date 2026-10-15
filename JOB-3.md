@@ -97,11 +97,36 @@ commit <hash>)`. Hash = commit kodenya; centangan ikut commit berikutnya.
   **SEBAGIAN** (15 Oktober 2026, commit e0747ef): mekanismenya selesai
   (`bahasa.py`, middleware + SSE `?lang=`, katalog `kamus_en.py`). Sudah
   terjemah: galat umum, antrean, unduh, transkrip, analisis, render, unggah,
-  gerbang tinjau, nilai tambah, punch-in, kesehatan sistem. Belum: temuan
-  Analitik/FYP, daftar model/font/suara/tema dari server, pesan cookies,
-  pembaruan, sutradara AI, dan galat-galat kecil lain (±200 kalimat).
+  gerbang tinjau, nilai tambah, punch-in, kesehatan sistem.
+  Tahap 2 (15 Oktober 2026 malam): 190 kalimat lagi, dikumpulkan otomatis
+  dari argumen AppError/_stage_progress/message= di seluruh backend: galat
+  router, cookies, saran FYP, sutradara bingkai, updater, unduhan, pemanasan
+  bingkai ("Framing clip 4 of 22"). Belum: daftar model/font/suara/tema dari
+  server dan kalimat yang disusun dari potongan di luar pola itu.
 - [ ] **J3-12** Teks yang dihasilkan AI (draf komentar, judul, caption)
   mengikuti bahasa pilihan atau bahasa video.
+
+## Temuan pemilik dari uji 14-21 (15 Oktober 2026 malam)
+
+Semua dikerjakan; uji langsungnya tes 22-27 di UJI-LANGSUNG.md.
+
+- Topik Beranda = kategori resmi YouTube (`chart=mostPopular` per kategori,
+  negara konten dari peramban atau Pengaturan), alamat `?topik=`, kotak cari
+  tetap kosong. Tanpa kunci YouTube Data API: pencarian nama kategori.
+- Pencarian tanpa cookies: kueri OmniClip tidak lagi masuk riwayat
+  penelusuran YouTube pemilik.
+- Kolam Beranda umum mengikuti bahasa (English: podcast/interview
+  internasional); daftar ramai mengikuti negara konten.
+- Avatar: `channel_id` yang kosong diisi dari kartu sejenis, ingatan
+  nama→id, atau channel pertama video kolaborasi.
+- Partitur: kartu tautan besar diganti dua tombol kecil. "Tempel tautan"
+  menerima situs apa pun yang dikenal yt-dlp (`/impor/tautan`, video
+  `KANAL_TAUTAN`, diunduh tahap unduh pipeline).
+- Alasan Gemini gagal dibedakan (kuota habis / kunci ditolak / tidak sah /
+  sibuk). Kunci pemilik sendiri: 429 dan 403 "project denied access".
+- "Cari klip lagi" dengan transkrip + audio tersimpan tidak menunggu giliran
+  analisis; giliran diambil hanya bila perlu Whisper/pemisahan penutur.
+- Unggahan yang sedang berjalan tampil di Klip jadi dengan persennya.
 
 ## Fase D: sesudahnya
 

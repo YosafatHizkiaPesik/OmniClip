@@ -1,7 +1,10 @@
 """Handler job yang menyusun pekerjaan panjang jadi langkah-langkah terpantau."""
 
 import logging
+import json
 import os
+import re
+from pathlib import Path
 from typing import Optional
 
 from ..errors import AppError, JobCancelled, RenderError
@@ -683,6 +686,42 @@ ULANG_MAKS = 2
 ULANG_JEDA = (25 * 60, 90 * 60)
 
 
+def alasan_gemini(galat: list[str]) -> str:
+    """
+    Alasan Gemini gagal yang bisa dimengerti dan ditindaklanjuti pemiliknya.
+
+    Sebelumnya kartu Partitur hanya menulis "Gemini gagal". Ditanyakan pemilik
+    15 Oktober 2026 ("apakah ada masalah dengan gemini?"); di log ternyata
+    kunci pertama 429 (kuota harian habis) dan kunci kedua 403 "Your project
+    has been denied access" (proyek Google-nya diblokir). Keduanya tidak bisa
+    diperbaiki dengan menunggu sebentar, dan keduanya perlu tindakan berbeda.
+    """
+    def jenis(g: str) -> str:
+        if "PERMISSION_DENIED" in g or "denied access" in g:
+            return "ditolak"
+        if "RESOURCE_EXHAUSTED" in g or "429" in g or "quota" in g.lower():
+            return "kuota"
+        if "API_KEY_INVALID" in g or "API key not valid" in g or "API key expired" in g:
+            return "tidak_sah"
+        if any(x in g for x in ("503", "UNAVAILABLE", "overloaded", "timeout",
+                                "timed out", "batas waktu", "504", "DEADLINE")):
+            return "sibuk"
+        return "lain"
+
+    semua = {jenis(g) for g in galat} or {"lain"}
+    if semua == {"kuota"}:
+        return "Kuota harian Gemini habis"
+    if semua == {"ditolak"}:
+        return "Kunci Gemini ditolak Google (proyeknya diblokir)"
+    if semua == {"kuota", "ditolak"}:
+        return "Kuota Gemini habis dan kunci lainnya ditolak Google"
+    if semua == {"tidak_sah"}:
+        return "Kunci Gemini tidak sah"
+    if "sibuk" in semua:
+        return "Gemini sedang sibuk atau tidak menjawab"
+    return "Gemini gagal"
+
+
 def _jadwalkan_coba_lagi(ctx, video_id: str, galat: str) -> str:
     """
     Mengantrekan satu percobaan ulang untuk nanti; mengembalikan kapan, atau "".
@@ -805,10 +844,39 @@ def run_auto_clip(ctx: JobContext) -> dict:
         # Dulu metadata tetap diminta ke YouTube — "This video is unavailable"
         # — dan impor tidak pernah bisa sampai ke klip.
         berkas = find_local_video(video_id)
+        baris = media_repo.get_video(video_id) or {}
+        try:
+            sumber_url = json.loads(baris.get("meta_json") or "{}").get("sumber_url")
+        except (TypeError, ValueError):
+            sumber_url = None
+        if berkas is None and sumber_url:
+            # Tautan dari situs lain (TikTok, Instagram, X, ...): diunduh ke
+            # folder impor, lalu diperlakukan persis seperti video impor.
+            from ..config import IMPOR_DIR
+            from .ytdlp import unduh_tautan
+            judul_tautan = (baris.get("title") or video_id)[:44]
+            _stage_progress(ctx, "download", 0.0, f"Mengunduh «{judul_tautan}»…")
+
+            def on_dl_tautan(frac: float, message: str) -> None:
+                ctx.check_cancelled()
+                _stage_progress(ctx, "download", frac, message,
+                                paksa=not message.startswith("Mengunduh"))
+
+            IMPOR_DIR.mkdir(parents=True, exist_ok=True)
+            aman = re.sub(r"[^\w\-]+", "_", judul_tautan).strip("_")[:40] or "video"
+            with ctx.giliran_unduh(lambda: _stage_progress(
+                    ctx, "download", 0.0,
+                    "Menunggu giliran mengunduh, unduhan lain sedang berjalan…",
+                    paksa=True)):
+                hasil_tautan = unduh_tautan(sumber_url, str(IMPOR_DIR), f"{aman}_{video_id}",
+                                            on_progress=on_dl_tautan)
+            if not hasil_tautan.get("success"):
+                raise AppError(hasil_tautan.get("error", "Pengunduhan gagal."),
+                               code=hasil_tautan.get("code", "DOWNLOAD_FAILED"), status=502)
+            berkas = Path(hasil_tautan["file_path"])
         if berkas is None:
             raise AppError("Berkas video impor ini sudah tidak ada di penyimpanan. "
                            "Ambil lagi videonya dari komputer.", code="IMPORT_MISSING", status=404)
-        baris = media_repo.get_video(video_id) or {}
         info = {"id": video_id, "title": baris.get("title") or video_id,
                 "duration": float(probe(berkas).get("duration") or baris.get("duration") or 0),
                 "language": None, "has_captions": False}
@@ -862,17 +930,32 @@ def run_auto_clip(ctx: JobContext) -> dict:
     # Unduhan berjalan bersamaan dengan video lain; mulai dari sini pekerjaan
     # berat (salinan analisis, Whisper, pelacakan wajah) bergiliran satu per
     # satu dengan render, seperti sebelumnya.
-    ctx.giliran_cpu(lambda: _stage_progress(
-        ctx, "download", 1.0,
-        ("Video dari komputer siap" if impor else "Video sudah terunduh")
-        + ", menunggu giliran analisis (video lain sedang diproses)…",
-        paksa=True))
+    def tunggu_giliran_berat() -> None:
+        ctx.giliran_cpu(lambda: _stage_progress(
+            ctx, "download", 1.0,
+            ("Video dari komputer siap" if impor else "Video sudah terunduh")
+            + ", menunggu giliran analisis (video lain sedang diproses)…",
+            paksa=True))
+
+    # "Cari klip lagi" untuk video yang transkrip dan audionya sudah tersimpan
+    # TIDAK ikut antre di belakang video lain. Isinya hanya membaca transkrip,
+    # mengukur energi dari audio tersimpan, dan memanggil Gemini: ringan, dan
+    # tidak memakan memori seperti Whisper atau pelacakan wajah. Dilaporkan
+    # pemilik 15 Oktober 2026: pencarian ulang menunggu 15 menit di "menunggu
+    # giliran analisis" sementara video lain disalin Whisper. Bila ternyata
+    # perlu langkah berat (transkrip harus diambil ulang, pemisahan penutur),
+    # giliran tetap diambil tepat sebelum langkah itu.
+    from . import suara as _suara_cek
+    ringan = bool(ulang and tx_repo.get_best(video_id) and _suara_cek.tersimpan(source))
+    if not ringan:
+        tunggu_giliran_berat()
 
     # Salinan analisis dimulai SEKARANG, di latar, sementara transkrip dan
     # pemilihan klip berjalan. Begitu pengguna membuka Studio, pelacakan wajah
     # dan gerakan sudah membaca salinan 1280 px, bukan sumber 4K-nya.
     from .proksi import siapkan as _siapkan_proksi
-    _siapkan_proksi(source)
+    if not ringan:
+        _siapkan_proksi(source)
 
     if not duration:
         duration = float(probe(source).get("duration") or 0)
@@ -933,6 +1016,7 @@ def run_auto_clip(ctx: JobContext) -> dict:
             _stage_progress(ctx, "captions", 1.0,
                             f"Transkrip ditemukan ({len(transcript['words'])} kata).")
         else:
+            tunggu_giliran_berat()
             _stage_progress(ctx, "transcribe", 0.0,
                             "Video tidak punya subtitle, menyalin ucapan dengan Whisper…")
             from .whisper import deteksi_bahasa, model_untuk, transcribe_audio
@@ -1030,6 +1114,7 @@ def run_auto_clip(ctx: JobContext) -> dict:
             speaker_conf = lama.get("speaker_confident", False)
             speaker_score = lama.get("speaker_score")
         elif ctx.payload.get("diarize", True) and sentences:
+            tunggu_giliran_berat()
             try:
                 _stage_progress(ctx, "analyze", 0.3, "Memperkirakan jumlah narasumber…")
                 from .diarize import analyze_speakers, label_from_evidence
@@ -1091,6 +1176,7 @@ def run_auto_clip(ctx: JobContext) -> dict:
         # --- 5. Penajaman oleh Gemini (opsional) -----------------------------
         api_key = ctx.payload.get("api_key") or get_api_key()
         gemini_gagal = None
+        galat_kunci: list[str] = []
         if use_gemini and api_key and candidates:
             _stage_progress(ctx, "gemini", 0.2, "Menyusun ulang peringkat dengan Gemini…")
             try:
@@ -1135,6 +1221,7 @@ def run_auto_clip(ctx: JobContext) -> dict:
                         raise
                     except Exception as e:
                         gagal_kunci = e
+                        galat_kunci.append(str(e))
                         log.warning("Kunci Gemini ke-%d gagal: %s", nomor, str(e)[:160])
                 else:
                     raise gagal_kunci or RuntimeError("Tidak ada kunci Gemini.")
@@ -1166,10 +1253,7 @@ def run_auto_clip(ctx: JobContext) -> dict:
                 # Kegagalan Gemini TIDAK boleh menjatuhkan pipeline: hasil
                 # heuristik tetap valid dan tetap jujur.
                 log.warning("Gemini gagal, memakai cadangan: %s", str(e)[:200])
-                gemini_gagal = ("Gemini sedang sibuk atau tidak menjawab"
-                                if any(x in str(e) for x in ("503", "UNAVAILABLE", "timeout",
-                                                             "timed out", "batas waktu"))
-                                else "Gemini gagal")
+                gemini_gagal = alasan_gemini(galat_kunci or [str(e)])
                 # Sebelum menyerah ke mesin lokal: OpenRouter, bila kuncinya
                 # ada. Mesin lokal menemukan momen yang terukur keras dan
                 # berjeda tepat, tapi tidak bisa menilai apakah sebuah momen

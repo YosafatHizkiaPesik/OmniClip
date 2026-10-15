@@ -1797,3 +1797,42 @@ body.is-studio .app-viewport,
 }
 .saring:hover { background: var(--plate-2); color: var(--ink); }
 .saring.is-on { background: var(--ink); color: var(--ground); border-color: var(--ink); }
+
+/* Tombol ringkas "Tempel tautan" / "Dari komputer" di kepala Partitur. */
+.impor-ringkas { position: relative; display: flex; gap: 8px; flex-wrap: wrap; }
+.impor-ringkas .btn-secondary.is-on { background: var(--plate-2); border-color: var(--ink-3); }
+.impor-panel {
+  position: absolute; top: calc(100% + 8px); right: 0; z-index: 30;
+  width: min(440px, calc(100vw - 32px)); padding: 14px;
+  background: var(--bg-card); border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg, 14px); box-shadow: 0 12px 34px rgba(0, 0, 0, .4);
+}
+.impor-panel-kepala { display: flex; align-items: center; justify-content: space-between; font-size: .88rem; }
+.impor-panel .ikon-tutup {
+  display: inline-flex; padding: 4px; border-radius: 6px; cursor: pointer;
+  background: none; border: 0; color: var(--text-muted);
+}
+.impor-panel .ikon-tutup:hover { color: var(--ink); background: var(--plate-2); }
+.impor-ket { font-size: .74rem; color: var(--text-secondary); margin: 4px 0 10px; line-height: 1.5; }
+.impor-input {
+  flex: 1; min-width: 0; padding: 9px 12px; font-size: .83rem;
+  background: var(--plate-3, rgba(255,255,255,.04)); color: var(--ink); outline: none;
+  border: 1px solid var(--rule, var(--border-color)); border-radius: var(--r-sm, 8px);
+}
+.impor-input:focus { border-color: var(--border-active, var(--ink-3)); }
+.impor-kabar { font-size: .76rem; margin: 9px 0 0; line-height: 1.5; color: var(--text-secondary); }
+.impor-menu { padding: 6px; width: min(340px, calc(100vw - 32px)); }
+.impor-menu > button {
+  display: flex; gap: 11px; align-items: flex-start; width: 100%; text-align: left;
+  padding: 10px; border-radius: 9px; cursor: pointer; font: inherit;
+  background: none; border: 0; color: var(--ink);
+}
+.impor-menu > button:hover:not(:disabled) { background: var(--plate-2); }
+.impor-menu > button svg { margin-top: 2px; flex-shrink: 0; color: var(--text-secondary); }
+.impor-menu > button span { display: flex; flex-direction: column; gap: 2px; }
+.impor-menu > button b { font-size: .82rem; font-weight: 650; }
+.impor-menu > button small { font-size: .72rem; color: var(--text-muted); line-height: 1.45; }
+.impor-menu .impor-kabar { padding: 0 10px 6px; }
+@media (max-width: 640px) {
+  .impor-panel { right: auto; left: 0; }
+}

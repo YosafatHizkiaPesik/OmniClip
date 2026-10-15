@@ -44,7 +44,7 @@ from typing import Optional
 
 log = logging.getLogger("omniclip.beranda")
 
-# Daftar populer YouTube untuk Indonesia, disimpan tiga jam.
+# Daftar populer YouTube untuk negara pengguna, disimpan tiga jam.
 #
 # Daftarnya sendiri hanya berganti beberapa kali sehari, dan satu panggilan
 # memakan satu unit dari 10.000 unit per hari. Tiga jam berarti paling banyak
@@ -119,14 +119,15 @@ def _tanggal(publishedAt: str) -> str:
         return ""
 
 
-def _kartu(item: dict) -> Optional[dict]:
+def _kartu(item: dict, buang_musik: bool = True) -> Optional[dict]:
     s = item.get("snippet") or {}
     st = item.get("statistics") or {}
     cd = item.get("contentDetails") or {}
     vid = str(item.get("id") or "").strip()
     if not vid:
         return None
-    if (s.get("categoryId") or "") in KATEGORI_BUANG:
+    # Topik Musik memang meminta musik; hanya beranda yang membuangnya.
+    if buang_musik and (s.get("categoryId") or "") in KATEGORI_BUANG:
         return None
     # Siaran langsung yang sedang berjalan belum punya akhir, dan mengunduh
     # video yang masih bertambah panjang tidak pernah selesai.
@@ -156,34 +157,45 @@ def _kartu(item: dict) -> Optional[dict]:
     }
 
 
-def _minta(kunci: str, kategori: Optional[str], maks: int) -> list[dict]:
+def _minta(kunci: str, kategori: Optional[str], maks: int, wilayah: str = "ID",
+           halaman: Optional[str] = None, buang_musik: bool = True) -> tuple[list[dict], Optional[str]]:
+    """Satu halaman daftar populer: (kartu, token halaman berikutnya)."""
     import requests
 
     params = {
         "part": "snippet,statistics,contentDetails",
-        "chart": "mostPopular", "regionCode": "ID",
+        "chart": "mostPopular", "regionCode": wilayah_sah(wilayah),
         "maxResults": min(max(maks, 1), 50), "key": kunci,
     }
     if kategori:
         params["videoCategoryId"] = kategori
+    if halaman:
+        params["pageToken"] = halaman
     try:
         r = requests.get("https://www.googleapis.com/youtube/v3/videos",
                          params=params, timeout=20)
     except Exception as e:                               # noqa: BLE001
         log.info("Daftar ramai tidak terbaca: %s", str(e)[:160])
-        return []
+        return [], None
     if not r.ok:
         # Kuota habis atau kunci dibatasi bukan alasan menggagalkan beranda;
         # yang hilang hanya lapis "sedang ramai".
         log.info("mostPopular menjawab %s: %s", r.status_code, r.text[:160])
-        return []
-    kartu = [_kartu(it) for it in (r.json().get("items") or [])]
-    return [k for k in kartu if k]
+        return [], None
+    data = r.json()
+    kartu = [_kartu(it, buang_musik) for it in (data.get("items") or [])]
+    return [k for k in kartu if k], data.get("nextPageToken")
 
 
-def ramai(*, kunci: Optional[str] = None, maks: int = 50) -> list[dict]:
+def wilayah_sah(kode: Optional[str]) -> str:
+    """Kode negara dua huruf (ISO 3166), atau ID bila tidak terbaca."""
+    kode = (kode or "").strip().upper()
+    return kode if re.fullmatch(r"[A-Z]{2}", kode) else "ID"
+
+
+def ramai(*, kunci: Optional[str] = None, maks: int = 50, wilayah: str = "ID") -> list[dict]:
     """
-    Video yang sedang ramai di Indonesia, menurut YouTube sendiri.
+    Video yang sedang ramai di negara pengguna, menurut YouTube sendiri.
 
     Daftar kosong bila kunci API belum dipasang, kuotanya habis, atau
     jaringannya mati. Itu keadaan yang sah: beranda masih punya lapis
@@ -197,20 +209,100 @@ def ramai(*, kunci: Optional[str] = None, maks: int = 50) -> list[dict]:
 
     from ..repos import cache as cache_repo
 
-    simpanan = cache_repo.ambil("beranda:ramai:ID", ttl=RAMAI_TTL)
+    wilayah = wilayah_sah(wilayah)
+    simpanan = cache_repo.ambil(f"beranda:ramai:{wilayah}", ttl=RAMAI_TTL)
     if isinstance(simpanan, list) and simpanan:
         return simpanan[:maks]
 
     hasil: list[dict] = []
     terlihat: set[str] = set()
     for kategori in KATEGORI_RAMAI:
-        for v in _minta(kunci, kategori, 25):
+        for v in _minta(kunci, kategori, 25, wilayah)[0]:
             if v["id"] in terlihat:
                 continue
             terlihat.add(v["id"])
             hasil.append(v)
     if hasil:
-        cache_repo.simpan("beranda:ramai:ID", hasil)
+        cache_repo.simpan(f"beranda:ramai:{wilayah}", hasil)
+    return hasil[:maks]
+
+
+# Topik di Beranda = kategori resmi YouTube (JOB-3, diminta pemilik 15 Oktober
+# 2026: "buat saja topiknya mengikuti YouTube, jangan membuat sendiri dengan
+# manipulasi search bar"). Sebelumnya tiap topik adalah kueri buatan kita
+# ("komedi lucu indonesia", "gameplay walkthrough funny") yang dikirim ke kotak
+# cari: kuerinya terlihat di kotak cari, terikat ke Indonesia, dan "gameplay
+# walkthrough funny" mengembalikan video kartun yang bukan gaming.
+#
+# Sekarang isinya `chart=mostPopular` per kategori untuk negara pengguna,
+# daftar yang sama yang disusun YouTube sendiri. Diuji 15 Oktober 2026 untuk
+# ID, US, GB, IN: semua kategori di bawah tersedia; Pendidikan (27) dan Wisata
+# (19) menjawab 404 sehingga tidak ditawarkan.
+#
+# kunci topik -> id kategori YouTube ("" = semua kategori, "Sedang tren").
+TOPIK = {
+    "tren": "", "gaming": "20", "musik": "10", "hiburan": "24", "komedi": "23",
+    "orang": "22", "olahraga": "17", "berita": "25", "sains": "28",
+    "gaya": "26", "film": "1", "hewan": "15", "otomotif": "2",
+}
+
+# Nama kategori dalam bahasa Inggris, untuk pencarian cadangan saat kunci API
+# belum dipasang. Kata ini tidak pernah ditulis ke kotak cari.
+TOPIK_CADANGAN = {
+    "tren": "trending", "gaming": "gaming", "musik": "music",
+    "hiburan": "entertainment", "komedi": "comedy", "orang": "vlog",
+    "olahraga": "sports", "berita": "news", "sains": "science technology",
+    "gaya": "how to", "film": "animation", "hewan": "animals", "otomotif": "cars",
+}
+
+# Daftar populer satu kategori paling banyak sekitar 200 video (Gaming US hari
+# itu: 127), empat halaman berisi 50.
+TOPIK_MAKS = 200
+
+
+def topik(nama: str, wilayah: str, maks: int, *, kunci: Optional[str] = None) -> Optional[list[dict]]:
+    """
+    Video populer satu kategori YouTube di satu negara.
+
+    None bila kunci API tidak ada atau YouTube menolak: pemanggil lalu memakai
+    pencarian cadangan. Disimpan tiga jam, seperti daftar ramai beranda.
+    """
+    from . import statistik
+
+    if nama not in TOPIK:
+        return None
+    kunci = (kunci if kunci is not None else statistik.kunci_api()).strip()
+    if not kunci:
+        return None
+
+    from ..repos import cache as cache_repo
+
+    wilayah = wilayah_sah(wilayah)
+    maks = max(1, min(maks, TOPIK_MAKS))
+    kunci_simpan = f"topik:{nama}:{wilayah}"
+    simpanan = cache_repo.ambil(kunci_simpan, ttl=RAMAI_TTL)
+    simpanan = simpanan if isinstance(simpanan, dict) else {}
+    hasil = list(simpanan.get("items") or [])
+    token = simpanan.get("token")
+    selesai = bool(simpanan.get("selesai"))
+    if len(hasil) >= maks or selesai:
+        return hasil[:maks]
+
+    terlihat = {v["id"] for v in hasil}
+    while len(hasil) < maks:
+        kartu, token = _minta(kunci, TOPIK[nama], 50, wilayah, token,
+                              buang_musik=(nama != "musik"))
+        if not kartu and not hasil:
+            return None
+        for v in kartu:
+            if v["id"] not in terlihat:
+                terlihat.add(v["id"])
+                v["sebab"] = "topik"
+                hasil.append(v)
+        if not token:
+            selesai = True
+            break
+    cache_repo.simpan(kunci_simpan, {"items": hasil, "token": token, "selesai": selesai})
     return hasil[:maks]
 
 

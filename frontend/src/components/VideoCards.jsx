@@ -31,10 +31,12 @@ export function formatAge(uploadDate) {
   const days = Math.floor((Date.now() - then.getTime()) / 86400000);
   if (!Number.isFinite(days) || days < 0) return '';
   if (days < 1) return t('umur.hari_ini');
-  if (days < 7) return t('umur.hari', { n: days });
-  if (days < 30) return t('umur.minggu', { n: Math.floor(days / 7) });
-  if (days < 365) return t('umur.bulan', { n: Math.floor(days / 30) });
-  return t('umur.tahun', { n: Math.floor(days / 365) });
+  // Bentuk tunggal terpisah: "1 day ago", bukan "1 days ago".
+  const umur = (kunci, n) => t(n === 1 ? `${kunci}_1` : kunci, { n });
+  if (days < 7) return umur('umur.hari', days);
+  if (days < 30) return umur('umur.minggu', Math.floor(days / 7));
+  if (days < 365) return umur('umur.bulan', Math.floor(days / 30));
+  return umur('umur.tahun', Math.floor(days / 365));
 }
 
 export function formatViews(views) {

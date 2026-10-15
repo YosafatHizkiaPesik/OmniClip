@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, Link2, Loader2, Sparkles, Upload } from 'lucide-react';
+import { AlertTriangle, ChevronDown, FolderOpen, Link2, Loader2, Smartphone, Sparkles, Upload, X } from 'lucide-react';
 import { apiGet, apiPost, apiUnggah } from '../../lib/api';
 import FolderPicker from '../../components/FolderPicker';
 import { useT } from '../../lib/i18n';
@@ -7,11 +7,11 @@ import { useT } from '../../lib/i18n';
 /**
  * Memasukkan video baru ke Partitur, dari tautan atau dari komputer sendiri.
  *
- * Tempatnya di sini dan bukan di halaman Cari video karena keduanya menjawab
- * pertanyaan yang berbeda. Cari video untuk "saya belum tahu mau mengklip apa";
- * ini untuk "saya sudah tahu persis videonya" — dan yang kedua tidak seharusnya
- * melewati pencarian lebih dulu. Partitur adalah daftar pekerjaan klip, jadi
- * menambah pekerjaan baru memang di sini tempatnya.
+ * Dua tombol kecil di kepala halaman, bukan kartu selebar layar (diminta
+ * pemilik 15 Oktober 2026: "link ini dan upload berkas diberikan button kecil
+ * saja agar lebih rapih"). Tautan YouTube sudah bisa ditempel di kotak cari
+ * Beranda, jadi kotak tautan di sini menerima video dari situs MANA PUN yang
+ * dikenal yt-dlp: TikTok, Instagram, X, Facebook, Vimeo, Twitch, dan YouTube.
  */
 export default function ImportBar({ onDone }) {
   const t = useT();
@@ -28,6 +28,22 @@ export default function ImportBar({ onDone }) {
   const [jalur, setJalur] = useState([]);
   const [audio, setAudio] = useState('');       // '' = suara asli
   const [periksa, setPeriksa] = useState(false);
+  // Panel yang terbuka: 'tautan' | 'berkas' | null.
+  const [panel, setPanel] = useState(null);
+  const wadahRef = useRef(null);
+  useEffect(() => {
+    if (!panel) return undefined;
+    const tutup = (e) => {
+      if (!wadahRef.current?.contains(e.target) && !sibuk) setPanel(null);
+    };
+    const esc = (e) => { if (e.key === 'Escape' && !sibuk) setPanel(null); };
+    document.addEventListener('mousedown', tutup);
+    document.addEventListener('keydown', esc);
+    return () => {
+      document.removeEventListener('mousedown', tutup);
+      document.removeEventListener('keydown', esc);
+    };
+  }, [panel, sibuk]);
 
   useEffect(() => {
     const nilai = tautan.trim();
@@ -65,7 +81,11 @@ export default function ImportBar({ onDone }) {
     if (!nilai) return;
     setSibuk('tautan'); setGalat(null); setKabar(null);
     try {
-      await mulaiKlip(nilai, nilai.slice(0, 40), audio || null);
+      // Tautan situs lain dicatat dulu sebagai video impor (judulnya dibaca
+      // dari situsnya); tautan YouTube langsung diteruskan seperti biasa.
+      const r = await apiPost('/impor/tautan', { url: nilai }, { timeout: 60000 });
+      await mulaiKlip(r.video_id, r.youtube ? nilai.slice(0, 40) : r.title,
+        r.youtube ? (audio || null) : null);
       setTautan('');
     } catch (err) {
       setGalat(err.message);
@@ -80,6 +100,7 @@ export default function ImportBar({ onDone }) {
   const [jelajah, setJelajah] = useState(false);
   const pakaiJalur = async (jalur) => {
     setJelajah(false);
+    setPanel('berkas');
     try {
       const folder = jalur.replace(/[\\/][^\\/]*$/, '');
       localStorage.setItem('omniclip.folderImpor', folder);
@@ -119,101 +140,106 @@ export default function ImportBar({ onDone }) {
     }
   };
 
-  return (
-    <div style={{
-      background: 'var(--bg-card)', border: '1px solid var(--border-color)',
-      borderRadius: 'var(--radius-lg, 14px)', padding: '14px 16px', marginBottom: '18px',
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-        <Sparkles size={15} style={{ color: 'var(--accent-cyan)' }} />
-        <strong style={{ fontSize: '0.86rem' }}>{t('impor.judul')}</strong>
-      </div>
-      <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: '0 0 11px' }}>
-        {t('impor.ket')}
-      </p>
+  // Kabar "masuk antrean" cukup terbaca sebentar; panelnya lalu menutup sendiri.
+  useEffect(() => {
+    if (!kabar || sibuk || galat) return undefined;
+    const j = setTimeout(() => { setPanel(null); setKabar(null); }, 3500);
+    return () => clearTimeout(j);
+  }, [kabar, sibuk, galat]);
 
-      <form onSubmit={kirimTautan}
-            style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'stretch' }}>
-        <div style={{ position: 'relative', flex: '1 1 260px', display: 'flex', alignItems: 'center' }}>
-          <Link2 size={15} style={{ position: 'absolute', left: '11px', color: 'var(--text-muted)' }} />
-          <input
-            value={tautan}
-            onChange={(e) => setTautan(e.target.value)}
-            placeholder="https://youtube.com/watch?v=…"
-            style={{
-              width: '100%', padding: '9px 12px 9px 34px', fontSize: '0.83rem',
-              background: 'var(--plate-3, rgba(255,255,255,0.04))',
-              border: '1px solid var(--rule, var(--border-color))',
-              borderRadius: 'var(--r-sm, 8px)', color: 'var(--ink)', outline: 'none',
-            }}
-          />
+  const tombol = (nama, Ikon, label, judul) => (
+    <button type="button" className={`btn-secondary${panel === nama ? ' is-on' : ''}`}
+            aria-expanded={panel === nama} title={judul}
+            onClick={() => { setGalat(null); setKabar(null); setPanel(panel === nama ? null : nama); }}
+            style={{ fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
+      {sibuk === nama ? <Loader2 size={14} className="animate-spin" /> : <Ikon size={14} />}
+      {label}
+      <ChevronDown size={13} style={{ opacity: 0.6, marginLeft: '-2px' }} />
+    </button>
+  );
+
+  const kabarGalat = (
+    <>
+      {sibuk === 'berkas' && (
+        <p className="impor-kabar">{t('impor.menyalin')}</p>
+      )}
+      {kabar && <p className="impor-kabar" style={{ color: 'var(--accent-cyan)' }}>{kabar}</p>}
+      {galat && (
+        <p className="impor-kabar" style={{ color: 'var(--danger)', display: 'flex', gap: '7px' }}>
+          <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: '1px' }} /> {galat}
+        </p>
+      )}
+    </>
+  );
+
+  return (
+    <div ref={wadahRef} className="impor-ringkas">
+      {tombol('tautan', Link2, t('impor.tempel'), t('impor.tempel_judul'))}
+      {tombol('berkas', Upload, t('impor.dari_komputer'), t('impor.dari_komputer_judul'))}
+      <input ref={berkasRef} type="file" accept="video/*" hidden onChange={kirimBerkas} />
+
+      {panel === 'tautan' && (
+        <div className="impor-panel" role="dialog" aria-label={t('impor.tempel')}>
+          <div className="impor-panel-kepala">
+            <strong>{t('impor.tempel')}</strong>
+            <button type="button" className="ikon-tutup" aria-label={t('umum.tutup')}
+                    onClick={() => setPanel(null)} disabled={!!sibuk}><X size={15} /></button>
+          </div>
+          <p className="impor-ket">{t('impor.ket_tautan')}</p>
+          <form onSubmit={kirimTautan} style={{ display: 'flex', gap: '8px' }}>
+            <input autoFocus value={tautan} onChange={(e) => setTautan(e.target.value)}
+                   placeholder="https://…" className="impor-input" />
+            <button type="submit" className="btn-primary" disabled={!tautan.trim() || !!sibuk}
+                    style={{ fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
+              {sibuk === 'tautan' ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+              {t('tonton.potong')}
+            </button>
+          </form>
+          {(jalur.length > 1 || periksa) && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '9px',
+                          fontSize: '0.78rem', color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
+              {periksa ? (
+                <><Loader2 size={13} className="animate-spin" /> {t('impor.periksa_audio')}</>
+              ) : (
+                <>
+                  <span>{t('impor.n_jalur', { n: jalur.length })}</span>
+                  <select value={audio} onChange={(e) => setAudio(e.target.value)}
+                          style={{ padding: '5px 8px', fontSize: '0.78rem', borderRadius: '6px',
+                                   background: 'var(--plate-3, transparent)', color: 'var(--ink)',
+                                   border: '1px solid var(--border-color)' }}>
+                    {jalur.map((j) => (
+                      <option key={j.lang} value={j.asli ? '' : j.lang}>
+                        {j.nama}{j.asli ? t('impor.suara_asli') : ''}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              )}
+            </div>
+          )}
+          {kabarGalat}
         </div>
-        <button type="submit" className="btn-primary" disabled={!tautan.trim() || !!sibuk}
-                style={{ fontSize: '0.82rem', whiteSpace: 'nowrap' }}>
-          {sibuk === 'tautan' ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-          {t('tonton.potong')}
-        </button>
-        <button type="button" className="btn-secondary" disabled={!!sibuk}
-                onClick={() => setJelajah(true)}
-                title={t('impor.dari_komputer_judul')}
-                style={{ fontSize: '0.82rem', whiteSpace: 'nowrap' }}>
-          {sibuk === 'berkas' ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
-          {t('impor.dari_komputer')}
-        </button>
-        <input ref={berkasRef} type="file" accept="video/*" hidden onChange={kirimBerkas} />
-      </form>
-      <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: '6px 0 0' }}>
-        {t('impor.dari_hp')}{' '}
-        <button type="button" onClick={() => berkasRef.current?.click()} disabled={!!sibuk}
-                style={{ background: 'none', border: 0, padding: 0, cursor: 'pointer',
-                         color: 'var(--reh)', font: 'inherit', textDecoration: 'underline' }}>
-          {t('impor.kirim_perangkat')}
-        </button>{' '}{t('impor.disalin')}
-      </p>
+      )}
+
+      {panel === 'berkas' && (
+        <div className="impor-panel impor-menu" role="menu">
+          <button type="button" role="menuitem" disabled={!!sibuk} onClick={() => setJelajah(true)}>
+            <FolderOpen size={16} />
+            <span><b>{t('impor.pilih_folder')}</b><small>{t('impor.dari_komputer_judul')}</small></span>
+          </button>
+          <button type="button" role="menuitem" disabled={!!sibuk} onClick={() => berkasRef.current?.click()}>
+            <Smartphone size={16} />
+            <span><b>{t('impor.kirim_perangkat')}</b><small>{t('impor.dari_hp_ket')}</small></span>
+          </button>
+          {kabarGalat}
+        </div>
+      )}
+
       {jelajah && (
         <FolderPicker modeVideo judul={t('impor.pilih_video')}
                       awal={(() => { try { return localStorage.getItem('omniclip.folderImpor') || ''; } catch { return ''; } })()}
                       onTutup={() => setJelajah(false)}
                       onPilih={pakaiJalur} />
-      )}
-
-      {(jalur.length > 1 || periksa) && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '9px',
-                      fontSize: '0.78rem', color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
-          {periksa ? (
-            <><Loader2 size={13} className="animate-spin" /> {t('impor.periksa_audio')}</>
-          ) : (
-            <>
-              <span>{t('impor.n_jalur', { n: jalur.length })}</span>
-              <select value={audio} onChange={(e) => setAudio(e.target.value)}
-                      style={{ padding: '5px 8px', fontSize: '0.78rem', borderRadius: '6px',
-                               background: 'var(--plate-3, transparent)', color: 'var(--ink)',
-                               border: '1px solid var(--border-color)' }}>
-                {jalur.map((j) => (
-                  <option key={j.lang} value={j.asli ? '' : j.lang}>
-                    {j.nama}{j.asli ? t('impor.suara_asli') : ''}
-                  </option>
-                ))}
-              </select>
-            </>
-          )}
-        </div>
-      )}
-      {sibuk === 'berkas' && (
-        <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: '9px 0 0' }}>
-          {t('impor.menyalin')}
-        </p>
-      )}
-      {kabar && (
-        <p style={{ fontSize: '0.78rem', color: 'var(--accent-cyan)', margin: '9px 0 0' }}>{kabar}</p>
-      )}
-      {galat && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: '8px', marginTop: '9px',
-          fontSize: '0.78rem', color: 'var(--danger)',
-        }}>
-          <AlertTriangle size={14} style={{ flexShrink: 0 }} /> {galat}
-        </div>
       )}
     </div>
   );

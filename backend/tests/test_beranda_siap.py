@@ -31,7 +31,7 @@ class BenihSiap(unittest.TestCase):
         from app.routers import videos
         tersimpan = {}
 
-        async def siapkan(pid, tunda=0.0):
+        async def siapkan(pid, tunda=0.0, wilayah="ID"):
             return None
 
         with mock.patch.object(videos.cache_repo, "ambil", return_value=simpanan), \
