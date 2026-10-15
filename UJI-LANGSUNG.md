@@ -117,6 +117,48 @@ Urutannya sama dengan jalur pemakaian normal.
   - Langkah: isi kunci API gratis di tab Sisipan, cari gambar, pasang satu.
   - Diharapkan: gambar masuk sebagai sisipan 3 detik di posisi pemutar.
 
+### Tambahan JOB-3 (15 Oktober 2026): tampilan seperti YouTube dan dua bahasa
+
+- [ ] **14. Beranda cepat.**
+  - Langkah: tutup tab OmniClip, buka lagi Beranda. Tekan tombol segarkan
+    (ikon putar di kiri topik), lalu gulir ke bawah.
+  - Diharapkan: kartu tampil dalam 1-2 detik (kecuali kunjungan pertama
+    sesudah aplikasi baru dinyalakan); gulir ke bawah langsung menambah kartu.
+- [ ] **15. Baris topik.**
+  - Langkah: sorot sebuah pil topik; putar roda tetikus di atas baris topik;
+    tekan panah kanan/kiri.
+  - Diharapkan: pil tidak terpotong; baris bergeser sampai topik terakhir
+    ("Jalan-jalan"), halaman tidak ikut menggulir.
+- [ ] **16. Filter pencarian.**
+  - Langkah: cari sesuatu, tekan tombol **Filter**, pilih Shorts.
+  - Diharapkan: panel filter baru muncul setelah tombol ditekan; tombolnya
+    menunjukkan angka 1; "Hapus filter" mengembalikan semuanya.
+- [ ] **17. Halaman Tonton.**
+  - Langkah: buka video dari kartu, tunggu ±10 detik, tekan "Selengkapnya".
+  - Diharapkan: tidak ada tombol Kembali/Cari video; deskripsi terbuka utuh
+    (bukan cuplikan satu-dua baris); avatar dan nama channel bisa diklik.
+- [ ] **18. Channel, Langganan, Riwayat.**
+  - Langkah: klik nama channel → Ikuti → buka menu Langganan → buka Riwayat.
+  - Diharapkan: halaman channel dengan banner, tab Video/Shorts/Live; channel
+    muncul di menu samping; video yang dibuka tercatat di Riwayat.
+- [ ] **19. Ganti bahasa ke English.**
+  - Langkah: pilih English di pemilih bahasa header (atau Settings >
+    Appearance and language). Buka Beranda, Tonton, Studio (semua tab),
+    Klip jadi, Unduhan, Analitik, Akun, Pengaturan, Mesin.
+  - Diharapkan: semua menu, tombol, dan penjelasan berbahasa Inggris. Yang
+    masih Indonesia hanya: judul/isi video, sebagian teks dari server
+    (temuan Analitik, nama tema/suara/font), dan teks buatan AI (J3-12).
+- [ ] **20. Kabar pekerjaan berbahasa Inggris.**
+  - Langkah: dalam mode English, potong satu video jadi klip, lalu render satu
+    klip di Studio.
+  - Diharapkan: bilah kemajuan bertuliskan "Downloading…", "Finding the most
+    interesting moments…", "Rendering clip… 45%", dst.
+- [ ] **21. Tata letak Akun, Pengaturan, Mesin.**
+  - Langkah: buka ketiganya di layar laptop dan di layar sempit (perkecil
+    jendela < 900 px).
+  - Diharapkan: daftar bagian di kiri, isi satu kolom tanpa lubang kosong; di
+    layar sempit daftarnya jadi pil yang bisa digeser.
+
 ## Riwayat hasil tes
 
 | Tanggal | Tes | Hasil | Catatan |

@@ -84,9 +84,22 @@ commit <hash>)`. Hash = commit kodenya; centangan ikut commit berikutnya.
   tabel konstanta harus ada di kamus. Yang masih Indonesia karena datang
   dari server (J3-11): daftar font, tema judul, suara pembaca, alasan
   bingkai/punch-in, pesan pekerjaan.
-- [ ] **J3-10** Terjemahkan Akun, Pengaturan, Mesin, formulir unggah.
+- [x] **J3-10** Terjemahkan Akun, Pengaturan, Mesin, formulir unggah.
+  (selesai 15 Oktober 2026, commit 76ef58a; bertahap sejak ae45bee)
+  Diminta pemilik di tengah jalan: halaman setelan penuh ruang kosong. Ketiga
+  halaman kini memakai `HalamanSetelan.jsx`: daftar bagian di kiri
+  (`?bagian=` di alamat), isi satu bagian dalam satu kolom; di layar sempit
+  daftarnya jadi pil. Pilihan bahasa juga ada di Pengaturan > Tampilan dan
+  bahasa. Termasuk kunci aplikasi, pemilih folder, kartu cookies di Beranda,
+  pesan galat `api.js`. `tebal()`: `**kata**` di kamus dirender tebal.
 - [ ] **J3-11** Pesan dari server (galat, kabar pekerjaan) mengikuti bahasa
   pilihan (header `Accept-Language`).
+  **SEBAGIAN** (15 Oktober 2026, commit e0747ef): mekanismenya selesai
+  (`bahasa.py`, middleware + SSE `?lang=`, katalog `kamus_en.py`). Sudah
+  terjemah: galat umum, antrean, unduh, transkrip, analisis, render, unggah,
+  gerbang tinjau, nilai tambah, punch-in, kesehatan sistem. Belum: temuan
+  Analitik/FYP, daftar model/font/suara/tema dari server, pesan cookies,
+  pembaruan, sutradara AI, dan galat-galat kecil lain (±200 kalimat).
 - [ ] **J3-12** Teks yang dihasilkan AI (draf komentar, judul, caption)
   mengikuti bahasa pilihan atau bahasa video.
 
