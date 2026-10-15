@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { apiGet, apiPost } from '../lib/api';
 
+import { useT } from '../lib/i18n';
 /**
  * Sakelar pembuang bunyi ragu dari subtitle.
  *
@@ -14,6 +15,7 @@ import { apiGet, apiPost } from '../lib/api';
  * bekerja dengan cara yang berbeda pula.
  */
 export default function SakelarGumam({ helpText }) {
+  const t = useT();
   const [aktif, setAktif] = useState(null);
   const [sibuk, setSibuk] = useState(false);
 
@@ -48,7 +50,7 @@ export default function SakelarGumam({ helpText }) {
         <input type="checkbox" checked={menyala} disabled={aktif === null || sibuk}
                onChange={(e) => ubah(e.target.checked)}
                style={{ width: '15px', height: '15px', flex: 'none' }} />
-        <b style={{ fontSize: '0.82rem', flex: 1 }}>Buang bunyi ragu</b>
+        <b style={{ fontSize: '0.82rem', flex: 1 }}>{t('gumam.judul')}</b>
         {sibuk && <Loader2 size={12} className="animate-spin" style={{ color: 'var(--ink-3)' }} />}
         <span style={{
           fontSize: '0.64rem', fontWeight: 800, padding: '2px 8px', borderRadius: '99px',
@@ -56,21 +58,18 @@ export default function SakelarGumam({ helpText }) {
           background: menyala ? 'var(--reh)' : 'var(--bg-glass)',
           color: menyala ? '#fff' : 'var(--text-muted)',
         }}>
-          {aktif === null ? '…' : menyala ? 'NYALA' : 'MATI'}
+          {aktif === null ? '…' : menyala ? t('umum.nyala') : t('umum.mati')}
         </span>
       </label>
       <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: '6px 0 0',
                   lineHeight: 1.55 }}>
         {menyala
-          ? '"ee", "eh", "mmm", "h" tidak ikut tertulis. Yang terucap di antara dua '
-            + 'kata tidak meninggalkan jeda di subtitle: kata sebelumnya menutupinya.'
-          : 'Semua yang terdengar ikut tertulis, termasuk bunyi ragu.'}
+          ? t('gumam.nyala')
+          : t('gumam.mati')}
       </p>
       <p className="bantu" style={{ ...helpText, fontSize: '0.7rem',
                                     color: 'var(--text-muted)', margin: '6px 0 0' }}>
-        "ah", "oh", "nah", "ya", "lah", "dong", "sih" sengaja dibiarkan: semuanya
-        membawa makna, dan membuangnya mengubah kalimatnya. Transkrip aslinya
-        tidak disentuh.
+        {t('gumam.ket')}
       </p>
     </div>
   );

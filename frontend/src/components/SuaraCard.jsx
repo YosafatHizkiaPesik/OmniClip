@@ -2,28 +2,22 @@ import React, { useEffect, useState } from 'react';
 import { AudioLines } from 'lucide-react';
 import { apiGet, apiPost } from '../lib/api';
 
+import { useT } from '../lib/i18n';
 const PILIHAN = [
   {
-    id: 'mati', label: 'Biarkan apa adanya',
-    nota: 'Suara klip persis seperti di video aslinya.',
+    id: 'mati', label: 'suara.mati', nota: 'suara.mati_ket',
   },
   {
-    id: 'seimbang', label: 'Seimbangkan kekerasannya',
-    nota: 'Semua klip keluar pada tingkat yang sama (-16 LUFS), jadi penonton '
-        + 'tidak perlu mengubah volume tiap ganti klip. Aman untuk musik dan '
-        + 'suara permainan.',
+    id: 'seimbang', label: 'suara.seimbang', nota: 'suara.seimbang_ket',
   },
   {
-    id: 'bersih', label: 'Seimbangkan dan bersihkan',
-    nota: 'Menambah tiga hal yang ditujukan pada suara ORANG: desis dihilangkan, '
-        + 'gemuruh di bawah 80 Hz dipotong, dan jarak antara bisikan dan teriakan '
-        + 'dirapatkan. Rekaman HP terdengar jauh lebih rapi, tapi musik ikut '
-        + 'terpengaruh, jadi jangan dipakai untuk klip musik.',
+    id: 'bersih', label: 'suara.bersih', nota: 'suara.bersih_ket',
   },
 ];
 
 /** Perapian suara saat render. Berlaku untuk semua render berikutnya. */
 export default function SuaraCard({ card, sectionTitle, helpText }) {
+  const t = useT();
   const [nilai, setNilai] = useState(null);
   const [kabar, setKabar] = useState(null);
 
@@ -37,7 +31,7 @@ export default function SuaraCard({ card, sectionTitle, helpText }) {
     setNilai(v);
     try {
       await apiPost('/settings/suara', { nilai: v });
-      setKabar('Tersimpan. Berlaku untuk render berikutnya.');
+      setKabar(t('umum.tersimpan_render'));
       setTimeout(() => setKabar(null), 2500);
     } catch (e) {
       setNilai(sebelumnya);
@@ -49,11 +43,10 @@ export default function SuaraCard({ card, sectionTitle, helpText }) {
     <div style={card}>
       <div style={sectionTitle}>
         <AudioLines size={18} style={{ color: 'var(--reh)' }} />
-        Perapian suara
+        {t('suara.judul')}
       </div>
       <p className="bantu" style={helpText}>
-        Dikerjakan saat render, pada suara klipnya saja. Berkas sumbernya tidak
-        disentuh.
+        {t('suara.ket')}
       </p>
       <div style={{ marginTop: '10px' }}>
         {PILIHAN.map((p) => (
@@ -65,8 +58,8 @@ export default function SuaraCard({ card, sectionTitle, helpText }) {
                    onChange={() => pilih(p.id)} disabled={nilai === null}
                    style={{ marginTop: '3px', accentColor: 'var(--reh)' }} />
             <span>
-              <span style={{ fontSize: '0.79rem', fontWeight: 700 }}>{p.label}</span>
-              <span style={{ ...helpText, display: 'block', marginTop: '2px' }}>{p.nota}</span>
+              <span style={{ fontSize: '0.79rem', fontWeight: 700 }}>{t(p.label)}</span>
+              <span style={{ ...helpText, display: 'block', marginTop: '2px' }}>{t(p.nota)}</span>
             </span>
           </label>
         ))}

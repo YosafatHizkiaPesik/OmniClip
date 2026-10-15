@@ -3,6 +3,7 @@ import {
   AlertTriangle, CheckCircle2, Cookie, Info, Loader2, Upload,
 } from 'lucide-react';
 import { apiDelete, apiGet, apiPost } from '../lib/api';
+import { tebal, useT } from '../lib/i18n';
 
 const NAMA_BROWSER = {
   firefox: 'Firefox', chrome: 'Google Chrome', chromium: 'Chromium',
@@ -24,6 +25,7 @@ const NAMA_BROWSER = {
  * saat tombolnya ditekan.
  */
 export default function CookiesCard({ card, sectionTitle, helpText }) {
+  const t = useT();
   const [info, setInfo] = useState(null);
   const [sibuk, setSibuk] = useState('');
   const [galat, setGalat] = useState(null);
@@ -103,12 +105,10 @@ export default function CookiesCard({ card, sectionTitle, helpText }) {
     <div style={card}>
       <div style={sectionTitle}>
         <Cookie size={18} style={{ color: 'var(--reh)' }} />
-        Cookies YouTube
+        {t('ck.judul')}
       </div>
       <p className="bantu" style={helpText}>
-        Biasanya tidak perlu. Nyalakan bila YouTube terus meminta &ldquo;confirm
-        you&rsquo;re not a bot&rdquo; untuk banyak video. Tandanya jaringan Anda
-        sedang ditandai, dan sesi login adalah jalan keluarnya.
+        {t('ck.ket')}
       </p>
 
       {/* Peringatan ini ditulis dari pengukuran, bukan dari dugaan, dan
@@ -123,10 +123,7 @@ export default function CookiesCard({ card, sectionTitle, helpText }) {
       }}>
         <Info size={15} style={{ flexShrink: 0, marginTop: '2px' }} />
         <span>
-          Pakai browser yang login dengan <strong>akun Google cadangan</strong>,
-          bukan akun utama: akun yang dipakai mengunduh bisa ikut ditandai YouTube.
-          Cookies tidak pernah keluar dari komputer ini. Tekan &ldquo;Uji
-          sekarang&rdquo; untuk membandingkan dengan dan tanpa cookies hari ini.
+          {tebal(t('ck.peringatan'))}
         </span>
       </div>
 
@@ -139,13 +136,13 @@ export default function CookiesCard({ card, sectionTitle, helpText }) {
           {daftar.filter((b) => !info.diperiksa || b.login).map((b) => (
             <button key={b.nama} className="btn-secondary" disabled={!!sibuk}
                     onClick={() => siapkanCadangan(b.nama)}
-                    title="Disimpan sekarang, dikirim hanya saat YouTube menuduh bot"
+                    title={t('ck.cadangan_judul')}
                     style={{ fontSize: '0.78rem', padding: '6px 11px',
                              borderColor: info.mode === 'mati' && info.siaga === b.nama
                                ? 'var(--accent-cyan)' : undefined,
                              color: info.mode === 'mati' && info.siaga === b.nama
                                ? 'var(--accent-cyan)' : undefined }}>
-              Cadangan: {NAMA_BROWSER[b.nama] || b.nama} (disarankan)
+              {t('ck.cadangan', { browser: NAMA_BROWSER[b.nama] || b.nama })}
             </button>
           ))}
         </div>
@@ -156,14 +153,14 @@ export default function CookiesCard({ card, sectionTitle, helpText }) {
                 style={{ fontSize: '0.78rem', padding: '6px 11px',
                          borderColor: info.mode === 'mati' ? 'var(--accent-cyan)' : undefined,
                          color: info.mode === 'mati' ? 'var(--accent-cyan)' : undefined }}>
-          Tanpa cookies
+          {t('ck.tanpa')}
         </button>
         {daftar.map((b) => (
           <button key={b.nama} className="btn-secondary"
                   disabled={!!sibuk || (info.diperiksa && !b.login)}
                   title={info.diperiksa && !b.login
-                    ? (b.galat || 'Cookies browser ini tidak bisa dibaca.')
-                    : 'Pakai sesi dari browser ini pada SETIAP permintaan'}
+                    ? (b.galat || t('ck.tak_terbaca'))
+                    : t('ck.pakai_judul')}
                   onClick={() => pilihBrowser(b.nama)}
                   style={{ fontSize: '0.78rem', padding: '6px 11px',
                            borderColor: info.mode === 'browser' && info.browser === b.nama
@@ -189,8 +186,7 @@ export default function CookiesCard({ card, sectionTitle, helpText }) {
 
       {!daftar.length && (
         <p style={{ ...helpText, marginTop: '9px' }}>
-          Tidak ada browser yang profilnya terbaca di komputer ini, jadi hanya
-          unggah <code>cookies.txt</code> yang tersedia.
+          {tebal(t('ck.tanpa_browser'))}
         </p>
       )}
 
@@ -200,7 +196,7 @@ export default function CookiesCard({ card, sectionTitle, helpText }) {
         <ul style={{ ...helpText, marginTop: '9px', paddingLeft: '18px' }}>
           {daftar.filter((b) => !b.login).map((b) => (
             <li key={b.nama}>
-              {NAMA_BROWSER[b.nama] || b.nama}: {b.galat || 'tidak bisa dibaca'}
+              {NAMA_BROWSER[b.nama] || b.nama}: {b.galat || t('ck.tak_terbaca_pendek')}
             </li>
           ))}
         </ul>
@@ -210,7 +206,7 @@ export default function CookiesCard({ card, sectionTitle, helpText }) {
         <button className="btn-secondary" disabled={!!sibuk} onClick={uji}
                 style={{ fontSize: '0.78rem', padding: '6px 11px' }}>
           {sibuk === 'uji' ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
-          Uji sekarang
+          {t('ck.uji')}
         </button>
         <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
           {/* "Siaga" adalah keadaan ketiga, dan tanpa menyebutnya "tanpa
@@ -218,18 +214,17 @@ export default function CookiesCard({ card, sectionTitle, helpText }) {
               sudah tersimpan dan akan dinyalakan sendiri begitu YouTube
               menolak dengan tuduhan bot. Lihat `cookies.KUNCI_SIAGA`. */}
           {info.dari_env
-            ? 'Dipaksa lewat OMNICLIP_COOKIES_FILE.'
-            : info.mode === 'browser' ? `Memakai ${NAMA_BROWSER[info.browser] || info.browser}.`
-            : info.mode === 'berkas' ? 'Memakai berkas cookies.txt.'
-            : info.siaga ? `Cadangan siap: ${NAMA_BROWSER[info.siaga] || info.siaga}. `
-              + 'Dikirim hanya saat YouTube menuduh bot.'
-            : 'Sedang tidak memakai cookies.'}
+            ? t('ck.dipaksa')
+            : info.mode === 'browser' ? t('ck.memakai', { browser: NAMA_BROWSER[info.browser] || info.browser })
+            : info.mode === 'berkas' ? t('ck.memakai_berkas')
+            : info.siaga ? t('ck.siaga', { browser: NAMA_BROWSER[info.siaga] || info.siaga })
+            : t('ck.tidak_pakai')}
         </span>
       </div>
 
       {sibuk === 'uji' && (
         <p style={{ ...helpText, marginTop: '9px' }}>
-          Meminta dua kali ke YouTube, dengan dan tanpa cookies. Butuh belasan detik.
+          {t('ck.menguji')}
         </p>
       )}
 
@@ -247,15 +242,13 @@ export default function CookiesCard({ card, sectionTitle, helpText }) {
           </div>
           {hasil.dilewati && (
             <div style={{ marginTop: '7px', fontSize: '0.74rem' }}>
-              OmniClip sudah <strong>melewati cookies ini sendiri</strong> untuk beberapa jam
-              ke depan, karena permintaan tanpa cookies terbukti berhasil sementara yang
-              dengan cookies gagal. Tidak ada yang perlu Anda lakukan.
+              {tebal(t('ck.dilewati'))}
             </div>
           )}
           <div style={{ marginTop: '7px', fontSize: '0.73rem', color: 'var(--text-muted)' }}>
-            Format video pada video uji. Tanpa cookies: <strong>{hasil.polos}</strong>
-            {hasil.dengan !== null && <> · dengan cookies: <strong>{hasil.dengan}</strong></>}
-            {hasil.terbaca > 0 && <> · {hasil.terbaca} butir cookie terbaca</>}
+            {tebal(t('ck.format', { polos: hasil.polos }))}
+            {hasil.dengan !== null && tebal(t('ck.format_dengan', { n: hasil.dengan }))}
+            {hasil.terbaca > 0 && t('ck.terbaca', { n: hasil.terbaca })}
           </div>
         </div>
       )}

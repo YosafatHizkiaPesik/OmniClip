@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Loader2, Palette } from 'lucide-react';
 import { apiGet, apiPost } from '../lib/api';
+import { tebal, useT } from '../lib/i18n';
 
 /**
  * Warna subtitle berbeda per penutur: satu sakelar untuk seluruh aplikasi.
@@ -14,6 +15,7 @@ import { apiGet, apiPost } from '../lib/api';
  * membalikkannya kembali begitu pemisahannya bisa dipercaya.
  */
 export default function WarnaPenuturCard({ card, sectionTitle, helpText }) {
+  const t = useT();
   const [aktif, setAktif] = useState(null);
   const [sibuk, setSibuk] = useState(false);
   const [kabar, setKabar] = useState(null);
@@ -34,8 +36,8 @@ export default function WarnaPenuturCard({ card, sectionTitle, helpText }) {
       setKabar({
         ok: true,
         teks: nilai
-          ? 'Warna per penutur menyala. Periksa hasilnya di Studio sebelum merender banyak klip.'
-          : 'Semua baris memakai satu warna.',
+          ? t('wp.nyala')
+          : t('wp.mati'),
       });
     } catch (e) {
       setAktif(sebelum);
@@ -49,25 +51,13 @@ export default function WarnaPenuturCard({ card, sectionTitle, helpText }) {
     <div style={card}>
       <div style={sectionTitle}>
         <Palette size={18} style={{ color: 'var(--reh)' }} />
-        Warna subtitle per penutur
+        {t('wp.judul')}
       </div>
       <p className="bantu" style={helpText}>
-        Memberi tiap orang di video warna subtitle sendiri. <strong>Mati</strong>{' '}
-        sejak 24 September 2026, dan bukan karena belum sempat dikerjakan:
-        pemisahan penuturnya sudah diukur dan belum cukup tepat. Pada podcast
-        tiga orang, wajah yang sedang bicara benar menemukan tiga orang, tapi
-        model suara yang dilatih dari bukti itu hanya benar 62% pada potongan
-        yang tidak dilatihkan, dan menambah buktinya justru menurunkan angka itu
-        ke 60%. Artinya sekitar empat dari sepuluh kalimat akan berwarna salah,
-        yaitu warna yang berganti di tengah kalimat orang yang sama. Satu warna
-        yang tidak pernah salah lebih baik daripada itu.
+        {tebal(t('wp.ket_a'))}
       </p>
       <p className="bantu" style={helpText}>
-        Menyalakannya tetap boleh, misalnya untuk wawancara dua orang dengan
-        suara yang jelas berbeda, atau bila Anda bersedia membetulkan sendiri
-        label penuturnya di tab Subtitle. Deteksi penutur tetap berjalan meski
-        sakelar ini mati, karena hasilnya dipakai untuk mengikuti wajah yang
-        sedang bicara; yang dimatikan hanya pewarnaannya.
+        {t('wp.ket_b')}
       </p>
 
       <label style={{
@@ -83,10 +73,9 @@ export default function WarnaPenuturCard({ card, sectionTitle, helpText }) {
             tanpa satu kata pun yang mengatakan apa yang dinyalakannya. Yang
             boleh disembunyikan penjelasannya, tidak pernah namanya. */}
         <span style={{ ...helpText, color: 'var(--text-primary)' }}>
-          <strong>Bedakan warna subtitle tiap penutur.</strong>
+          <strong>{t('wp.sakelar')}</strong>
           <span className="bantu">{' '}
-            Saat mati, setiap baris memakai warna teks yang dipilih di Studio, apa
-            pun tebakan penuturnya.
+            {t('wp.sakelar_ket')}
           </span>
         </span>
         {sibuk && <Loader2 size={15} className="animate-spin" style={{ marginTop: '3px' }} />}

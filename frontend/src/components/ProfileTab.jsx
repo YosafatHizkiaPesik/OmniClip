@@ -2,26 +2,20 @@ import React, { useState, useEffect } from 'react';
 import {
   KeyRound, Loader2, Sun, Moon, Eye, EyeOff, Info,
   CheckCircle2, AlertTriangle, Sparkles, Scissors, Mic,
-  Trash2, Languages, UploadCloud, ShieldAlert,
+  Trash2, Languages, UploadCloud, ShieldAlert, Captions, Volume2, Palette, Globe,
 } from 'lucide-react';
+import { BAHASA, bahasa, setBahasa, tebal, useT } from '../lib/i18n';
+import HalamanSetelan from './HalamanSetelan';
 import { apiDelete, apiGet, apiPost, apiPut } from '../lib/api';
 import { Link } from 'react-router-dom';
 import SakelarSensor from './SakelarSensor';
 import SakelarGumam from './SakelarGumam';
-import SecurityCard from './SecurityCard';
-import StorageCard from './StorageCard';
-import PemeliharaanCard from './PemeliharaanCard';
-import KesehatanCard from './KesehatanCard';
-import PemakaianAiCard from './PemakaianAiCard';
-import KeluarCard from './KeluarCard';
 import SuaraCard from './SuaraCard';
 import CookiesCard from './CookiesCard';
 import TerjemahOtomatisCard from './TerjemahOtomatisCard';
 import OpenRouterCard from './OpenRouterCard';
-import StatistikCard from './StatistikCard';
 import LajuRenderCard from './LajuRenderCard';
 import WarnaPenuturCard from './WarnaPenuturCard';
-import UpdateCard from './UpdateCard';
 
 // Bagian pada satu lembar bergaris, bukan kartu di atas kartu. Tumpukan kartu
 // ikon+judul+teks sebagai struktur halaman adalah wadah paling malas yang ada,
@@ -55,20 +49,8 @@ const helpText = {
  * Keterangan kelompok ikut tersembunyi di mode Ringkas, seperti keterangan
  * setelan lainnya.
  */
-function Kelompok({ judul, nota, children }) {
-  return (
-    <section className="setelan-kelompok">
-      <div className="setelan-kelompok-kepala">
-        <h2>{judul}</h2>
-        {nota && <p className="bantu">{nota}</p>}
-      </div>
-      <div className="petak-setelan">{children}</div>
-    </section>
-  );
-}
-
-
 export default function ProfileTab() {
+  const t = useT();
   const [theme, setTheme] = useState(() => localStorage.getItem('omniclip_theme') || 'light');
   const [apiKey, setApiKey] = useState('');
   const [showApiKey, setShowApiKey] = useState(false);
@@ -249,7 +231,7 @@ export default function ProfileTab() {
       const res = await apiPost('/settings/api-key',
         { api_key: apiKey.trim(), provider: settings?.ai_provider || 'gemini' });
       setApiKey('');
-      setFeedback({ kind: 'ok', text: res.message || 'API key tersimpan.' });
+      setFeedback({ kind: 'ok', text: res.message || t('set.kunci_tersimpan') });
       loadSettings();
     } catch (err) {
       setFeedback({ kind: 'error', text: err.message });
@@ -263,7 +245,7 @@ export default function ProfileTab() {
     setFeedback(null);
     try {
       const res = await apiDelete('/settings/api-key');
-      setFeedback({ kind: 'ok', text: res.message || 'API key dihapus.' });
+      setFeedback({ kind: 'ok', text: res.message || t('set.kunci_dihapus') });
       loadSettings();
     } catch (err) {
       setFeedback({ kind: 'error', text: err.message });
@@ -291,484 +273,415 @@ export default function ProfileTab() {
     return n;
   });
 
-  return (
-    <div className={`page${ringkas ? ' ringkas' : ''}`} style={{ maxWidth: '1280px' }}>
-      <div className="work-block" style={{ alignItems: 'center' }}>
-        <div style={{ minWidth: 0 }}>
-          <h1 className="work-title">Catatan main</h1>
-          <div className="sub">Setelan yang berlaku untuk seluruh partitur.</div>
-        </div>
-        <button className="tombol-ringkas" onClick={ubahRingkas}
-                title={ringkas ? 'Tampilkan penjelasan tiap setelan'
-                               : 'Sembunyikan penjelasan, sisakan setelannya saja'}>
-          {ringkas ? 'Tampilkan penjelasan' : 'Ringkas'}
-        </button>
+  const pilihan = (on) => ({
+    textAlign: 'center', padding: '11px 6px', cursor: 'pointer',
+    borderRadius: 'var(--radius-md)',
+    border: on ? '2px solid var(--accent-cyan)' : '1px solid var(--border-color)',
+    background: on ? 'var(--hl-wash)' : 'transparent',
+  });
+
+  const tombolRingkas = (
+    <button className="tombol-ringkas" onClick={ubahRingkas}
+            title={ringkas ? t('setelan.penjelasan_judul') : t('setelan.ringkas_judul')}>
+      {ringkas ? t('setelan.tampil_penjelasan') : t('setelan.ringkas')}
+    </button>
+  );
+
+  const galatBackend = settingsError && (
+    <div style={{ ...card, borderColor: 'var(--accent-red)', display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+      <AlertTriangle size={18} style={{ color: 'var(--danger)', flexShrink: 0, marginTop: '2px' }} />
+      <div>
+        <div style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-primary)' }}>{t('set.backend')}</div>
+        <div className="bantu" style={helpText}>{settingsError}</div>
       </div>
+    </div>
+  );
 
-
-      {settingsError && (
-        <div style={{ ...card, borderColor: 'var(--accent-red)', display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-          <AlertTriangle size={18} style={{ color: 'var(--danger)', flexShrink: 0, marginTop: '2px' }} />
-          <div>
-            <div style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-primary)' }}>Backend tidak terhubung</div>
-            <div className="bantu" style={helpText}>{settingsError}</div>
-          </div>
-        </div>
-      )}
-
-      <Kelompok judul="Klip dan transkrip"
-                nota="Berapa klip yang dicari, seberapa teliti suaranya disalin, dan ke bahasa apa.">
-        {/* --- Jumlah klip --- */}
-        <div style={card}>
-          <div style={sectionTitle}>
-            <Scissors size={18} style={{ color: 'var(--reh)' }} />
-            Jumlah klip per video
-          </div>
-          <p className="bantu" style={helpText}>
-            Berapa banyak momen yang ditawarkan dari satu video. Pada mode otomatis
-            jatahnya tumbuh mengikuti durasi (kira-kira satu klip tiap empat menit)
-            sehingga podcast dua jam tidak lagi diperlakukan sama dengan video
-            sepuluh menit.
-          </p>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', marginTop: '13px' }}>
-            {[
-              [0, 'Otomatis', 'ikut durasi'],
-              [8, '8 klip', 'ringkas'],
-              [16, '16 klip', 'banyak'],
-              [30, '30 klip', 'maksimal'],
-            ].map(([v, title, hint]) => (
-              <button key={v} onClick={() => chooseMaxClips(v)} style={{
-                textAlign: 'center', padding: '11px 6px', cursor: 'pointer',
-                borderRadius: 'var(--radius-md)',
-                border: maxClips === v ? '2px solid var(--accent-cyan)' : '1px solid var(--border-color)',
-                background: maxClips === v ? 'var(--hl-wash)' : 'transparent',
-              }}>
-                <div style={{
-                  fontSize: '0.84rem', fontWeight: 800, marginBottom: '2px',
-                  color: maxClips === v ? 'var(--accent-cyan)' : 'var(--text-primary)',
-                }}>{title}</div>
-                <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{hint}</div>
-              </button>
-            ))}
-          </div>
-          <p style={{ ...helpText, marginTop: '11px' }}>
-            Video yang sudah pernah dianalisis dengan jatah lebih kecil akan
-            dianalisis ulang saat jatahnya dinaikkan.
-          </p>
-        </div>
-
-        {/* --- Ketelitian transkrip --- */}
-        <div style={card}>
-          <div style={sectionTitle}>
-            <Mic size={18} style={{ color: 'var(--reh)' }} />
-            Ketelitian transkrip
-          </div>
-          <p className="bantu" style={helpText}>
-            Hanya berlaku untuk video yang belum punya subtitle di YouTube dan harus
-            disalin ucapannya di komputer ini. Video yang sudah bersubtitle tidak
-            terpengaruh dan tetap selesai dalam hitungan detik.
-          </p>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '13px' }}>
-            {[
-              ['base', 'Cepat', '± 5x lebih cepat', 'Cukup untuk bicara jelas dan pelan.'],
-              ['small', 'Akurat', '± 5x lebih lama', 'Jauh lebih baik untuk percakapan cepat dan bahasa gaul.'],
-            ].map(([v, title, speed, hint]) => (
-              <button key={v} onClick={() => chooseWhisper(v)} style={{
-                textAlign: 'left', padding: '11px 13px', cursor: 'pointer',
-                borderRadius: 'var(--radius-md)',
-                border: whisperModel === v ? '2px solid var(--accent-cyan)' : '1px solid var(--border-color)',
-                background: whisperModel === v ? 'var(--hl-wash)' : 'transparent',
-              }}>
-                <div style={{
-                  fontSize: '0.88rem', fontWeight: 800, marginBottom: '3px',
-                  color: whisperModel === v ? 'var(--accent-cyan)' : 'var(--text-primary)',
-                }}>{title}</div>
-                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '3px' }}>{speed}</div>
-                <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', lineHeight: 1.45 }}>{hint}</div>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* --- Bahasa subtitle --- */}
-        <div style={card}>
-          <div style={sectionTitle}>
-            <Languages size={18} style={{ color: 'var(--reh)' }} />
-            Bahasa subtitle
-          </div>
-          <p className="bantu" style={helpText}>
-            Urutan bahasa yang <strong>dicoba lebih dulu</strong> saat mengambil
-            subtitle dari YouTube. Ini bukan batas: kalau video tidak punya satu pun
-            bahasa di sini, sistem tetap memakai bahasa yang benar-benar ada di video
-            itu. Untuk video tanpa subtitle sama sekali, bahasanya dikenali sendiri
-            dari suaranya.
-          </p>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '13px' }}>
-            {(bahasaUmum ?? []).map(({ code, label: nama }) => {
-              const urutan = langs.indexOf(code);
-              const on = urutan >= 0;
-              return (
-                <button key={code} onClick={() => toggleLang(code)} style={{
-                  display: 'inline-flex', alignItems: 'center', gap: '6px',
-                  padding: '7px 11px', fontSize: '0.76rem', fontWeight: 700,
-                  cursor: 'pointer', borderRadius: 'var(--radius-sm)',
-                  border: on ? '2px solid var(--accent-cyan)' : '1px solid var(--border-color)',
-                  background: on ? 'var(--hl-wash)' : 'transparent',
-                  color: on ? 'var(--accent-cyan)' : 'var(--text-secondary)',
-                }}>
-                  {on && (
-                    <span style={{
-                      minWidth: '17px', height: '17px', borderRadius: '50%',
-                      background: 'var(--accent-cyan)', color: '#04121a',
-                      fontSize: '0.66rem', fontWeight: 900,
-                      display: 'grid', placeItems: 'center',
-                    }}>{urutan + 1}</span>
-                  )}
-                  {nama}
-                </button>
-              );
-            })}
-          </div>
-          <div style={{ display: 'flex', gap: '7px', marginTop: '11px', flexWrap: 'wrap' }}>
-            <input value={langDraft} onChange={(e) => setLangDraft(e.target.value)}
-                   placeholder="Kode lain, mis. pt-BR"
-                   onKeyDown={(e) => { if (e.key === 'Enter') tambahLang(); }}
-                   style={{
-                     flex: '1 1 150px', padding: '8px 10px', fontSize: '0.78rem',
-                     fontFamily: 'inherit', borderRadius: 'var(--radius-sm)',
-                     border: '1px solid var(--border-color)', background: 'transparent',
-                     color: 'var(--text-primary)',
-                   }} />
-            <button onClick={tambahLang} className="btn-secondary"
-                    style={{ fontSize: '0.78rem' }}>Tambah</button>
-            <button onClick={() => simpanLangs([])} className="btn-secondary"
-                    style={{ fontSize: '0.78rem' }}>Kembalikan bawaan</button>
-          </div>
-          {langError && (
-            <p style={{ fontSize: '0.75rem', color: 'var(--danger)', margin: '9px 0 0' }}>{langError}</p>
-          )}
-          <p style={{ ...helpText, marginTop: '11px' }}>
-            Urutan sekarang: <strong>{langs.join(' → ') || 'bawaan'}</strong>
-          </p>
-        </div>
-
-        <CookiesCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
-      </Kelompok>
-
-      <Kelompok judul="Subtitle"
-                nota="Apa yang ditulis di layar, dan bagaimana rupanya.">
-        <div style={card}>
-          <div style={sectionTitle}>
-            <ShieldAlert size={18} style={{ color: 'var(--reh)' }} />
-            Kata yang ditulis
-          </div>
-          <SakelarSensor />
-          <SakelarGumam helpText={helpText} />
-        </div>
-        <WarnaPenuturCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
-        <TerjemahOtomatisCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
-      </Kelompok>
-
-      <Kelompok judul="Suara dan gambar"
-                nota="Berlaku untuk semua render berikutnya.">
-        <SuaraCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
-        <LajuRenderCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
-        {/* --- Tampilan --- */}
-        <div style={card}>
-          <div style={sectionTitle}>
-            {theme === 'dark' ? <Moon size={18} style={{ color: 'var(--reh)' }} /> : <Sun size={18} style={{ color: 'var(--reh)' }} />}
-            Tampilan
-          </div>
-          <p className="bantu" style={helpText}>Pilih tema terang atau gelap untuk seluruh aplikasi.</p>
-          <div style={{ display: 'flex', gap: '10px', marginTop: '14px' }}>
-            {[
-              { id: 'dark', label: 'Gelap', Icon: Moon },
-              { id: 'light', label: 'Terang', Icon: Sun },
-            ].map(({ id, label, Icon }) => (
-              <button
-                key={id}
-                onClick={() => setTheme(id)}
-                style={{
-                  flex: 1,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-                  padding: '12px',
-                  borderRadius: 'var(--radius-md)',
-                  cursor: 'pointer',
-                  fontWeight: 700,
-                  fontSize: '0.85rem',
-                  color: theme === id ? 'var(--accent-cyan)' : 'var(--text-secondary)',
-                  background: theme === id ? 'var(--hl-wash)' : 'transparent',
-                  border: theme === id ? '1px solid var(--border-active)' : '1px solid var(--border-color)',
-                  transition: 'all 0.2s ease',
-                }}
-              >
-                <Icon size={16} />
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-      </Kelompok>
-
-      <Kelompok judul="Mesin AI"
-                nota="Model yang memilih klip dan menulis caption, beserta kuncinya.">
-        {/* --- Model AI --- */}
-        <div style={card}>
-          <div style={sectionTitle}>
-            <Sparkles size={18} style={{ color: 'var(--reh)' }} />
-            Model AI pemilih klip
-          </div>
-          <p className="bantu" style={helpText}>
-            Model yang membaca transkrip lalu memutuskan bagian mana yang layak jadi
-            klip. Model yang lebih besar biasanya lebih paham konteks pembahasan,
-            tapi lebih lambat dan memakai lebih banyak kuota.
-          </p>
-          {models === null && !modelsError && (
-            <p style={{ ...helpText, marginTop: '10px' }}>Memuat daftar model…</p>
-          )}
-          {modelsError && (
-            <p style={{ ...helpText, marginTop: '10px', color: 'var(--accent-red, var(--danger))' }}>
-              Tidak bisa mengambil daftar model: {modelsError}
-            </p>
-          )}
-          {models?.length > 0 && (
-            <>
-              <select value={model} onChange={(e) => chooseModel(e.target.value)}
-                      style={{
-                        width: '100%', marginTop: '12px', padding: '11px 12px',
-                        borderRadius: 'var(--radius-md)', fontSize: '0.86rem',
-                        border: '1px solid var(--border-color)',
-                        background: 'var(--bg-glass)', color: 'var(--text-primary)',
-                      }}>
-                <option value="">
-                  Otomatis{modelInfo.terkuat ? ` (mencoba ${modelInfo.terkuat} lebih dulu)` : ''}
-                </option>
-                {models.map((m) => (
-                  <option key={m} value={m}>
-                    {m}{modelInfo.habisHarian.includes(m) ? ' (jatah hari ini habis)' : ''}
-                  </option>
-                ))}
-              </select>
-              <p style={{ ...helpText, marginTop: '10px' }}>
-                Urut dari yang terkuat. <strong>Otomatis</strong> mencoba yang teratas
-                lebih dulu, dan pindah ke berikutnya bila model itu sedang sibuk atau
-                jatah hariannya sudah habis. Jadi model yang tertulis di atas bukan
-                selalu yang terkuat, melainkan yang akan dicoba pertama hari ini.
-                Model <strong>lite</strong> hanya dipakai paling akhir, saat semua
-                model penuh kehabisan jatah, karena jatah hariannya dihitung
-                terpisah.
-              </p>
-              {modelInfo.habisHarian.length > 0 && (
-                <p style={{ ...helpText, marginTop: '8px' }}>
-                  {modelInfo.habisHarian.length} model sudah memakai jatah hariannya
-                  dan kembali sendiri
-                  {modelInfo.jamKePutaran !== null
-                    ? ` sekitar ${modelInfo.jamKePutaran} jam lagi` : ' setelah jatahnya berputar'}
-                  : {modelInfo.habisHarian.join(', ')}.
-                </p>
-              )}
-              {modelTersembunyi > 0 && (
-                <p style={{ ...helpText, marginTop: '8px' }}>
-                  {modelTersembunyi} model tidak ditampilkan karena kunci ini tidak
-                  punya aksesnya. Seri <strong>pro</strong> memang di luar kuota
-                  gratis Gemini; ia muncul sendiri di daftar ini begitu kunci Anda
-                  mendapatkannya.
-                </p>
-              )}
-            </>
-          )}
-        </div>
-
-        {/* --- Gemini API Key --- */}
-        <div style={card}>
-          <div style={sectionTitle}>
-            <KeyRound size={18} style={{ color: 'var(--reh)' }} />
-            API key AI
-          </div>
-          <p className="bantu" style={helpText}>
-            Opsional. Tanpa API key, OmniClip tetap memotong klip memakai mesin heuristik
-            lokal berbasis transkrip asli. Dengan API key, {provider.label} ikut menyusun
-            ulang peringkat dan judul klip. Ambil kunci gratis di{' '}
-            <a href={provider.key_url} target="_blank" rel="noreferrer"
-               style={{ color: 'var(--reh)' }}>
-              {new URL(provider.key_url).host}
-            </a>.
-          </p>
-          <p style={{ ...helpText, marginTop: '8px' }}>
-            Kunci disimpan di basis data komputer ini dan tetap ada setelah backend
-            dimulai ulang, jadi tidak perlu lagi menyunting <code>backend/.env</code>
-            lewat terminal, yang memang tidak bisa dilakukan dari HP. Kunci tidak
-            pernah dikirim ke mana pun selain {provider.label}.
-          </p>
-          <p style={{ ...helpText, marginTop: '8px' }}>
-            <strong style={{ color: 'var(--text-primary)' }}>Boleh lebih dari satu
-            kunci</strong>, satu per baris. OmniClip pindah sendiri ke kunci
-            berikutnya saat satu kunci kehabisan jatah atau ditolak.{' '}
-            <strong style={{ color: 'var(--text-primary)' }}>Tapi kunci keduanya
-            harus dari PROJECT Google yang berbeda</strong>: Google menghitung
-            kuota per project, bukan per kunci, jadi dua kunci dari project yang
-            sama berbagi jatah yang sama persis dan tidak menambah apa-apa. Buat
-            project baru di{' '}
-            <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer"
-               style={{ color: 'var(--reh)' }}>aistudio.google.com/apikey</a>{' '}
-            lalu ambil kuncinya dari sana.
-          </p>
-
-          {settings && (
-            <div style={{ ...helpText, marginTop: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              {settings.gemini_api_key_set ? (
-                <>
-                  <CheckCircle2 size={15} style={{ color: 'var(--entry)' }} />
-                  {(settings.gemini_api_key_count ?? 1) > 1
-                    ? `${settings.gemini_api_key_count} kunci tersimpan`
-                    : <>Tersimpan (berakhiran <code>{settings.gemini_api_key_last4}</code>)</>}
-                  {settings.gemini_api_key_source === 'env' && (
-                    <span style={{ color: 'var(--text-muted)' }}>
-                      dari <code>backend/.env</code>
-                    </span>
-                  )}
-                </>
-              ) : (
-                <>
-                  <Info size={15} style={{ color: 'var(--text-muted)' }} />
-                  Belum dikonfigurasi. Klip dipilih mesin lokal.
-                </>
-              )}
-            </div>
-          )}
-
-          <div style={{ display: 'flex', gap: '8px', marginTop: '14px' }}>
-            <div style={{ position: 'relative', flex: 1 }}>
-              {/* Kotak bertingkat, bukan satu baris: kolom yang tingginya satu
-                  baris mengatakan "satu kunci saja" tanpa sepatah kata pun, dan
-                  menempel dua kunci ke dalamnya terasa seperti melawan alat. */}
-              <textarea
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleSaveApiKey();
-                }}
-                rows={apiKey.includes('\n') ? 3 : 1}
-                spellCheck={false}
-                placeholder="Tempel API key di sini. Punya lebih dari satu? Satu per baris."
-                style={{
-                  width: '100%',
-                  padding: '11px 40px 11px 14px',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1px solid var(--border-color)',
-                  background: 'var(--bg-glass)',
-                  color: 'var(--text-primary)',
-                  fontSize: '0.85rem',
-                  fontFamily: 'inherit',
-                  resize: 'vertical',
-                  lineHeight: 1.5,
-                  WebkitTextSecurity: showApiKey ? 'none' : 'disc',
-                }}
-              />
-              <button
-                type="button"
-                onClick={() => setShowApiKey((v) => !v)}
-                aria-label={showApiKey ? 'Sembunyikan API key' : 'Tampilkan API key'}
-                style={{
-                  position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)',
-                  background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)',
-                  display: 'flex', alignItems: 'center',
-                }}
-              >
-                {showApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
-              </button>
-            </div>
-            <button
-              className="btn-primary"
-              onClick={handleSaveApiKey}
-              disabled={savingKey || !apiKey.trim()}
-              style={{ opacity: savingKey || !apiKey.trim() ? 0.5 : 1, whiteSpace: 'nowrap' }}
-            >
-              {savingKey ? <Loader2 size={15} className="animate-spin" /> : 'Simpan'}
-            </button>
-          </div>
-
-          {settings?.gemini_api_key_set && settings.gemini_api_key_source !== 'env' && (
-            <button
-              onClick={handleDeleteApiKey}
-              disabled={deletingKey}
-              style={{
-                marginTop: '10px', display: 'flex', alignItems: 'center', gap: '7px',
-                background: 'none', border: 'none', padding: '4px 0', cursor: 'pointer',
-                fontSize: '0.78rem', fontWeight: 700, fontFamily: 'inherit',
-                color: 'var(--danger)', opacity: deletingKey ? 0.5 : 1,
-              }}
-            >
-              {deletingKey ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-              Hapus kunci ini
-            </button>
-          )}
-
-          {feedback && (
-            <div style={{
-              ...helpText,
-              marginTop: '10px',
-              color: feedback.kind === 'ok' ? 'var(--entry)' : 'var(--accent-red)',
-              display: 'flex', alignItems: 'center', gap: '7px',
-            }}>
-              {feedback.kind === 'ok' ? <CheckCircle2 size={15} /> : <AlertTriangle size={15} />}
-              {feedback.text}
-            </div>
-          )}
-        </div>
-        <OpenRouterCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
-      </Kelompok>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-      <Kelompok judul="Lainnya"
-                nota="Akun, dan keterangan pemasangan ini.">
-      {/* Akun Google kini milik TIAP PROFIL (Drive dan kanal YouTube sendiri),
-          jadi menyambungkannya dari sini, tanpa tahu profil mana yang aktif,
-          adalah cara tercepat mengunggah ke kanal yang salah. */}
+  const klipIsi = (
+    <>
+      {galatBackend}
       <div style={card}>
         <div style={sectionTitle}>
-          <UploadCloud size={18} style={{ color: 'var(--reh)' }} />
-          Akun Google, Drive, dan YouTube
+          <Scissors size={18} style={{ color: 'var(--reh)' }} />
+          {t('set.jumlah')}
         </div>
-        {/* Tautannya DI LUAR `.bantu`: di mode Ringkas kartu ini dulu tinggal
-            judul tanpa satu pun jalan keluar, dan sebuah kartu yang hanya
-            memberi tahu "ini ada di tempat lain" tanpa menunjukkan tempatnya
-            tidak mengerjakan apa pun. */}
-        <p style={helpText}>
-          <span className="bantu">
-            Setiap profil menyambungkan akun Google-nya sendiri, beserta setelan
-            unggah otomatisnya.{' '}
-          </span>
-          Atur di <Link to="/profil" style={{ color: 'var(--reh)', fontWeight: 700 }}>halaman Akun</Link>.
+        <p className="bantu" style={helpText}>{t('set.jumlah_ket')}</p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', marginTop: '13px' }}>
+          {[
+            [0, t('set.otomatis'), t('set.ikut_durasi')],
+            [8, t('set.n_klip', { n: 8 }), t('set.ringkas')],
+            [16, t('set.n_klip', { n: 16 }), t('set.banyak')],
+            [30, t('set.n_klip', { n: 30 }), t('set.maksimal')],
+          ].map(([v, judul, ket]) => (
+            <button key={v} onClick={() => chooseMaxClips(v)} style={pilihan(maxClips === v)}>
+              <div style={{
+                fontSize: '0.84rem', fontWeight: 800, marginBottom: '2px',
+                color: maxClips === v ? 'var(--accent-cyan)' : 'var(--text-primary)',
+              }}>{judul}</div>
+              <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{ket}</div>
+            </button>
+          ))}
+        </div>
+        <p className="bantu" style={{ ...helpText, marginTop: '11px' }}>{t('set.jumlah_ulang')}</p>
+      </div>
+
+      <div style={card}>
+        <div style={sectionTitle}>
+          <Mic size={18} style={{ color: 'var(--reh)' }} />
+          {t('set.teliti')}
+        </div>
+        <p className="bantu" style={helpText}>{t('set.teliti_ket')}</p>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '13px' }}>
+          {[
+            ['base', t('set.cepat'), t('set.cepat_laju'), t('set.cepat_ket')],
+            ['small', t('set.akurat'), t('set.akurat_laju'), t('set.akurat_ket')],
+          ].map(([v, judul, laju, ket]) => (
+            <button key={v} onClick={() => chooseWhisper(v)}
+                    style={{ ...pilihan(whisperModel === v), textAlign: 'left', padding: '11px 13px' }}>
+              <div style={{
+                fontSize: '0.88rem', fontWeight: 800, marginBottom: '3px',
+                color: whisperModel === v ? 'var(--accent-cyan)' : 'var(--text-primary)',
+              }}>{judul}</div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '3px' }}>{laju}</div>
+              <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', lineHeight: 1.45 }}>{ket}</div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div style={card}>
+        <div style={sectionTitle}>
+          <Languages size={18} style={{ color: 'var(--reh)' }} />
+          {t('set.bahasa_sub')}
+        </div>
+        <p className="bantu" style={helpText}>{tebal(t('set.bahasa_sub_ket'))}</p>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '13px' }}>
+          {(bahasaUmum ?? []).map(({ code, label: nama }) => {
+            const urutan = langs.indexOf(code);
+            const on = urutan >= 0;
+            return (
+              <button key={code} onClick={() => toggleLang(code)} style={{
+                display: 'inline-flex', alignItems: 'center', gap: '6px',
+                padding: '7px 11px', fontSize: '0.76rem', fontWeight: 700,
+                cursor: 'pointer', borderRadius: 'var(--radius-sm)',
+                border: on ? '2px solid var(--accent-cyan)' : '1px solid var(--border-color)',
+                background: on ? 'var(--hl-wash)' : 'transparent',
+                color: on ? 'var(--accent-cyan)' : 'var(--text-secondary)',
+              }}>
+                {on && (
+                  <span style={{
+                    minWidth: '17px', height: '17px', borderRadius: '50%',
+                    background: 'var(--accent-cyan)', color: '#04121a',
+                    fontSize: '0.66rem', fontWeight: 900,
+                    display: 'grid', placeItems: 'center',
+                  }}>{urutan + 1}</span>
+                )}
+                {nama}
+              </button>
+            );
+          })}
+        </div>
+        <div style={{ display: 'flex', gap: '7px', marginTop: '11px', flexWrap: 'wrap' }}>
+          <input value={langDraft} onChange={(e) => setLangDraft(e.target.value)}
+                 placeholder={t('set.kode_lain')}
+                 onKeyDown={(e) => { if (e.key === 'Enter') tambahLang(); }}
+                 style={{
+                   flex: '1 1 150px', padding: '8px 10px', fontSize: '0.78rem',
+                   fontFamily: 'inherit', borderRadius: 'var(--radius-sm)',
+                   border: '1px solid var(--border-color)', background: 'transparent',
+                   color: 'var(--text-primary)',
+                 }} />
+          <button onClick={tambahLang} className="btn-secondary"
+                  style={{ fontSize: '0.78rem' }}>{t('set.tambah')}</button>
+          <button onClick={() => simpanLangs([])} className="btn-secondary"
+                  style={{ fontSize: '0.78rem' }}>{t('set.bawaan')}</button>
+        </div>
+        {langError && (
+          <p style={{ fontSize: '0.75rem', color: 'var(--danger)', margin: '9px 0 0' }}>{langError}</p>
+        )}
+        <p style={{ ...helpText, marginTop: '11px' }}>
+          {t('set.urutan')} <strong>{langs.join(' → ') || t('set.urutan_bawaan')}</strong>
         </p>
       </div>
 
-      {/* --- Info --- */}
+      <CookiesCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
+    </>
+  );
+
+  const subtitleIsi = (
+    <>
+      <div style={card}>
+        <div style={sectionTitle}>
+          <ShieldAlert size={18} style={{ color: 'var(--reh)' }} />
+          {t('set.kata')}
+        </div>
+        <SakelarSensor />
+        <SakelarGumam helpText={helpText} />
+      </div>
+      <WarnaPenuturCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
+      <TerjemahOtomatisCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
+    </>
+  );
+
+  const suaraIsi = (
+    <>
+      <SuaraCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
+      <LajuRenderCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
+    </>
+  );
+
+  const tampilanIsi = (
+    <>
+      <div style={card}>
+        <div style={sectionTitle}>
+          {theme === 'dark' ? <Moon size={18} style={{ color: 'var(--reh)' }} /> : <Sun size={18} style={{ color: 'var(--reh)' }} />}
+          {t('set.tema')}
+        </div>
+        <p className="bantu" style={helpText}>{t('set.tema_ket')}</p>
+        <div style={{ display: 'flex', gap: '10px', marginTop: '14px' }}>
+          {[
+            { id: 'dark', label: t('set.gelap'), Icon: Moon },
+            { id: 'light', label: t('set.terang'), Icon: Sun },
+          ].map(({ id, label, Icon }) => (
+            <button key={id} onClick={() => setTheme(id)} style={{
+              flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+              padding: '12px', borderRadius: 'var(--radius-md)', cursor: 'pointer',
+              fontWeight: 700, fontSize: '0.85rem', fontFamily: 'inherit',
+              color: theme === id ? 'var(--accent-cyan)' : 'var(--text-secondary)',
+              background: theme === id ? 'var(--hl-wash)' : 'transparent',
+              border: theme === id ? '1px solid var(--border-active)' : '1px solid var(--border-color)',
+              transition: 'all 0.2s ease',
+            }}>
+              <Icon size={16} />
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div style={card}>
+        <div style={sectionTitle}>
+          <Globe size={18} style={{ color: 'var(--reh)' }} />
+          {t('set.bahasa')}
+        </div>
+        <p className="bantu" style={helpText}>{t('set.bahasa_ket')}</p>
+        <div style={{ display: 'flex', gap: '10px', marginTop: '14px', flexWrap: 'wrap' }}>
+          {BAHASA.map(({ kode, nama }) => (
+            <button key={kode} onClick={() => setBahasa(kode)} lang={kode} style={{
+              flex: '1 1 160px', padding: '12px', borderRadius: 'var(--radius-md)', cursor: 'pointer',
+              fontWeight: 700, fontSize: '0.85rem', fontFamily: 'inherit',
+              color: bahasa() === kode ? 'var(--accent-cyan)' : 'var(--text-secondary)',
+              background: bahasa() === kode ? 'var(--hl-wash)' : 'transparent',
+              border: bahasa() === kode ? '1px solid var(--border-active)' : '1px solid var(--border-color)',
+            }}>
+              {nama}
+            </button>
+          ))}
+        </div>
+      </div>
+    </>
+  );
+
+  const aiIsi = (
+    <>
+      <div style={card}>
+        <div style={sectionTitle}>
+          <Sparkles size={18} style={{ color: 'var(--reh)' }} />
+          {t('set.model')}
+        </div>
+        <p className="bantu" style={helpText}>{t('set.model_ket')}</p>
+        {models === null && !modelsError && (
+          <p style={{ ...helpText, marginTop: '10px' }}>{t('set.memuat_model')}</p>
+        )}
+        {modelsError && (
+          <p style={{ ...helpText, marginTop: '10px', color: 'var(--accent-red, var(--danger))' }}>
+            {t('set.gagal_model', { pesan: modelsError })}
+          </p>
+        )}
+        {models?.length > 0 && (
+          <>
+            <select value={model} onChange={(e) => chooseModel(e.target.value)}
+                    style={{
+                      width: '100%', marginTop: '12px', padding: '11px 12px',
+                      borderRadius: 'var(--radius-md)', fontSize: '0.86rem',
+                      border: '1px solid var(--border-color)',
+                      background: 'var(--bg-glass)', color: 'var(--text-primary)',
+                    }}>
+              <option value="">
+                {t('ulang.otomatis')}{modelInfo.terkuat ? t('ulang.mencoba', { model: modelInfo.terkuat }) : ''}
+              </option>
+              {models.map((m) => (
+                <option key={m} value={m}>
+                  {m}{modelInfo.habisHarian.includes(m) ? t('ulang.jatah_habis') : ''}
+                </option>
+              ))}
+            </select>
+            <p className="bantu" style={{ ...helpText, marginTop: '10px' }}>{tebal(t('set.model_urut'))}</p>
+            {modelInfo.habisHarian.length > 0 && (
+              <p style={{ ...helpText, marginTop: '8px' }}>
+                {t('set.habis_n', { n: modelInfo.habisHarian.length })}
+                {modelInfo.jamKePutaran !== null
+                  ? t('set.habis_jam', { n: modelInfo.jamKePutaran }) : t('set.habis_putar')}
+                : {modelInfo.habisHarian.join(', ')}.
+              </p>
+            )}
+            {modelTersembunyi > 0 && (
+              <p className="bantu" style={{ ...helpText, marginTop: '8px' }}>
+                {tebal(t('set.tersembunyi', { n: modelTersembunyi }))}
+              </p>
+            )}
+          </>
+        )}
+      </div>
+
+      <div style={card}>
+        <div style={sectionTitle}>
+          <KeyRound size={18} style={{ color: 'var(--reh)' }} />
+          {t('set.kunci')}
+        </div>
+        <p className="bantu" style={helpText}>
+          {t('set.kunci_ket_a', { penyedia: provider.label })}{' '}
+          <a href={provider.key_url} target="_blank" rel="noreferrer"
+             style={{ color: 'var(--reh)' }}>
+            {new URL(provider.key_url).host}
+          </a>.
+        </p>
+        <p className="bantu" style={{ ...helpText, marginTop: '8px' }}>
+          {tebal(t('set.kunci_ket_b', { penyedia: provider.label }))}
+        </p>
+        <p className="bantu" style={{ ...helpText, marginTop: '8px' }}>{tebal(t('set.kunci_banyak'))}</p>
+
+        {settings && (
+          <div style={{ ...helpText, marginTop: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {settings.gemini_api_key_set ? (
+              <>
+                <CheckCircle2 size={15} style={{ color: 'var(--entry)' }} />
+                {(settings.gemini_api_key_count ?? 1) > 1
+                  ? t('set.n_kunci', { n: settings.gemini_api_key_count })
+                  : <>{t('set.tersimpan_akhiran')} <code>{settings.gemini_api_key_last4}</code>)</>}
+                {settings.gemini_api_key_source === 'env' && (
+                  <span style={{ color: 'var(--text-muted)' }}>
+                    {t('set.dari')} <code>backend/.env</code>
+                  </span>
+                )}
+              </>
+            ) : (
+              <>
+                <Info size={15} style={{ color: 'var(--text-muted)' }} />
+                {t('set.belum_kunci')}
+              </>
+            )}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: '8px', marginTop: '14px' }}>
+          <div style={{ position: 'relative', flex: 1 }}>
+            {/* Kotak bertingkat, bukan satu baris: kolom satu baris mengatakan
+                "satu kunci saja" tanpa sepatah kata pun. */}
+            <textarea
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleSaveApiKey();
+              }}
+              rows={apiKey.includes('\n') ? 3 : 1}
+              spellCheck={false}
+              placeholder={t('set.kunci_placeholder')}
+              style={{
+                width: '100%', padding: '11px 40px 11px 14px',
+                borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)',
+                background: 'var(--bg-glass)', color: 'var(--text-primary)',
+                fontSize: '0.85rem', fontFamily: 'inherit', resize: 'vertical', lineHeight: 1.5,
+                WebkitTextSecurity: showApiKey ? 'none' : 'disc',
+              }}
+            />
+            <button type="button" onClick={() => setShowApiKey((v) => !v)}
+                    aria-label={showApiKey ? t('set.sembunyi_kunci') : t('set.tampil_kunci')}
+                    style={{
+                      position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)',
+                      background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)',
+                      display: 'flex', alignItems: 'center',
+                    }}>
+              {showApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
+          <button className="btn-primary" onClick={handleSaveApiKey}
+                  disabled={savingKey || !apiKey.trim()}
+                  style={{ opacity: savingKey || !apiKey.trim() ? 0.5 : 1, whiteSpace: 'nowrap' }}>
+            {savingKey ? <Loader2 size={15} className="animate-spin" /> : t('umum.simpan')}
+          </button>
+        </div>
+
+        {settings?.gemini_api_key_set && settings.gemini_api_key_source !== 'env' && (
+          <button onClick={handleDeleteApiKey} disabled={deletingKey}
+                  style={{
+                    marginTop: '10px', display: 'flex', alignItems: 'center', gap: '7px',
+                    background: 'none', border: 'none', padding: '4px 0', cursor: 'pointer',
+                    fontSize: '0.78rem', fontWeight: 700, fontFamily: 'inherit',
+                    color: 'var(--danger)', opacity: deletingKey ? 0.5 : 1,
+                  }}>
+            {deletingKey ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+            {t('set.hapus_kunci')}
+          </button>
+        )}
+
+        {feedback && (
+          <div style={{
+            ...helpText, marginTop: '10px',
+            color: feedback.kind === 'ok' ? 'var(--entry)' : 'var(--accent-red)',
+            display: 'flex', alignItems: 'center', gap: '7px',
+          }}>
+            {feedback.kind === 'ok' ? <CheckCircle2 size={15} /> : <AlertTriangle size={15} />}
+            {feedback.text}
+          </div>
+        )}
+      </div>
+      <OpenRouterCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
+    </>
+  );
+
+  // Akun Google milik TIAP akun OmniClip, jadi di sini hanya tautan ke sana.
+  const lainIsi = (
+    <>
+      <div style={card}>
+        <div style={sectionTitle}>
+          <UploadCloud size={18} style={{ color: 'var(--reh)' }} />
+          {t('set.google')}
+        </div>
+        <p style={helpText}>
+          <span className="bantu">{t('set.google_ket')}{' '}</span>
+          {t('set.atur_di')}{' '}
+          <Link to="/profil" style={{ color: 'var(--reh)', fontWeight: 700 }}>{t('set.halaman_akun')}</Link>.
+        </p>
+      </div>
       <div style={card}>
         <div style={sectionTitle}>
           <Info size={18} style={{ color: 'var(--reh)' }} />
-          Tentang
+          {t('set.tentang')}
         </div>
         <div style={{ ...helpText, display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '6px 16px', marginTop: '8px' }}>
-          <span style={{ color: 'var(--text-muted)' }}>Versi</span><span>OmniClip {versiApp || '…'}</span>
-          <span style={{ color: 'var(--text-muted)' }}>Mode</span><span>Lokal, semua file dan riwayat disimpan di komputer ini</span>
-          <span style={{ color: 'var(--text-muted)' }}>Penyimpanan</span><span><code>OmniClip_Storage/</code></span>
+          <span style={{ color: 'var(--text-muted)' }}>{t('set.versi')}</span><span>OmniClip {versiApp || '…'}</span>
+          <span style={{ color: 'var(--text-muted)' }}>{t('set.mode')}</span><span>{t('set.mode_ket')}</span>
+          <span style={{ color: 'var(--text-muted)' }}>{t('set.penyimpanan')}</span><span><code>OmniClip_Storage/</code></span>
         </div>
       </div>
-      </Kelompok>
-    </div>
+    </>
+  );
+
+  return (
+    <HalamanSetelan
+      kelas={ringkas ? 'ringkas' : ''}
+      judul={t('set.judul')}
+      sub={t('set.sub')}
+      aksi={tombolRingkas}
+      bagian={[
+        { id: 'klip', judul: t('set.b_klip'), nota: t('set.b_klip_nota'), Ikon: Scissors, isi: klipIsi },
+        { id: 'subtitle', judul: t('set.b_subtitle'), nota: t('set.b_subtitle_nota'), Ikon: Captions, isi: subtitleIsi },
+        { id: 'suara', judul: t('set.b_suara'), nota: t('set.b_suara_nota'), Ikon: Volume2, isi: suaraIsi },
+        { id: 'tampilan', judul: t('set.b_tampilan'), nota: t('set.b_tampilan_nota'), Ikon: Palette, isi: tampilanIsi },
+        { id: 'ai', judul: t('set.b_ai'), nota: t('set.b_ai_nota'), Ikon: Sparkles, isi: aiIsi },
+        { id: 'lain', judul: t('set.b_lain'), nota: t('set.b_lain_nota'), Ikon: Info, isi: lainIsi },
+      ]}
+    />
   );
 }

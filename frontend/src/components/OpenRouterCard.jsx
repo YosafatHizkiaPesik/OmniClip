@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Eye, EyeOff, Info, Loader2, LifeBuoy, Trash2 } from 'lucide-react';
 import { apiDelete, apiGet, apiPost } from '../lib/api';
+import { tebal, useT } from '../lib/i18n';
 
 /**
  * Kunci cadangan OpenRouter.
@@ -11,6 +12,7 @@ import { apiDelete, apiGet, apiPost } from '../lib/api';
  * menangkapnya saat jatuh.
  */
 export default function OpenRouterCard({ card, sectionTitle, helpText }) {
+  const t = useT();
   const [info, setInfo] = useState(null);
   const [kunci, setKunci] = useState('');
   const [lihat, setLihat] = useState(false);
@@ -29,7 +31,7 @@ export default function OpenRouterCard({ card, sectionTitle, helpText }) {
     try {
       const r = await apiPost('/settings/openrouter-key', { api_key: nilai, provider: 'gemini' });
       setKunci('');
-      setKabar({ ok: true, teks: r.message || 'Tersimpan.' });
+      setKabar({ ok: true, teks: r.message || t('akun.tersimpan') });
       muat();
     } catch (e) {
       setKabar({ ok: false, teks: e.message });
@@ -42,7 +44,7 @@ export default function OpenRouterCard({ card, sectionTitle, helpText }) {
     setHapus(true);
     try {
       await apiDelete('/settings/openrouter-key');
-      setKabar({ ok: true, teks: 'Kunci OpenRouter dihapus.' });
+      setKabar({ ok: true, teks: t('or.dihapus') });
       muat();
     } catch (e) {
       setKabar({ ok: false, teks: e.message });
@@ -78,19 +80,13 @@ export default function OpenRouterCard({ card, sectionTitle, helpText }) {
     <div style={card}>
       <div style={sectionTitle}>
         <LifeBuoy size={18} style={{ color: 'var(--reh)' }} />
-        Cadangan bila Gemini tidak bisa dipakai
+        {t('or.judul')}
       </div>
       <p className="bantu" style={helpText}>
-        Opsional, tapi ini yang menyelamatkan hari buruk. Kuota gratis Gemini
-        terbatas per hari, dan servernya sendiri bisa menjawab "sedang sibuk"
-        berjam-jam. Saat itu terjadi, <strong>pemilihan klip</strong> dan{' '}
-        <strong>penyusunan bingkai</strong> jatuh ke mesin lokal: momennya tetap
-        ditemukan, tapi tidak ada yang menilai apakah momen itu lucu atau
-        mengejutkan, dan daftar klipnya terasa datar. Dengan kunci{' '}
+        {tebal(t('or.ket_a'))}{' '}
         <a href="https://openrouter.ai/keys" target="_blank" rel="noreferrer"
            style={{ color: 'var(--reh)' }}>openrouter.ai</a>{' '}
-        OmniClip pindah sendiri ke model gratis di sana. Gemini tetap yang
-        dicoba lebih dulu selama masih bisa.
+        {t('or.ket_b')}
       </p>
 
       {info && (
@@ -98,12 +94,12 @@ export default function OpenRouterCard({ card, sectionTitle, helpText }) {
           {info.openrouter_key_set ? (
             <>
               <CheckCircle2 size={15} style={{ color: 'var(--entry)' }} />
-              Tersimpan (berakhiran <code>{info.openrouter_key_last4}</code>)
+              {t('set.tersimpan_akhiran')} <code>{info.openrouter_key_last4}</code>)
             </>
           ) : (
             <>
               <Info size={15} style={{ color: 'var(--text-muted)' }} />
-              Belum diisi. Saat Gemini sibuk atau kuotanya habis, pemilihan klip dan penyusunan bingkai jatuh ke mesin lokal.
+              {t('or.belum')}
             </>
           )}
         </div>
@@ -116,7 +112,7 @@ export default function OpenRouterCard({ card, sectionTitle, helpText }) {
             value={kunci}
             onChange={(e) => setKunci(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && simpanKunci()}
-            placeholder="Tempel kunci OpenRouter di sini…"
+            placeholder={t('or.placeholder')}
             style={{
               width: '100%', padding: '11px 40px 11px 14px',
               borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)',
@@ -125,7 +121,7 @@ export default function OpenRouterCard({ card, sectionTitle, helpText }) {
             }}
           />
           <button type="button" onClick={() => setLihat((v) => !v)}
-                  aria-label={lihat ? 'Sembunyikan kunci' : 'Tampilkan kunci'}
+                  aria-label={lihat ? t('or.sembunyi') : t('or.tampil')}
                   style={{
                     position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)',
                     background: 'none', border: 'none', cursor: 'pointer',
@@ -137,7 +133,7 @@ export default function OpenRouterCard({ card, sectionTitle, helpText }) {
         <button className="btn-primary" onClick={simpanKunci}
                 disabled={simpan || !kunci.trim()}
                 style={{ opacity: simpan || !kunci.trim() ? 0.5 : 1, whiteSpace: 'nowrap' }}>
-          {simpan ? <Loader2 size={15} className="animate-spin" /> : 'Simpan'}
+          {simpan ? <Loader2 size={15} className="animate-spin" /> : t('umum.simpan')}
         </button>
       </div>
 
@@ -150,7 +146,7 @@ export default function OpenRouterCard({ card, sectionTitle, helpText }) {
                   color: 'var(--danger)', opacity: hapus ? 0.5 : 1,
                 }}>
           {hapus ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-          Hapus kunci ini
+          {t('set.hapus_kunci')}
         </button>
       )}
 
@@ -163,19 +159,16 @@ export default function OpenRouterCard({ card, sectionTitle, helpText }) {
                     background: 'transparent', color: 'var(--ink)',
                   }}>
             <option value="">
-              Otomatis (yang paling cocok){info?.terkuat ? ` (sekarang ${info.terkuat})` : ''}
+              {t('or.otomatis')}{info?.terkuat ? t('or.sekarang', { model: info.terkuat }) : ''}
             </option>
             {daftar.map((m) => (
               <option key={m.id} value={m.id}>
-                {m.id}{m.video ? ' · bisa menonton video' : ' · hanya gambar'}{m.suara ? ' + suara' : ''}
+                {m.id}{m.video ? t('or.video') : t('or.gambar')}{m.suara ? t('or.suara') : ''}
               </option>
             ))}
           </select>
           <p style={{ ...helpText, marginTop: '10px' }}>
-            Hanya model <strong>gratis</strong> yang ditampilkan, diurutkan dari yang
-            paling cocok: yang bisa menonton video dan mendengar suaranya lebih dulu,
-            karena tawa lebih jelas terdengar daripada terlihat. Model berbayar tidak
-            pernah dipilih sendiri.
+            {tebal(t('or.gratis'))}
           </p>
         </div>
       )}
@@ -188,12 +181,9 @@ export default function OpenRouterCard({ card, sectionTitle, helpText }) {
                onChange={(e) => sakelarBingkai(e.target.checked)}
                style={{ marginTop: '3px', width: '16px', height: '16px', accentColor: 'var(--reh)' }} />
         <span style={{ ...helpText, color: 'var(--text-primary)' }}>
-          <strong>Susun bingkai sendiri sesudah mengklip.</strong>
+          <strong>{t('or.bingkai')}</strong>
           <span className="bantu">{' '}
-          Tanpa ini, bingkai reaksi baru disusun saat Anda menekan tombolnya di Studio.
-          Dengan ini, 6 klip pertama tiap video sudah berbingkai saat dibuka. Sengaja
-          mati sejak awal: tiap klip memakai satu panggilan model, dari kuota harian
-          yang sama dengan yang dipakai untuk memilih klip video berikutnya.
+          {t('or.bingkai_ket')}
           </span>
         </span>
       </label>

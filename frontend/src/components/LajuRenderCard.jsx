@@ -2,19 +2,13 @@ import React, { useEffect, useState } from 'react';
 import { Gauge } from 'lucide-react';
 import { apiGet, apiPost } from '../lib/api';
 
+import { useT } from '../lib/i18n';
 const PILIHAN = [
   {
-    id: 'sumber', label: 'Ikut video aslinya',
-    nota: 'Rekaman 60 fps keluar 60 fps. Untuk klip permainan ini perbedaan '
-        + 'mutu yang paling kelihatan di layar, jauh lebih terasa daripada '
-        + 'bitrate. Harganya: render memakan waktu lebih lama, karena setiap '
-        + 'potong, skala, dan kabur dikerjakan dua kali lebih sering.',
+    id: 'sumber', label: 'fps.sumber', nota: 'fps.sumber_ket',
   },
   {
-    id: '30', label: 'Selalu 30 fps',
-    nota: 'Render paling cepat, dan untuk klip bicara hampir tidak ada bedanya '
-        + 'di mata. Untuk permainan cepat, gerakannya akan terlihat lebih '
-        + 'patah-patah daripada rekaman aslinya.',
+    id: '30', label: 'fps.30', nota: 'fps.30_ket',
   },
 ];
 
@@ -32,6 +26,7 @@ const PILIHAN = [
  * 60 fps.
  */
 export default function LajuRenderCard({ card, sectionTitle, helpText }) {
+  const t = useT();
   const [nilai, setNilai] = useState(null);
   const [kabar, setKabar] = useState(null);
 
@@ -45,7 +40,7 @@ export default function LajuRenderCard({ card, sectionTitle, helpText }) {
     setNilai(v);
     try {
       await apiPost('/settings/render-fps', { nilai: v });
-      setKabar('Tersimpan. Berlaku untuk render berikutnya.');
+      setKabar(t('umum.tersimpan_render'));
       setTimeout(() => setKabar(null), 2500);
     } catch (e) {
       setNilai(sebelumnya);
@@ -57,11 +52,10 @@ export default function LajuRenderCard({ card, sectionTitle, helpText }) {
     <div style={card}>
       <div style={sectionTitle}>
         <Gauge size={18} style={{ color: 'var(--reh)' }} />
-        Laju bingkai render
+        {t('fps.judul')}
       </div>
       <p className="bantu" style={helpText}>
-        Berapa bingkai per detik yang keluar dari render. Tidak menyentuh
-        resolusi maupun bitrate, yang selalu 1080x1920 pada mutu penuh.
+        {t('fps.ket')}
       </p>
       <div style={{ marginTop: '10px' }}>
         {PILIHAN.map((p) => (
@@ -73,8 +67,8 @@ export default function LajuRenderCard({ card, sectionTitle, helpText }) {
                    onChange={() => pilih(p.id)} disabled={nilai === null}
                    style={{ marginTop: '3px', accentColor: 'var(--reh)' }} />
             <span>
-              <span style={{ fontSize: '0.79rem', fontWeight: 700 }}>{p.label}</span>
-              <span style={{ ...helpText, display: 'block', marginTop: '2px' }}>{p.nota}</span>
+              <span style={{ fontSize: '0.79rem', fontWeight: 700 }}>{t(p.label)}</span>
+              <span style={{ ...helpText, display: 'block', marginTop: '2px' }}>{t(p.nota)}</span>
             </span>
           </label>
         ))}

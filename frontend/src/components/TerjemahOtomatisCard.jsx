@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Languages } from 'lucide-react';
 import { apiGet, apiPost } from '../lib/api';
+import { useT } from '../lib/i18n';
 
 /**
  * Terjemahan otomatis untuk video berbahasa asing.
@@ -10,6 +11,7 @@ import { apiGet, apiPost } from '../lib/api';
  * subtitle kedua, langsung saat video dianalisis.
  */
 export default function TerjemahOtomatisCard({ card, sectionTitle, helpText }) {
+  const t = useT();
   const [bahasa, setBahasa] = useState(null);
   const [daftar, setDaftar] = useState([]);
   const [simpan, setSimpan] = useState(null);
@@ -23,32 +25,30 @@ export default function TerjemahOtomatisCard({ card, sectionTitle, helpText }) {
     setBahasa(v);
     try {
       await apiPost('/settings/terjemah-otomatis', { bahasa: v });
-      setSimpan('Tersimpan.');
+      setSimpan(t('akun.tersimpan'));
       setTimeout(() => setSimpan(null), 2000);
     } catch (e) {
       setSimpan(e.message);
     }
   };
 
-  const pilihan = daftar.length ? daftar : [{ code: 'id', label: 'Indonesia' }, { code: 'en', label: 'Inggris' }];
+  const pilihan = daftar.length ? daftar : [{ code: 'id', label: t('bahasa.indonesia') }, { code: 'en', label: t('bahasa.inggris') }];
   return (
     <div style={card}>
       <div style={sectionTitle}>
         <Languages size={18} style={{ color: 'var(--reh)' }} />
-        Terjemahan otomatis
+        {t('to.judul')}
       </div>
       <p className="bantu" style={helpText}>
-        Video yang bahasanya berbeda, misalnya anime berbahasa Jepang, langsung
-        diberi subtitle terjemahan di bawah subtitle aslinya saat dianalisis. Tanpa
-        kunci Gemini pun tetap jalan (lewat Google Terjemahan).
+        {t('to.ket')}
       </p>
       <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '10px', flexWrap: 'wrap' }}>
         <select value={bahasa ?? ''} disabled={bahasa === null} onChange={(e) => pilih(e.target.value)}
                 style={{ padding: '7px 10px', fontSize: '0.8rem', fontFamily: 'inherit',
                          borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)',
                          background: 'transparent', color: 'var(--ink)' }}>
-          <option value="">Mati (hanya subtitle asli)</option>
-          {pilihan.map((b) => <option key={b.code} value={b.code}>Terjemahkan ke {b.label}</option>)}
+          <option value="">{t('to.mati')}</option>
+          {pilihan.map((b) => <option key={b.code} value={b.code}>{t('to.ke', { bahasa: b.label })}</option>)}
         </select>
         {simpan && <span className="bantu" style={helpText}>{simpan}</span>}
       </div>

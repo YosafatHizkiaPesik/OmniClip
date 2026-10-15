@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { apiGet, apiPost } from '../lib/api';
 
+import { useT } from '../lib/i18n';
 /**
  * Sakelar sensor kata kasar, dipakai di dua tempat.
  *
@@ -14,6 +15,7 @@ import { apiGet, apiPost } from '../lib/api';
  * pratinjau; suaranya tidak disentuh.
  */
 export default function SakelarSensor({ ringkas = false }) {
+  const t = useT();
   const [aktif, setAktif] = useState(null);
   const [sibuk, setSibuk] = useState(false);
 
@@ -49,7 +51,7 @@ export default function SakelarSensor({ ringkas = false }) {
         <input type="checkbox" checked={menyala} disabled={aktif === null || sibuk}
                onChange={(e) => ubah(e.target.checked)}
                style={{ width: '15px', height: '15px', flex: 'none' }} />
-        <b style={{ fontSize: '0.82rem', flex: 1 }}>Sensor kata kasar</b>
+        <b style={{ fontSize: '0.82rem', flex: 1 }}>{t('sensor.judul')}</b>
         {sibuk && <Loader2 size={12} className="animate-spin" style={{ color: 'var(--ink-3)' }} />}
         <span style={{
           fontSize: '0.64rem', fontWeight: 800, padding: '2px 8px', borderRadius: '99px',
@@ -57,23 +59,19 @@ export default function SakelarSensor({ ringkas = false }) {
           background: menyala ? 'var(--reh)' : 'var(--bg-glass)',
           color: menyala ? '#fff' : 'var(--text-muted)',
         }}>
-          {aktif === null ? '…' : menyala ? 'NYALA' : 'MATI'}
+          {aktif === null ? '…' : menyala ? t('umum.nyala') : t('umum.mati')}
         </span>
       </label>
       <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: '6px 0 0',
                   lineHeight: 1.55 }}>
         {menyala
-          ? 'Umpatan keras ditutup satu huruf di tengahnya: "anjing" jadi "anj*ng". '
-            + 'Penonton tetap membacanya, tapi mesin penyaring tidak menemukan kata '
-            + 'utuhnya. Suaranya tidak disentuh.'
-          : 'Teks ditampilkan apa adanya. Klip yang subtitle-nya memuat umpatan utuh '
-            + 'sering diturunkan jangkauannya oleh YouTube, TikTok, dan Instagram.'}
+          ? t('sensor.nyala')
+          : t('sensor.mati')}
       </p>
       {!ringkas && (
         <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', margin: '6px 0 0',
                     lineHeight: 1.5 }}>
-          Umpatan ringan sengaja dibiarkan: babi, cok, cuk, anjir, bodoh, bego,
-          setan, gila.
+          {t('sensor.ringan')}
         </p>
       )}
     </div>
