@@ -1519,25 +1519,52 @@ def _warna_ff(warna: str, bawaan: str = "white") -> str:
     return w
 
 
+# Lebar rata-rata satu huruf sebagai pecahan tinggi huruf. Archivo Black yang
+# dipakai bawaan termasuk lebar; 0,62 diukur dari "Kai Cenat shows Tota around
+# the States" pada 3,2% x 1920 = 61 px, yang terbaca 1 570 px utuh.
+TEKS_LEBAR_HURUF = 0.62
+TEKS_JARAK_BARIS = 1.25
+
+
+def bungkus_teks(teks: str, per_baris: int, maks_baris: int = 4) -> list[str]:
+    """Memecah teks per kata supaya tiap baris muat; kata panjang tidak dipotong."""
+    baris: list[str] = []
+    kini = ""
+    for kata in str(teks or "").split():
+        if kini and len(kini) + 1 + len(kata) > per_baris:
+            baris.append(kini)
+            kini = kata
+        else:
+            kini = f"{kini} {kata}".strip()
+    if kini:
+        baris.append(kini)
+    if len(baris) > maks_baris:
+        baris = baris[:maks_baris - 1] + [" ".join(baris[maks_baris - 1:])]
+    return baris or [""]
+
+
 def _graf_teks(bagian: list[str], l: dict, video: str, i: int,
                out_w: int, out_h: int) -> str:
-    """Satu `drawtext` untuk sebuah sisipan teks. Mengembalikan label barunya."""
+    """
+    `drawtext` untuk sebuah sisipan teks. Mengembalikan label barunya.
+
+    Teks yang lebih lebar daripada petaknya DIBUNGKUS ke beberapa baris, satu
+    `drawtext` per baris (drawtext tidak membungkus sendiri). Sampai 12 Oktober
+    2026 sisipan Tulisan selalu satu baris, dan kartu konteks "Kai Cenat shows
+    Tota around the States" pada kanvas 9:16 terpotong di kedua tepi layar.
+    """
     from .fonts import _berkas_keluarga
 
     t0, dur = float(l["t"]), float(l["dur"])
     t1 = t0 + dur
     tinggi = max(8, int(round(out_h * float(l.get("ukuran") or TEKS_UKURAN_BAWAAN) / 100.0)))
     x, y, w, h = petak_sisipan(l, out_w, out_h)
-    # Di tengah petaknya, tapi TIDAK PERNAH keluar kanvas.
-    #
-    # Tulisan bisa lebih lebar daripada petaknya — "@namakanal" pada preset
-    # sudut sudah cukup — dan tanpa kurungan ini ujungnya terpotong di tepi
-    # layar. Terlihat pada render uji 30 September 2026. Komanya dikawal karena
-    # di dalam nilai opsi `drawtext` koma memisahkan filter.
-    tengah_x = f"{x}+({w}-text_w)/2"
-    tengah_y = f"{y}+({h}-text_h)/2"
-    px = f"max(0\\,min({out_w}-text_w\\,{tengah_x}))"
-    py = f"max(0\\,min({out_h}-text_h\\,{tengah_y}))"
+    tebal = float(l.get("tebal_garis") or 0.0)
+    latar = str(l.get("latar") or "").strip()
+    tepi = max(4, tinggi // 5) if latar else int(round(tebal))
+    lebar_muat = max(tinggi * 4, min(w, out_w) * 0.9 - 2 * tepi)
+    per_baris = max(4, int(lebar_muat / (tinggi * TEKS_LEBAR_HURUF)))
+    baris = bungkus_teks(str(l.get("teks") or ""), per_baris)
 
     # Alfa yang berubah menurut waktu: ketembusan, lembut masuk, lembut keluar,
     # ketiganya dalam satu ungkapan. Waktunya waktu KLIP, karena `drawtext`
@@ -1551,28 +1578,40 @@ def _graf_teks(bagian: list[str], l: dict, video: str, i: int,
     if fo > 0:
         alfa = f"if(gt(t,{t1 - fo:.3f}),({t1:.3f}-t)/{fo:.3f}*{op:.3f},{alfa})"
 
-    opsi = [
-        f"text='{_lolos_teks(str(l.get('teks') or ''))}'",
-        f"fontsize={tinggi}",
-        f"fontcolor={_warna_ff(l.get('warna'), 'white')}",
-        f"x={px}", f"y={py}",
-        f"alpha='{alfa}'",
-        f"enable='between(t,{t0:.3f},{t1:.3f})'",
-    ]
     berkas = _berkas_keluarga(str(l.get("keluarga") or ""))
-    if berkas and Path(berkas).is_file():
-        opsi.append(f"fontfile='{ffpath(Path(berkas))}'")
-    tebal = float(l.get("tebal_garis") or 0.0)
-    if tebal > 0:
-        opsi.append(f"borderw={int(round(tebal))}")
-        opsi.append(f"bordercolor={_warna_ff(l.get('garis'), 'black')}")
-    latar = str(l.get("latar") or "").strip()
-    if latar:
-        opsi.append("box=1")
-        opsi.append(f"boxcolor={_warna_ff(latar, 'black')}@0.55")
-        opsi.append(f"boxborderw={max(4, tinggi // 5)}")
-    keluar = f"[svt{i}]"
-    bagian.append(f"{video}drawtext={':'.join(opsi)}{keluar}")
+    langkah = int(round(tinggi * TEKS_JARAK_BARIS))
+    total = langkah * (len(baris) - 1) + tinggi
+    keluar = video
+    for k, isi in enumerate(baris):
+        # Di tengah petaknya, tapi TIDAK PERNAH keluar kanvas. Komanya dikawal
+        # karena di dalam nilai opsi `drawtext` koma memisahkan filter.
+        tengah_x = f"{x}+({w}-text_w)/2"
+        if len(baris) == 1:
+            tengah_y = f"{y}+({h}-text_h)/2"
+        else:
+            tengah_y = f"{y}+({h}-{total})/2+{k * langkah}"
+        px = f"max(0\\,min({out_w}-text_w\\,{tengah_x}))"
+        py = f"max(0\\,min({out_h}-text_h\\,{tengah_y}))"
+        opsi = [
+            f"text='{_lolos_teks(isi)}'",
+            f"fontsize={tinggi}",
+            f"fontcolor={_warna_ff(l.get('warna'), 'white')}",
+            f"x={px}", f"y={py}",
+            f"alpha='{alfa}'",
+            f"enable='between(t,{t0:.3f},{t1:.3f})'",
+        ]
+        if berkas and Path(berkas).is_file():
+            opsi.append(f"fontfile='{ffpath(Path(berkas))}'")
+        if tebal > 0:
+            opsi.append(f"borderw={int(round(tebal))}")
+            opsi.append(f"bordercolor={_warna_ff(l.get('garis'), 'black')}")
+        if latar:
+            opsi.append("box=1")
+            opsi.append(f"boxcolor={_warna_ff(latar, 'black')}@0.55")
+            opsi.append(f"boxborderw={max(4, tinggi // 5)}")
+        label = f"[svt{i}]" if k == len(baris) - 1 else f"[svt{i}b{k}]"
+        bagian.append(f"{keluar}drawtext={':'.join(opsi)}{label}")
+        keluar = label
     return keluar
 
 

@@ -36,5 +36,24 @@ class SisipanTeks(unittest.TestCase):
         self.assertEqual(MediaLayerModel(aset="0123456789abcdef").aset, "0123456789abcdef")
 
 
+
+class Bungkus(unittest.TestCase):
+    def test_teks_panjang_dipecah_per_kata(self):
+        from app.services.render import bungkus_teks
+        b = bungkus_teks("Kai Cenat shows Tota around the States", 20)
+        self.assertEqual(b, ["Kai Cenat shows Tota", "around the States"])
+        self.assertEqual(bungkus_teks("@namakanal", 20), ["@namakanal"])
+        self.assertEqual(len(bungkus_teks("a " * 100, 10, maks_baris=3)), 3)
+
+    def test_graf_satu_drawtext_per_baris(self):
+        l = siapkan_sisipan([dict(TULISAN, teks="Kai Cenat shows Tota around the States",
+                                  posisi="atas", ukuran=3.2, rect=None)], 10.0)
+        from app.services.render import build_sisipan_graph
+        _, graf, v, _ = build_sisipan_graph(l, "[0:v]", "[0:a]", input_awal=1,
+                                            out_w=1080, out_h=1920)
+        self.assertEqual(graf.count("drawtext="), 2)
+        self.assertEqual(v, "[svt0]")
+
+
 if __name__ == "__main__":
     unittest.main()
