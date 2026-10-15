@@ -16,6 +16,10 @@ sendiri; jangan pakai `--amend` untuk itu, hash-nya berubah dan catatannya
 jadi menunjuk commit yang tidak ada. Urutan yang disepakati pemilik: **Fase 0, lalu
 Fase 1**, baru Fase 2 dan 3.
 
+**Sesudah v1.3.7:** yang masih kurang dan daftar tes untuk pemilik ada di
+`UJI-LANGSUNG.md`. Baca berkas itu saat pemilik bertanya "apa yang kurang" atau
+"apa yang harus saya tes".
+
 ---
 
 ## Kenapa JOB-2 ada
