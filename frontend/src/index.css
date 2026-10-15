@@ -1687,3 +1687,20 @@ body.is-studio .app-viewport,
   font-size: .8rem; background: var(--bg-card); border: 1px solid var(--border-color);
   box-shadow: 0 6px 24px rgba(0, 0, 0, .35);
 }
+
+/* Topik beranda gaya YouTube (JOB-3): pil dengan ikon berwarna khas tiap
+   topik; yang aktif terbalik, putih dengan teks gelap, seperti chip YouTube. */
+.topik {
+  display: inline-flex; align-items: center; gap: 7px; flex: none; cursor: pointer;
+  padding: 8px 15px; border-radius: 999px; font: inherit; font-size: .86rem; font-weight: 650;
+  color: var(--ink); background: var(--plate-2); border: 1px solid var(--border-color);
+  transition: background .15s ease, transform .15s ease, border-color .15s ease;
+}
+.topik:hover {
+  background: color-mix(in srgb, var(--warna-topik) 16%, var(--plate-2));
+  border-color: color-mix(in srgb, var(--warna-topik) 55%, transparent);
+  transform: translateY(-1px);
+}
+.topik-ikon { color: var(--warna-topik); }
+.topik.is-on { background: var(--ink); color: var(--ground); border-color: var(--ink); }
+.topik.is-on .topik-ikon { color: var(--warna-topik); }

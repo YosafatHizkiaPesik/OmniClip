@@ -24,8 +24,10 @@ import { useChannelInfo } from '../lib/avatarChannel';
  */
 export function formatAge(uploadDate) {
   if (!uploadDate || !/^\d{8}$/.test(String(uploadDate))) return '';
-  const t = String(uploadDate);
-  const then = new Date(+t.slice(0, 4), +t.slice(4, 6) - 1, +t.slice(6, 8));
+  // Bukan `t`: nama itu fungsi terjemahan, dan menutupinya di sini membuat
+  // Beranda pecah ("t is not a function") begitu tanggal unggah datang.
+  const tgl = String(uploadDate);
+  const then = new Date(+tgl.slice(0, 4), +tgl.slice(4, 6) - 1, +tgl.slice(6, 8));
   const days = Math.floor((Date.now() - then.getTime()) / 86400000);
   if (!Number.isFinite(days) || days < 0) return '';
   if (days < 1) return t('umur.hari_ini');

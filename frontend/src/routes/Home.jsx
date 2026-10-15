@@ -1,6 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Loader2, Video, RefreshCw, X, Scissors, CheckCircle2 } from 'lucide-react';
+import {
+  Loader2, Video, RefreshCw, X, Scissors, CheckCircle2, Flame, Mic, MessagesSquare, GraduationCap,
+  Gamepad2, Music2, Cpu, TrendingUp, Laugh, UtensilsCrossed, Plane,
+} from 'lucide-react';
+import { bahasa, useT } from '../lib/i18n';
 import { apiGet, apiPost } from '../lib/api';
 import { VideoCard } from '../components/VideoCards';
 import CookiesAwal from '../components/CookiesAwal';
@@ -9,22 +13,22 @@ import CookiesAwal from '../components/CookiesAwal';
 // hasil ke tahun yang sudah lewat.
 // Emoji dibuang: ia bukan sistem ikon, dan sebelas emoji dari sebelas keluarga
 // gambar yang berbeda membuat baris ini terbaca sebagai tempelan, bukan kendali.
+// Topik beranda (JOB-3): pil gaya YouTube dengan ikon dan warna khas.
+// Kata kuncinya mengikuti bahasa pilihan: mode Inggris mencari video
+// berbahasa Inggris. Untuk Gaming, BUKAN "gaming highlights": di YouTube
+// Indonesia kata "highlights" dikuasai sorotan olahraga (5 dari 6 hasil).
 const CATEGORIES = [
-  { label: 'Trending', query: 'trending viral indonesia' },
-  { label: 'Podcast', query: 'podcast indonesia terbaru' },
-  { label: 'Wawancara', query: 'wawancara eksklusif indonesia' },
-  { label: 'Edukasi', query: 'edukasi menarik indonesia' },
-  // BUKAN "gaming highlights": di YouTube Indonesia kata "highlights"
-  // dikuasai sorotan sepak bola dan basket, dan kuerinya mengembalikan
-  // Asian Games, bukan permainan. Diuji langsung: 5 dari 6 hasil teratas
-  // adalah olahraga.
-  { label: 'Gaming', query: 'gameplay game indonesia' },
-  { label: 'Musik', query: 'musik viral indonesia' },
-  { label: 'Tech', query: 'teknologi AI indonesia' },
-  { label: 'Finance', query: 'investasi tips keuangan indonesia' },
-  { label: 'Komedi', query: 'komedi lucu indonesia' },
-  { label: 'Kuliner', query: 'kuliner makanan enak indonesia' },
-  { label: 'Travel', query: 'travel wisata indonesia' },
+  { kunci: 'trending', Icon: Flame, warna: '#FF4D4D', q: { id: 'trending viral indonesia', en: 'trending viral today' } },
+  { kunci: 'podcast', Icon: Mic, warna: '#A78BFA', q: { id: 'podcast indonesia terbaru', en: 'podcast full episode' } },
+  { kunci: 'wawancara', Icon: MessagesSquare, warna: '#60A5FA', q: { id: 'wawancara eksklusif indonesia', en: 'exclusive interview' } },
+  { kunci: 'edukasi', Icon: GraduationCap, warna: '#34D399', q: { id: 'edukasi menarik indonesia', en: 'educational explained' } },
+  { kunci: 'gaming', Icon: Gamepad2, warna: '#F472B6', q: { id: 'gameplay game indonesia', en: 'gameplay walkthrough funny' } },
+  { kunci: 'musik', Icon: Music2, warna: '#FBBF24', q: { id: 'musik viral indonesia', en: 'music video viral' } },
+  { kunci: 'tech', Icon: Cpu, warna: '#22D3EE', q: { id: 'teknologi AI indonesia', en: 'tech AI news' } },
+  { kunci: 'finance', Icon: TrendingUp, warna: '#4ADE80', q: { id: 'investasi tips keuangan indonesia', en: 'investing personal finance' } },
+  { kunci: 'komedi', Icon: Laugh, warna: '#FB923C', q: { id: 'komedi lucu indonesia', en: 'stand up comedy' } },
+  { kunci: 'kuliner', Icon: UtensilsCrossed, warna: '#F87171', q: { id: 'kuliner makanan enak indonesia', en: 'street food tour' } },
+  { kunci: 'travel', Icon: Plane, warna: '#38BDF8', q: { id: 'travel wisata indonesia', en: 'travel vlog' } },
 ];
 
 /**
@@ -152,7 +156,10 @@ export default function Home() {
       ? `/search?q=${encodeURIComponent(q)}&limit=${batas}&sort=${sort}`
         + (durasi ? `&durasi=${durasi}` : '') + (tanggal ? `&tanggal=${tanggal}` : '')
       : `/trending?limit=${batas}&refresh=${nonce}`;
-    apiGet(path)
+    // 75 detik, bukan 30: beranda menunggu beberapa pencarian YouTube, dan
+    // saat sambungan ke youtube.com tersendat server tetap selesai menyusun
+    // tapi lewat 30 detik (15 Oktober 2026).
+    apiGet(path, { timeout: 75000 })
       .then((data) => {
         if (batal) return;
         const datang = Array.isArray(data) ? data : [];
@@ -233,7 +240,9 @@ export default function Home() {
   }, [habis, loading, feed.length, batas]);
 
 
-  const activeCategory = CATEGORIES.findIndex((c) => c.query === q);
+  const t = useT();
+  const kueriTopik = (c) => c.q[bahasa()] ?? c.q.id;
+  const activeCategory = CATEGORIES.findIndex((c) => Object.values(c.q).includes(q));
 
   // Urutan dikerjakan YouTube, bukan diurutkan ulang di sini: tanpa tanggal
   // unggah di hasil pencarian, "terbaru" mustahil dijawab dari data yang ada.
@@ -267,15 +276,16 @@ export default function Home() {
             <RefreshCw size={13} className={loading ? 'animate-spin' : undefined} />
           </button>
         )}
-        {CATEGORIES.map((cat, i) => (
-          <button
-            key={cat.label}
-            onClick={() => setParams({ q: cat.query })}
-            className={`chip${activeCategory === i ? ' is-on' : ''}`}
-          >
-            {cat.label}
-          </button>
-        ))}
+        {CATEGORIES.map((cat, i) => {
+          const aktif = activeCategory === i;
+          return (
+            <button key={cat.kunci} onClick={() => setParams({ q: kueriTopik(cat) })}
+                    className={`topik${aktif ? ' is-on' : ''}`} style={{ '--warna-topik': cat.warna }}>
+              <cat.Icon size={15} strokeWidth={2.2} className="topik-ikon" />
+              {t(`topik.${cat.kunci}`)}
+            </button>
+          );
+        })}
       </div>
 
       {/* Urutan hanya berlaku untuk pencarian: beranda tanpa kata kunci sudah
