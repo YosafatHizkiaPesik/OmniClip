@@ -6,6 +6,7 @@ import {
 } from './frames';
 import { beginRectDrag } from './rectDrag';
 import BilahBingkaiKlip from './BilahBingkaiKlip';
+import { useT } from '../../lib/i18n';
 
 /**
  * Meja bingkai: video sumber seutuhnya, dengan kotak yang menandai apa yang
@@ -55,6 +56,7 @@ export default function FrameStage({
   gamingKabar = null,
   onCariUlangGaming = null,
 }) {
+  const t = useT();
   const mirrorRef = useRef(null);
   const boxRef = useRef(null);
   const cropRef = useRef(null);
@@ -116,13 +118,13 @@ export default function FrameStage({
   const cropXAt = useMemo(() => {
     const kf = reframe?.keyframes;
     if (!kf?.length || (frameMode !== 'smart' && frameMode !== 'motion')) return null;
-    return (t) => {
-      if (t <= kf[0][0]) return kf[0][1];
+    return (detik) => {
+      if (detik <= kf[0][0]) return kf[0][1];
       let lo = 0;
       let hi = kf.length - 1;
       while (lo < hi) {
         const mid = Math.ceil((lo + hi) / 2);
-        if (kf[mid][0] <= t) lo = mid;
+        if (kf[mid][0] <= detik) lo = mid;
         else hi = mid - 1;
       }
       return kf[lo][1];
@@ -177,10 +179,10 @@ export default function FrameStage({
         // Kotak ikut-wajah digerakkan lewat ref, bukan state: pada 60 fps,
         // me-render ulang pohon komponen tiap frame akan membuat seluruh
         // editor terasa berat.
-        const t = clipTimeFor(segments, main.currentTime);
+        const tk = clipTimeFor(segments, main.currentTime);
         const c = cropRef.current;
         if (c && cropXAt && reframe?.source_w) {
-          const x = cropXAt(t);
+          const x = cropXAt(tk);
           c.style.left = `${(x / reframe.source_w) * 100}%`;
         }
 
@@ -193,11 +195,11 @@ export default function FrameStage({
         // terlihat sekali, penandanya berdiri selamanya di posisi terakhirnya —
         // yang di rekaman dua kamera berarti "orang 2" mengambang di atas kursi
         // kosong sepanjang sisa klip.
-        const aimed = personKeyAt(personKeys, t);
+        const aimed = personKeyAt(personKeys, tk);
         // Siapa yang terlihat TEPAT sekarang, dan di mana. Dihitung sekali
         // per bingkai, bukan per penanda.
         const fps = reframe?.people_fps || 8;
-        const si = Math.max(0, Math.round(t * fps));
+        const si = Math.max(0, Math.round(tk * fps));
         const segar = (reframe?.people ?? []).map((_, i) => {
           const lane = reframe?.people_seen?.[i];
           return lane ? !!lane[Math.min(si, lane.length - 1)] : true;
@@ -209,7 +211,7 @@ export default function FrameStage({
         for (const [key, el] of Object.entries(personRefs.current)) {
           if (!el) continue;
           const idx = Number(key);
-          const v = personAt(reframe, idx, t);
+          const v = personAt(reframe, idx, tk);
           // Penanda yang posisinya sudah basi disembunyikan bila ia jatuh
           // menimpa penanda orang lain yang sedang benar-benar terlihat.
           //
@@ -293,7 +295,7 @@ export default function FrameStage({
     const target = { '9:16': 9 / 16, '1:1': 1, '4:5': 4 / 5, '16:9': 16 / 9 }[aspectRatio] ?? 9 / 16;
     if (frameMode === 'center') {
       const w = Math.min(100, (target / aspect) * 100);
-      return { x: (100 - w) / 2, y: 0, w, h: 100, label: 'Potong tengah' };
+      return { x: (100 - w) / 2, y: 0, w, h: 100, label: 'bingkai.label_center' };
     }
     // Kotak tetap: gambar kotak yang BENAR-BENAR akan dipotong ffmpeg. Tanpa
     // ini, memilih "Kotak tetap" di linimasa tidak mengubah apa pun di layar —
@@ -303,7 +305,7 @@ export default function FrameStage({
       return {
         x: Number(boxRect.x) || 0, y: Number(boxRect.y) || 0,
         w: Number(boxRect.w) || 100, h: Number(boxRect.h) || 100,
-        label: 'Kotak tetap',
+        label: 'bingkai.label_box',
       };
     }
     if (frameMode === 'gaming' && (layout?.frames ?? []).length) {
@@ -313,17 +315,17 @@ export default function FrameStage({
       // Susunannya dua bidang, jadi tidak ada satu kotak yang bisa mewakilinya.
       // Yang jujur adalah mengatakan apa yang akan terjadi, bukan menggambar
       // kotak yang tidak benar.
-      return { x: 0, y: 0, w: 100, h: 100, label: 'Main game: wajah di atas, permainan di bawah' };
+      return { x: 0, y: 0, w: 100, h: 100, label: 'bingkai.label_gaming' };
     }
     if (frameMode === 'blur') {
-      return { x: 0, y: 0, w: 100, h: 100, label: 'Bilah kabur: seluruh bingkai dipakai' };
+      return { x: 0, y: 0, w: 100, h: 100, label: 'bingkai.label_blur' };
     }
     if (frameMode === 'motion' && reframe?.available && reframe.source_w) {
       // Jejak gerakan dari server — rencana yang sama persis dengan render,
       // jadi kotak ini bergeser tepat seperti hasilnya nanti.
       return {
         x: 0, y: 0, w: (reframe.crop_w / reframe.source_w) * 100, h: 100,
-        label: 'Ikuti gerakan', moving: true,
+        label: 'bingkai.label_motion', moving: true,
       };
     }
     if (frameMode === 'motion') {
@@ -331,12 +333,12 @@ export default function FrameStage({
       // tunjukkan lebar jendelanya di tengah, dan katakan begitu.
       const w = Math.min(100, (target / aspect) * 100);
       return { x: (100 - w) / 2, y: 0, w, h: 100,
-               label: 'Ikuti gerakan, jendela ini bergeser mengikuti tokoh' };
+               label: 'bingkai.label_motion_tunggu' };
     }
     if (frameMode === 'smart' && reframe?.available && reframe.source_w) {
       return {
         x: 0, y: 0, w: (reframe.crop_w / reframe.source_w) * 100, h: 100,
-        label: 'Ikut wajah', moving: true,
+        label: 'bingkai.label_smart', moving: true,
       };
     }
     return null;
@@ -384,25 +386,25 @@ export default function FrameStage({
             pernah terpakai, sementara di sebelahnya ada ratusan piksel kosong.
             Keterangannya tetap ada, hanya berhenti menuntut barisnya sendiri. */}
         <div className="frame-stage-tag">
-          <b>Video sumber</b>
+          <b>{t('bingkai.sumber')}</b>
           <span>
             {frameMode === 'gaming'
               ? (gamingSetel
-                ? 'seret kotak untuk memindahkan · tarik sudutnya untuk mengubah ukuran'
-                : (gamingKabar || 'mencari kamera wajah pemain'))
+                ? t('bingkai.seret_gaming')
+                : (gamingKabar || t('bingkai.cari_facecam')))
               : frameMode === 'layout'
-              ? `${layout?.frames?.length ?? 0} bingkai, seret kotaknya`
-              : frameMode === 'original' ? 'dipakai utuh, tanpa dipotong'
-                : frameMode === 'blur' ? 'muat seluruhnya, sisi diisi versi kabur'
-                  : staticCrop ? 'kotak menandai bagian yang diambil'
-                    : 'menyiapkan kotak…'}
+              ? t('bingkai.n_bingkai', { n: layout?.frames?.length ?? 0 })
+              : frameMode === 'original' ? t('bingkai.utuh')
+                : frameMode === 'blur' ? t('bingkai.blur_ket')
+                  : staticCrop ? t('bingkai.kotak_tanda')
+                    : t('bingkai.menyiapkan_kotak')}
           </span>
           {frameMode === 'gaming' && gamingKabar && onCariUlangGaming && (
             <button type="button" onClick={onCariUlangGaming}
                     style={{ background: 'none', border: 0, padding: '0 0 0 6px',
                              cursor: 'pointer', font: 'inherit', color: 'inherit',
                              textDecoration: 'underline' }}>
-              Cari lagi
+              {t('bingkai.cari_lagi')}
             </button>
           )}
         </div>
@@ -432,7 +434,7 @@ export default function FrameStage({
                    onLoadedMetadata={onMeta}
                    style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} />
           ) : (
-            <div className="frame-stage-empty">Video sumber belum tersedia.</div>
+            <div className="frame-stage-empty">{t('bingkai.belum_ada')}</div>
           )}
 
           {/* Penanda orang, hanya di mode ikut-wajah.
@@ -447,9 +449,7 @@ export default function FrameStage({
               <button key={i} type="button"
                       ref={(el) => { personRefs.current[i] = el; }}
                       onClick={() => onLockPerson(i)}
-                      title={`Tekan: bingkai mengikuti wajah ${i + 1} mulai detik ini. `
-                        + 'Tekan lagi di detik lain: potongannya ditutup dan '
-                        + 'bingkai kembali memilih sendiri.'}
+                      title={t('bingkai.pin_judul', { n: i + 1 })}
                       className="person-pin">
                 {i + 1}
               </button>
@@ -467,7 +467,7 @@ export default function FrameStage({
                    zIndex: 3,
                  }}>
               <span className="frame-rect-tag" style={{ background: 'var(--hl)', color: '#1A1400' }}>
-                Kotak tetap · seret untuk memindahkan
+                {t('bingkai.kotak_seret')}
               </span>
               {['nw', 'ne', 'sw', 'se'].map((h) => (
                 <span key={h} className={`frame-grip grip-${h}`}
@@ -486,7 +486,7 @@ export default function FrameStage({
                    borderColor: 'var(--hl)',
                  }}>
               <span className="frame-rect-tag" style={{ background: 'var(--hl)', color: '#1A1400' }}>
-                {staticCrop.label}
+                {t(staticCrop.label)}
               </span>
             </div>
           )}
@@ -528,12 +528,12 @@ export default function FrameStage({
                     ? { left: `${(100 - r * 100) / 2}%`, width: `${r * 100}%`, top: 0, height: '100%' }
                     : { top: `${(100 - 100 / r) / 2}%`, height: `${100 / r}%`, left: 0, width: '100%' };
                   return (
-                    <span className="frame-rect-tampil" title="Bagian yang tampil di klip"
+                    <span className="frame-rect-tampil" title={t('bingkai.tampil_di_klip')}
                           style={{ ...gaya, borderColor: ink }} />
                   );
                 })()}
                 <span className="frame-rect-tag" style={{ background: ink }}>
-                  {gamingSetel ? f.label : `${i + 1}. ${f.label}`}{f.follow ? ' · mengikuti' : ''}
+                  {gamingSetel ? f.label : `${i + 1}. ${f.label}`}{f.follow ? t('bingkai.mengikuti') : ''}
                 </span>
                 {['nw', 'ne', 'sw', 'se'].map((h) => (
                   <span key={h} className={`frame-grip grip-${h}`}
@@ -549,8 +549,8 @@ export default function FrameStage({
         aktif={menghitung}
         panjangKlip={(segments || []).reduce((n, g) => n + (g.end - g.start), 0)}
         label={frameMode === 'gaming'
-          ? 'Mencari kamera wajah pemain di klip ini…'
-          : 'Mencari wajah di klip ini…'} />
+          ? t('bingkai.cari_facecam_klip')
+          : t('bingkai.cari_wajah_klip')} />
     </div>
   );
 }

@@ -7,6 +7,7 @@ import { apiDelete, apiGet, apiPost } from '../../lib/api';
 import ImportBar from './ImportBar';
 import { formatTime } from '../../utils/timeFormat';
 import BilahProses from '../../components/BilahProses';
+import { useT } from '../../lib/i18n';
 
 /**
  * Halaman depan Studio: setiap video yang diminta untuk diklip jadi satu kartu.
@@ -22,12 +23,12 @@ const POLL_MS = 2500;
 const POLL_ULANG_MS = 5000;
 
 const STATUS_META = {
-  queued: { label: 'Menunggu antrean', color: 'var(--text-secondary)', Icon: Clock },
-  running: { label: 'Sedang diproses', color: 'var(--accent-cyan)', Icon: Loader2 },
-  done: { label: 'Siap ditinjau', color: 'var(--entry)', Icon: CheckCircle2 },
-  failed: { label: 'Gagal', color: 'var(--accent-red, var(--danger))', Icon: AlertTriangle },
-  empty: { label: 'Tidak ada klip', color: 'var(--text-muted)', Icon: AlertTriangle },
-  unknown: { label: 'Belum diproses', color: 'var(--text-muted)', Icon: Clock },
+  queued: { label: 'partitur.status_queued', color: 'var(--text-secondary)', Icon: Clock },
+  running: { label: 'partitur.status_running', color: 'var(--accent-cyan)', Icon: Loader2 },
+  done: { label: 'partitur.status_done', color: 'var(--entry)', Icon: CheckCircle2 },
+  failed: { label: 'partitur.status_failed', color: 'var(--accent-red, var(--danger))', Icon: AlertTriangle },
+  empty: { label: 'partitur.status_empty', color: 'var(--text-muted)', Icon: AlertTriangle },
+  unknown: { label: 'partitur.status_unknown', color: 'var(--text-muted)', Icon: Clock },
 };
 
 /**
@@ -36,14 +37,15 @@ const STATUS_META = {
  * Kasar dengan sengaja: yang dibutuhkan pembacanya bukan detiknya, melainkan
  * apakah ini soal menit atau soal jam.
  */
-function sebentarLagi(waktu) {
+function sebentarLagi(waktu, t) {
   const menit = Math.max(0, Math.round((waktu * 1000 - Date.now()) / 60000));
-  if (menit <= 1) return 'sebentar lagi';
-  if (menit < 60) return `sekitar ${menit} menit lagi`;
-  return `sekitar ${Math.round(menit / 60)} jam lagi`;
+  if (menit <= 1) return t('partitur.sebentar');
+  if (menit < 60) return t('partitur.menit_lagi', { n: menit });
+  return t('partitur.jam_lagi', { n: Math.round(menit / 60) });
 }
 
 export default function StudioHome({ onOpen, onFindVideos }) {
+  const t = useT();
   const [projects, setProjects] = useState(null);
   const [error, setError] = useState(null);
   // Kabar sesaat sesudah menghapus, misalnya ruang yang dibebaskan.
@@ -125,14 +127,11 @@ export default function StudioHome({ onOpen, onFindVideos }) {
     const nama = (p?.title || videoId).slice(0, 60);
     // eslint-disable-next-line no-alert
     const ikutVideo = window.confirm(
-      `Hapus "${nama}" dari Partitur.\n\n`
-      + 'TEKAN OK untuk menghapus kartunya BESERTA berkas video mentahnya '
-      + '(membebaskan ruang, dan video itu harus diunduh lagi bila dipakai lagi).\n\n'
-      + 'TEKAN Batal untuk pilihan berikutnya.');
+      t('partitur.hapus_tanya', { nama }));
     let hapusVideo = ikutVideo;
     if (!ikutVideo) {
       // eslint-disable-next-line no-alert
-      if (!window.confirm(`Hapus kartunya saja, berkas videonya DIBIARKAN?\n\n"${nama}"`)) return;
+      if (!window.confirm(t('partitur.hapus_kartu_saja', { nama }))) return;
       hapusVideo = false;
     }
     try {
@@ -140,7 +139,7 @@ export default function StudioHome({ onOpen, onFindVideos }) {
         `/projects/${videoId}${hapusVideo ? '?hapus_video=true' : ''}`);
       setProjects((prev) => prev.filter((x) => x.video_id !== videoId));
       if (r?.bita_dibebaskan > 0) {
-        setPesan(`Ruang yang dibebaskan: ${(r.bita_dibebaskan / 1e9).toFixed(2)} GB`);
+        setPesan(t('partitur.dibebaskan', { gb: (r.bita_dibebaskan / 1e9).toFixed(2) }));
         setTimeout(() => setPesan(null), 6000);
       }
     } catch (err) {
@@ -152,7 +151,7 @@ export default function StudioHome({ onOpen, onFindVideos }) {
     return (
       <div style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--text-secondary)' }}>
         <Loader2 size={26} className="animate-spin" style={{ color: 'var(--accent-cyan)' }} />
-        <p style={{ marginTop: '10px', fontSize: '0.85rem' }}>Memuat daftar project…</p>
+        <p style={{ marginTop: '10px', fontSize: '0.85rem' }}>{t('partitur.memuat')}</p>
       </div>
     );
   }
@@ -169,19 +168,19 @@ export default function StudioHome({ onOpen, onFindVideos }) {
         flexWrap: 'wrap', marginBottom: '18px',
       }}>
         <div>
-          <h1 style={{ fontSize: '1.3rem', fontWeight: 800, marginBottom: '3px' }}>Partitur</h1>
+          <h1 style={{ fontSize: '1.3rem', fontWeight: 800, marginBottom: '3px' }}>{t('partitur.judul')}</h1>
           <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: 0 }}>
             {projects.length
-              ? `${projects.length} video · klik kartu untuk membuka editor`
-              : 'Belum ada video yang diproses'}
+              ? t('partitur.n_video', { n: projects.length })
+              : t('partitur.kosong_sub')}
           </p>
         </div>
         <div style={{ flex: 1 }} />
         <button className="btn-secondary" onClick={load} style={{ fontSize: '0.8rem' }}>
-          <RefreshCw size={14} /> Segarkan
+          <RefreshCw size={14} /> {t('umum.segarkan')}
         </button>
         <button className="btn-primary" onClick={onFindVideos} style={{ fontSize: '0.8rem' }}>
-          <Search size={14} /> Cari video
+          <Search size={14} /> {t('tonton.cari_video')}
         </button>
       </header>
 
@@ -196,8 +195,7 @@ export default function StudioHome({ onOpen, onFindVideos }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <span style={{ flex: 1 }}>
               {error.name === 'TimeoutError'
-                ? 'Daftar project belum terjawab. Server sedang sibuk, biasanya '
-                  + 'karena auto bingkai berjalan. Dicoba lagi sendiri.'
+                ? t('partitur.timeout')
                 : error.message}
             </span>
             <button
@@ -206,7 +204,7 @@ export default function StudioHome({ onOpen, onFindVideos }) {
               onClick={() => setPutaran((n) => n + 1)}
               style={{ flex: 'none' }}
             >
-              <RotateCw size={13} /> Coba lagi
+              <RotateCw size={13} /> {t('umum.coba_lagi')}
             </button>
           </div>
         </div>
@@ -219,15 +217,14 @@ export default function StudioHome({ onOpen, onFindVideos }) {
           borderRadius: 'var(--radius-lg)',
         }}>
           <Film size={38} style={{ color: 'var(--text-muted)', marginBottom: '14px' }} />
-          <h3 style={{ fontWeight: 700, marginBottom: '8px' }}>Belum ada project klip</h3>
+          <h3 style={{ fontWeight: 700, marginBottom: '8px' }}>{t('partitur.kosong')}</h3>
           <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.65 }}>
-            Buka halaman Cari video, pilih videonya, lalu tekan <strong>Potong jadi klip</strong>.
-            Prosesnya berjalan di latar belakang, jadi Anda bisa langsung memilih
-            video berikutnya tanpa menunggu.
+            {t('partitur.kosong_a')} <strong>{t('tonton.potong')}</strong>.{' '}
+            {t('partitur.kosong_b')}
           </p>
           <button className="btn-primary" onClick={onFindVideos}
                   style={{ marginTop: '18px', fontSize: '0.84rem' }}>
-            <Search size={15} /> Cari video
+            <Search size={15} /> {t('tonton.cari_video')}
           </button>
         </div>
       )}
@@ -295,11 +292,11 @@ export default function StudioHome({ onOpen, onFindVideos }) {
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.74rem', color: meta.color }}>
                   <meta.Icon size={13} className={p.status === 'running' ? 'animate-spin' : undefined} />
-                  <span style={{ fontWeight: 700 }}>{meta.label}</span>
+                  <span style={{ fontWeight: 700 }}>{t(meta.label)}</span>
                   {p.engine && p.status === 'done' && (
                     <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>
                       · {p.engine === 'gemini' ? 'Gemini'
-                        : p.engine === 'openrouter' ? 'OpenRouter' : 'mesin lokal'}
+                        : p.engine === 'openrouter' ? 'OpenRouter' : t('partitur.mesin_lokal')}
                     </span>
                   )}
                 </div>
@@ -317,10 +314,10 @@ export default function StudioHome({ onOpen, onFindVideos }) {
                 {p.mesin_gagal && p.status === 'done' && (
                   <div style={{ fontSize: '0.71rem', color: 'var(--text-muted)',
                                 lineHeight: 1.45 }}>
-                    {p.mesin_gagal}, jadi klipnya dipilih mesin lokal.
+                    {t('partitur.mesin_gagal', { alasan: p.mesin_gagal })}
                     {/* Saran "cari ulang sendiri" hanya berguna bila memang
                         tidak ada yang akan mencarikannya. */}
-                    {!p.coba_lagi_pada && ' Buka editor lalu "Cari ulang klip" bila ingin dicoba lagi.'}
+                    {!p.coba_lagi_pada && t('partitur.cari_ulang_saran')}
                   </div>
                 )}
 
@@ -331,8 +328,7 @@ export default function StudioHome({ onOpen, onFindVideos }) {
                 {p.coba_lagi_pada && p.status === 'done' && (
                   <div style={{ fontSize: '0.71rem', color: 'var(--text-muted)',
                                 lineHeight: 1.45 }}>
-                    Klipnya akan dicari ulang dengan Gemini {sebentarLagi(p.coba_lagi_pada)}.
-                    Sampai saat itu klip yang ada sekarang tetap bisa dibuka dan disunting.
+                    {t('partitur.dijadwalkan', { kapan: sebentarLagi(p.coba_lagi_pada, t) })}
                   </div>
                 )}
 
@@ -345,7 +341,7 @@ export default function StudioHome({ onOpen, onFindVideos }) {
                 )}
                 {busy && catatanLanjut[p.video_id]?.length > 0 && (
                   <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', lineHeight: 1.45 }}>
-                    Dilanjutkan, dilewati: {catatanLanjut[p.video_id].join(', ')}.
+                    {t('partitur.dilewati', { daftar: catatanLanjut[p.video_id].join(', ') })}
                   </div>
                 )}
 
@@ -353,22 +349,22 @@ export default function StudioHome({ onOpen, onFindVideos }) {
                   {p.status === 'failed' && (
                     <button className="btn-primary" style={{ flex: 1, fontSize: '0.76rem', padding: '7px' }}
                             disabled={melanjutkan === p.video_id}
-                            title="Menjalankan ulang dengan setelan yang sama. Unduhan dan transkrip yang sudah ada tidak diulang."
+                            title={t('partitur.lanjut_judul')}
                             onClick={(e) => lanjutkan(p.video_id, e)}>
                       {melanjutkan === p.video_id
                         ? <Loader2 size={13} className="animate-spin" /> : <RotateCw size={13} />}
-                      Lanjutkan proses
+                      {t('partitur.lanjut')}
                     </button>
                   )}
                   {openable && (
                     <button className="btn-primary" style={{ flex: 1, fontSize: '0.76rem', padding: '7px' }}
                             onClick={(e) => { e.stopPropagation(); onOpen(p); }}>
-                      <Sparkles size={13} /> Buka editor
+                      <Sparkles size={13} /> {t('partitur.buka_editor')}
                     </button>
                   )}
                   <button
                     onClick={(e) => handleDelete(p.video_id, e)}
-                    title="Hapus hasil analisis"
+                    title={t('partitur.hapus_judul')}
                     style={{
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       width: '30px', height: '30px', borderRadius: 'var(--radius-sm)',

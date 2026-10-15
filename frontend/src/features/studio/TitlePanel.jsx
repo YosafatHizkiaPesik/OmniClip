@@ -7,6 +7,7 @@ import { CARD_VARIANTS } from './cardStyles';
 import {
   DEFAULT_JUDUL_VIDEO, GaleriTema, iniTema, useDaftarTema,
 } from './JudulTema';
+import { useT } from '../../lib/i18n';
 
 const TITLE_MAX = 100;
 
@@ -19,12 +20,9 @@ export const DEFAULT_CARD = {
 };
 
 const MODES = [
-  { id: 'freeze', label: 'Foto diam',
-    hint: 'Satu bingkai klip dibekukan jadi latar, judul di atasnya, baru klipnya mulai. Klipnya utuh, hanya jadi lebih panjang.' },
-  { id: 'zoom', label: 'Foto merayap membesar',
-    hint: 'Sama seperti foto diam, tapi gambarnya membesar pelan selama judul dibaca, supaya tidak terlihat macet.' },
-  { id: 'overlay', label: 'Klip langsung jalan',
-    hint: 'Judul menutupi sebagian klip yang sudah berjalan lalu hilang. Tidak ada waktu yang terbuang.' },
+  { id: 'freeze', label: 'kartu_mode.freeze', hint: 'kartu_mode.freeze_ket' },
+  { id: 'zoom', label: 'kartu_mode.zoom', hint: 'kartu_mode.zoom_ket' },
+  { id: 'overlay', label: 'kartu_mode.overlay', hint: 'kartu_mode.overlay_ket' },
 ];
 
 /**
@@ -48,11 +46,12 @@ const MODES = [
  * sekali, saat panel pertama dibuka, lalu tidak pernah lagi.
  */
 function ContohGaya({ v, teks, warna, bayang, aktif, onPilih }) {
+  const t = useT();
   const [putar, setPutar] = useState(0);
   const skala = 0.34;               // kotak contoh setinggi ±34% kanvas 1920
   return (
     <button type="button" onClick={onPilih} onMouseEnter={() => setPutar((n) => n + 1)}
-            className={`judul-contoh${aktif ? ' is-on' : ''}`} title={v.note}>
+            className={`judul-contoh${aktif ? ' is-on' : ''}`} title={t(v.note)}>
       <span className="judul-contoh-layar">
         <span key={putar} data-kartu-judul style={{
           display: 'inline-block', color: warna, fontWeight: 900,
@@ -64,21 +63,22 @@ function ContohGaya({ v, teks, warna, bayang, aktif, onPilih }) {
           {teks.length > 26 ? `${teks.slice(0, 24).trim()}…` : teks}
         </span>
       </span>
-      <span className="judul-contoh-nama">{v.label}</span>
+      <span className="judul-contoh-nama">{t(v.label)}</span>
     </button>
   );
 }
 
 /** Pilihan lama tampil judul di dalam video. `null` berarti sepanjang klip. */
 const LAMA_JUDUL = [
-  { id: null, label: 'Sepanjang klip' },
-  { id: 5, label: '5 detik pertama' },
-  { id: 10, label: '10 detik pertama' },
+  { id: null, label: 'judul.sepanjang' },
+  { id: 5, label: 'judul.lima_detik' },
+  { id: 10, label: 'judul.sepuluh_detik' },
 ];
 
 export default function TitlePanel({
   clip, onChange, onRetitle = null, retitling = false, onJudulSemua = null,
 }) {
+  const t = useT();
   const [copied, setCopied] = useState(false);
   const [draft, setDraft] = useState('');
   // Keadaan suara pembaca: ada/tidak, sedang dipasang, sedang dibacakan.
@@ -106,7 +106,7 @@ export default function TitlePanel({
   if (!clip) {
     return (
       <p style={{ fontSize: '.8rem', color: 'var(--ink-3)', margin: 0 }}>
-        Pilih satu klip dulu.
+        {t('studio.pilih_satu_klip')}
       </p>
     );
   }
@@ -123,7 +123,7 @@ export default function TitlePanel({
   const jv = { ...DEFAULT_JUDUL_VIDEO, ...clip.judul_video };
   const patchJv = (patch) => onChange({ judul_video: { ...jv, ...patch } });
   const jvText = (jv.teks || '').trim() || title;
-  const catatanTema = (id) => daftarTema.find((t) => t.id === id)?.catatan;
+  const catatanTema = (id) => daftarTema.find((tm) => tm.id === id)?.catatan;
 
   /** Membacakan judulnya sekarang, supaya tempo dan nadanya bisa dinilai. */
   const dengar = async () => {
@@ -157,11 +157,11 @@ export default function TitlePanel({
         try {
           await el.play();
         } catch {
-          setVoiceError('Peramban menahan pemutaran otomatis, tekan tombol putar di bawah.');
+          setVoiceError(t('judul.autoplay_ditahan'));
         }
       }
     } catch (e) {
-      setVoiceError(e.message || 'Gagal membacakan judul.');
+      setVoiceError(e.message || t('judul.gagal_baca'));
     } finally {
       setBusy(null);
     }
@@ -181,16 +181,16 @@ export default function TitlePanel({
         if (st.available) { setVoiceReady(true); break; }
       }
     } catch (e) {
-      setVoiceError(e.message || 'Gagal memasang suara pembaca.');
+      setVoiceError(e.message || t('judul.gagal_pasang'));
     } finally {
       setBusy(null);
     }
   };
 
   const addTag = () => {
-    const t = draft.trim().replace(/^#+/, '').replace(/[^\wÀ-ɏ]/g, '');
-    if (!t || tags.includes(`#${t}`)) { setDraft(''); return; }
-    onChange({ hashtags: [...tags, `#${t}`].slice(0, 12) });
+    const tag = draft.trim().replace(/^#+/, '').replace(/[^\wÀ-ɏ]/g, '');
+    if (!tag || tags.includes(`#${tag}`)) { setDraft(''); return; }
+    onChange({ hashtags: [...tags, `#${tag}`].slice(0, 12) });
     setDraft('');
   };
 
@@ -210,7 +210,7 @@ export default function TitlePanel({
     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
       <label style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
         <span className="mark" style={{ color: 'var(--ink)' }}>
-          Judul klip{' '}
+          {t('judul.judul_klip')}{' '}
           <span style={{ color: title.length > TITLE_MAX ? 'var(--danger)' : 'var(--ink-3)' }}>
             ({title.length}/{TITLE_MAX})
           </span>
@@ -221,11 +221,9 @@ export default function TitlePanel({
       </label>
       <p style={{ fontSize: '.72rem', color: 'var(--ink-3)', lineHeight: 1.55, margin: 0 }}>
         {(clip.title_source === 'gemini' || clip.source === 'gemini')
-          ? 'Ditulis oleh Gemini dari isi klip ini.'
-          : 'Diambil dari kalimat pembuka klip ini sendiri, kutipan nyata, '
-            + 'bukan judul karangan. Akurat, tapi jarang memancing.'}
-        {' '}Judul ini jadi nama berkas hasil render, dan mengisi sendiri
-        formulir saat klipnya diunggah.
+          ? t('judul.oleh_gemini')
+          : t('judul.dari_pembuka')}
+        {' '}{t('judul.nama_berkas')}
       </p>
 
       {/* Klip yang tidak terpilih Gemini saat analisis keluar dengan judul
@@ -235,7 +233,7 @@ export default function TitlePanel({
         <button className="btn-secondary" onClick={onRetitle} disabled={retitling}
                 style={{ justifyContent: 'center' }}>
           {retitling ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-          {retitling ? 'Gemini sedang menulis…' : 'Tulis ulang judul & tagar dengan Gemini'}
+          {retitling ? t('judul.gemini_menulis') : t('judul.tulis_ulang')}
         </button>
       )}
 
@@ -251,40 +249,36 @@ export default function TitlePanel({
                  onChange={(e) => patchCard({ enabled: e.target.checked })}
                  style={{ width: '15px', height: '15px' }} />
           <span className="mark" style={{ color: 'var(--ink)' }}>
-            Tampilkan judul di awal klip
+            {t('judul.kartu_awal')}
           </span>
         </label>
         <p style={{ fontSize: '.72rem', color: 'var(--ink-3)', lineHeight: 1.55, margin: '6px 0 0' }}>
-          Judulnya disiapkan di sini dan baru digabungkan dengan klipnya saat
-          dirender, jadi mematikan pilihan ini mengembalikan klipnya seperti
-          semula, tanpa perlu mengubah apa pun yang lain.
+          {t('judul.kartu_awal_ket')}
         </p>
 
         {card.enabled && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '11px' }}>
             <label style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-              <span className="mark" style={{ color: 'var(--ink)' }}>Teks kartu</span>
+              <span className="mark" style={{ color: 'var(--ink)' }}>{t('judul.teks_kartu')}</span>
               <textarea className="field" rows={2} value={card.text}
-                        placeholder={title || 'ikut judul klip di atas'}
+                        placeholder={title || t('judul.ikut_judul')}
                         onChange={(e) => patchCard({ text: e.target.value })}
                         style={{ resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }} />
             </label>
             <p style={{ fontSize: '.72rem', color: 'var(--ink-3)', margin: 0 }}>
-              Dikosongkan berarti memakai judul klip di atas. Diisi berarti kartunya
-              boleh berbeda dari judul unggahan, yang sering perlu, karena judul
-              yang dibaca di layar dan judul yang dicari orang bukan hal yang sama.
+              {t('judul.teks_kartu_ket')}
             </p>
 
             <div>
               <div className="mark" style={{ color: 'var(--ink)', marginBottom: '6px' }}>
-                Latar selama judul tampil
+                {t('judul.latar')}
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 {MODES.map((m) => (
                   <button key={m.id} onClick={() => patchCard({ mode: m.id })}
                           className={`choice${card.mode === m.id ? ' is-on' : ''}`}>
-                    <div className="choice-t">{m.label}</div>
-                    <div className="choice-h">{m.hint}</div>
+                    <div className="choice-t">{t(m.label)}</div>
+                    <div className="choice-h">{t(m.hint)}</div>
                   </button>
                 ))}
               </div>
@@ -292,7 +286,7 @@ export default function TitlePanel({
 
             <div>
               <div className="mark" style={{ color: 'var(--ink)', marginBottom: '6px' }}>
-                Gaya judul
+                {t('judul.gaya')}
               </div>
               {/* Tiap pilihan MEMPERLIHATKAN dirinya, bukan hanya menyebut
                   namanya. Dulu yang ada cuma nama dan satu kalimat keterangan,
@@ -304,11 +298,11 @@ export default function TitlePanel({
               <GaleriTema teks={cardText} pilihan={card.variant}
                           onPilih={(id) => patchCard({ variant: id })} />
               <div className="mark" style={{ color: 'var(--ink-3)', margin: '12px 0 6px' }}>
-                Hanya teks bergerak, tanpa latar
+                {t('judul.hanya_teks')}
               </div>
               <div className="judul-galeri">
                 {CARD_VARIANTS.map((v) => (
-                  <ContohGaya key={v.id} v={v} teks={cardText || 'JUDUL KLIP ANDA'}
+                  <ContohGaya key={v.id} v={v} teks={cardText || t('judul.contoh')}
                               warna={card.color || '#FFFFFF'} bayang={card.shadow || '#000000'}
                               aktif={(card.variant || 'garis') === v.id}
                               onPilih={() => patchCard({ variant: v.id })} />
@@ -317,15 +311,13 @@ export default function TitlePanel({
               <p style={{ fontSize: '.72rem', color: 'var(--ink-3)', lineHeight: 1.55, margin: '8px 0 0' }}>
                 {iniTema(card.variant)
                   ? catatanTema(card.variant)
-                  : CARD_VARIANTS.find((v) => v.id === (card.variant || 'garis'))?.note}
+                  : t(CARD_VARIANTS.find((v) => v.id === (card.variant || 'garis'))?.note ?? '')}
               </p>
               <p style={{
                 fontSize: '.72rem', color: 'var(--ink-3)', lineHeight: 1.6,
                 margin: '8px 0 0',
               }}>
-                Letak dan ukurannya diseret langsung di atas pratinjau: seret
-                judulnya untuk memindahkan, bulatan di pojok kanan-bawah untuk
-                melebarkan kotaknya sekaligus membesarkan hurufnya.
+                {t('judul.seret_ket')}
               </p>
             </div>
 
@@ -333,7 +325,7 @@ export default function TitlePanel({
               <input type="checkbox" checked={card.voice}
                      onChange={(e) => patchCard({ voice: e.target.checked })}
                      style={{ width: '15px', height: '15px' }} />
-              <span style={{ fontSize: '.82rem' }}>Bacakan judulnya</span>
+              <span style={{ fontSize: '.82rem' }}>{t('judul.bacakan')}</span>
             </label>
 
             {card.voice ? (
@@ -347,9 +339,7 @@ export default function TitlePanel({
                     }}>
                       <AlertTriangle size={14} style={{ flex: 'none', marginTop: '2px', color: 'var(--warn)' }} />
                       <span style={{ fontSize: '.75rem', color: 'var(--ink-2)', lineHeight: 1.55 }}>
-                        Suara pembaca belum ada di mesin ini. Berkasnya 63 MB, diunduh
-                        sekali lalu bekerja tanpa internet, judulnya tidak pernah
-                        dikirim ke layanan mana pun.
+                        {t('judul.suara_belum')}
                       </span>
                     </div>
                     <button className="btn-secondary" onClick={pasangSuara} disabled={busy === 'pasang'}
@@ -357,14 +347,14 @@ export default function TitlePanel({
                       {busy === 'pasang'
                         ? <Loader2 size={14} className="animate-spin" />
                         : <Download size={14} />}
-                      {busy === 'pasang' ? 'Mengunduh suara…' : 'Pasang suara pembaca'}
+                      {busy === 'pasang' ? t('judul.mengunduh_suara') : t('judul.pasang_suara')}
                     </button>
                   </>
                 ) : (
                   <>
                     <div>
                       <div className="mark" style={{ color: 'var(--ink)', marginBottom: '6px' }}>
-                        Suara pembaca
+                        {t('judul.suara_pembaca')}
                       </div>
                       <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                         {voices.filter((v) => v.ready).map((v) => (
@@ -381,13 +371,13 @@ export default function TitlePanel({
                           berarti judul klip dikirim keluar dari mesin ini. */}
                       <p style={{ fontSize: '.72rem', color: 'var(--ink-3)', lineHeight: 1.55, margin: '6px 0 0' }}>
                         {voices.find((v) => v.id === card.voice_id)?.online
-                          ? 'Dibuat di server Microsoft, judul klip dikirim ke sana untuk dibacakan, dan butuh internet. Ini suara yang dipakai kebanyakan alat pembuat klip.'
-                          : 'Dibuat di komputer ini. Judul tidak dikirim ke mana pun dan tetap bekerja tanpa internet.'}
+                          ? t('judul.suara_online')
+                          : t('judul.suara_lokal')}
                       </p>
                     </div>
                     <label style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
                       <span style={{ fontSize: '.76rem', color: 'var(--ink-2)' }}>
-                        Tempo bacaan · {card.rate.toFixed(2)}×
+                        {t('judul.tempo', { n: card.rate.toFixed(2) })}
                       </span>
                       <input type="range" min="0.7" max="1.4" step="0.05" value={card.rate}
                              onChange={(e) => { setHeard(null); patchCard({ rate: Number(e.target.value) }); }} />
@@ -402,10 +392,9 @@ export default function TitlePanel({
                     </button>
                     {heard && (
                       <p style={{ fontSize: '.74rem', color: 'var(--ink-2)', margin: 0 }}>
-                        Bacaannya {heard.seconds.toFixed(1)} detik, jadi kartunya
-                        menahan layar <b>{heard.card_seconds.toFixed(1)} detik</b>.
-                        {' '}Panjang kartu memang mengikuti bacaan, kartu yang
-                        berganti sebelum kalimatnya selesai terdengar seperti kesalahan.
+                        {t('judul.bacaan_a', { n: heard.seconds.toFixed(1) })}{' '}
+                        <b>{t('judul.bacaan_detik', { n: heard.card_seconds.toFixed(1) })}</b>
+                        {t('judul.bacaan_b')}
                       </p>
                     )}
                   </>
@@ -420,7 +409,7 @@ export default function TitlePanel({
             ) : (
               <label style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
                 <span style={{ fontSize: '.76rem', color: 'var(--ink-2)' }}>
-                  Kartu menahan layar · {card.seconds.toFixed(1)} detik
+                  {t('judul.kartu_tahan', { n: card.seconds.toFixed(1) })}
                 </span>
                 <input type="range" min="1.2" max="8" step="0.1" value={card.seconds}
                        onChange={(e) => patchCard({ seconds: Number(e.target.value) })} />
@@ -444,34 +433,33 @@ export default function TitlePanel({
                  onChange={(e) => patchJv({ aktif: e.target.checked })}
                  style={{ width: '15px', height: '15px' }} />
           <span className="mark" style={{ color: 'var(--ink)' }}>
-            Judul di dalam video
+            {t('judul.di_video')}
           </span>
         </label>
         <p style={{ fontSize: '.72rem', color: 'var(--ink-3)', lineHeight: 1.55, margin: '6px 0 0' }}>
-          Judulnya menempel di atas video selama klip berjalan, bukan hanya di
-          awal. Letak dan ukurannya diseret langsung di pratinjau.
+          {t('judul.di_video_ket')}
         </p>
 
         {jv.aktif && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '11px' }}>
             <label style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-              <span className="mark" style={{ color: 'var(--ink)' }}>Teks judul</span>
+              <span className="mark" style={{ color: 'var(--ink)' }}>{t('judul.teks_judul')}</span>
               <textarea className="field" rows={2} value={jv.teks} maxLength={240}
-                        placeholder={title || 'ikut judul klip di atas'}
+                        placeholder={title || t('judul.ikut_judul')}
                         onChange={(e) => patchJv({ teks: e.target.value })}
                         style={{ resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }} />
             </label>
 
             <div>
               <div className="mark" style={{ color: 'var(--ink)', marginBottom: '6px' }}>
-                Lama tampil
+                {t('judul.lama_tampil')}
               </div>
               <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                 {LAMA_JUDUL.map((l) => (
                   <button key={String(l.id)} type="button"
                           className={`chip${(jv.durasi ?? null) === l.id ? ' is-on' : ''}`}
                           onClick={() => patchJv({ durasi: l.id })}>
-                    {l.label}
+                    {t(l.label)}
                   </button>
                 ))}
               </div>
@@ -479,7 +467,7 @@ export default function TitlePanel({
 
             <div>
               <div className="mark" style={{ color: 'var(--ink)', marginBottom: '6px' }}>
-                Tema
+                {t('judul.tema')}
               </div>
               <GaleriTema teks={jvText} pilihan={jv.tema}
                           onPilih={(id) => patchJv({ tema: id })} />
@@ -498,7 +486,7 @@ export default function TitlePanel({
                         setTimeout(() => setTersebar(false), 1800);
                       }}>
                 {tersebar ? <Check size={14} style={{ color: 'var(--entry)' }} /> : <Copy size={14} />}
-                {tersebar ? 'Diterapkan ke semua klip' : 'Terapkan tema & letak ini ke semua klip'}
+                {tersebar ? t('judul.diterapkan') : t('judul.terapkan_semua')}
               </button>
             )}
           </div>
@@ -507,34 +495,32 @@ export default function TitlePanel({
 
       <div>
         <div className="mark" style={{ color: 'var(--ink)', marginBottom: '6px' }}>
-          Tagar ({tags.length})
+          {t('judul.tagar_n', { n: tags.length })}
         </div>
         <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', marginBottom: '7px' }}>
-          {tags.map((t) => (
-            <span key={t} className="chip" style={{ display: 'inline-flex', gap: '5px', alignItems: 'center' }}>
-              {t}
+          {tags.map((tg) => (
+            <span key={tg} className="chip" style={{ display: 'inline-flex', gap: '5px', alignItems: 'center' }}>
+              {tg}
               <X size={11} style={{ cursor: 'pointer' }}
-                 onClick={() => onChange({ hashtags: tags.filter((x) => x !== t) })} />
+                 onClick={() => onChange({ hashtags: tags.filter((x) => x !== tg) })} />
             </span>
           ))}
           {tags.length === 0 && (
-            <span style={{ fontSize: '.75rem', color: 'var(--ink-3)' }}>Belum ada tagar.</span>
+            <span style={{ fontSize: '.75rem', color: 'var(--ink-3)' }}>{t('judul.belum_tagar')}</span>
           )}
         </div>
         <div style={{ display: 'flex', gap: '6px' }}>
-          <input className="field" value={draft} placeholder="tambah tagar…"
+          <input className="field" value={draft} placeholder={t('judul.tambah_tagar')}
                  onChange={(e) => setDraft(e.target.value)}
                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTag(); } }}
                  style={{ flex: 1, minWidth: 0, padding: '6px 9px', fontSize: '.8rem' }} />
           <button className="btn-secondary" onClick={addTag} disabled={!draft.trim()}
                   style={{ fontSize: '.76rem', padding: '6px 10px' }}>
-            <Plus size={12} /> Tambah
+            <Plus size={12} /> {t('judul.tambah')}
           </button>
         </div>
         <p style={{ fontSize: '.72rem', color: 'var(--ink-3)', lineHeight: 1.55, margin: '8px 0 0' }}>
-          Tagar di atas diambil dari kata yang benar-benar diucapkan di klip ini
-          dan dari judul video sumbernya. Tagar yang tidak nyambung dengan isinya
-          tidak membuat video naik, justru sebaliknya.
+          {t('judul.tagar_ket')}
         </p>
       </div>
 
@@ -542,7 +528,7 @@ export default function TitlePanel({
               disabled={!title && tags.length === 0}
               style={{ justifyContent: 'center' }}>
         {copied ? <Check size={14} style={{ color: 'var(--entry)' }} /> : <Copy size={14} />}
-        {copied ? 'Tersalin' : 'Salin judul + tagar'}
+        {copied ? t('judul.tersalin') : t('judul.salin')}
       </button>
 
       {clip.ai_reason && (

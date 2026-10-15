@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Loader2, RotateCcw, Sparkles, X, Cpu } from 'lucide-react';
 import { apiGet, apiPost } from '../../lib/api';
 import BilahProses from '../../components/BilahProses';
+import { useT } from '../../lib/i18n';
 
 const kecil = { fontSize: '0.72rem', color: 'var(--text-secondary)', lineHeight: 1.5 };
 const label = { fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-secondary)' };
@@ -11,9 +12,9 @@ const kontrol = {
   background: 'var(--bg-card)', color: 'var(--text-primary)',
 };
 
-function namaMesin(engine, model) {
+function namaMesin(engine, model, t) {
   if (engine === 'gemini') return `Gemini${model ? ` (${model})` : ''}`;
-  return 'mesin lokal (heuristik)';
+  return t('ulang.mesin_lokal_heuristik');
 }
 
 /**
@@ -25,6 +26,7 @@ function namaMesin(engine, model) {
  * adanya, dan susunan klip sebelumnya bisa dikembalikan.
  */
 export default function CariUlangDialog({ videoId, data, dirty, onSimpanDulu, onSelesai, onTutup }) {
+  const t = useT();
   const [mesin, setMesin] = useState('gemini');
   const [model, setModel] = useState(() => {
     try { return localStorage.getItem('omniclip_gemini_model') || ''; } catch { return ''; }
@@ -82,12 +84,12 @@ export default function CariUlangDialog({ videoId, data, dirty, onSimpanDulu, on
   };
 
   const mulai = async () => {
-    setSibuk(true); setGalat(null); setPesan('Memulai…'); setJob(null);
+    setSibuk(true); setGalat(null); setPesan(t('sutradara.memulai')); setJob(null);
     try {
       // Suntingan yang belum tersimpan disimpan dulu, supaya "Kembalikan
       // sebelumnya" mengembalikan susunan yang benar-benar terakhir dilihat.
       if (dirty) {
-        setPesan('Menyimpan suntingan sekarang…');
+        setPesan(t('ulang.menyimpan'));
         await onSimpanDulu();
       }
       const { job_id: jobId } = await apiPost(`/projects/${videoId}/cari-ulang`, {
@@ -95,10 +97,10 @@ export default function CariUlangDialog({ videoId, data, dirty, onSimpanDulu, on
         max_clips: Number(jumlah) || 0,
       });
       const job = await pantau(jobId);
-      if (job.status !== 'done') throw new Error(job.error || 'Pencarian ulang gagal.');
-      setPesan('Memuat klip baru…');
+      if (job.status !== 'done') throw new Error(job.error || t('ulang.gagal'));
+      setPesan(t('ulang.memuat'));
       await muatUlang();
-      setPesan(`${job.message || 'Selesai.'} Daftar klip sudah diperbarui.`);
+      setPesan(t('ulang.selesai', { pesan: job.message || t('ulang.selesai_bawaan') }));
     } catch (e) {
       setGalat(e.message);
     } finally {
@@ -107,11 +109,11 @@ export default function CariUlangDialog({ videoId, data, dirty, onSimpanDulu, on
   };
 
   const pulihkan = async () => {
-    setSibuk(true); setGalat(null); setPesan('Mengembalikan susunan sebelumnya…');
+    setSibuk(true); setGalat(null); setPesan(t('ulang.mengembalikan'));
     try {
       await apiPost(`/projects/${videoId}/pulihkan`, {});
       await muatUlang();
-      setPesan('Susunan sebelumnya dikembalikan.');
+      setPesan(t('ulang.dikembalikan'));
     } catch (e) {
       setGalat(e.message);
     } finally {
@@ -138,7 +140,7 @@ export default function CariUlangDialog({ videoId, data, dirty, onSimpanDulu, on
   );
 
   return (
-    <div role="dialog" aria-modal="true" aria-label="Cari ulang klip"
+    <div role="dialog" aria-modal="true" aria-label={t('ulang.judul')}
          onClick={(e) => { if (e.target === e.currentTarget && !sibuk) onTutup(); }}
          style={{
            position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(0,0,0,0.55)',
@@ -152,8 +154,8 @@ export default function CariUlangDialog({ videoId, data, dirty, onSimpanDulu, on
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <Sparkles size={17} style={{ color: 'var(--accent-cyan)' }} />
-          <b style={{ fontSize: '0.98rem' }}>Cari ulang klip</b>
-          <button onClick={onTutup} disabled={sibuk} aria-label="Tutup"
+          <b style={{ fontSize: '0.98rem' }}>{t('ulang.judul')}</b>
+          <button onClick={onTutup} disabled={sibuk} aria-label={t('umum.tutup')}
                   style={{ marginLeft: 'auto', background: 'none', border: 'none',
                            cursor: sibuk ? 'default' : 'pointer', color: 'var(--text-secondary)' }}>
             <X size={18} />
@@ -161,51 +163,47 @@ export default function CariUlangDialog({ videoId, data, dirty, onSimpanDulu, on
         </div>
 
         <p style={{ ...kecil, margin: 0 }}>
-          Klip sekarang: <b>{(data?.clips || []).length} klip</b> dari{' '}
-          <b>{namaMesin(data?.engine, data?.model)}</b>. Pencarian ulang memilih
-          momen, hook, dan judul yang baru. Video dan transkrip tidak diunduh
-          ulang, dan penanda narasumber tetap sama.
+          {t('ulang.sekarang_a')} <b>{t('ulang.n_klip', { n: (data?.clips || []).length })}</b> {t('ulang.dari')}{' '}
+          <b>{namaMesin(data?.engine, data?.model, t)}</b>{t('ulang.sekarang_b')}
         </p>
 
         <div style={{ display: 'grid', gap: '7px' }}>
           {pilihan('gemini', <Sparkles size={16} style={{ color: 'var(--accent-cyan)', marginTop: 2 }} />,
                    'Gemini', adaKunci === false
-                     ? 'Butuh kunci API, isi di Pengaturan → Model AI.'
-                     : 'Membaca seluruh transkrip dan menilai momen seperti penyunting.',
+                     ? t('ulang.butuh_kunci')
+                     : t('ulang.gemini_ket'),
                    adaKunci === false)}
           {pilihan('heuristik', <Cpu size={16} style={{ color: 'var(--text-secondary)', marginTop: 2 }} />,
-                   'Mesin lokal', 'Tanpa internet dan tanpa kuota, dari pola bicara dan energi suara.')}
+                   t('sutradara.lokal'), t('ulang.lokal_ket'))}
         </div>
 
         {mesin === 'gemini' && daftarModel.length > 0 && (
-          <label style={label}>Model
+          <label style={label}>{t('ulang.model')}
             <select value={model} onChange={(e) => setModel(e.target.value)} disabled={sibuk}
                     style={{ ...kontrol, width: '100%', marginTop: '5px' }}>
               <option value="">
-                Otomatis{infoModel.terkuat ? ` (mencoba ${infoModel.terkuat} lebih dulu)` : ''}
+                {t('ulang.otomatis')}{infoModel.terkuat ? t('ulang.mencoba', { model: infoModel.terkuat }) : ''}
               </option>
               {daftarModel.map((m) => (
                 <option key={m} value={m}>
-                  {m}{infoModel.habisHarian.includes(m) ? ' (jatah hari ini habis)' : ''}
+                  {m}{infoModel.habisHarian.includes(m) ? t('ulang.jatah_habis') : ''}
                 </option>
               ))}
             </select>
           </label>
         )}
 
-        <label style={label}>Jumlah klip
+        <label style={label}>{t('ulang.jumlah')}
           <select value={jumlah} onChange={(e) => setJumlah(e.target.value)} disabled={sibuk}
                   style={{ ...kontrol, width: '100%', marginTop: '5px' }}>
-            <option value={0}>Otomatis, sesuai panjang video</option>
-            {[5, 8, 10, 15, 20, 30].map((n) => <option key={n} value={n}>{n} klip</option>)}
+            <option value={0}>{t('ulang.jumlah_otomatis')}</option>
+            {[5, 8, 10, 15, 20, 30].map((n) => <option key={n} value={n}>{t('ulang.n_klip', { n })}</option>)}
           </select>
         </label>
 
         <p style={{ ...kecil, margin: 0, padding: '8px 10px', borderRadius: 'var(--radius-sm)',
                     background: 'var(--bg-glass)', border: '1px solid var(--border-color)' }}>
-          Daftar klip di Studio akan diganti{dirty ? ', dan suntingan yang belum disimpan disimpan dulu' : ''}.
-          Klip yang sudah dirender tidak tersentuh, dan susunan sekarang bisa
-          dikembalikan kapan saja.
+          {t('ulang.diganti')}{dirty ? t('ulang.diganti_simpan') : ''}{t('ulang.diganti_b')}
         </p>
 
         {sibuk && job && <BilahProses job={job} />}
@@ -222,14 +220,14 @@ export default function CariUlangDialog({ videoId, data, dirty, onSimpanDulu, on
           <button className="btn-primary" onClick={mulai} disabled={sibuk}
                   style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }}>
             {sibuk ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-            {sibuk ? 'Mencari…' : 'Cari ulang'}
+            {sibuk ? t('ulang.mencari') : t('ulang.cari_ulang')}
           </button>
           {sebelumnya && (
             <button className="btn-secondary" onClick={pulihkan} disabled={sibuk}
-                    title={`Kembali ke ${sebelumnya.clip_count} klip dari ${namaMesin(sebelumnya.engine, sebelumnya.model)}`}
+                    title={t('ulang.kembali_judul', { n: sebelumnya.clip_count, mesin: namaMesin(sebelumnya.engine, sebelumnya.model, t) })}
                     style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }}>
               <RotateCcw size={14} />
-              Kembalikan sebelumnya ({sebelumnya.clip_count} klip)
+              {t('ulang.kembalikan', { n: sebelumnya.clip_count })}
             </button>
           )}
         </div>

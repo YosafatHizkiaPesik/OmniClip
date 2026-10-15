@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { apiGet } from '../../lib/api';
 import { CARD_VARIANTS } from './cardStyles';
+import { t as tr, useT } from '../../lib/i18n';
 
 /**
  * Judul bertema: latar, warna, huruf, dan geraknya satu paket.
@@ -80,7 +81,7 @@ async function ambilGambar(p) {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(p),
   });
-  if (!r.ok) throw new Error('Judul gagal digambar.');
+  if (!r.ok) throw new Error(tr('judul.gagal_gambar'));
   const blob = await r.blob();
   const hasil = { url: URL.createObjectURL(blob), kotak: await kotakDariGambar(blob), p };
   _gambar.set(kunci, hasil);
@@ -119,38 +120,39 @@ export function useGambarJudul(p, jeda = 140) {
 }
 
 /** Satu contoh tema di galeri: judulnya sendiri, digambar oleh libass. */
-function ContohTema({ t, teks, aktif, onPilih }) {
+function ContohTema({ tema, teks, aktif, onPilih }) {
   const [putar, setPutar] = useState(0);
   const { hasil } = useGambarJudul({
-    tema: t.id, teks, pos_x: 50, pos_y: 50, box_w: 92, ukuran: 100, aspek: '9:16',
+    tema: tema.id, teks, pos_x: 50, pos_y: 50, box_w: 92, ukuran: 100, aspek: '9:16',
   }, 0);
   return (
     <button type="button" onClick={onPilih} onMouseEnter={() => setPutar((n) => n + 1)}
-            className={`judul-contoh tema-contoh${aktif ? ' is-on' : ''}`} title={t.catatan}>
+            className={`judul-contoh tema-contoh${aktif ? ' is-on' : ''}`} title={tema.catatan}>
       <span className="judul-contoh-layar">
         {hasil
-          ? <img key={putar} src={hasil.url} alt="" className={`gerak-${t.gerak}`} />
+          ? <img key={putar} src={hasil.url} alt="" className={`gerak-${tema.gerak}`} />
           : <Loader2 size={14} className="animate-spin" style={{ color: 'rgba(255,255,255,.5)' }} />}
       </span>
-      <span className="judul-contoh-nama">{t.label}</span>
+      <span className="judul-contoh-nama">{tema.label}</span>
     </button>
   );
 }
 
 /** Galeri tema lengkap. */
 export function GaleriTema({ teks, pilihan, onPilih }) {
+  const t = useT();
   const daftar = useDaftarTema();
-  const pendek = (teks || 'JUDUL KLIP ANDA').trim();
+  const pendek = (teks || t('judul.contoh')).trim();
   // Teks contoh dipotong supaya muat dua baris di kotak kecil.
   const contoh = pendek.length > 34 ? `${pendek.slice(0, 32).trim()}…` : pendek;
   if (!daftar.length) {
-    return <p style={{ fontSize: '.74rem', color: 'var(--ink-3)', margin: 0 }}>Memuat tema…</p>;
+    return <p style={{ fontSize: '.74rem', color: 'var(--ink-3)', margin: 0 }}>{t('judul.memuat_tema')}</p>;
   }
   return (
     <div className="judul-galeri">
-      {daftar.map((t) => (
-        <ContohTema key={t.id} t={t} teks={contoh} aktif={pilihan === t.id}
-                    onPilih={() => onPilih(t.id)} />
+      {daftar.map((tm) => (
+        <ContohTema key={tm.id} tema={tm} teks={contoh} aktif={pilihan === tm.id}
+                    onPilih={() => onPilih(tm.id)} />
       ))}
     </div>
   );
@@ -168,6 +170,7 @@ export function GaleriTema({ teks, pilihan, onPilih }) {
  * nama bidang yang sama.
  */
 export function LapisJudul({ nilai, aspek = '9:16', boxW, boxH, onUbah, gerak = '', zIndex = 3 }) {
+  const t = useT();
   const p = {
     tema: nilai.tema, teks: nilai.teks,
     pos_x: Number(nilai.pos_x ?? 50), pos_y: Number(nilai.pos_y ?? 50),
@@ -234,7 +237,7 @@ export function LapisJudul({ nilai, aspek = '9:16', boxW, boxH, onUbah, gerak = 
       </div>
       {onUbah && (
         <div onPointerDown={mulaiSeret('pindah')}
-             title="Seret untuk memindahkan judul"
+             title={t('judul.seret_pindah')}
              style={{
                position: 'absolute', pointerEvents: 'auto', cursor: 'move',
                left: `${k.x0}%`, top: `${k.y0}%`,
@@ -243,7 +246,7 @@ export function LapisJudul({ nilai, aspek = '9:16', boxW, boxH, onUbah, gerak = 
                outlineOffset: '4px',
              }}>
           <span onPointerDown={mulaiSeret('ukuran')}
-                title="Seret untuk mengubah ukuran judul"
+                title={t('judul.seret_ukuran')}
                 style={{
                   position: 'absolute', right: '-8px', bottom: '-8px',
                   width: '15px', height: '15px', borderRadius: '50%',

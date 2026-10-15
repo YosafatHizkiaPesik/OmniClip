@@ -26,11 +26,12 @@ function rgba(hex, a) {
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
 }
 
+// `label` dan `note` adalah kunci kamus (locales/), diterjemahkan saat dirender.
 export const CARD_VARIANTS = [
   {
     id: 'garis',
-    label: 'Garis tebal',
-    note: 'Huruf putih bergaris tepi tebal. Terbaca di atas gambar apa pun, inilah yang dipakai kebanyakan klip.',
+    label: 'gaya_kartu.garis',
+    note: 'gaya_kartu.garis_ket',
     // BorderStyle 1 = garis tepi + bayangan.
     ass: { border: 1, outline: 9, shadow: 4, back: null },
     anim: 'kartu-masuk .32s ease-out both',
@@ -42,8 +43,8 @@ export const CARD_VARIANTS = [
   },
   {
     id: 'kotak',
-    label: 'Kotak isi',
-    note: 'Judul duduk di dalam pelat warna. Paling tegas, dan satu-satunya yang tetap terbaca di atas gambar yang sangat ramai.',
+    label: 'gaya_kartu.kotak',
+    note: 'gaya_kartu.kotak_ket',
     // BorderStyle 3 = kotak buram; BackColour yang jadi pelatnya.
     ass: { border: 3, outline: 14, shadow: 0, back: 'shadow' },
     anim: 'kartu-masuk .32s ease-out both',
@@ -57,8 +58,8 @@ export const CARD_VARIANTS = [
   },
   {
     id: 'bayang',
-    label: 'Bayangan jatuh',
-    note: 'Tanpa garis tepi, hanya bayangan yang jatuh ke kanan bawah. Lebih tenang dan terkesan mahal.',
+    label: 'gaya_kartu.bayang',
+    note: 'gaya_kartu.bayang_ket',
     ass: { border: 1, outline: 0, shadow: 11, back: null },
     anim: 'kartu-masuk .32s ease-out both',
     css: (shadow, scale) => ({
@@ -67,8 +68,8 @@ export const CARD_VARIANTS = [
   },
   {
     id: 'polos',
-    label: 'Polos',
-    note: 'Huruf saja, garis tepi tipis sekadar menahannya dari latar. Untuk latar yang sudah gelap dan rata.',
+    label: 'gaya_kartu.polos',
+    note: 'gaya_kartu.polos_ket',
     ass: { border: 1, outline: 3, shadow: 2, back: null },
     anim: 'kartu-masuk .32s ease-out both',
     css: (shadow, scale) => ({
@@ -78,8 +79,8 @@ export const CARD_VARIANTS = [
   },
   {
     id: 'naik',
-    label: 'Naik dari bawah',
-    note: 'Judul merayap naik sambil muncul. Gerak paling aman: matanya bergerak ke arah yang sama dengan cara orang membaca.',
+    label: 'gaya_kartu.naik',
+    note: 'gaya_kartu.naik_ket',
     ass: { border: 1, outline: 9, shadow: 4, back: null },
     anim: 'kartu-naik .30s ease-out both',
     css: (shadow, scale) => ({
@@ -90,8 +91,8 @@ export const CARD_VARIANTS = [
   },
   {
     id: 'hentak',
-    label: 'Menghentak masuk',
-    note: 'Melompat masuk, sempat kelewat besar, lalu mengendap. Untuk klip yang temponya cepat.',
+    label: 'gaya_kartu.hentak',
+    note: 'gaya_kartu.hentak_ket',
     ass: { border: 1, outline: 11, shadow: 4, back: null },
     anim: 'kartu-hentak .26s cubic-bezier(.2,1.5,.4,1) both',
     css: (shadow, scale) => ({
@@ -102,8 +103,8 @@ export const CARD_VARIANTS = [
   },
   {
     id: 'pelat',
-    label: 'Pelat melebar',
-    note: 'Pelat warna yang membuka dari tengah ke samping. Paling berat dan paling terbaca di atas gambar yang ramai.',
+    label: 'gaya_kartu.pelat',
+    note: 'gaya_kartu.pelat_ket',
     ass: { border: 3, outline: 16, shadow: 0, back: 'shadow' },
     anim: 'kartu-pelat .32s ease-out both',
     css: (shadow, scale) => ({
@@ -116,8 +117,8 @@ export const CARD_VARIANTS = [
   },
   {
     id: 'lempar',
-    label: 'Stiker dilempar',
-    note: 'Masuk miring dan mengecil, lalu duduk lurus. Terbaca seperti stiker yang dilempar ke layar.',
+    label: 'gaya_kartu.stiker',
+    note: 'gaya_kartu.stiker_ket',
     ass: { border: 1, outline: 10, shadow: 6, back: null },
     anim: 'kartu-lempar .26s ease-out both',
     css: (shadow, scale) => ({
@@ -128,8 +129,8 @@ export const CARD_VARIANTS = [
   },
   {
     id: 'getar',
-    label: 'Bergetar',
-    note: 'Bergoyang pelan selama judulnya tampil. Untuk horor, jumpscare, dan apa pun yang seharusnya terasa tidak tenang.',
+    label: 'gaya_kartu.getar',
+    note: 'gaya_kartu.getar_ket',
     ass: { border: 1, outline: 9, shadow: 5, back: null },
     anim: 'kartu-getar .72s ease-in-out both',
     css: (shadow, scale) => ({
@@ -140,8 +141,8 @@ export const CARD_VARIANTS = [
   },
   {
     id: 'diam',
-    label: 'Tanpa gerak',
-    note: 'Muncul begitu saja dan menetap. Untuk klip yang gambarnya sendiri sudah sibuk.',
+    label: 'gaya_kartu.diam',
+    note: 'gaya_kartu.diam_ket',
     ass: { border: 1, outline: 9, shadow: 4, back: null },
     anim: null,
     css: (shadow, scale) => ({
