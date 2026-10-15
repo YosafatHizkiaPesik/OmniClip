@@ -342,6 +342,11 @@ EMA_PASSES = 2             # dua lintasan = filter orde-4, riak sisa jauh lebih 
 # pernah mengikat. Ongkosnya 1,5% kekasaran, dan yang dibeli adalah hampir
 # satu detik bingkai yang tidak lagi tertinggal.
 MAX_SPEED_RATIO = 0.16
+# Plafon adaptif: lihat _smooth. Ambang dalam pecahan lebar KOTAK crop.
+KEJAR_AMBANG = 0.30
+KEJAR_KALI = 4.0
+# Subjek tidak boleh selebar kurang dari ini dibanding wajah terbesar di layar.
+SUBJEK_RELATIF_MIN = 0.35
 SCENE_CUT_DISTANCE = 0.5   # jarak Bhattacharyya histogram HSV
 MEDIAN_WINDOW = 7          # buang deteksi meleset sesaat sebelum difilter
 # Jarak minimum antar BATAS bidikan, dalam detik.
@@ -2044,7 +2049,8 @@ def _settle_subject(subject: list[Optional[int]]) -> list[Optional[int]]:
 def _smooth(centers: list[Optional[float]], cuts: list[bool], *,
             source_w: int, crop_w: int,
             subject: Optional[list] = None,
-            motion: str = "smooth") -> list[float]:
+            motion: str = "smooth",
+            batas_keluar: Optional[list] = None) -> list[float]:
     """
     Mengubah jejak wajah mentah menjadi gerakan kamera yang enak dilihat.
 
@@ -2136,6 +2142,30 @@ def _smooth(centers: list[Optional[float]], cuts: list[bool], *,
         runs.append((prev, b))
         prev = b
     runs.append((prev, len(filled)))
+    # Batas yang dipakai diserahkan ke pemanggil: interpolasi ke laju perintah
+    # tidak boleh melandaikan lompatan di batas ini (lihat plan_reframe).
+    if batas_keluar is not None:
+        batas_keluar[:] = [(b, b in keras) for b in bounds]
+
+    # Bidikan baru tidak boleh mewarisi posisi bidikan sebelumnya.
+    #
+    # `filled` meneruskan nilai terakhir yang diketahui ke sampel tanpa wajah,
+    # dan sesudah potongan adegan nilai itu milik GAMBAR LAIN. Sampai detektor
+    # menemukan wajah di bidikan baru (wajah yang masih buram karena gerak,
+    # atau baru masuk bingkai), kotaknya menatap tempat orang di bidikan
+    # sebelumnya duduk: ruang kosong, lalu meluncur ke wajah begitu ia
+    # terdeteksi. Diisi mundur dari wajah pertama di bidikan itu sendiri.
+    for a, b in runs:
+        if a == 0 or a not in keras:
+            continue
+        pertama = next((centers[j] for j in range(a, min(b, len(centers)))
+                        if centers[j] is not None), None)
+        if pertama is None:
+            continue
+        for j in range(a, b):
+            if centers[j] is not None:
+                break
+            filled[j] = pertama
 
     out: list[float] = []
     for a, b in runs:
@@ -2163,6 +2193,7 @@ def _smooth(centers: list[Optional[float]], cuts: list[bool], *,
 
         chunk = _median(chunk, MEDIAN_WINDOW)
         chunk = _apply_deadzone(chunk, deadzone)
+        sasaran = list(chunk)
         # Dua lintasan maju-mundur. Satu lintasan masih menyisakan riak halus
         # yang terlihat sebagai getar pelan saat kamera berpindah; melipatgandakan
         # orde filter menekannya tanpa menambah keterlambatan, karena tiap
@@ -2172,14 +2203,89 @@ def _smooth(centers: list[Optional[float]], cuts: list[bool], *,
 
         # Plafon kecepatan terakhir, supaya perpindahan besar tetap terbaca
         # sebagai gerakan kamera dan bukan lompatan.
+        #
+        # Plafonnya ADAPTIF (15 Oktober 2026). Plafon tetap 0,16 lebar/detik
+        # membuat kamera tertinggal di belakang wajah yang bergerak cepat:
+        # pada siaran IRL handheld wajahnya melintas ±600 px/detik, kamera
+        # hanya boleh 205, dan selama itu wajahnya di luar bingkai. Dilaporkan
+        # sebagai "masih ada animasi pergerakan yang lumayan terasa lama".
+        # Gerak kecil tetap dibatasi plafon biasa; begitu sasaran sudah
+        # mendekati tepi kotak, kamera boleh mengejar sampai KEJAR_KALI lipat.
+        kejar_ambang = KEJAR_AMBANG * crop_w
+        # Penghalus tidak boleh membawa kamera lebih jauh dari KEJAR_AMBANG
+        # lebar kotak dari wajahnya. Empat lintasan EMA dua arah melandaikan
+        # gerak cepat terlalu jauh: wajah yang menyeberang 600 px/detik
+        # dihaluskan jadi tanjakan yang BERANGKAT 260 px lebih dulu dan tiba
+        # belakangan, dua-duanya di luar kotak. Gerak kecil tidak tersentuh,
+        # karena di situ selisihnya memang tidak pernah sebesar itu.
+        chunk = [min(max(v, t_ - kejar_ambang), t_ + kejar_ambang)
+                 for v, t_ in zip(chunk, sasaran)]
         limited = [chunk[0]]
         for v in chunk[1:]:
             prev_v = limited[-1]
-            step = max(-max_step, min(max_step, v - prev_v))
+            batas_langkah = max_step * (KEJAR_KALI if abs(v - prev_v) > kejar_ambang else 1.0)
+            step = max(-batas_langkah, min(batas_langkah, v - prev_v))
             limited.append(prev_v + step)
         out.extend(min(max(v, lo), hi) for v in limited)
 
     return out
+
+
+def _waktu_potong_tepat(src: Path, segments: list[dict], idx: int) -> Optional[float]:
+    """
+    Waktu potongan adegan sampai ke bingkainya, dalam waktu KLIP.
+
+    Pemindai bekerja pada 8 Hz, jadi ia hanya tahu potongannya jatuh di antara
+    sampel `idx-1` dan `idx`. Jendela 125 ms itu didekode ulang pada 30 fps,
+    kecil saja, dan bingkai dengan beda histogram terbesar dari pendahulunya
+    adalah bingkai pertama gambar baru. None bila tidak bisa dibaca; pemanggil
+    lalu memakai waktu sampelnya.
+    """
+    try:
+        import cv2
+        import numpy as np
+    except ImportError:
+        return None
+    a_klip = max(0.0, (idx - 1) / SAMPLE_FPS)
+    b_klip = idx / SAMPLE_FPS
+    # Waktu klip -> waktu sumber, lewat urutan segmennya.
+    sisa, sumber = a_klip, None
+    for sg in segments:
+        d = float(sg["end"]) - float(sg["start"])
+        if sisa < d:
+            sumber = float(sg["start"]) + sisa
+            break
+        sisa -= d
+    if sumber is None:
+        return None
+    fps, w, h = 30, 160, 90
+    from .proksi import untuk_analisis
+    cmd = ["ffmpeg", "-hide_banner", "-nostdin", "-loglevel", "error",
+           "-ss", f"{max(0.0, sumber - 1 / fps):.3f}", "-t", f"{(b_klip - a_klip) + 2 / fps:.3f}",
+           "-i", str(untuk_analisis(src)), "-vf", f"fps={fps},scale={w}:{h}",
+           "-f", "rawvideo", "-pix_fmt", "bgr24", "-"]
+    try:
+        raw = subprocess.run(cmd, capture_output=True, timeout=20).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    ukuran = w * h * 3
+    bingkai = [np.frombuffer(raw[k * ukuran:(k + 1) * ukuran], np.uint8).reshape(h, w, 3)
+               for k in range(len(raw) // ukuran)]
+    if len(bingkai) < 2:
+        return None
+    hist = []
+    for img in bingkai:
+        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+        hh = cv2.calcHist([hsv], [0, 1], None, [30, 16], [0, 180, 0, 256])
+        cv2.normalize(hh, hh)
+        hist.append(hh)
+    beda = [cv2.compareHist(hist[k - 1], hist[k], cv2.HISTCMP_BHATTACHARYYA)
+            for k in range(1, len(hist))]
+    k = int(np.argmax(beda)) + 1
+    if beda[k - 1] < SCENE_CUT_DISTANCE * 0.6:
+        return None
+    t = a_klip - 1 / fps + k / fps
+    return round(min(max(t, a_klip), b_klip), 4)
 
 
 def _titik_wajah_terlihat(people, seen, i):
@@ -3186,14 +3292,59 @@ def plan_reframe(source_video_path: str, segments: list[dict], *,
     # berarti mengabaikan permintaannya.
     if people and lock_person is None and not person_keys:
         subject = _settle_subject(list(subject))
+        # Hanya bila orangnya BENAR-BENAR terlihat pada sampel itu.
+        #
+        # `people` menahan posisi terakhir, dan sebelum seseorang pertama kali
+        # terlihat ia diisi mundur dengan posisi pertamanya. Penenang subjek
+        # bisa memperpanjang giliran B ke sampel sebelum kamera memotong ke B
+        # (giliran bicaranya mulai sedikit lebih dulu daripada potongannya),
+        # dan tanpa syarat ini bingkai pindah ke kursi B di bidikan
+        # BERIKUTNYA sementara bidikan sekarang masih memperlihatkan A.
+        # Terukur 15 Oktober 2026 pada podcast Tirta-Gia: 0,15 dtk sebelum
+        # potongan, kotak di x=620 dan satu-satunya wajah di x=150.
+        def _terlihat(s_, i_):
+            return (seen is None or s_ >= len(seen) or i_ >= len(seen[s_])
+                    or bool(seen[s_][i_]))
         centers = [
             float(people[s][i]) if (s is not None and s < len(people)
-                                    and people[s][i] is not None) else c
+                                    and people[s][i] is not None
+                                    and _terlihat(s, i)) else c
             for i, (c, s) in enumerate(zip(centers, subject))
         ]
 
+    # Wajah latar tidak pernah jadi subjek bila ada wajah jauh lebih besar.
+    #
+    # Pada siaran IRL handheld (IShowSpeed, 15 Oktober 2026) orang yang lewat
+    # di belakang tertangkap sebagai "orang 1" selebar 24 px, sementara
+    # wajah streamernya 180 px, dan bingkai berpindah ke orang lewat itu
+    # selama dua detik: 12% klip tanpa wajah utamanya. Penanda pengguna
+    # dihormati, jadi aturan ini hanya berlaku tanpa kunci orang.
+    if people and boxes and lock_person is None and not person_keys:
+        subject = list(subject)
+        centers = list(centers)
+        ganti = 0
+        for i in range(min(len(subject), len(centers))):
+            lebar = {q: float(boxes[q][i][1]) for q in range(len(people))
+                     if q < len(boxes) and i < len(boxes[q]) and boxes[q][i] is not None
+                     and q < len(seen) and i < len(seen[q]) and seen[q][i]}
+            if len(lebar) < 2:
+                continue
+            besar = max(lebar, key=lebar.get)
+            s_ = subject[i]
+            ukur = lebar.get(s_) if s_ is not None else None
+            if ukur is None or ukur >= SUBJEK_RELATIF_MIN * lebar[besar]:
+                continue
+            subject[i] = besar
+            if people[besar][i] is not None:
+                centers[i] = float(people[besar][i])
+            ganti += 1
+        if ganti:
+            log.info("%.1f dtk subjek wajah latar kecil diganti wajah terbesar",
+                     ganti / SAMPLE_FPS)
+
+    batas: list = []
     smoothed = _smooth(centers, cuts, source_w=source_w, crop_w=crop_w,
-                       subject=subject, motion=frame_motion)
+                       subject=subject, motion=frame_motion, batas_keluar=batas)
 
     plan = ReframePlan(crop_w=crop_w, crop_h=crop_h, source_w=source_w,
                        source_h=source_h, face_coverage=round(coverage, 3),
@@ -3213,8 +3364,37 @@ def plan_reframe(source_video_path: str, segments: list[dict], *,
     total = (len(smoothed) - 1) / SAMPLE_FPS
     n = len(smoothed)
 
-    def at(idx: int) -> float:
-        return smoothed[min(max(idx, 0), n - 1)]
+    # Rentang antar batas, dengan WAKTU pindahnya. Spline tidak boleh
+    # melintasi batas: Catmull-Rom yang melewati lompatan 400 piksel
+    # melandaikannya jadi luncuran satu sampel (125 ms) menyeberangi layar,
+    # dan melampaui (overshoot) di kedua sisinya. Itulah "bingkai menyorot
+    # ruang kosong sepersekian detik, lalu baru pindah ke wajahnya" yang
+    # dilaporkan 15 Oktober 2026. Di batas, posisinya berganti seketika.
+    #
+    # Potongan adegan dicari sampai ke bingkainya (`_waktu_potong_tepat`):
+    # sampel 8 Hz hanya tahu potongannya ada di antara dua sampel, dan
+    # berpindah di sampel sesudahnya berarti sampai 125 ms gambar baru dengan
+    # kotak lama.
+    rentang: list[tuple[float, int, int]] = []        # (mulai_dtk, idx_a, idx_b)
+    awal_idx, awal_t = 0, 0.0
+    for b, keras_ in batas:
+        if not (0 < b < n):
+            continue
+        t_b = b / SAMPLE_FPS
+        if keras_ and frame_motion != "cut":
+            t_b = _waktu_potong_tepat(src, segments, b) or t_b
+        rentang.append((awal_t, awal_idx, b))
+        awal_idx, awal_t = b, t_b
+    rentang.append((awal_t, awal_idx, n))
+
+    def rentang_untuk(t: float) -> tuple[int, int]:
+        for k in range(len(rentang) - 1, -1, -1):
+            if t + 1e-9 >= rentang[k][0]:
+                return rentang[k][1], rentang[k][2]
+        return rentang[0][1], rentang[0][2]
+
+    def at(idx: int, a: int = 0, b: int = n) -> float:
+        return smoothed[min(max(idx, a), b - 1)]
 
     keyframes: list[tuple[float, int]] = []
     centers: list[tuple[float, float]] = []
@@ -3224,6 +3404,10 @@ def plan_reframe(source_video_path: str, segments: list[dict], *,
         pos = t * SAMPLE_FPS
         i = int(math.floor(pos))
         u = pos - i
+        ra, rb = rentang_untuk(t)
+        if i < ra:
+            # Sudah lewat waktu potongnya, sampelnya belum: pakai awal bidikan baru.
+            i, u = ra, 0.0
         if frame_motion == "cut":
             # Tangga, bukan spline. Catmull-Rom melewati tiap titik dengan
             # tangen bersambung — justru sifat yang membuatnya bagus untuk
@@ -3232,7 +3416,8 @@ def plan_reframe(source_video_path: str, segments: list[dict], *,
             # sepertiga detik, yang terbaca sebagai sentakan, bukan potongan.
             cx = at(i)
         else:
-            p0, p1, p2, p3 = at(i - 1), at(i), at(i + 1), at(i + 2)
+            p0, p1, p2, p3 = (at(i - 1, ra, rb), at(i, ra, rb),
+                              at(i + 1, ra, rb), at(i + 2, ra, rb))
             cx = 0.5 * (
                 (2 * p1)
                 + (-p0 + p2) * u
