@@ -1,5 +1,6 @@
 import React from 'react';
 import { AlertTriangle, RotateCcw } from 'lucide-react';
+import { t } from '../lib/i18n';
 
 /**
  * Penahan galat render.
@@ -40,10 +41,9 @@ export default class ErrorBoundary extends React.Component {
         borderRadius: 'var(--radius-md)', textAlign: 'center',
       }}>
         <AlertTriangle size={30} style={{ color: 'var(--accent-red, var(--danger))', marginBottom: '10px' }} />
-        <h3 style={{ fontWeight: 800, marginBottom: '8px' }}>Bagian ini gagal ditampilkan</h3>
+        <h3 style={{ fontWeight: 800, marginBottom: '8px' }}>{t('galat.judul')}</h3>
         <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.6, margin: '0 0 6px' }}>
-          Halaman lain masih bisa dibuka lewat tombol menu (☰) di kiri atas. Rincian teknisnya
-          ada di konsol browser (F12).
+          {t('galat.saran')}
         </p>
         <code style={{
           display: 'block', fontSize: '0.74rem', color: 'var(--text-muted)',
@@ -52,7 +52,7 @@ export default class ErrorBoundary extends React.Component {
           {String(error?.message || error)}
         </code>
         <button className="btn-secondary" onClick={() => this.setState({ error: null })}>
-          <RotateCcw size={14} /> Coba tampilkan lagi
+          <RotateCcw size={14} /> {t('galat.coba_lagi')}
         </button>
       </div>
     );

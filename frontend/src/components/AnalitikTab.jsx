@@ -4,6 +4,7 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { apiGet } from '../lib/api';
+import { useT } from '../lib/i18n';
 import GrafikHarian from './GrafikHarian';
 
 /**
@@ -50,30 +51,31 @@ function Angka({ label, nilai, nota }) {
   );
 }
 
-function Temuan({ t }) {
+function Temuan({ temuan: tm }) {
+  const t = useT();
   return (
     <li style={{ padding: '10px 0', borderTop: '1px solid var(--border-color)' }}>
       <div style={{ display: 'flex', gap: '8px', alignItems: 'baseline', flexWrap: 'wrap' }}>
-        <b style={{ fontSize: '0.82rem', color: warnaBerat(t.berat) }}>{t.judul}</b>
+        <b style={{ fontSize: '0.82rem', color: warnaBerat(tm.berat) }}>{tm.judul}</b>
         <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-          {t.berapa} dari {t.dari} klip
+          {t('analitik.dari_klip', { n: tm.berapa, dari: tm.dari })}
         </span>
-        {t.dasar === 'kanal' && (
-          <span className="chip is-on" style={{ fontSize: '0.66rem' }}>terukur di kanal ini</span>
+        {tm.dasar === 'kanal' && (
+          <span className="chip is-on" style={{ fontSize: '0.66rem' }}>{t('analitik.terukur_chip')}</span>
         )}
       </div>
-      {t.dasar === 'kanal' && (
+      {tm.dasar === 'kanal' && (
         <div style={{ ...helpText, fontSize: '0.74rem', marginTop: '3px' }}>
-          Median tayangan klip yang kena: <b>{t.median_kena}</b>, yang tidak kena:{' '}
-          <b>{t.median_bersih}</b>.
+          {t('analitik.median_kena', { kena: tm.median_kena, bersih: tm.median_bersih })}
         </div>
       )}
-      <div style={{ ...helpText, fontSize: '0.76rem', marginTop: '3px' }}>{t.saran}</div>
+      <div style={{ ...helpText, fontSize: '0.76rem', marginTop: '3px' }}>{tm.saran}</div>
     </li>
   );
 }
 
 export default function AnalitikTab() {
+  const t = useT();
   const [data, setData] = useState(null);
   const [galat, setGalat] = useState(null);
   const [sibuk, setSibuk] = useState(false);
@@ -98,16 +100,15 @@ export default function AnalitikTab() {
     <div className="page" style={{ maxWidth: '1280px' }}>
       <div className="work-block" style={{ alignItems: 'center' }}>
         <div style={{ minWidth: 0 }}>
-          <h1 className="work-title">Analitik</h1>
+          <h1 className="work-title">{t('analitik.judul')}</h1>
           <div className="sub">
-            Klip yang sudah diunggah ke YouTube, berapa kali ditonton, dan apa
-            yang bisa dibaca dari angkanya.
+            {t('analitik.sub')}
           </div>
         </div>
         <button className="btn-secondary" onClick={muat} disabled={sibuk}
                 style={{ display: 'inline-flex', gap: '7px', alignItems: 'center' }}>
           {sibuk ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-          Muat ulang
+          {t('umum.muat_ulang')}
         </button>
       </div>
 
@@ -121,21 +122,19 @@ export default function AnalitikTab() {
 
       {!data && !galat && (
         <div style={{ ...helpText, display: 'flex', gap: '8px', alignItems: 'center' }}>
-          <Loader2 size={16} className="animate-spin" /> Membaca tayangan dari YouTube…
+          <Loader2 size={16} className="animate-spin" /> {t('analitik.membaca')}
         </div>
       )}
 
       {data && !data.kunci_terpasang && (
         <div style={card}>
           <div style={sectionTitle}>
-            <BarChart3 size={18} style={{ color: 'var(--reh)' }} />Kunci belum terpasang
+            <BarChart3 size={18} style={{ color: 'var(--reh)' }} />{t('analitik.tanpa_kunci')}
           </div>
           <p className="bantu" style={helpText}>
-            Tayangan dibaca dengan kunci YouTube Data API. Tanpa kunci itu,
-            OmniClip tahu video mana yang ia unggah tapi tidak boleh menanyakan
-            angkanya. Kuncinya dipasang sekali di halaman{' '}
-            <Link to="/profil" style={{ color: 'var(--reh)' }}>Akun</Link>, dan
-            hanya bisa membaca: ia tidak mengubah apa pun di kanal Anda.
+            {t('analitik.tanpa_kunci_a')}{' '}
+            <Link to="/profil" style={{ color: 'var(--reh)' }}>{t('nav.akun')}</Link>
+            {t('analitik.tanpa_kunci_b')}
           </p>
         </div>
       )}
@@ -143,13 +142,12 @@ export default function AnalitikTab() {
       {data && data.kunci_terpasang && data.terunggah === 0 && (
         <div style={card}>
           <div style={sectionTitle}>
-            <BarChart3 size={18} style={{ color: 'var(--reh)' }} />Belum ada yang diunggah
+            <BarChart3 size={18} style={{ color: 'var(--reh)' }} />{t('analitik.belum_unggah')}
           </div>
           <p className="bantu" style={helpText}>
-            Kuncinya terpasang dan siap, tapi profil ini belum pernah mengunggah
-            klip ke YouTube lewat OmniClip. Begitu klip pertama naik dari{' '}
-            <Link to="/clips" style={{ color: 'var(--reh)' }}>Klip jadi</Link>,
-            angkanya muncul di sini sendiri.
+            {t('analitik.belum_unggah_a')}{' '}
+            <Link to="/clips" style={{ color: 'var(--reh)' }}>{t('klip.judul')}</Link>
+            {t('analitik.belum_unggah_b')}
           </p>
         </div>
       )}
@@ -157,12 +155,12 @@ export default function AnalitikTab() {
       {data && data.terunggah > 0 && (
         <>
           <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-            <Angka label="Total tayangan" nilai={r?.total ?? 0}
-                   nota={`dari ${data.terbaca} klip yang terbaca`} />
-            <Angka label="Median per klip" nilai={r?.median ?? '-'}
-                   nota="setengah klip di atas angka ini, setengahnya di bawah" />
-            <Angka label="Terunggah" nilai={data.terunggah}
-                   nota={belumTerbaca > 0 ? `${belumTerbaca} belum terbaca` : 'semuanya terbaca'} />
+            <Angka label={t('analitik.total')} nilai={r?.total ?? 0}
+                   nota={t('analitik.dari_terbaca', { n: data.terbaca })} />
+            <Angka label={t('analitik.median')} nilai={r?.median ?? '-'}
+                   nota={t('analitik.median_nota')} />
+            <Angka label={t('analitik.terunggah')} nilai={data.terunggah}
+                   nota={belumTerbaca > 0 ? t('analitik.belum_terbaca', { n: belumTerbaca }) : t('analitik.semua_terbaca')} />
           </div>
 
           {/* Ringkasan kanal, dan dari mana tiap video datang.
@@ -175,27 +173,27 @@ export default function AnalitikTab() {
             <div style={{ ...card, marginTop: '12px' }}>
               <div style={sectionTitle}>
                 <BarChart3 size={18} style={{ color: 'var(--reh)' }} />
-                Kanal {data.kanal.nama}
+                {t('analitik.kanal', { nama: data.kanal.nama })}
               </div>
               <div style={{ display: 'flex', gap: '22px', flexWrap: 'wrap',
                             margin: '8px 0 4px' }}>
-                <Angka label="Video di kanal" nilai={data.kanal.jumlah_video ?? '-'}
+                <Angka label={t('analitik.video_kanal')} nilai={data.kanal.jumlah_video ?? '-'}
                        nota={data.dari_omniclip !== undefined
-                         ? `${data.dari_omniclip} diunggah lewat OmniClip`
+                         ? t('analitik.lewat_omniclip_n', { n: data.dari_omniclip })
                          : ''} />
-                <Angka label="Total tayangan kanal"
+                <Angka label={t('analitik.total_kanal')}
                        nilai={data.kanal.total_tayangan ?? '-'}
-                       nota="seluruh video, sejak kanal dibuat" />
-                <Angka label="Pelanggan"
-                       nilai={data.kanal.pelanggan_disembunyikan ? 'disembunyikan'
+                       nota={t('analitik.total_kanal_nota')} />
+                <Angka label={t('analitik.pelanggan')}
+                       nilai={data.kanal.pelanggan_disembunyikan ? t('analitik.disembunyikan')
                          : (data.kanal.pelanggan ?? '-')}
-                       nota="menurut YouTube" />
+                       nota={t('analitik.menurut_yt')} />
               </div>
               <div style={{ marginTop: '14px', paddingTop: '12px',
                             borderTop: '1px solid var(--border-color)' }}>
                 <div style={{ fontSize: '0.82rem', fontWeight: 800,
                               marginBottom: '8px' }}>
-                  Tambahan tayangan per hari
+                  {t('analitik.per_hari')}
                 </div>
                 <GrafikHarian harian={data.harian} helpText={helpText} />
               </div>
@@ -208,11 +206,8 @@ export default function AnalitikTab() {
               <AlertTriangle size={16} style={{ flex: 'none', marginTop: '2px',
                                                 color: 'var(--reh)' }} />
               <div style={{ ...helpText, fontSize: '0.78rem' }}>
-                <b>{belumTerbaca} video belum terbaca angkanya.</b> Kunci API hanya
-                bisa membaca video <b>publik</b>. Video yang masih Pribadi atau Tidak
-                publik tidak dijawab YouTube sama sekali, dan OmniClip tidak akan
-                menampilkannya sebagai nol tayangan. Ubah statusnya jadi publik di
-                YouTube Studio, lalu muat ulang halaman ini.
+                <b>{t('analitik.tak_terbaca_judul', { n: belumTerbaca })}</b>{' '}
+                {t('analitik.tak_terbaca_isi')}
               </div>
             </div>
           )}
@@ -224,13 +219,11 @@ export default function AnalitikTab() {
             <div style={{ ...card, marginTop: '12px' }}>
               <div style={sectionTitle}>
                 <BarChart3 size={18} style={{ color: 'var(--reh)' }} />
-                Klip dengan komentar vs tanpa komentar
+                {t('analitik.banding')}
               </div>
               <p className="bantu" style={helpText}>{data.banding_komentar.kalimat}</p>
               <div style={{ ...helpText, fontSize: '0.74rem' }}>
-                Terbaca: {data.banding_komentar.dengan} klip dengan komentar,{' '}
-                {data.banding_komentar.tanpa} tanpa. Perbandingan memakai median dan baru
-                ditampilkan bila tiap kelompok punya paling sedikit {data.banding_komentar.minimal} klip.
+                {t('analitik.banding_ket', data.banding_komentar)}
               </div>
             </div>
           )}
@@ -238,41 +231,31 @@ export default function AnalitikTab() {
           <div style={{ ...card, marginTop: '12px' }}>
             <div style={sectionTitle}>
               <BarChart3 size={18} style={{ color: 'var(--reh)' }} />
-              {data.cukup_data ? 'Yang terukur di kanal ini' : 'Yang masih kurang'}
+              {data.cukup_data ? t('analitik.terukur') : t('analitik.kurang')}
             </div>
             <p className="bantu" style={helpText}>
               {data.cukup_data
-                ? 'Tiap temuan di bawah ini dibandingkan antara klip yang kena dan '
-                  + 'yang tidak, memakai median tayangan klip Anda sendiri.'
-                : `Dengan ${data.terbaca} klip terbaca, belum ada yang bisa `
-                  + `dibandingkan. Di bawah ${data.ambang} klip, perbedaan tayangan `
-                  + 'antara dua video bisa seluruhnya kebetulan, dan menyajikannya '
-                  + 'sebagai sebab akan membuat Anda mengubah hal yang salah. Jadi '
-                  + 'yang di bawah ini daftar periksa, bukan penjelasan kenapa '
-                  + 'sebuah klip sepi.'}
+                ? t('analitik.terukur_ket')
+                : t('analitik.kurang_ket', { n: data.terbaca, ambang: data.ambang })}
             </p>
             {data.temuan.length === 0 ? (
               <p style={{ ...helpText, marginTop: '10px' }}>
-                Tidak ada satu pun temuan di klip yang sudah diunggah. Yang
-                tersisa ada di luar berkas videonya: judul, jam tayang, dan
-                seberapa sering kanal ini mengunggah.
+                {t('analitik.tanpa_temuan')}
               </p>
             ) : (
               <ul style={{ listStyle: 'none', padding: 0, margin: '10px 0 0' }}>
-                {data.temuan.map((t) => <Temuan key={t.kode} t={t} />)}
+                {data.temuan.map((tm) => <Temuan key={tm.kode} temuan={tm} />)}
               </ul>
             )}
             <p style={{ fontSize: '0.68rem', color: 'var(--text-muted)',
                         margin: '12px 0 0', lineHeight: 1.55 }}>
-              {data.catatan_kaki} Daftar periksa, bukan ramalan: tidak ada yang
-              bisa menjamin jangkauan, yang bisa dijaga hanya hal-hal yang
-              diketahui membuat penonton pergi.
+              {data.catatan_kaki} {t('analitik.bukan_ramalan')}
             </p>
           </div>
 
           <div style={{ ...card, marginTop: '12px' }}>
             <div style={sectionTitle}>
-              <Eye size={18} style={{ color: 'var(--reh)' }} />Klip per klip
+              <Eye size={18} style={{ color: 'var(--reh)' }} />{t('analitik.per_klip')}
             </div>
             <div style={{ overflowX: 'auto', marginTop: '8px' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse',
@@ -281,11 +264,11 @@ export default function AnalitikTab() {
                   <tr style={{ textAlign: 'left', color: 'var(--text-muted)',
                                fontSize: '0.7rem', textTransform: 'uppercase',
                                letterSpacing: '0.04em' }}>
-                    <th style={{ padding: '6px 8px 6px 0' }}>Klip</th>
-                    <th style={{ padding: '6px 8px', textAlign: 'right' }}>Tayangan</th>
-                    <th style={{ padding: '6px 8px', textAlign: 'right' }}>Suka</th>
-                    <th style={{ padding: '6px 8px', textAlign: 'right' }}>Panjang</th>
-                    <th style={{ padding: '6px 8px', textAlign: 'right' }}>Daftar periksa</th>
+                    <th style={{ padding: '6px 8px 6px 0' }}>{t('analitik.kol_klip')}</th>
+                    <th style={{ padding: '6px 8px', textAlign: 'right' }}>{t('analitik.kol_tayangan')}</th>
+                    <th style={{ padding: '6px 8px', textAlign: 'right' }}>{t('analitik.kol_suka')}</th>
+                    <th style={{ padding: '6px 8px', textAlign: 'right' }}>{t('analitik.kol_panjang')}</th>
+                    <th style={{ padding: '6px 8px', textAlign: 'right' }}>{t('analitik.kol_periksa')}</th>
                     <th style={{ padding: '6px 0 6px 8px' }} />
                   </tr>
                 </thead>
@@ -304,15 +287,15 @@ export default function AnalitikTab() {
                         <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)',
                                       marginTop: 2 }}>
                           {k.dari_omniclip === false
-                            ? 'diunggah di luar OmniClip'
-                            : 'lewat OmniClip'}
+                            ? t('analitik.luar_omniclip')
+                            : t('analitik.lewat_omniclip')}
                           {k.waktu ? ` · ${String(k.waktu).slice(0, 10)}` : ''}
                         </div>
                         {!k.terbaca && (
                           <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                            angkanya tidak terbaca
+                            {t('analitik.tak_terbaca')}
                             {k.privasi && k.privasi !== 'public'
-                              ? `, diunggah sebagai ${k.privasi === 'private' ? 'Pribadi' : 'Tidak publik'}`
+                              ? t(k.privasi === 'private' ? 'analitik.sebagai_pribadi' : 'analitik.sebagai_tidak_publik')
                               : ''}
                           </div>
                         )}
@@ -334,7 +317,7 @@ export default function AnalitikTab() {
                       <td style={{ padding: '9px 8px', textAlign: 'right',
                                    color: 'var(--text-secondary)',
                                    fontVariantNumeric: 'tabular-nums' }}>
-                        {k.durasi ? `${Math.round(k.durasi)} dtk` : '-'}
+                        {k.durasi ? t('analitik.detik', { n: Math.round(k.durasi) }) : '-'}
                       </td>
                       <td style={{ padding: '9px 8px', textAlign: 'right',
                                    fontVariantNumeric: 'tabular-nums' }}>
@@ -348,7 +331,7 @@ export default function AnalitikTab() {
                       </td>
                       <td style={{ padding: '9px 0 9px 8px' }}>
                         <a href={k.url} target="_blank" rel="noreferrer"
-                           title="Buka di YouTube"
+                           title={t('analitik.buka_yt')}
                            style={{ color: 'var(--reh)', display: 'inline-flex' }}>
                           <ExternalLink size={14} />
                         </a>
@@ -360,9 +343,7 @@ export default function AnalitikTab() {
             </div>
             <p style={{ fontSize: '0.68rem', color: 'var(--text-muted)',
                         margin: '12px 0 0', lineHeight: 1.55 }}>
-              Angka tayangan disimpan lima belas menit sebelum ditanyakan ulang,
-              supaya jatah harian kunci API tidak habis hanya karena halaman ini
-              dibuka berkali-kali.
+              {t('analitik.cache')}
             </p>
           </div>
         </>

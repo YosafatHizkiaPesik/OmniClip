@@ -21,6 +21,8 @@ import { formatDurationHuman } from '../utils/timeFormat';
 // 405, itu sebabnya 720p tidak dijadikan bawaan.
 const RESOLUSI_BAWAAN = '1080p';
 const RESOLUTIONS = ['1080p', 'Terbaik', '720p', '480p', '360p', 'Audio MP3'];
+// Nilainya dikirim apa adanya ke server; hanya labelnya yang diterjemahkan.
+const LABEL_RESOLUSI = { Terbaik: 'tonton.terbaik', 'Audio MP3': 'tonton.audio_mp3' };
 
 /**
  * Halaman tonton.
@@ -173,15 +175,15 @@ export default function Watch() {
       setNotice({
         kind: res.cached ? 'cached' : 'queued',
         text: res.cached
-          ? 'Video ini sudah pernah diklip. Hasilnya menunggu di Clip Studio.'
-          : 'Diantrekan. Prosesnya berjalan di latar belakang, Anda bisa langsung memilih video lain.',
+          ? t('tonton.sudah_diklip')
+          : t('tonton.diantrekan'),
       });
     } catch (err) {
       setNotice({ kind: 'error', text: err.message });
     } finally {
       setQueueing(false);
     }
-  }, [videoId, mutu]);
+  }, [videoId, mutu, t]);
 
   /**
    * Menanyakan resolusi sumber SEBELUM mengklip.
@@ -237,7 +239,7 @@ export default function Watch() {
     try {
       await downloadToDisk('local_downloads', fileName);
     } catch (err) {
-      setNotice({ kind: 'error', text: `Gagal menyimpan file: ${err.message}` });
+      setNotice({ kind: 'error', text: t('tonton.gagal_simpan', { pesan: err.message }) });
     }
   };
 
@@ -245,10 +247,10 @@ export default function Watch() {
     return (
       <div style={{ maxWidth: '520px', margin: '60px auto', textAlign: 'center' }}>
         <AlertTriangle size={34} style={{ color: 'var(--accent-red, var(--danger))', marginBottom: '12px' }} />
-        <h3 style={{ fontWeight: 700, marginBottom: '7px' }}>Video tidak bisa dibuka</h3>
+        <h3 style={{ fontWeight: 700, marginBottom: '7px' }}>{t('tonton.tidak_bisa')}</h3>
         <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{infoError.message}</p>
         <button className="btn-primary" onClick={() => navigate('/')} style={{ marginTop: '16px' }}>
-          <ArrowLeft size={14} /> Kembali ke feed
+          <ArrowLeft size={14} /> {t('tonton.kembali_feed')}
         </button>
       </div>
     );
@@ -261,10 +263,10 @@ export default function Watch() {
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', gap: '10px', marginBottom: '16px' }}>
           <button className="btn-secondary" onClick={() => navigate(-1)} style={{ padding: '0 14px' }}>
-            <ArrowLeft size={16} /> Kembali
+            <ArrowLeft size={16} /> {t('umum.kembali')}
           </button>
           <button className="btn-secondary" onClick={() => navigate('/')} style={{ padding: '0 14px' }}>
-            <Search size={16} /> Cari video
+            <Search size={16} /> {t('tonton.cari_video')}
           </button>
         </div>
 
@@ -282,7 +284,7 @@ export default function Watch() {
 
         <div style={{ padding: '14px 0' }}>
           <h2 style={{ fontSize: '1.15rem', fontWeight: 700, lineHeight: 1.4, marginBottom: '10px' }}>
-            {video?.title ?? 'Memuat…'}
+            {video?.title ?? t('umum.memuat')}
           </h2>
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -327,13 +329,13 @@ export default function Watch() {
                         borderColor: 'rgba(79, 172, 254, 0.35)',
                         color: '#4facfe', fontSize: '0.85rem',
                       }}>
-                <Download size={16} /> Unduh video
+                <Download size={16} /> {t('tonton.unduh')}
               </button>
               <button onClick={handleClip} disabled={queueing} className="btn-primary"
                       style={{ background: 'linear-gradient(135deg, var(--danger), #ff4e50)', color: '#fff', fontSize: '0.85rem' }}>
                 {queueing
-                  ? <><Loader2 size={16} className="animate-spin" /> Mengantre…</>
-                  : <><Scissors size={16} /><Sparkles size={14} /> Potong jadi klip</>}
+                  ? <><Loader2 size={16} className="animate-spin" /> {t('kisi.mengantre')}</>
+                  : <><Scissors size={16} /><Sparkles size={14} /> {t('tonton.potong')}</>}
               </button>
             </div>
 
@@ -360,14 +362,11 @@ export default function Watch() {
               border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)',
             }}>
               <div style={{ fontSize: '0.92rem', fontWeight: 800, marginBottom: '4px' }}>
-                Ambil sumbernya di resolusi berapa?
+                {t('tonton.resolusi_tanya')}
               </div>
               <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)',
                             lineHeight: 1.6, marginBottom: '12px' }}>
-                Klip 9:16 memotong bagian tengah gambar, jadi sumber yang lebih tinggi
-                berarti klip yang lebih tajam. Bayarannya: berkasnya jauh lebih besar,
-                dan di atas 1080p YouTube hampir selalu memakai VP9 atau AV1 yang jauh
-                lebih berat didekode komputer ini.
+                {t('tonton.resolusi_jelas')}
               </div>
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '10px' }}>
                 {pilihMutu.pilihan.map((r) => {
@@ -376,14 +375,14 @@ export default function Watch() {
                     <button key={r} onClick={() => pakaiMutu(r)}
                             className={bawaan ? 'btn-primary' : 'btn-secondary'}
                             style={{ fontSize: '0.82rem' }}>
-                      {r}{bawaan ? ' · disarankan' : ''}
+                      {r}{bawaan ? t('tonton.disarankan') : ''}
                     </button>
                   );
                 })}
               </div>
               <button className="btn-secondary" style={{ fontSize: '0.78rem' }}
                       onClick={() => { setPilihMutu(null); setQueueing(false); }}>
-                Batal
+                {t('umum.batal')}
               </button>
             </div>
           )}
@@ -397,24 +396,22 @@ export default function Watch() {
                 <Clock size={18} style={{ color: 'var(--accent-cyan)', flexShrink: 0, marginTop: '2px' }} />
                 <div>
                   <div style={{ fontSize: '0.92rem', fontWeight: 800, marginBottom: '4px' }}>
-                    Video ini tidak punya subtitle di YouTube
+                    {t('tonton.tanpa_subtitle')}
                   </div>
                   <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-                    Durasinya {Math.round(pending.minutes)} menit, jadi ucapannya harus
-                    disalin dulu di komputer ini, perkiraan{' '}
-                    <strong style={{ color: 'var(--accent-cyan)' }}>± {pending.fast} menit</strong>.
-                    Prosesnya berjalan di latar belakang, jadi Anda tetap bisa menonton
-                    dan mengantre video lain sementara menunggu.
+                    {t('tonton.tanpa_subtitle_a', { menit: Math.round(pending.minutes) })}{' '}
+                    <strong style={{ color: 'var(--accent-cyan)' }}>{t('tonton.tanpa_subtitle_m', { menit: pending.fast })}</strong>
+                    {t('tonton.tanpa_subtitle_b')}
                   </div>
                 </div>
               </div>
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                 <button className="btn-primary" style={{ fontSize: '0.82rem' }} onClick={startClip}>
-                  <Sparkles size={14} /> Lanjutkan
+                  <Sparkles size={14} /> {t('umum.lanjutkan')}
                 </button>
                 <button className="btn-secondary" style={{ fontSize: '0.82rem' }}
                         onClick={() => setPending(null)}>
-                  Batal
+                  {t('umum.batal')}
                 </button>
               </div>
             </div>
@@ -434,12 +431,12 @@ export default function Watch() {
               {notice.kind !== 'error' && (
                 <button className="btn-primary" style={{ fontSize: '0.78rem', padding: '6px 12px' }}
                         onClick={() => navigate('/studio')}>
-                  <Scissors size={13} /> Buka Clip Studio
+                  <Scissors size={13} /> {t('tonton.buka_studio')}
                 </button>
               )}
               <button className="btn-secondary" style={{ fontSize: '0.78rem', padding: '6px 12px' }}
                       onClick={() => setNotice(null)}>
-                Tutup
+                {t('umum.tutup')}
               </button>
             </div>
           )}
@@ -448,7 +445,7 @@ export default function Watch() {
 
       <div className="watch-sidebar" style={{ width: '360px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '4px' }}>
         <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '8px', paddingLeft: '4px' }}>
-          Video lain
+          {t('tonton.video_lain')}
         </div>
         {relatedLoading ? (
           <div style={{ padding: '40px', textAlign: 'center' }}>
@@ -456,7 +453,7 @@ export default function Watch() {
           </div>
         ) : related.length === 0 ? (
           <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-            Tidak ada video terkait ditemukan.
+            {t('tonton.tanpa_terkait')}
           </div>
         ) : (
           [...dariChannel.slice(0, 6),
@@ -471,7 +468,7 @@ export default function Watch() {
         <div className="modal-overlay">
           <div className="modal-box" style={{ maxWidth: '420px' }}>
             <h3 style={{ fontSize: '1.05rem', fontWeight: 700, borderBottom: '1px solid var(--border-color)', paddingBottom: '10px' }}>
-              Unduh: <span style={{ color: 'var(--accent-cyan)', fontSize: '0.88rem' }}>
+              {t('tonton.unduh_judul')} <span style={{ color: 'var(--accent-cyan)', fontSize: '0.88rem' }}>
                 {(video?.title ?? '').slice(0, 48)}…
               </span>
             </h3>
@@ -484,7 +481,7 @@ export default function Watch() {
                   color: resolution === res ? 'var(--accent-cyan)' : 'var(--text-primary)',
                   display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px',
                 }}>
-                  {res}
+                  {LABEL_RESOLUSI[res] ? t(LABEL_RESOLUSI[res]) : res}
                   {resolution === res && <CheckCircle2 size={13} />}
                 </button>
               ))}
@@ -502,18 +499,18 @@ export default function Watch() {
                     </div>
                     <button onClick={() => saveToDisk(downloadResult.file_name)} className="btn-primary"
                             style={{ background: 'var(--entry)', color: '#fff', fontSize: '0.78rem', padding: '6px 12px', alignSelf: 'flex-start' }}>
-                      <Download size={13} /> Simpan ke Perangkat
+                      <Download size={13} /> {t('tonton.simpan_perangkat')}
                     </button>
                   </div>
                 )}
               </div>
             )}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-              <button className="btn-secondary" onClick={() => setShowDownload(false)}>Tutup</button>
+              <button className="btn-secondary" onClick={() => setShowDownload(false)}>{t('umum.tutup')}</button>
               <button className="btn-primary" onClick={submitDownload} disabled={downloadJob.active}>
                 {downloadJob.active
-                  ? <><Loader2 size={15} className="animate-spin" /> Mengunduh…</>
-                  : <><Download size={15} /> Unduh via Server</>}
+                  ? <><Loader2 size={15} className="animate-spin" /> {t('tonton.mengunduh')}</>
+                  : <><Download size={15} /> {t('tonton.unduh_server')}</>}
               </button>
             </div>
           </div>

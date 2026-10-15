@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Download, Film, Music, Trash2, RefreshCw, Search, Play, X, CheckCircle, Loader2, AlertTriangle, Scissors, ArrowRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { apiGet, apiDelete, apiPost, downloadToDisk } from '../lib/api';
+import { lokal, useT } from '../lib/i18n';
 
 function formatBytes(bytes) {
   if (bytes < 1024) return `${bytes} B`;
@@ -12,7 +13,7 @@ function formatBytes(bytes) {
 
 function formatDate(timestamp) {
   if (!timestamp) return '';
-  return new Date(timestamp * 1000).toLocaleDateString('id-ID', {
+  return new Date(timestamp * 1000).toLocaleDateString(lokal(), {
     day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
   });
 }
@@ -34,10 +35,10 @@ function judulDariNama(fileName) {
 
 function formatDuration(seconds) {
   if (!seconds || seconds <= 0) return null;
-  const t = Math.round(seconds);
-  const j = Math.floor(t / 3600);
-  const m = Math.floor((t % 3600) / 60);
-  const d = t % 60;
+  const total = Math.round(seconds);
+  const j = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const d = total % 60;
   const pad = (n) => String(n).padStart(2, '0');
   return j ? `${j}:${pad(m)}:${pad(d)}` : `${m}:${pad(d)}`;
 }
@@ -115,6 +116,7 @@ function Thumb({ item }) {
 
 // Video Player Modal
 function VideoPlayerModal({ item, onClose }) {
+  const t = useT();
   const src = `${item.web_url}`;
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -122,7 +124,7 @@ function VideoPlayerModal({ item, onClose }) {
         background: '#000', borderRadius: '16px', overflow: 'hidden',
         maxWidth: '800px', width: '100%', position: 'relative',
       }}>
-        <button onClick={onClose} style={{
+        <button onClick={onClose} aria-label={t('umum.tutup')} style={{
           position: 'absolute', top: '10px', right: '10px', zIndex: 10,
           width: '32px', height: '32px', borderRadius: '50%',
           background: 'rgba(0,0,0,0.7)', border: 'none', color: '#fff',
@@ -144,6 +146,7 @@ function VideoPlayerModal({ item, onClose }) {
 }
 
 export default function DownloadsTab() {
+  const t = useT();
   const [downloads, setDownloads] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -204,7 +207,7 @@ export default function DownloadsTab() {
   useEffect(() => { fetchDownloads(); }, []);
 
   const handleDelete = async (filename) => {
-    if (!window.confirm(`Hapus file "${filename}"?`)) return;
+    if (!window.confirm(t('unduhan.yakin_hapus', { nama: filename }))) return;
     setDeleting(filename);
     setActionError(null);
     try {
@@ -212,7 +215,7 @@ export default function DownloadsTab() {
       setDownloads(prev => prev.filter(d => d.file_name !== filename));
       setSelectedItems(prev => { const s = new Set(prev); s.delete(filename); return s; });
     } catch (err) {
-      setActionError(`Gagal menghapus "${filename}": ${err.message}`);
+      setActionError(t('klip.gagal_hapus', { nama: filename, pesan: err.message }));
     } finally {
       setDeleting(null);
     }
@@ -220,7 +223,7 @@ export default function DownloadsTab() {
 
   const handleBulkDelete = async () => {
     if (selectedItems.size === 0) return;
-    if (!window.confirm(`Hapus ${selectedItems.size} file yang dipilih?`)) return;
+    if (!window.confirm(t('unduhan.yakin_hapus_n', { n: selectedItems.size }))) return;
     setBulkDeleting(true);
     setActionError(null);
     const failed = [];
@@ -234,7 +237,7 @@ export default function DownloadsTab() {
       }
     }
     if (failed.length) {
-      setActionError(`${failed.length} file gagal dihapus: ${failed.join(', ')}`);
+      setActionError(t('unduhan.gagal_n', { n: failed.length, daftar: failed.join(', ') }));
     }
     setSelectedItems(new Set());
     await fetchDownloads();
@@ -246,7 +249,7 @@ export default function DownloadsTab() {
     try {
       await downloadToDisk('local_downloads', fileName);
     } catch (err) {
-      setActionError(`Gagal menyimpan file: ${err.message}`);
+      setActionError(t('tonton.gagal_simpan', { pesan: err.message }));
     }
   };
 
@@ -277,9 +280,9 @@ export default function DownloadsTab() {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
-          <h1 className="work-title" style={{ fontSize: '1.5rem' }}>Unduhan</h1>
+          <h1 className="work-title" style={{ fontSize: '1.5rem' }}>{t('unduhan.judul')}</h1>
           <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-            {downloads.length} file • Total: {formatBytes(totalSize)}
+            {t('unduhan.ringkas', { n: downloads.length, ukuran: formatBytes(totalSize) })}
           </p>
         </div>
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -291,11 +294,11 @@ export default function DownloadsTab() {
               style={{ color: 'var(--danger)', borderColor: 'rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.08)', fontSize: '0.82rem' }}
             >
               {bulkDeleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-              Hapus {selectedItems.size} Terpilih
+              {t('unduhan.hapus_n', { n: selectedItems.size })}
             </button>
           )}
           <button className="btn-secondary" onClick={fetchDownloads} style={{ fontSize: '0.82rem' }}>
-            <RefreshCw size={14} /> Muat ulang
+            <RefreshCw size={14} /> {t('umum.muat_ulang')}
           </button>
         </div>
       </div>
@@ -307,7 +310,7 @@ export default function DownloadsTab() {
           <Search size={16} style={{ position: 'absolute', left: '12px', color: 'var(--text-muted)' }} />
           <input
             type="text"
-            placeholder="Cari file unduhan..."
+            placeholder={t('unduhan.cari')}
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             style={{
@@ -326,7 +329,7 @@ export default function DownloadsTab() {
 
         {/* Filter Chips */}
         <div style={{ display: 'flex', gap: '6px' }}>
-          {[['all', 'Semua'], ['video', '🎬 Video'], ['audio', '🎵 Audio']].map(([val, label]) => (
+          {[['all', t('umum.semua')], ['video', '🎬 Video'], ['audio', '🎵 Audio']].map(([val, label]) => (
             <button key={val} onClick={() => setFilter(val)} style={{
               padding: '8px 14px', borderRadius: '20px', border: 'none', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer',
               background: filter === val ? '#fff' : 'var(--rule-2)',
@@ -346,7 +349,7 @@ export default function DownloadsTab() {
           <AlertTriangle size={15} style={{ flexShrink: 0 }} />
           <span style={{ flex: 1, minWidth: '180px' }}>{actionError}</span>
           <button className="btn-secondary" style={{ fontSize: '0.76rem', padding: '5px 11px' }}
-                  onClick={() => setActionError(null)}>Tutup</button>
+                  onClick={() => setActionError(null)}>{t('umum.tutup')}</button>
         </div>
       )}
 
@@ -357,22 +360,22 @@ export default function DownloadsTab() {
       ) : loadError ? (
         <div style={{ padding: '40px 20px', textAlign: 'center', background: 'var(--bg-card)', borderRadius: '16px', border: '1px solid var(--accent-red)' }}>
           <AlertTriangle size={40} style={{ color: 'var(--accent-red)', marginBottom: '12px' }} />
-          <h3 style={{ fontWeight: 700 }}>Gagal memuat daftar unduhan</h3>
+          <h3 style={{ fontWeight: 700 }}>{t('unduhan.gagal_muat')}</h3>
           <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '4px' }}>{loadError.message}</p>
           <button className="btn-secondary" onClick={fetchDownloads} style={{ marginTop: '14px' }}>
-            <RefreshCw size={14} /> Coba lagi
+            <RefreshCw size={14} /> {t('umum.coba_lagi')}
           </button>
         </div>
       ) : filtered.length === 0 ? (
         <div style={{ padding: '60px 20px', textAlign: 'center', background: 'var(--bg-card)', borderRadius: '16px', border: '1px dashed var(--border-color)' }}>
           <Download size={48} style={{ color: 'var(--text-muted)', marginBottom: '12px' }} />
           <h3 style={{ fontWeight: 700 }}>
-            {downloads.length === 0 ? 'Belum Ada File Diunduh' : 'Tidak ada hasil pencarian'}
+            {downloads.length === 0 ? t('unduhan.kosong') : t('unduhan.tanpa_hasil')}
           </h3>
           <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
             {downloads.length === 0
-              ? 'Gunakan tab Search untuk download video atau audio.'
-              : `Tidak ada file yang cocok dengan "${searchQuery}"`}
+              ? t('unduhan.kosong_saran')
+              : t('unduhan.tidak_cocok', { q: searchQuery })}
           </p>
         </div>
       ) : (
@@ -401,7 +404,7 @@ export default function DownloadsTab() {
                       gambar, jadi kendali pilih ikut ke sana. */}
                   <div
                     onClick={(e) => { e.stopPropagation(); toggleSelect(item.file_name); }}
-                    title={dipilih ? 'Batal pilih' : 'Pilih'}
+                    title={dipilih ? t('unduhan.batal_pilih') : t('umum.pilih')}
                     style={{
                       position: 'absolute', top: '6px', left: '6px',
                       width: '22px', height: '22px', borderRadius: '6px', cursor: 'pointer',
@@ -458,12 +461,12 @@ export default function DownloadsTab() {
                     style={{ width: '100%', marginBottom: '6px', padding: '7px',
                              fontSize: '0.76rem', justifyContent: 'center', gap: '6px' }}
                     title={item.ada_partitur
-                      ? 'Video ini sudah punya proyek di Partitur'
-                      : 'Buat klip otomatis dari video ini'}>
+                      ? t('unduhan.sudah_proyek')
+                      : t('unduhan.buat_klip')}>
                     {mengirim === item.video_id
                       ? <Loader2 size={13} className="animate-spin" />
                       : item.ada_partitur ? <ArrowRight size={13} /> : <Scissors size={13} />}
-                    {item.ada_partitur ? 'Buka di Partitur' : 'Masukkan ke Partitur'}
+                    {item.ada_partitur ? t('unduhan.buka_partitur') : t('unduhan.ke_partitur')}
                   </button>
                 )}
 
@@ -472,14 +475,14 @@ export default function DownloadsTab() {
                     onClick={() => setPreviewItem(item)}
                     className="btn-secondary"
                     style={{ flex: 1, padding: '6px', fontSize: '0.76rem', justifyContent: 'center' }}
-                    title="Putar"
+                    title={t('unduhan.putar')}
                   ><Play size={13} /></button>
                   <button
                     onClick={() => handleProxyDownload(item.file_name)}
                     className="btn-secondary"
                     style={{ flex: 1, padding: '6px', fontSize: '0.76rem', justifyContent: 'center',
                              color: 'var(--accent-cyan)', borderColor: 'var(--hl-wash)' }}
-                    title="Simpan ke perangkat"
+                    title={t('unduhan.simpan')}
                   ><Download size={13} /></button>
                   <button
                     onClick={() => handleDelete(item.file_name)}
@@ -487,7 +490,7 @@ export default function DownloadsTab() {
                     className="btn-secondary"
                     style={{ flex: 1, padding: '6px', fontSize: '0.76rem', justifyContent: 'center',
                              color: 'var(--danger)', borderColor: 'rgba(239,68,68,0.25)' }}
-                    title="Hapus"
+                    title={t('umum.hapus')}
                   >
                     {deleting === item.file_name
                       ? <Loader2 size={13} className="animate-spin" />

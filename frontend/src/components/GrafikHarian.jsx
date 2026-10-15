@@ -1,4 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
+import { lokal, useT } from '../lib/i18n';
 
 /**
  * Tayangan yang DITAMBAH tiap hari, bukan totalnya.
@@ -26,10 +27,11 @@ const KANAN = 12;
 const tanggalPendek = (iso) => {
   const d = new Date(`${iso}T00:00:00`);
   return Number.isNaN(d.getTime()) ? iso
-    : d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+    : d.toLocaleDateString(lokal(), { day: 'numeric', month: 'short' });
 };
 
 export default function GrafikHarian({ harian, helpText }) {
+  const t = useT();
   const wrapRef = useRef(null);
   const [lebar, setLebar] = useState(680);
   const [sorot, setSorot] = useState(null);
@@ -63,9 +65,7 @@ export default function GrafikHarian({ harian, helpText }) {
   if ((harian || []).length === 0) {
     return (
       <p style={helpText}>
-        Grafiknya belum punya data. OmniClip mencatat tayangan sekali sehari,
-        jadi garisnya mulai terbentuk setelah halaman ini dibuka pada dua hari
-        yang berbeda.
+        {t('grafik.kosong')}
       </p>
     );
   }
@@ -73,10 +73,7 @@ export default function GrafikHarian({ harian, helpText }) {
     const satu = harian[harian.length - 1];
     return (
       <p style={helpText}>
-        Baru satu hari tercatat ({tanggalPendek(satu.tanggal)}, total{' '}
-        <b>{satu.total}</b> tayangan). Besok garisnya mulai terbentuk. Riwayat
-        sebelum hari ini tidak ada: YouTube Data API hanya memberi angka saat
-        ini, tanpa masa lalu.
+        {t('grafik.satu_hari', { tanggal: tanggalPendek(satu.tanggal), total: satu.total })}
       </p>
     );
   }
@@ -101,7 +98,7 @@ export default function GrafikHarian({ harian, helpText }) {
   return (
     <div ref={wrapRef} style={{ width: '100%' }}>
       <svg width="100%" height={H} viewBox={`0 0 ${w} ${H}`} role="img"
-           aria-label={`Tambahan tayangan per hari, ${titik.length} hari, tertinggi ${titik[puncak].tambahan}`}
+           aria-label={t('grafik.aria', { n: titik.length, maks: titik[puncak].tambahan })}
            onMouseMove={sentuh} onMouseLeave={() => setSorot(null)}
            style={{ display: 'block', touchAction: 'none' }}>
         {/* Garis bantu recessive: tiga saja, dan tidak menuntut perhatian. */}
@@ -158,9 +155,7 @@ export default function GrafikHarian({ harian, helpText }) {
         </text>
       </svg>
       <p style={{ ...helpText, marginTop: 6 }}>
-        Tambahan tayangan tiap hari di seluruh kanal, dicatat OmniClip sendiri.
-        Hari yang aplikasinya tidak dibuka tidak tercatat, dan hari seperti itu
-        dilewati, bukan dianggap nol.
+        {t('grafik.ket')}
       </p>
     </div>
   );

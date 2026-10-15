@@ -57,15 +57,24 @@ commit <hash>)`. Hash = commit kodenya; centangan ikut commit berikutnya.
   bisa dibuka, info channel + Ikuti, tombol klip yang jelas.
   (selesai 15 Oktober 2026, commit d1d5b1c) "Video lain" = 6 video channel
   yang sama lalu hasil pencarian terkait.
-- [ ] **J3-7** Riwayat tontonan per akun + filter pencarian (durasi, tanggal
+- [x] **J3-7** Riwayat tontonan per akun + filter pencarian (durasi, tanggal
   unggah, jenis: video / shorts / live, urutan).
-  **SEBAGIAN** (15 Oktober 2026, commit d1d5b1c): riwayat tontonan selesai;
-  filter durasi, tanggal, dan urutan sudah ada sejak sebelumnya. Belum:
-  filter jenis video / shorts / live.
+  (selesai 15 Oktober 2026, commit 29bfb8e) Riwayat tontonan di commit
+  d1d5b1c; filter jenis lewat parameter `sp` YouTube, semua filter tampil
+  sebagai pil. Sekalian (commit 63a3e61): beranda tidak pecah lagi ("t is
+  not a function" karena variabel lokal `t`), tombol topik jadi pil
+  berikon, batas tunggu feed 75 detik.
 ## Fase C: seluruh UI dua bahasa
 
-- [ ] **J3-8** Terjemahkan kerangka, beranda, channel, tonton, Klip jadi,
+- [x] **J3-8** Terjemahkan kerangka, beranda, channel, tonton, Klip jadi,
   Unduhan, Analitik.
+  (selesai 15 Oktober 2026, commit berikut sesudah 29bfb8e) Termasuk menu
+  akun, kotak galat, kemajuan pekerjaan, grafik harian. Tanggal dan angka
+  ikut bahasa (`lokal()`, `angka()`). Tes `i18n.test.js` menjaga: kunci id
+  dan en sama, setiap `t('kunci')` ada di kamus, isian `{nama}` cocok.
+  Tes penjaga backend membaca komponen + kamus lewat `tests/teks_ui.py`.
+  Kalimat yang dibuat server (temuan analitik, alasan nilai tambah, pesan
+  galat) masih Indonesia sampai J3-11.
 - [ ] **J3-9** Terjemahkan Studio (semua panel).
 - [ ] **J3-10** Terjemahkan Akun, Pengaturan, Mesin, formulir unggah.
 - [ ] **J3-11** Pesan dari server (galat, kabar pekerjaan) mengikuti bahasa

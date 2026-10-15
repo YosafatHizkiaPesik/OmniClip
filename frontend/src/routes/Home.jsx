@@ -274,7 +274,7 @@ export default function Home() {
       }}>
         {!q && (
           <button className="chip" disabled={loading} onClick={() => setNonce((n) => n + 1)}
-                  title="Segarkan" style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                  title={t('umum.segarkan')} style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
             <RefreshCw size={13} className={loading ? 'animate-spin' : undefined} />
           </button>
         )}
@@ -296,7 +296,7 @@ export default function Home() {
         <div className="baris-saring">
           {[
             [t('saring.jenis'), jenis, setJenis, [['', t('saring.semua')], ['video', t('saring.video')],
-              ['shorts', 'Shorts'], ['live', 'Live']]],
+              ['shorts', t('channel.tab_shorts')], ['live', t('channel.tab_live')]]],
             [t('saring.urutkan'), sort, setSort, SORTS],
             [t('saring.durasi'), durasi, setDurasi, [['', t('saring.semua')], ['pendek', t('saring.pendek')],
               ['sedang', t('saring.sedang')], ['panjang', t('saring.panjang')]]],
@@ -337,27 +337,26 @@ export default function Home() {
           borderRadius: 'var(--r-md)', border: '1px solid color-mix(in srgb, var(--danger) 40%, transparent)',
         }}>
           <Video size={38} style={{ color: 'var(--danger)', marginBottom: '12px' }} />
-          <h3 style={{ fontWeight: 700, marginBottom: '6px' }}>Pencarian gagal</h3>
+          <h3 style={{ fontWeight: 700, marginBottom: '6px' }}>{t('beranda.cari_gagal')}</h3>
           <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.6, maxWidth: '440px', margin: '0 auto' }}>
             {error.message}
           </p>
           {error.code === 'YTDLP_RATE_LIMIT' && (
             <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '10px', lineHeight: 1.6 }}>
-              YouTube sedang membatasi permintaan dari komputer ini. Tunggu beberapa
-              menit, atau pasang berkas cookies di halaman Settings.
+              {t('beranda.dibatasi')}
             </p>
           )}
           <button className="btn-secondary" style={{ marginTop: '16px', fontSize: '0.83rem' }}
                   onClick={() => setNonce((n) => n + 1)}>
-            Coba lagi
+            {t('umum.coba_lagi')}
           </button>
         </div>
       ) : feed.length === 0 ? (
         <div style={{ padding: '60px 20px', textAlign: 'center', background: 'var(--bg-card)', borderRadius: 'var(--r-md)', border: '1px dashed var(--border-color)' }}>
           <Video size={40} style={{ color: 'var(--text-muted)', marginBottom: '12px' }} />
-          <h3 style={{ fontWeight: 700 }}>Tidak ada video ditemukan</h3>
+          <h3 style={{ fontWeight: 700 }}>{t('beranda.kosong')}</h3>
           <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-            Coba kata kunci yang berbeda.
+            {t('beranda.kosong_saran')}
           </p>
         </div>
       ) : (
@@ -374,7 +373,7 @@ export default function Home() {
               {/* Kotak centang selalu ada, supaya memilih yang PERTAMA tidak
                   perlu mencari mode tersembunyi lebih dulu. */}
               <label onClick={(e) => e.stopPropagation()}
-                     title="Pilih untuk diklip bersama"
+                     title={t('kisi.pilih')}
                      style={{
                        position: 'absolute', top: '8px', left: '8px', zIndex: 2,
                        display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -401,12 +400,12 @@ export default function Home() {
               apa yang sudah dibaca orang. */}
           {error && feed.length
             ? <span style={{ color: 'var(--danger)' }}>
-                Gagal memuat lebih banyak: {error.message}
+                {t('beranda.gagal_tambah', { pesan: error.message })}
               </span>
             : menambah || (loading && feed.length)
-              ? <><RefreshCw size={14} className="animate-spin" style={{ verticalAlign: '-2px' }} /> Memuat lagi…</>
+              ? <><RefreshCw size={14} className="animate-spin" style={{ verticalAlign: '-2px' }} /> {t('umum.memuat_lagi')}</>
               : habis || batas >= PLAFON
-                ? 'Sudah sampai ujung hasil.'
+                ? t('beranda.ujung')
                 : ''}
         </div>
       )}
@@ -422,18 +421,18 @@ export default function Home() {
           boxShadow: '0 6px 24px rgba(0,0,0,0.35)',
         }}>
           <span style={{ fontSize: '0.8rem', fontWeight: 700 }}>
-            {pilih.size} video dipilih
+            {t('kisi.dipilih', { n: pilih.size })}
           </span>
           <button className="btn-primary" onClick={klipSemua} disabled={mengantre}
                   style={{ fontSize: '0.8rem', display: 'inline-flex', gap: '6px',
                            alignItems: 'center' }}>
             {mengantre ? <Loader2 size={14} className="animate-spin" /> : <Scissors size={14} />}
-            {mengantre ? 'Mengantre…' : 'Klip semuanya'}
+            {mengantre ? t('kisi.mengantre') : t('kisi.klip_semua')}
           </button>
           <button onClick={() => setPilih(new Set())}
                   style={{ background: 'none', border: 'none', cursor: 'pointer',
                            color: 'var(--text-muted)', display: 'flex' }}
-                  aria-label="Batalkan pilihan">
+                  aria-label={t('kisi.batal')}>
             <X size={16} />
           </button>
         </div>
@@ -448,10 +447,7 @@ export default function Home() {
           boxShadow: '0 6px 24px rgba(0,0,0,0.35)',
         }}>
           <CheckCircle2 size={15} style={{ color: 'var(--entry)' }} />
-          {hasilAntre.masuk} video diantrekan
-          {hasilAntre.sudah > 0 && `, ${hasilAntre.sudah} sudah pernah diklip`}
-          {hasilAntre.gagal > 0 && `, ${hasilAntre.gagal} gagal`}
-          . Lihat kemajuannya di Partitur.
+          {t('kisi.hasil', hasilAntre)}
         </div>
       )}
     </div>

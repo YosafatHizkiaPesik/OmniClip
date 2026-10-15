@@ -117,6 +117,8 @@ class GrafikJujurSaatDataBelumAda(unittest.TestCase):
 
     def test_halaman_mengatakan_apa_adanya(self):
         from pathlib import Path
-        src = Path("../frontend/src/components/GrafikHarian.jsx").read_text(encoding="utf-8")
+
+        from teks_ui import teks_ui
+        src = teks_ui(Path(__file__).resolve().parents[2] / "frontend/src/components/GrafikHarian.jsx")
         self.assertIn("Baru satu hari tercatat", src)
         self.assertIn("tambahan", src)

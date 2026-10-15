@@ -67,11 +67,21 @@ export function useT() {
   return t;
 }
 
+/** Kode lokal Intl untuk bahasa pilihan: tanggal dan angka ikut bahasanya. */
+export function lokal() {
+  return kini === 'id' ? 'id-ID' : 'en-US';
+}
+
+/** Angka utuh dengan pemisah ribuan sesuai bahasa: 12.345 / 12,345. */
+export function angka(n) {
+  return Number(n || 0).toLocaleString(lokal());
+}
+
 /** Format angka ringkas sesuai bahasa: 1,2 jt / 1.2M. */
 export function angkaRingkas(n) {
   if (n == null || Number.isNaN(Number(n))) return '';
   try {
-    return new Intl.NumberFormat(kini === 'id' ? 'id-ID' : 'en-US',
+    return new Intl.NumberFormat(lokal(),
       { notation: 'compact', maximumFractionDigits: 1 }).format(Number(n));
   } catch {
     return String(n);

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Check, ChevronDown, Settings2 } from 'lucide-react';
 import { apiGet, pilihProfil } from '../lib/api';
 import { Lencana } from '../routes/Profil';
+import { useT } from '../lib/i18n';
 
 /**
  * Profil aktif, selalu terlihat di kepala aplikasi.
@@ -17,6 +18,7 @@ export default function ProfilPemilih() {
   const [buka, setBuka] = useState(false);
   const ref = useRef(null);
   const navigate = useNavigate();
+  const t = useT();
 
   useEffect(() => {
     apiGet('/profil').then(setData).catch(() => {});
@@ -35,7 +37,9 @@ export default function ProfilPemilih() {
   return (
     <div ref={ref} style={{ position: 'relative', marginRight: '12px' }}>
       <button onClick={() => setBuka((v) => !v)} aria-expanded={buka}
-              title={aktif.google.connected ? `Akun ${aktif.nama} · ${aktif.google.email}` : `Akun ${aktif.nama} (belum masuk Google)`}
+              title={aktif.google.connected
+                ? t('profil.akun_tersambung', { nama: aktif.nama, email: aktif.google.email })
+                : t('profil.akun_belum', { nama: aktif.nama })}
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: '7px', cursor: 'pointer',
                 padding: '3px 9px 3px 3px', borderRadius: '999px', fontFamily: 'inherit',
@@ -69,7 +73,7 @@ export default function ProfilPemilih() {
                 <span style={{ display: 'block', fontWeight: 800, fontSize: '0.8rem' }}>{p.nama}</span>
                 <span style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-secondary)',
                                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {p.google.connected ? p.google.email : 'Belum tersambung ke Google'}
+                  {p.google.connected ? p.google.email : t('profil.belum_google')}
                 </span>
               </span>
               {p.id === data.aktif && <Check size={14} />}
@@ -82,7 +86,7 @@ export default function ProfilPemilih() {
                     background: 'transparent', color: 'var(--text-secondary)', fontFamily: 'inherit',
                     fontSize: '0.78rem', fontWeight: 700,
                   }}>
-            <Settings2 size={14} />Kelola akun · tambah akun
+            <Settings2 size={14} />{t('profil.kelola')}
           </button>
         </div>
       )}

@@ -11,6 +11,8 @@ import re
 import unittest
 from pathlib import Path
 
+from teks_ui import teks_ui
+
 AKAR = Path(__file__).resolve().parents[2]
 KARTU = AKAR / "frontend" / "src" / "components" / "DownloadsTab.jsx"
 ROUTER = AKAR / "backend" / "app" / "routers" / "videos.py"
@@ -42,8 +44,9 @@ class KartuUnduhanPunyaTombolnya(unittest.TestCase):
         self.teks = KARTU.read_text(encoding="utf-8")
 
     def test_dua_kalimat_untuk_dua_keadaan(self):
-        self.assertIn("Masukkan ke Partitur", self.teks)
-        self.assertIn("Buka di Partitur", self.teks)
+        teks = teks_ui(KARTU)
+        self.assertIn("Masukkan ke Partitur", teks)
+        self.assertIn("Buka di Partitur", teks)
         self.assertIn("item.ada_partitur", self.teks)
 
     def test_tidak_muncul_untuk_audio_atau_tanpa_id(self):
