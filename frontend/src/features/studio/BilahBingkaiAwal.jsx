@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Loader2, CheckCircle2 } from 'lucide-react';
 import { apiGet } from '../../lib/api';
+import { useT } from '../../lib/i18n';
 
 /**
  * Bilah kemajuan penyiapan bingkai untuk SEMUA klip sebuah video.
@@ -19,14 +20,15 @@ import { apiGet } from '../../lib/api';
 const SELESAI = new Set(['done', 'failed', 'cancelled']);
 
 /** "2 menit 5 detik", untuk lama yang sudah berjalan. */
-function lamanya(detik) {
+function lamanya(detik, t) {
   const d = Math.max(0, Math.round(detik));
-  if (d < 60) return `${d} detik`;
+  if (d < 60) return t('waktu.detik_panjang', { n: d });
   const m = Math.floor(d / 60);
-  return `${m} menit ${d % 60} detik`;
+  return t('waktu.menit_detik_panjang', { m, s: d % 60 });
 }
 
 export default function BilahBingkaiAwal({ videoId }) {
+  const t = useT();
   const [job, setJob] = useState(null);
   // Video yang sedang dikerjakan auto bingkai SEKARANG, yang mungkin bukan
   // video ini. "Antre" tanpa itu tidak menjawab pertanyaan yang sebenarnya:
@@ -165,15 +167,15 @@ export default function BilahBingkaiAwal({ videoId }) {
         <span style={{ color: 'var(--ink-2)', flex: 1, minWidth: 0, overflow: 'hidden',
                        textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {antre && sedangDikerjakan
-            ? `Menunggu giliran. Sekarang: ${sedangDikerjakan.video_title
-               || sedangDikerjakan.video_id}`
-            : (job.message || 'Menyiapkan bingkai semua klip…')}
+            ? t('bba.menunggu_giliran', { judul: sedangDikerjakan.video_title
+               || sedangDikerjakan.video_id })
+            : (job.message || t('bba.menyiapkan'))}
         </span>
         {jalan && (
           <span style={{ color: 'var(--ink-2)', fontVariantNumeric: 'tabular-nums',
                          flex: 'none' }}>
-            {antre ? 'antre' : `${persen}%`}
-            {berjalan > 3 ? ` · ${antre ? 'menunggu' : 'berjalan'} ${lamanya(berjalan)}` : ''}
+            {antre ? t('bba.antre') : `${persen}%`}
+            {berjalan > 3 ? t(antre ? 'bba.menunggu_n' : 'bba.berjalan_n', { n: lamanya(berjalan, t) }) : ''}
           </span>
         )}
       </div>
@@ -188,11 +190,9 @@ export default function BilahBingkaiAwal({ videoId }) {
       {jalan && (
         <p style={{ fontSize: '.71rem', color: 'var(--ink-3)', lineHeight: 1.5,
                     margin: '6px 0 0' }}>
-          Berjalan di latar belakang dan mengalah pada apa pun yang Anda tunggu.
-          Klip yang belum sampai gilirannya tetap bisa dibuka; ia akan menghitung
-          bingkainya sendiri saat itu juga.
+          {t('bba.latar')}
           {antre && sedangDikerjakan?.message
-            ? ` Yang sedang dikerjakan sekarang: ${sedangDikerjakan.message}.`
+            ? t('bba.sedang', { pesan: sedangDikerjakan.message })
             : ''}
         </p>
       )}

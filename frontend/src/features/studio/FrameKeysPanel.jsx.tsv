@@ -1,0 +1,5 @@
+x.math_abs_k_t	Math.abs((k.t ?? 0) - t)	
+x.linimasa_bingkai	Linimasa bingkai	
+x.kosong_berarti_seluruh_klip	Kosong berarti seluruh klip memakai satu mode di atas. Tambahkan dua kunci atau lebih untuk berganti cara membingkai di tengah klip, misalnya mengikuti wajah saat narasumber bicara, lalu kotak tetap yang memuat semua orang saat reaksinya yang penting.	
+x.hapus_kunci	Hapus kunci	
+x.kotak	Kotak (%)	

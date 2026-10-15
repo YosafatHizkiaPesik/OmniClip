@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Loader2, CheckCircle2 } from 'lucide-react';
+import { useT } from '../../lib/i18n';
 
 /**
  * Kabar saat salinan pratinjau sedang disiapkan, dan saat ia siap diputar.
@@ -21,6 +22,7 @@ import { Loader2, CheckCircle2 } from 'lucide-react';
 const TAHAN_SIAP = 6000;
 
 export default function BilahPratinjau({ disiapkan = false, kemajuan = null }) {
+  const t = useT();
   const [siap, setSiap] = useState(false);
   const sebelum = useRef(disiapkan);
 
@@ -30,9 +32,9 @@ export default function BilahPratinjau({ disiapkan = false, kemajuan = null }) {
     // memang tidak pernah butuh salinan.
     if (sebelum.current && !disiapkan) {
       setSiap(true);
-      const t = setTimeout(() => setSiap(false), TAHAN_SIAP);
+      const jeda = setTimeout(() => setSiap(false), TAHAN_SIAP);
       sebelum.current = disiapkan;
-      return () => clearTimeout(t);
+      return () => clearTimeout(jeda);
     }
     sebelum.current = disiapkan;
     return undefined;
@@ -52,8 +54,8 @@ export default function BilahPratinjau({ disiapkan = false, kemajuan = null }) {
           : <CheckCircle2 size={13} style={{ color: 'var(--entry)', flex: 'none' }} />}
         <span style={{ color: 'var(--ink-2)', flex: 1, minWidth: 0 }}>
           {disiapkan
-            ? 'Menyiapkan salinan video untuk pratinjau…'
-            : 'Salinan pratinjau siap. Videonya sekarang berjalan lancar.'}
+            ? t('pratinjau.menyiapkan')
+            : t('pratinjau.siap')}
         </span>
         {disiapkan && persen !== null && (
           <span style={{ color: 'var(--ink-2)', fontVariantNumeric: 'tabular-nums',
@@ -70,9 +72,7 @@ export default function BilahPratinjau({ disiapkan = false, kemajuan = null }) {
           </div>
           <p style={{ fontSize: '.71rem', color: 'var(--ink-3)', lineHeight: 1.5,
                       margin: '6px 0 0' }}>
-            Sementara ini yang diputar berkas aslinya, dan itu bisa tersendat di
-            klip beresolusi tinggi. Begitu salinannya selesai, pemutarnya
-            berpindah sendiri tanpa kehilangan posisi Anda.
+            {t('pratinjau.sementara')}
           </p>
         </>
       )}

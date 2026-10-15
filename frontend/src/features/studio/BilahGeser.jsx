@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useT } from '../../lib/i18n';
 
 /**
  * Bilah geser mendatar yang digambar sendiri, untuk linimasa yang diperbesar.
@@ -25,6 +26,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 const MIN_PX = 56;
 
 export default function BilahGeser({ bagi, penanda }) {
+  const t = useT();
   const [ukur, setUkur] = useState({ kiri: 0, tampak: 1, penuh: 1 });
   const alurRef = useRef(null);
 
@@ -82,7 +84,7 @@ export default function BilahGeser({ bagi, penanda }) {
       className="tl-geser"
       ref={alurRef}
       onPointerDown={seret}
-      title="Seret untuk menggeser linimasa. Roda tetikus dan seret tombol tengah juga bisa."
+      title={t('geser.judul')}
     >
       <div className="tl-geser-pegangan" data-pegangan="1"
            style={{ left: `${kiriPegangan}px`, width: `${lebarPegangan}px` }} />

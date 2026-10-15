@@ -68,7 +68,7 @@ commit <hash>)`. Hash = commit kodenya; centangan ikut commit berikutnya.
 
 - [x] **J3-8** Terjemahkan kerangka, beranda, channel, tonton, Klip jadi,
   Unduhan, Analitik.
-  (selesai 15 Oktober 2026, commit berikut sesudah 29bfb8e) Termasuk menu
+  (selesai 15 Oktober 2026, commit 3c79412) Termasuk menu
   akun, kotak galat, kemajuan pekerjaan, grafik harian. Tanggal dan angka
   ikut bahasa (`lokal()`, `angka()`). Tes `i18n.test.js` menjaga: kunci id
   dan en sama, setiap `t('kunci')` ada di kamus, isian `{nama}` cocok.

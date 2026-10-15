@@ -1,5 +1,6 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { beginRectDrag } from './rectDrag';
+import { useT } from '../../lib/i18n';
 
 /**
  * Sisipan di atas pratinjau: cuplikan dan gambar di petaknya, musik dan efek
@@ -60,6 +61,7 @@ function opasitasPada(l, clipTime) {
 const SUDUT = [['nw', 0, 0], ['ne', 1, 0], ['sw', 0, 1], ['se', 1, 1]];
 
 function Lapis({ l, jenis, clipTime, playing, boxW, boxH, terpilih, onRect, onPilih }) {
+  const t = useT();
   const ref = useRef(null);
   // Pergeseran supaya tulisan tidak keluar kanvas, sama seperti kurungan
   // `max(0,min(W-text_w,...))` di sisi render. Tanpa ini pratinjau memperlihatkan
@@ -168,8 +170,8 @@ function Lapis({ l, jenis, clipTime, playing, boxW, boxH, terpilih, onRect, onPi
           beginRectDrag(e, { boxW, boxH, rect: petak, handle: null, onChange: onRect });
         }}
         title={terpilih
-          ? 'Seret untuk memindahkan, tarik sudutnya untuk mengubah ukuran'
-          : 'Klik untuk memilih sisipan ini'}
+          ? t('sisipan.seret')
+          : t('sisipan.klik_pilih')}
         style={{
           position: 'absolute', left: `${px}px`, top: `${py}px`,
           width: `${pw}px`, height: `${ph}px`, zIndex: 3,

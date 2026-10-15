@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, Link2, Loader2, Sparkles, Upload } from 'lucide-react';
 import { apiGet, apiPost, apiUnggah } from '../../lib/api';
 import FolderPicker from '../../components/FolderPicker';
+import { useT } from '../../lib/i18n';
 
 /**
  * Memasukkan video baru ke Partitur, dari tautan atau dari komputer sendiri.
@@ -13,6 +14,7 @@ import FolderPicker from '../../components/FolderPicker';
  * menambah pekerjaan baru memang di sini tempatnya.
  */
 export default function ImportBar({ onDone }) {
+  const t = useT();
   const [tautan, setTautan] = useState('');
   // Panjang klip milik VIDEO INI, bukan milik aplikasi. Nilai di Pengaturan
   // hanya jadi titik awalnya.
@@ -33,14 +35,14 @@ export default function ImportBar({ onDone }) {
     setAudio('');
     if (!/(youtu\.?be|^[\w-]{11}$)/.test(nilai)) return undefined;
     let batal = false;
-    const t = setTimeout(() => {
+    const jeda = setTimeout(() => {
       setPeriksa(true);
       apiGet(`/video-info?url=${encodeURIComponent(nilai)}`)
         .then((info) => { if (!batal) setJalur(info?.audio_tracks ?? []); })
         .catch(() => { /* tanpa daftar jalur: tetap suara asli */ })
         .finally(() => { if (!batal) setPeriksa(false); });
     }, 700);
-    return () => { batal = true; clearTimeout(t); };
+    return () => { batal = true; clearTimeout(jeda); };
   }, [tautan]);
 
   const mulaiKlip = async (videoId, judul, audioLang = null) => {
@@ -52,8 +54,8 @@ export default function ImportBar({ onDone }) {
       gemini_model: localStorage.getItem('omniclip_gemini_model') || null,
     });
     setKabar(res.cached
-      ? `«${judul}» sudah pernah diklip. Hasilnya ada di daftar bawah.`
-      : `«${judul}» masuk antrean. Kartunya muncul di bawah.`);
+      ? t('impor.sudah', { judul })
+      : t('impor.antre', { judul }));
     onDone?.();
   };
 
@@ -102,11 +104,11 @@ export default function ImportBar({ onDone }) {
       const data = new FormData();
       data.append('berkas', f);
       const mb = Math.round(f.size / 1e6);
-      setKabar(`Mengirim ${f.name} (${mb} MB)… 0%`);
+      setKabar(t('impor.mengirim', { nama: f.name, mb, n: 0 }));
       const hasil = await apiUnggah('/impor/berkas', data, (frac) => {
         setKabar(frac < 1
-          ? `Mengirim ${f.name} (${mb} MB)… ${Math.round(frac * 100)}%`
-          : 'Terkirim. Memeriksa videonya…');
+          ? t('impor.mengirim', { nama: f.name, mb, n: Math.round(frac * 100) })
+          : t('impor.terkirim'));
       });
       setKabar(null);
       await mulaiKlip(hasil.video_id, hasil.title);
@@ -124,10 +126,10 @@ export default function ImportBar({ onDone }) {
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
         <Sparkles size={15} style={{ color: 'var(--accent-cyan)' }} />
-        <strong style={{ fontSize: '0.86rem' }}>Klip video baru</strong>
+        <strong style={{ fontSize: '0.86rem' }}>{t('impor.judul')}</strong>
       </div>
       <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: '0 0 11px' }}>
-        Tempel tautan YouTube, atau ambil video dari komputer ini.
+        {t('impor.ket')}
       </p>
 
       <form onSubmit={kirimTautan}
@@ -149,27 +151,27 @@ export default function ImportBar({ onDone }) {
         <button type="submit" className="btn-primary" disabled={!tautan.trim() || !!sibuk}
                 style={{ fontSize: '0.82rem', whiteSpace: 'nowrap' }}>
           {sibuk === 'tautan' ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-          Potong jadi klip
+          {t('tonton.potong')}
         </button>
         <button type="button" className="btn-secondary" disabled={!!sibuk}
                 onClick={() => setJelajah(true)}
-                title="Video di komputer ini dibaca langsung dari tempatnya, tidak disalin"
+                title={t('impor.dari_komputer_judul')}
                 style={{ fontSize: '0.82rem', whiteSpace: 'nowrap' }}>
           {sibuk === 'berkas' ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
-          Dari komputer
+          {t('impor.dari_komputer')}
         </button>
         <input ref={berkasRef} type="file" accept="video/*" hidden onChange={kirimBerkas} />
       </form>
       <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: '6px 0 0' }}>
-        Membuka OmniClip dari HP atau perangkat lain?{' '}
+        {t('impor.dari_hp')}{' '}
         <button type="button" onClick={() => berkasRef.current?.click()} disabled={!!sibuk}
                 style={{ background: 'none', border: 0, padding: 0, cursor: 'pointer',
                          color: 'var(--reh)', font: 'inherit', textDecoration: 'underline' }}>
-          Kirim video dari perangkat ini
-        </button>{' '}(disalin ke penyimpanan OmniClip).
+          {t('impor.kirim_perangkat')}
+        </button>{' '}{t('impor.disalin')}
       </p>
       {jelajah && (
-        <FolderPicker modeVideo judul="Pilih video dari komputer"
+        <FolderPicker modeVideo judul={t('impor.pilih_video')}
                       awal={(() => { try { return localStorage.getItem('omniclip.folderImpor') || ''; } catch { return ''; } })()}
                       onTutup={() => setJelajah(false)}
                       onPilih={pakaiJalur} />
@@ -179,17 +181,17 @@ export default function ImportBar({ onDone }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '9px',
                       fontSize: '0.78rem', color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
           {periksa ? (
-            <><Loader2 size={13} className="animate-spin" /> Memeriksa jalur audio video ini…</>
+            <><Loader2 size={13} className="animate-spin" /> {t('impor.periksa_audio')}</>
           ) : (
             <>
-              <span>Video ini punya {jalur.length} jalur audio. Unduh suara:</span>
+              <span>{t('impor.n_jalur', { n: jalur.length })}</span>
               <select value={audio} onChange={(e) => setAudio(e.target.value)}
                       style={{ padding: '5px 8px', fontSize: '0.78rem', borderRadius: '6px',
                                background: 'var(--plate-3, transparent)', color: 'var(--ink)',
                                border: '1px solid var(--border-color)' }}>
                 {jalur.map((j) => (
                   <option key={j.lang} value={j.asli ? '' : j.lang}>
-                    {j.nama}{j.asli ? ' (suara asli)' : ''}
+                    {j.nama}{j.asli ? t('impor.suara_asli') : ''}
                   </option>
                 ))}
               </select>
@@ -199,7 +201,7 @@ export default function ImportBar({ onDone }) {
       )}
       {sibuk === 'berkas' && (
         <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: '9px 0 0' }}>
-          Menyalin berkas ke penyimpanan OmniClip… video besar butuh beberapa menit.
+          {t('impor.menyalin')}
         </p>
       )}
       {kabar && (

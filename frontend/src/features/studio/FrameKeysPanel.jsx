@@ -1,12 +1,14 @@
 import React from 'react';
 import { Plus, Trash2 } from 'lucide-react';
+import { useT } from '../../lib/i18n';
 
+// Label = kunci kamus, diterjemahkan saat dirender.
 export const MODE_KUNCI = [
-  ['smart', 'Ikuti wajah'],
-  ['box', 'Kotak tetap'],
-  ['gaming', 'Main game'],
-  ['center', 'Potong tengah'],
-  ['blur', 'Bilah kabur'],
+  ['smart', 'bingkai.mode_smart'],
+  ['box', 'bingkai.mode_box'],
+  ['gaming', 'bingkai.mode_gaming'],
+  ['center', 'bingkai.mode_center'],
+  ['blur', 'bingkai.mode_blur'],
 ];
 
 const jam = (d) => `${Math.floor(d / 60)}:${String(Math.floor(d % 60)).padStart(2, '0')}`;
@@ -27,12 +29,13 @@ const jam = (d) => `${Math.floor(d / 60)}:${String(Math.floor(d % 60)).padStart(
  * pembingkaian hanya akan tampil sebagai latar kabur kosong.
  */
 export default function FrameKeysPanel({ keys, onKeys, waktuSekarang = 0, durasi = 0 }) {
+  const t = useT();
   const daftar = keys ?? [];
 
   const tambah = () => {
-    const t = daftar.length === 0 ? 0 : Math.max(0, Math.min(waktuSekarang, durasi - 0.5));
-    if (daftar.some((k) => Math.abs((k.t ?? 0) - t) < 0.25)) return;
-    const berikut = [...daftar, { t, mode: 'smart' }].sort((a, b) => (a.t ?? 0) - (b.t ?? 0));
+    const waktu = daftar.length === 0 ? 0 : Math.max(0, Math.min(waktuSekarang, durasi - 0.5));
+    if (daftar.some((k) => Math.abs((k.t ?? 0) - waktu) < 0.25)) return;
+    const berikut = [...daftar, { t: waktu, mode: 'smart' }].sort((a, b) => (a.t ?? 0) - (b.t ?? 0));
     if (berikut.length) berikut[0] = { ...berikut[0], t: 0 };
     onKeys(berikut);
   };
@@ -52,19 +55,16 @@ export default function FrameKeysPanel({ keys, onKeys, waktuSekarang = 0, durasi
     <div style={{ marginTop: '14px', paddingTop: '12px',
                   borderTop: '1px solid var(--rule-2, var(--border-color))' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-        <strong style={{ fontSize: '0.8rem' }}>Linimasa bingkai</strong>
+        <strong style={{ fontSize: '0.8rem' }}>{t('bingkai.linimasa')}</strong>
         <button className="chip" onClick={tambah} style={{ fontSize: '0.73rem' }}>
-          <Plus size={12} /> Tambah di {jam(waktuSekarang)}
+          <Plus size={12} /> {t('bingkai.tambah_di', { waktu: jam(waktuSekarang) })}
         </button>
       </div>
 
       {daftar.length < 2 ? (
         <p style={{ fontSize: '0.74rem', color: 'var(--text-secondary)',
                     lineHeight: 1.55, margin: '8px 0 0' }}>
-          Kosong berarti seluruh klip memakai satu mode di atas. Tambahkan dua kunci
-          atau lebih untuk berganti cara membingkai di tengah klip, misalnya mengikuti
-          wajah saat narasumber bicara, lalu kotak tetap yang memuat semua orang saat
-          reaksinya yang penting.
+          {t('bingkai.linimasa_ket')}
         </p>
       ) : null}
 
@@ -89,7 +89,7 @@ export default function FrameKeysPanel({ keys, onKeys, waktuSekarang = 0, durasi
                         border: '1px solid var(--border-color)',
                         borderRadius: 'var(--radius-sm, 6px)',
                       }}>
-                {MODE_KUNCI.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                {MODE_KUNCI.map(([v, l]) => <option key={v} value={v}>{t(l)}</option>)}
               </select>
               {i > 0 && (
                 <input type="number" step="0.5" min="0" max={durasi}
@@ -105,7 +105,7 @@ export default function FrameKeysPanel({ keys, onKeys, waktuSekarang = 0, durasi
               <div style={{ flex: 1 }} />
               {i > 0 && (
                 <button className="chip" onClick={() => hapus(i)}
-                        style={{ fontSize: '0.72rem' }} title="Hapus kunci">
+                        style={{ fontSize: '0.72rem' }} title={t('bingkai.hapus_kunci')}>
                   <Trash2 size={12} />
                 </button>
               )}
@@ -115,7 +115,7 @@ export default function FrameKeysPanel({ keys, onKeys, waktuSekarang = 0, durasi
               <div style={{ display: 'flex', gap: '6px', marginTop: '7px', flexWrap: 'wrap',
                             alignItems: 'center' }}>
                 <span style={{ fontSize: '0.71rem', color: 'var(--text-muted)' }}>
-                  Kotak (%)
+                  {t('bingkai.kotak_persen')}
                 </span>
                 {['x', 'y', 'w', 'h'].map((sumbu) => (
                   <label key={sumbu} style={{ display: 'flex', alignItems: 'center', gap: '3px',

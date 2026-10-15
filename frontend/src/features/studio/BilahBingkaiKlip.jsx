@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { apiGet } from '../../lib/api';
+import { useT } from '../../lib/i18n';
 
 /**
  * Bilah kemajuan untuk perhitungan bingkai SATU klip yang sedang dibuka.
@@ -32,12 +33,13 @@ import { apiGet } from '../../lib/api';
 const TETAP = 6.0;         // detik, biaya membuka dan menyiapkan berkasnya
 const PER_DETIK = 0.36;    // detik pemindaian per detik klip
 
-function lamanya(d) {
+function lamanya(d, t) {
   const s = Math.max(0, Math.round(d));
-  return s < 60 ? `${s} dtk` : `${Math.floor(s / 60)} mnt ${s % 60} dtk`;
+  return s < 60 ? t('waktu.detik', { n: s }) : t('waktu.menit_detik', { m: Math.floor(s / 60), s: s % 60 });
 }
 
 export default function BilahBingkaiKlip({ aktif, panjangKlip = 0, label }) {
+  const t = useT();
   const [berjalan, setBerjalan] = useState(0);
   // Kemajuan SUNGGUHAN dari pemindainya: langkah keberapa dari berapa.
   // Perkiraan di bawah hanya dipakai selama jawaban itu belum ada.
@@ -75,18 +77,18 @@ export default function BilahBingkaiKlip({ aktif, panjangKlip = 0, label }) {
     persen = Math.min(99, bagian * 100);
     const sisaDetik = berjalan * (1 - bagian) / Math.max(0.02, bagian);
     kanan = `${Math.round(nyata.selesai)}/${Math.round(nyata.total)} · `
-          + `${lamanya(sisaDetik)} lagi`;
+          + t('bbk.lagi', { n: lamanya(sisaDetik, t) });
   } else {
     const kira = TETAP + PER_DETIK * Math.max(0, panjangKlip);
     const lewat = berjalan > kira;
     persen = lewat ? 95 : Math.min(95, (berjalan / Math.max(1, kira)) * 95);
-    kanan = lewat ? `berjalan ${lamanya(berjalan)}` : 'menyiapkan…';
+    kanan = lewat ? t('bbk.berjalan', { n: lamanya(berjalan, t) }) : t('bbk.menyiapkan');
   }
 
   const tahap = nyata?.tahap
-    ? (nyata.tahap === 'kamera wajah' ? 'Mencari kamera wajah pemain…'
-                                      : 'Melacak wajah di klip ini…')
-    : (label || 'Menghitung bingkai klip ini…');
+    ? (nyata.tahap === 'kamera wajah' ? t('bbk.kamera_wajah')
+                                      : t('bbk.lacak'))
+    : (label || t('bbk.hitung'));
 
   return (
     <div className="bingkai-kira" role="status" aria-live="polite">

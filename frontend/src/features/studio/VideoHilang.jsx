@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { AlertTriangle, Download, Loader2 } from 'lucide-react';
 import { apiGet, apiPost } from '../../lib/api';
+import { useT } from '../../lib/i18n';
 
 /**
  * Video sumber tidak ada lagi di penyimpanan, padahal klipnya masih ada.
@@ -11,6 +12,7 @@ import { apiGet, apiPost } from '../../lib/api';
  * jadi yang hilang cuma videonya, dan itu bisa diambil lagi dari YouTube.
  */
 export default function VideoHilang({ videoId, onPulih }) {
+  const t = useT();
   const [jalur, setJalur] = useState([]);
   const [audio, setAudio] = useState('');          // '' = suara asli
   const [kerja, setKerja] = useState(null);        // {progress, message}
@@ -26,7 +28,7 @@ export default function VideoHilang({ videoId, onPulih }) {
 
   const unduh = async () => {
     setGalat(null);
-    setKerja({ progress: 0, message: 'Mengantre…' });
+    setKerja({ progress: 0, message: t('kisi.mengantre') });
     try {
       const { job_id: jobId } = await apiPost('/download', {
         url: videoId, audio_lang: audio || null,
@@ -34,10 +36,10 @@ export default function VideoHilang({ videoId, onPulih }) {
       for (;;) {
         // eslint-disable-next-line no-await-in-loop
         const job = await apiGet(`/jobs/${jobId}`);
-        setKerja({ progress: job.progress ?? 0, message: job.message || 'Mengunduh…' });
+        setKerja({ progress: job.progress ?? 0, message: job.message || t('tonton.mengunduh') });
         if (job.status === 'done') break;
         if (job.status === 'failed' || job.status === 'cancelled') {
-          throw new Error(job.error || 'Unduhan gagal.');
+          throw new Error(job.error || t('hilang.unduh_gagal'));
         }
         // eslint-disable-next-line no-await-in-loop
         await new Promise((r) => setTimeout(r, 1200));
@@ -55,9 +57,8 @@ export default function VideoHilang({ videoId, onPulih }) {
       <div style={{ display: 'flex', gap: '9px', alignItems: 'flex-start' }}>
         <AlertTriangle size={15} style={{ color: 'var(--warn)', flexShrink: 0, marginTop: '2px' }} />
         <div style={{ flex: 1, lineHeight: 1.55 }}>
-          <b>Berkas video sumber tidak ada di penyimpanan komputer ini.</b>{' '}
-          Klip, subtitle, dan suntingan Anda aman, yang hilang hanya videonya,
-          dan itu bisa diunduh lagi dari YouTube.
+          <b>{t('hilang.judul')}</b>{' '}
+          {t('hilang.ket')}
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap',
                         marginTop: '8px' }}>
             {jalur.length > 1 && (
@@ -67,7 +68,7 @@ export default function VideoHilang({ videoId, onPulih }) {
                                border: '1px solid var(--border-color)' }}>
                 {jalur.map((j) => (
                   <option key={j.lang} value={j.asli ? '' : j.lang}>
-                    Suara {j.nama}{j.asli ? ' (asli)' : ''}
+                    {t('hilang.suara', { nama: j.nama })}{j.asli ? t('hilang.asli') : ''}
                   </option>
                 ))}
               </select>
@@ -75,7 +76,7 @@ export default function VideoHilang({ videoId, onPulih }) {
             <button className="btn-primary" onClick={unduh} disabled={!!kerja}
                     style={{ fontSize: '.78rem' }}>
               {kerja ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
-              {kerja ? `Mengunduh ${Math.round((kerja.progress ?? 0) * 100)}%` : 'Unduh ulang video'}
+              {kerja ? t('hilang.mengunduh', { n: Math.round((kerja.progress ?? 0) * 100) }) : t('hilang.unduh_ulang')}
             </button>
           </div>
           {kerja && (
