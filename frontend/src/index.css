@@ -1729,6 +1729,18 @@ body.is-studio .app-viewport,
 .topik.is-on { background: var(--ink); color: var(--ground); border-color: var(--ink); }
 .topik.is-on .topik-ikon { color: var(--warna-topik); }
 
+.tombol-saring-baris { display: flex; gap: 8px; align-items: center; margin-bottom: 14px; }
+.tombol-saring {
+  display: inline-flex; align-items: center; gap: 7px; cursor: pointer;
+  padding: 7px 14px; border-radius: 999px; font: inherit; font-size: .84rem; font-weight: 650;
+  color: var(--ink); background: var(--plate-2); border: 1px solid var(--border-color);
+}
+.tombol-saring:hover, .tombol-saring.is-on { background: var(--plate-3, var(--plate-2)); border-color: var(--ink-3); }
+.tombol-saring-jumlah {
+  min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; font-size: .7rem;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--ink); color: var(--ground);
+}
 .baris-saring { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
 .kelompok-saring { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .judul-saring {

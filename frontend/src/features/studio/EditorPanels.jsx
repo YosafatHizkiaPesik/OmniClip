@@ -8,6 +8,7 @@ import { JARAK_KATA, JARAK_KATA_MAKS, JARAK_KATA_MIN, gayaKata, hexAlpha, jarakK
 import {
   COLOR_GROUPS, COLOR_PAIRS, normalizeHex, useFavoriteColors, useRecentColors,
 } from '../../lib/colors';
+import { useT } from '../../lib/i18n';
 
 /**
  * Sakelar induk warna per penutur, dibaca sekali per sesi.
@@ -119,13 +120,13 @@ const DEFAULT_SPEAKER_COLORS = ['#FFFFFF', '#7CFFB2', '#FFB3C7', '#B39DFF',
                                '#FFD166', '#5BC8FF', '#FF9F1C', '#B8FF3A'];
 
 export function TrimPanel({ clip, videoDuration, busy, onNudge, onSetBounds, onAddSegment, onRemoveSegment }) {
+  const t = useT();
   if (!clip) return null;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
       <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0 }}>
-        Tarik batas mundur untuk menambah konteks sebelumnya, atau maju untuk memperpanjang.
-        Subtitle otomatis dihitung ulang mengikuti batas baru.
+        {t('batas.ket')}
       </p>
 
       {clip.segments.map((seg, idx) => (
@@ -135,11 +136,11 @@ export function TrimPanel({ clip, videoDuration, busy, onNudge, onSetBounds, onA
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
             <span style={label}>
-              {clip.segments.length > 1 ? `Potongan ${idx + 1}` : 'Rentang klip'}
+              {clip.segments.length > 1 ? t('batas.potongan_n', { n: idx + 1 }) : t('batas.rentang')}
             </span>
             {clip.segments.length > 1 && (
               <button onClick={() => onRemoveSegment(clip.clip_id, idx)} disabled={busy}
-                      aria-label="Hapus potongan"
+                      aria-label={t('batas.hapus_potongan')}
                       style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent-red)', display: 'flex' }}>
                 <Trash2 size={15} />
               </button>
@@ -149,7 +150,7 @@ export function TrimPanel({ clip, videoDuration, busy, onNudge, onSetBounds, onA
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
             {['start', 'end'].map((edge) => (
               <div key={edge}>
-                <div style={{ ...label, marginBottom: '5px' }}>{edge === 'start' ? 'Mulai' : 'Selesai'}</div>
+                <div style={{ ...label, marginBottom: '5px' }}>{edge === 'start' ? t('batas.mulai') : t('batas.selesai')}</div>
                 <TimeInput
                   value={seg[edge]}
                   disabled={busy}
@@ -188,11 +189,10 @@ export function TrimPanel({ clip, videoDuration, busy, onNudge, onSetBounds, onA
         style={{ fontSize: '0.8rem' }}
       >
         {busy ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-        Gabungkan potongan lain
+        {t('batas.gabung')}
       </button>
       <p style={{ fontSize: '0.74rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
-        Potongan baru bisa diambil dari bagian mana pun di video, misalnya menit 10
-        digabung dengan menit 50. Atur waktunya di kotak yang muncul.
+        {t('batas.gabung_ket')}
       </p>
     </div>
   );
@@ -209,6 +209,7 @@ export function SubtitlePanel({ clip, onUpdate, onRemove, onSplit = null,
                                // saling membingungkan.
                                selectedLine = null, onSelectLine = null,
                                onSeekLine = null }) {
+  const t = useT();
   // Kait dipanggil SEBELUM percabangan keluar apa pun — komponen ini punya dua
   // jalan keluar lebih awal, dan kait di bawahnya akan berubah-ubah jumlahnya
   // antar render.
@@ -287,9 +288,9 @@ export function SubtitlePanel({ clip, onUpdate, onRemove, onSplit = null,
   useLayoutEffect(() => {
     const kotak = listRef.current;
     if (!kotak) return;
-    for (const t of kotak.querySelectorAll('textarea')) {
-      t.style.height = 'auto';
-      t.style.height = `${t.scrollHeight}px`;
+    for (const ta of kotak.querySelectorAll('textarea')) {
+      ta.style.height = 'auto';
+      ta.style.height = `${ta.scrollHeight}px`;
     }
   }, [clip?.clip_id, (clip?.subtitles ?? []).length]);
 
@@ -348,9 +349,7 @@ export function SubtitlePanel({ clip, onUpdate, onRemove, onSplit = null,
   if (!lines.length) {
     return (
       <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-        Klip ini tidak punya subtitle. Kalau video sumbernya tidak memiliki transkrip,
-        sistem tidak membuat teks apa pun, subtitle karangan justru berbahaya karena
-        akan ikut terbakar ke video.
+        {t('sub.kosong')}
       </p>
     );
   }
@@ -388,11 +387,8 @@ export function SubtitlePanel({ clip, onUpdate, onRemove, onSplit = null,
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
       <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
-        {lines.length} baris. Perbaiki kata yang salah dengar langsung di sini, dan
-        tekan lingkaran warna untuk menandai siapa yang bicara. Nomor <b>Orang</b>
-        di sini datang dari memisahkan SUARA, satu orang tetap dihitung meski
-        kameranya sedang tidak menyorotnya. Nomor <b>Wajah</b> pada bingkai lain
-        soal: itu wajah yang terlihat di layar, diurut dari kiri ke kanan.
+        {t('sub.ket_a', { n: lines.length })} <b>{t('sub.ket_b')}</b> {t('sub.ket_c')}{' '}
+        <b>{t('sub.ket_d')}</b> {t('sub.ket_e')}
       </p>
 
       <div style={{
@@ -400,18 +396,15 @@ export function SubtitlePanel({ clip, onUpdate, onRemove, onSplit = null,
         background: 'var(--bg-glass)', border: '1px solid var(--border-color)',
       }}>
         <div style={{ fontSize: '0.75rem', fontWeight: 700, marginBottom: '4px' }}>
-          {speakerConfident === null ? 'Penanda penutur'
+          {speakerConfident === null ? t('sub.penanda')
             : speakerConfident
-              ? `Terdeteksi ${speakerCount} narasumber`
-              : 'Suara sulit dipisahkan otomatis'}
+              ? t('sub.terdeteksi', { n: speakerCount })
+              : t('sub.sulit')}
         </div>
         <p style={{ fontSize: '0.68rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.55 }}>
           {speakerConfident === false
-            ? 'Sistem harus menebak dua hal sekaligus: berapa orangnya, dan '
-              + 'siapa bicara kapan. Yang pertama paling sering meleset, kalau '
-              + 'Anda sudah tahu jumlahnya, isikan di bawah dan sisanya biasanya ikut membaik.'
-            : 'Ditebak dari warna suara. Kalau jumlahnya keliru, setel sendiri '
-              + 'di bawah lalu deteksi ulang.'}
+            ? t('sub.sulit_ket')
+            : t('sub.tebak_ket')}
         </p>
 
         {onRedetect && <SpeakerCountPicker current={speakerCount} busy={redetecting}
@@ -420,11 +413,10 @@ export function SubtitlePanel({ clip, onUpdate, onRemove, onSplit = null,
         <button className="btn-secondary" onClick={() => onAutoSpeakers?.(clip.clip_id)}
                 disabled={redetecting}
                 style={{ fontSize: '0.72rem', padding: '6px 9px', marginTop: '8px' }}>
-          Tandai ulang dari jeda bicara
+          {t('sub.dari_jeda')}
         </button>
         <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)', margin: '5px 0 0', lineHeight: 1.5 }}>
-          Cara cepat tanpa mendengarkan ulang: menganggap jeda panjang sebagai
-          pergantian giliran. Hanya berlaku untuk klip ini.
+          {t('sub.dari_jeda_ket')}
         </p>
       </div>
 
@@ -468,7 +460,7 @@ export function SubtitlePanel({ clip, onUpdate, onRemove, onSplit = null,
                    padding: on ? '3px 4px' : '3px 4px',
                  }}>
               <button onClick={() => onSeekLine?.(line.start)}
-                      title="Putar dari baris ini"
+                      title={t('sub.putar_baris')}
                       style={{
                         background: 'none', border: 'none', padding: 0, textAlign: 'left',
                         cursor: onSeekLine ? 'pointer' : 'default',
@@ -480,8 +472,8 @@ export function SubtitlePanel({ clip, onUpdate, onRemove, onSplit = null,
               </button>
               <button
                 onClick={() => onUpdate(clip.clip_id, i, { speaker: (speaker + 1) % total })}
-                title={`Orang ${speaker + 1}, klik untuk ganti (sampai ${total})`}
-                aria-label="Ganti penanda pembicara"
+                title={t('sub.orang_klik', { n: speaker + 1, total })}
+                aria-label={t('sub.ganti_penanda')}
                 style={{
                   width: '20px', height: '20px', borderRadius: '50%', cursor: 'pointer',
                   background: colorOf(speaker), border: '2px solid var(--border-color)',
@@ -531,10 +523,10 @@ export function SubtitlePanel({ clip, onUpdate, onRemove, onSplit = null,
                         : { x: style?.pos_x ?? 50,
                             y: style?.position === 'top' ? 15
                                : style?.position === 'middle' ? 50 : 85 })}
-                      aria-label={bebas ? 'Kembalikan ke gaya klip' : 'Beri letak sendiri'}
+                      aria-label={bebas ? t('sub.kembalikan_gaya') : t('sub.letak_sendiri')}
                       title={bebas
-                        ? 'Baris ini punya letaknya sendiri. Klik untuk mengembalikannya ke gaya klip.'
-                        : 'Beri baris ini letaknya sendiri, lalu seret di pratinjau.'}
+                        ? t('sub.letak_bebas_judul')
+                        : t('sub.letak_sendiri_judul')}
                       style={{ background: 'none', border: 'none', cursor: 'pointer',
                                color: bebas ? 'var(--reh)' : 'var(--text-muted)',
                                display: 'flex' }}>
@@ -553,14 +545,14 @@ export function SubtitlePanel({ clip, onUpdate, onRemove, onSplit = null,
                             .filter(Boolean).length;
                           onSplit(clip.clip_id, i, kata);
                         }}
-                        aria-label="Pecah baris di posisi kursor"
-                        title="Pecah baris di posisi kursor. Tiap pecahan punya waktu, warna, dan letaknya sendiri."
+                        aria-label={t('sub.pecah')}
+                        title={t('sub.pecah_judul')}
                         style={{ background: 'none', border: 'none', cursor: 'pointer',
                                  color: 'var(--text-muted)', display: 'flex' }}>
                   <Scissors size={14} />
                 </button>
               )}
-              <button onClick={() => onRemove(clip.clip_id, i)} aria-label="Hapus baris"
+              <button onClick={() => onRemove(clip.clip_id, i)} aria-label={t('sub.hapus_baris')}
                       style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}>
                 <Trash2 size={14} />
               </button>
@@ -584,6 +576,7 @@ const WARNA_ORANG = ['#FFFFFF', '#FFE500', '#7CFFB2', '#5BC8FF', '#FFB3C7',
  * dan diam-diam tidak terjadi apa-apa adalah jawaban terburuk.
  */
 function WarnaTiapOrang({ jumlah, tally, palette, style, onStyle: onStyleProp }) {
+  const t = useT();
   const [buka, setBuka] = useState(null);
   const [sibuk, setSibuk] = useState(false);
   const boleh = useWarnaPenutur();
@@ -626,7 +619,7 @@ function WarnaTiapOrang({ jumlah, tally, palette, style, onStyle: onStyleProp })
   return (
     <div>
       <div style={{ ...label, fontSize: '0.7rem', marginBottom: '6px' }}>
-        Warna subtitle tiap orang
+        {t('warna.judul')}
       </div>
       {onStyleProp && (
         <label style={{
@@ -641,7 +634,7 @@ function WarnaTiapOrang({ jumlah, tally, palette, style, onStyle: onStyleProp })
                  style={{ width: '15px', height: '15px', accentColor: 'var(--accent-cyan)',
                           flex: 'none' }} />
           <span style={{ fontSize: '0.73rem', fontWeight: 700, color: 'var(--ink)' }}>
-            Warna subtitle mengikuti penutur
+            {t('warna.sakelar')}
           </span>
         </label>
       )}
@@ -651,7 +644,7 @@ function WarnaTiapOrang({ jumlah, tally, palette, style, onStyle: onStyleProp })
             <button
               onClick={() => onStyle && setBuka(buka === i ? null : i)}
               disabled={!onStyle}
-              title={onStyle ? `Pilih warna untuk Orang ${i + 1}` : undefined}
+              title={onStyle ? t('warna.pilih_untuk', { n: i + 1 }) : undefined}
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '4px 9px',
                 borderRadius: '99px', fontSize: '0.7rem', fontWeight: 700, fontFamily: 'inherit',
@@ -664,7 +657,7 @@ function WarnaTiapOrang({ jumlah, tally, palette, style, onStyle: onStyleProp })
                 width: '13px', height: '13px', borderRadius: '50%',
                 background: warnaDari(i), border: '1px solid rgba(0,0,0,0.45)',
               }} />
-              Orang {i + 1} · {tally[i] || 0} baris
+              {t('warna.orang_baris', { n: i + 1, baris: tally[i] || 0 })}
               {onStyle && <Palette size={11} style={{ color: 'var(--text-muted)' }} />}
             </button>
           </div>
@@ -680,14 +673,14 @@ function WarnaTiapOrang({ jumlah, tally, palette, style, onStyle: onStyleProp })
         }}>
           <div style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-secondary)',
                         marginBottom: '7px' }}>
-            Warna untuk Orang {buka + 1}
+            {t('warna.untuk', { n: buka + 1 })}
           </div>
           <div style={{ display: 'flex', gap: '7px', flexWrap: 'wrap', alignItems: 'center' }}>
             {WARNA_ORANG.map((c) => {
               const on = warnaDari(buka).toUpperCase() === c;
               return (
                 <button key={c} onClick={() => { setel(buka, c); setBuka(null); }}
-                        title={c} aria-label={`Warna ${c}`}
+                        title={c} aria-label={t('warna.hex', { c })}
                         style={{
                           width: '26px', height: '26px', borderRadius: '50%', cursor: 'pointer',
                           background: c, padding: 0,
@@ -695,36 +688,31 @@ function WarnaTiapOrang({ jumlah, tally, palette, style, onStyle: onStyleProp })
                         }} />
               );
             })}
-            <label title="Warna lain" style={{ display: 'inline-flex', alignItems: 'center', gap: '5px',
+            <label title={t('warna.lain')} style={{ display: 'inline-flex', alignItems: 'center', gap: '5px',
                                                fontSize: '0.68rem', color: 'var(--text-secondary)',
                                                fontWeight: 700, cursor: 'pointer' }}>
               <input type="color" value={warnaDari(buka)}
                      onChange={(e) => setel(buka, e.target.value)}
                      style={{ width: '30px', height: '26px', padding: 0, border: 'none',
                               background: 'none', cursor: 'pointer' }} />
-              Lainnya
+              {t('warna.lainnya')}
             </label>
           </div>
         </div>
       )}
       {!boleh && onStyleProp && (
         <p style={{ fontSize: '0.66rem', color: 'var(--text-muted)', margin: '6px 0 0', lineHeight: 1.5 }}>
-          Semua baris memakai satu warna. Nyalakan sakelar di atas untuk mencobanya
-          pada video ini. Perlu diketahui sebelum menyalakannya: pemisahan penutur
-          baru benar sekitar enam dari sepuluh kalimat pada podcast tiga orang yang
-          suaranya mirip, dan lebih baik pada dua orang yang suaranya jelas berbeda.
-          Hitungan baris di atas tetap dipakai untuk mengikuti wajah yang bicara,
-          menyala atau tidak.
+          {t('warna.mati_ket')}
         </p>
       )}
       {seragam && onStyle && (
         <p style={{ fontSize: '0.66rem', color: 'var(--text-muted)', margin: '6px 0 0', lineHeight: 1.5 }}>
-          Warna per orang sedang dimatikan. Semua baris memakai satu warna.{' '}
+          {t('warna.seragam')}{' '}
           <button onClick={() => onStyle({ ...style, per_speaker_colors: true })}
                   style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer',
                            color: 'var(--accent-cyan)', fontWeight: 700, fontSize: 'inherit',
                            fontFamily: 'inherit' }}>
-            Nyalakan
+            {t('warna.nyalakan')}
           </button>
         </p>
       )}
@@ -741,11 +729,12 @@ function WarnaTiapOrang({ jumlah, tally, palette, style, onStyle: onStyleProp })
  * jadi membiarkannya menjawab menghapus separuh kesulitannya.
  */
 function SpeakerCountPicker({ current, busy, onRedetect }) {
+  const t = useT();
   const [value, setValue] = useState(Math.max(1, Math.min(6, current || 2)));
   return (
     <div style={{ marginTop: '10px' }}>
       <div style={{ ...label, fontSize: '0.66rem', marginBottom: '6px' }}>
-        Jumlah narasumber
+        {t('narasumber.jumlah')}
       </div>
       <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
         {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
@@ -764,17 +753,16 @@ function SpeakerCountPicker({ current, busy, onRedetect }) {
                 onClick={() => onRedetect(value)}
                 style={{ fontSize: '0.73rem', padding: '6px 10px' }}>
           {busy ? <Loader2 size={13} className="animate-spin" /> : <Users size={13} />}
-          Deteksi ulang dengan {value} orang
+          {t('narasumber.deteksi', { n: value })}
         </button>
         <button className="btn-secondary" disabled={busy}
                 onClick={() => onRedetect(null)}
                 style={{ fontSize: '0.73rem', padding: '6px 10px' }}>
-          Biar sistem menebak
+          {t('narasumber.tebak')}
         </button>
       </div>
       <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)', margin: '6px 0 0', lineHeight: 1.5 }}>
-        Menandai ulang seluruh klip dari suaranya. Butuh sekitar dua menit untuk
-        video satu jam, transkripnya tidak diulang.
+        {t('narasumber.ket')}
       </p>
     </div>
   );
@@ -786,6 +774,7 @@ function SpeakerCountPicker({ current, busy, onRedetect }) {
 // Preset gaya. Bukan sekadar warna: tiap preset menyetel ukuran, animasi, font,
 // dan posisi sekaligus, karena kombinasi itulah yang membuat sebuah gaya
 // terbaca utuh — mengganti warna saja tidak mengubah kesannya.
+// `label` dan `hint` adalah kunci kamus, diterjemahkan saat dirender.
 const STYLE_PRESETS = [
   // --- Kotak sorot per kata -------------------------------------------------
   // Gaya yang paling banyak ditiru orang sekarang: tiap kata mendapat kotak
@@ -793,28 +782,28 @@ const STYLE_PRESETS = [
   // di backend/app/services/subtitles.py — tapi hasilnya memang yang membuat
   // klip terlihat dikerjakan editor, bukan dikerjakan mesin.
   {
-    id: 'kotak_kuning', label: 'Kotak Kuning', hint: 'Kata diucapkan masuk kotak kuning',
+    id: 'kotak_kuning', label: 'tema_sub.kotak_kuning', hint: 'tema_sub.kotak_kuning_ket',
     patch: { size: 86, primary: '#FFFFFF', highlight: '#FFE500', font: 'Montserrat',
              uppercase: true, animation: 'pop_in', position: 'bottom', outline_px: 7,
              sorot: 'kotak', kotak_warna: '#FFE500', kotak_teks: '#101010',
              highlight_words: true, bg: false },
   },
   {
-    id: 'kotak_hijau', label: 'Kotak Hijau', hint: 'Kotak hijau, baris memantul masuk',
+    id: 'kotak_hijau', label: 'tema_sub.kotak_hijau', hint: 'tema_sub.kotak_hijau_ket',
     patch: { size: 92, primary: '#FFFFFF', highlight: '#00E676', font: 'Anton',
              uppercase: true, animation: 'pantul', position: 'bottom', outline_px: 7,
              sorot: 'kotak', kotak_warna: '#00E676', kotak_teks: '#06210F',
              highlight_words: true, bg: false },
   },
   {
-    id: 'kotak_merah', label: 'Kotak Merah', hint: 'Kotak merah, huruf putih',
+    id: 'kotak_merah', label: 'tema_sub.kotak_merah', hint: 'tema_sub.kotak_merah_ket',
     patch: { size: 82, primary: '#FFFFFF', highlight: '#FF3B5C', font: 'Archivo Black',
              uppercase: true, animation: 'fade', position: 'bottom', outline_px: 7,
              sorot: 'kotak_pop', kotak_warna: '#FF3B5C', kotak_teks: '#FFFFFF',
              highlight_words: true, bg: false },
   },
   {
-    id: 'kotak_ungu', label: 'Kotak Ungu', hint: 'Kotak ungu, huruf miring ke atas',
+    id: 'kotak_ungu', label: 'tema_sub.kotak_ungu', hint: 'tema_sub.kotak_ungu_ket',
     patch: { size: 88, primary: '#FFFFFF', highlight: '#9B5CFF', font: 'Poppins',
              uppercase: true, animation: 'slide_up', position: 'bottom', outline_px: 6,
              sorot: 'kotak', kotak_warna: '#9B5CFF', kotak_teks: '#FFFFFF',
@@ -822,63 +811,63 @@ const STYLE_PRESETS = [
   },
   // --- Nyala ----------------------------------------------------------------
   {
-    id: 'neon_biru', label: 'Neon Biru', hint: 'Kata menyala biru, masuk dari buram',
+    id: 'neon_biru', label: 'tema_sub.neon_biru', hint: 'tema_sub.neon_biru_ket',
     patch: { size: 94, primary: '#FFFFFF', highlight: '#00E5FF', font: 'Anton',
              uppercase: true, animation: 'blur_masuk', position: 'bottom', outline_px: 7,
              sorot: 'glow', highlight_words: true, bg: false },
   },
   {
-    id: 'neon_pink', label: 'Neon Pink', hint: 'Nyala merah muda, gaya klub malam',
+    id: 'neon_pink', label: 'tema_sub.neon_pink', hint: 'tema_sub.neon_pink_ket',
     patch: { size: 106, primary: '#FFFFFF', highlight: '#FF3DCB', font: 'Bebas Neue',
              uppercase: true, animation: 'fade', position: 'bottom', outline_px: 6,
              sorot: 'glow', highlight_words: true, bg: false },
   },
   // --- Gerak ----------------------------------------------------------------
   {
-    id: 'satu_kata', label: 'Satu Kata', hint: 'Satu kata besar, berganti cepat',
+    id: 'satu_kata', label: 'tema_sub.satu_kata', hint: 'tema_sub.satu_kata_ket',
     patch: { size: 150, primary: '#FFFFFF', highlight: '#FFE500', font: 'Anton',
              uppercase: true, animation: 'satu_kata', position: 'middle', outline_px: 9,
              highlight_words: true, bg: false, margin_v: 300 },
   },
   {
-    id: 'pantul', label: 'Pantul', hint: 'Baris melompat masuk, kata memantul',
+    id: 'pantul', label: 'tema_sub.pantul', hint: 'tema_sub.pantul_ket',
     patch: { size: 92, primary: '#FFFFFF', highlight: '#FFE500', font: 'Montserrat',
              uppercase: true, animation: 'pantul', position: 'bottom', outline_px: 7,
              sorot: 'pop', highlight_words: true, bg: false },
   },
   {
-    id: 'putar', label: 'Putar', hint: 'Baris masuk sambil berputar',
+    id: 'putar', label: 'tema_sub.putar', hint: 'tema_sub.putar_ket',
     patch: { size: 90, primary: '#FFFFFF', highlight: '#5BC8FF', font: 'Rubik',
              uppercase: true, animation: 'putar', position: 'bottom', outline_px: 7,
              sorot: 'pop', highlight_words: true, bg: false },
   },
   {
-    id: 'geser', label: 'Geser', hint: 'Baris meluncur dari kiri',
+    id: 'geser', label: 'tema_sub.geser', hint: 'tema_sub.geser_ket',
     patch: { size: 88, primary: '#FFFFFF', highlight: '#B8FF3A', font: 'Oswald',
              uppercase: true, animation: 'geser_kiri', position: 'bottom', outline_px: 7,
              sorot: 'warna', highlight_words: true, bg: false },
   },
   {
-    id: 'getar', label: 'Getar', hint: 'Hentakan kecil, untuk klip game dan reaksi',
+    id: 'getar', label: 'tema_sub.getar', hint: 'tema_sub.getar_ket',
     patch: { size: 84, primary: '#FFFFFF', highlight: '#FF4D5E', font: 'Bungee',
              uppercase: true, animation: 'getar', position: 'bottom', outline_px: 8,
              sorot: 'pop', highlight_words: true, bg: false },
   },
   {
-    id: 'fokus', label: 'Fokus', hint: 'Masuk dari buram jadi tajam',
+    id: 'fokus', label: 'tema_sub.fokus', hint: 'tema_sub.fokus_ket',
     patch: { size: 88, primary: '#FFFFFF', highlight: '#FFD166', font: 'Poppins',
              uppercase: false, animation: 'blur_masuk', position: 'bottom', outline_px: 6,
              sorot: 'warna', highlight_words: true, bg: false },
   },
   // --- Penanda kata ----------------------------------------------------------
   {
-    id: 'garis_bawah', label: 'Garis Bawah', hint: 'Kata diucapkan digarisbawahi',
+    id: 'garis_bawah', label: 'tema_sub.garis_bawah', hint: 'tema_sub.garis_bawah_ket',
     patch: { size: 80, primary: '#FFFFFF', highlight: '#FFE500', font: 'Poppins',
              uppercase: false, animation: 'fade', position: 'bottom', outline_px: 6,
              sorot: 'garis_bawah', highlight_words: true, bg: false },
   },
   {
-    id: 'retro', label: 'Retro', hint: 'Bayangan berwarna yang digeser',
+    id: 'retro', label: 'tema_sub.retro', hint: 'tema_sub.retro_ket',
     patch: { size: 88, primary: '#FFFFFF', highlight: '#FFE500', font: 'Lilita One',
              uppercase: true, animation: 'putar', position: 'bottom', outline_px: 0,
              shadow_px: 9, bayang_warna: '#FF00AA',
@@ -886,31 +875,31 @@ const STYLE_PRESETS = [
   },
   // --- Gaya awal -------------------------------------------------------------
   {
-    id: 'tebal', label: 'Tebal', hint: 'Putih tebal, kata aktif kuning',
+    id: 'tebal', label: 'tema_sub.tebal', hint: 'tema_sub.tebal_ket',
     patch: { size: 96, primary: '#FFFFFF', highlight: '#FFE500', font: 'Montserrat',
              uppercase: true, animation: 'karaoke_pop', position: 'bottom', outline_px: 7,
              highlight_words: true, bg: false },
   },
   {
-    id: 'neon', label: 'Neon', hint: 'Besar, sorot biru elektrik',
+    id: 'neon', label: 'tema_sub.neon', hint: 'tema_sub.neon_ket',
     patch: { size: 110, primary: '#FFFFFF', highlight: '#00E5FF', font: 'Anton',
              uppercase: true, animation: 'karaoke_pop', position: 'bottom', outline_px: 8,
              highlight_words: true, bg: false },
   },
   {
-    id: 'lembut', label: 'Lembut', hint: 'Huruf biasa, masuk memudar',
+    id: 'lembut', label: 'tema_sub.lembut', hint: 'tema_sub.lembut_ket',
     patch: { size: 84, primary: '#FFFFFF', highlight: '#FFD166', font: 'Poppins',
              uppercase: false, animation: 'fade', position: 'bottom', outline_px: 5,
              highlight_words: true, bg: false },
   },
   {
-    id: 'naik', label: 'Naik', hint: 'Baris naik dari bawah',
+    id: 'naik', label: 'tema_sub.naik', hint: 'tema_sub.naik_ket',
     patch: { size: 92, primary: '#FFFFFF', highlight: '#7CFF6B', font: 'Oswald',
              uppercase: true, animation: 'slide_up', position: 'bottom', outline_px: 7,
              highlight_words: true, bg: false },
   },
   {
-    id: 'papan', label: 'Papan', hint: 'Blok tebal, sangat mencolok',
+    id: 'papan', label: 'tema_sub.papan', hint: 'tema_sub.papan_ket',
     // Warna DITULIS sebagai heksadesimal, bukan sebagai var(--danger).
     // Nilai preset ini dikirim apa adanya ke ffmpeg, dan variabel CSS tidak
     // berarti apa-apa di sana — sah di peramban, putih di video, tanpa satu
@@ -920,19 +909,19 @@ const STYLE_PRESETS = [
              highlight_words: true, bg: false },
   },
   {
-    id: 'ramping', label: 'Ramping', hint: 'Sempit, banyak kata muat',
+    id: 'ramping', label: 'tema_sub.ramping', hint: 'tema_sub.ramping_ket',
     patch: { size: 116, primary: '#FFFFFF', highlight: '#00F5D4', font: 'Bebas Neue',
              uppercase: true, animation: 'karaoke_wipe', position: 'bottom', outline_px: 6,
              highlight_words: true, bg: false },
   },
   {
-    id: 'ceria', label: 'Ceria', hint: 'Bulat, gaya kartun',
+    id: 'ceria', label: 'tema_sub.ceria', hint: 'tema_sub.ceria_ket',
     patch: { size: 94, primary: '#FFFFFF', highlight: '#FF9F1C', font: 'Lilita One',
              uppercase: true, animation: 'pop_in', position: 'bottom', outline_px: 8,
              highlight_words: true, bg: false },
   },
   {
-    id: 'bersih', label: 'Bersih', hint: 'Tanpa animasi, tengah bawah',
+    id: 'bersih', label: 'tema_sub.bersih', hint: 'tema_sub.bersih_ket',
     patch: { size: 88, primary: '#FFFFFF', highlight: '#FFFFFF', font: 'Rubik',
              uppercase: false, animation: 'none', position: 'bottom', outline_px: 5,
              highlight_words: true, bg: false },
@@ -943,27 +932,27 @@ const STYLE_PRESETS = [
   // terlihat tenang, yang kedua terlihat keras. Sampai sekarang hanya yang
   // kedua yang bisa dibuat.
   {
-    id: 'apple', label: 'Apple', hint: 'Pelat gelap, huruf biasa, tenang',
+    id: 'apple', label: 'tema_sub.apple', hint: 'tema_sub.apple_ket',
     patch: { size: 76, primary: '#FFFFFF', highlight: '#FFFFFF', font: 'Poppins',
              uppercase: false, animation: 'fade', position: 'bottom', outline_px: 0,
              highlight_words: false, bg: true, bg_color: '#000000',
              bg_opacity: 0.55, bg_pad: 14 },
   },
   {
-    id: 'sinema', label: 'Sinema', hint: 'Pelat tipis, seperti subtitle film',
+    id: 'sinema', label: 'tema_sub.sinema', hint: 'tema_sub.sinema_ket',
     patch: { size: 64, primary: '#FFFFFF', highlight: '#FFFFFF', font: 'Rubik',
              uppercase: false, animation: 'none', position: 'bottom', outline_px: 0,
              highlight_words: false, bg: true, bg_color: '#000000',
              bg_opacity: 0.72, bg_pad: 10 },
   },
   {
-    id: 'ketik', label: 'Ketik', hint: 'Kata muncul satu per satu',
+    id: 'ketik', label: 'tema_sub.ketik', hint: 'tema_sub.ketik_ket',
     patch: { size: 92, primary: '#FFFFFF', highlight: '#FFE500', font: 'Montserrat',
              uppercase: true, animation: 'typewriter', position: 'bottom', outline_px: 7,
              highlight_words: false, bg: false },
   },
   {
-    id: 'stiker', label: 'Stiker', hint: 'Pelat berwarna, gaya kartun',
+    id: 'stiker', label: 'tema_sub.stiker', hint: 'tema_sub.stiker_ket',
     patch: { size: 84, primary: '#101010', highlight: '#101010', font: 'Lilita One',
              uppercase: true, animation: 'pop_in', position: 'bottom', outline_px: 0,
              highlight_words: false, bg: true, bg_color: '#FFE500',
@@ -990,10 +979,11 @@ function modeSorot(p) {
 
 
 function PresetTile({ preset, active, onPick }) {
+  const t = useT();
   const p = preset.patch;
   const words = p.uppercase ? ['AYO', 'MULAI'] : ['Ayo', 'mulai'];
   return (
-    <button onClick={onPick} title={preset.hint}
+    <button onClick={onPick} title={t(preset.hint)}
             style={{
               padding: 0, cursor: 'pointer', overflow: 'hidden',
               borderRadius: 'var(--radius-sm)',
@@ -1041,9 +1031,9 @@ function PresetTile({ preset, active, onPick }) {
         <div style={{
           fontSize: '0.74rem', fontWeight: 800,
           color: active ? 'var(--accent-cyan)' : 'var(--text-primary)',
-        }}>{preset.label}</div>
+        }}>{t(preset.label)}</div>
         <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)', lineHeight: 1.3 }}>
-          {preset.hint}
+          {t(preset.hint)}
         </div>
       </div>
     </button>
@@ -1053,38 +1043,39 @@ function PresetTile({ preset, active, onPick }) {
 // Cara BARIS masuk. Sorotan per kata diatur terpisah, karena keduanya memang
 // dua hal yang berbeda: satu mengatur bagaimana baris datang, satu lagi
 // bagaimana kata yang sedang diucapkan ditandai.
+// Label = kunci kamus; diterjemahkan pemanggil sebelum diberikan ke <Segmented>.
 const ANIMATIONS = [
-  ['karaoke_pop', 'Karaoke pantul'],
-  ['karaoke_wipe', 'Karaoke warna'],
-  ['fade', 'Memudar'],
-  ['slide_up', 'Naik'],
-  ['pop_in', 'Membesar'],
-  ['pantul', 'Pantul'],
-  ['putar', 'Putar'],
-  ['geser_kiri', 'Geser kiri'],
-  ['geser_kanan', 'Geser kanan'],
-  ['blur_masuk', 'Fokus'],
-  ['getar', 'Getar'],
-  ['typewriter', 'Ketik'],
-  ['satu_kata', 'Satu kata'],
-  ['none', 'Tanpa animasi'],
+  ['karaoke_pop', 'anim.karaoke_pop'],
+  ['karaoke_wipe', 'anim.karaoke_wipe'],
+  ['fade', 'anim.fade'],
+  ['slide_up', 'anim.slide_up'],
+  ['pop_in', 'anim.pop_in'],
+  ['pantul', 'anim.pantul'],
+  ['putar', 'anim.putar'],
+  ['geser_kiri', 'anim.geser_kiri'],
+  ['geser_kanan', 'anim.geser_kanan'],
+  ['blur_masuk', 'anim.blur_masuk'],
+  ['getar', 'anim.getar'],
+  ['typewriter', 'anim.typewriter'],
+  ['satu_kata', 'anim.satu_kata'],
+  ['none', 'anim.none'],
 ];
 
 // Cara KATA yang sedang diucapkan ditandai.
 const SOROT = [
-  ['warna', 'Warna'],
-  ['pop', 'Warna + pantul'],
-  ['kotak', 'Kotak'],
-  ['kotak_pop', 'Kotak + pantul'],
-  ['glow', 'Nyala'],
-  ['garis_bawah', 'Garis bawah'],
-  ['mati', 'Tidak disorot'],
+  ['warna', 'sorot.warna'],
+  ['pop', 'sorot.pop'],
+  ['kotak', 'sorot.kotak'],
+  ['kotak_pop', 'sorot.kotak_pop'],
+  ['glow', 'sorot.glow'],
+  ['garis_bawah', 'sorot.garis_bawah'],
+  ['mati', 'sorot.mati'],
 ];
 
 function Segmented({ options, value, onChange, columns = 3, size = '0.76rem' }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: `repeat(${columns}, 1fr)`, gap: '6px' }}>
-      {options.map(([v, t]) => (
+      {options.map(([v, teks]) => (
         <button key={v} onClick={() => onChange(v)}
                 style={{
                   padding: '9px 2px', fontSize: size, fontWeight: 700, cursor: 'pointer',
@@ -1092,20 +1083,21 @@ function Segmented({ options, value, onChange, columns = 3, size = '0.76rem' }) 
                   border: value === v ? '2px solid var(--accent-cyan)' : '1px solid var(--border-color)',
                   background: value === v ? 'var(--hl-wash)' : 'transparent',
                   color: value === v ? 'var(--accent-cyan)' : 'var(--text-secondary)',
-                }}>{t}</button>
+                }}>{teks}</button>
       ))}
     </div>
   );
 }
 
 function Swatch({ color, selected, onClick, size = 26, title }) {
+  const t = useT();
   // Tanpa `onClick` ia hanya keping warna, bukan kendali — dan digambar sebagai
   // <span>. Sebagai <button> ia dipakai juga di dalam judul Section, yang
   // sendirinya sebuah <button>: tombol di dalam tombol adalah HTML tidak sah,
   // dan React memperingatkannya di konsol setiap kali panel Gaya dibuka.
   const Tag = onClick ? 'button' : 'span';
   return (
-    <Tag {...(onClick ? { onClick, type: 'button', 'aria-label': `Warna ${color}` } : {})}
+    <Tag {...(onClick ? { onClick, type: 'button', 'aria-label': t('warna.hex', { c: color }) } : {})}
             title={title || color}
             style={{
               display: 'inline-block',
@@ -1128,6 +1120,7 @@ function Swatch({ color, selected, onClick, size = 26, title }) {
  * ketiganya hilang kalau yang tersedia hanya enam bulatan tetap.
  */
 function ColorPicker({ value, onChange }) {
+  const t = useT();
   const [favs, toggleFav] = useFavoriteColors();
   const [recent, remember] = useRecentColors();
   const [open, setOpen] = useState(false);
@@ -1154,8 +1147,8 @@ function ColorPicker({ value, onChange }) {
         <code style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', flex: 1 }}>
           {value}
         </code>
-        <button onClick={() => toggleFav(value)} title={isFav ? 'Hapus dari favorit' : 'Simpan ke favorit'}
-                aria-label="Favoritkan warna"
+        <button onClick={() => toggleFav(value)} title={isFav ? t('pilihwarna.hapus_fav') : t('pilihwarna.simpan_fav')}
+                aria-label={t('pilihwarna.fav_aria')}
                 style={{
                   background: 'none', border: 'none', cursor: 'pointer', display: 'flex',
                   color: isFav ? '#FFD166' : 'var(--text-muted)', padding: '2px',
@@ -1168,28 +1161,28 @@ function ColorPicker({ value, onChange }) {
                   borderRadius: '6px', cursor: 'pointer', fontSize: '0.7rem',
                   padding: '3px 8px', color: 'var(--text-secondary)', fontWeight: 700,
                 }}>
-          {open ? 'Tutup' : 'Pilih'}
+          {open ? t('pilihwarna.tutup') : t('pilihwarna.pilih')}
         </button>
       </div>
 
       {open && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '9px', marginTop: '10px' }}>
           {favs.length > 0 && (
-            <Row title="Favorit" colors={favs} value={value} onPick={pick} />
+            <Row title={t('pilihwarna.favorit')} colors={favs} value={value} onPick={pick} />
           )}
           {recent.length > 0 && (
-            <Row title="Terakhir dipakai" colors={recent} value={value} onPick={pick} />
+            <Row title={t('pilihwarna.terakhir')} colors={recent} value={value} onPick={pick} />
           )}
           {COLOR_GROUPS.map((g) => (
-            <Row key={g.name} title={g.name} colors={g.colors} value={value} onPick={pick} />
+            <Row key={g.name} title={t(g.name)} colors={g.colors} value={value} onPick={pick} />
           ))}
 
           <div>
-            <div style={{ ...label, fontSize: '0.66rem', marginBottom: '5px' }}>Warna bebas</div>
+            <div style={{ ...label, fontSize: '0.66rem', marginBottom: '5px' }}>{t('pilihwarna.bebas')}</div>
             <div style={{ display: 'flex', gap: '7px', alignItems: 'center' }}>
               <input type="color" value={normalizeHex(value) || '#FFFFFF'}
                      onChange={(e) => pick(e.target.value)}
-                     aria-label="Pemilih warna bebas"
+                     aria-label={t('pilihwarna.bebas_aria')}
                      style={{
                        width: '38px', height: '32px', padding: 0, cursor: 'pointer',
                        background: 'none', border: '1px solid var(--border-color)',
@@ -1269,6 +1262,7 @@ function Section({ id, title, note, openId, setOpenId, children }) {
  * dibantah adalah pilihan yang tidak bisa diperbaiki.
  */
 function PilihTemaAI({ klip, presets, set }) {
+  const t = useT();
   const [sibuk, setSibuk] = useState(false);
   const [hasil, setHasil] = useState(null);
   const [galat, setGalat] = useState(null);
@@ -1279,14 +1273,14 @@ function PilihTemaAI({ klip, presets, set }) {
     try {
       const r = await apiPost('/clip-gaya', { ...klip, segarkan }, { timeout: 120000 });
       const preset = presets.find((p) => p.id === r.tema);
-      if (!preset) throw new Error(`Tema "${r.tema}" tidak dikenal di sini.`);
+      if (!preset) throw new Error(t('temaai.tak_dikenal', { tema: r.tema }));
       // Usul model soal warna per penutur hanya berlaku bila sakelar induknya
       // menyala. Model menilai transkrip, bukan ketepatan pemisahan suaranya,
       // jadi ia tidak berhak menyalakan sesuatu yang sedang dimatikan.
       const bolehWarna = await muatWarnaPenutur();
       set({ ...preset.patch,
             per_speaker_colors: bolehWarna && !!r.warna_per_penutur });
-      setHasil({ ...r, label: preset.label,
+      setHasil({ ...r, label: t(preset.label),
                  warna_per_penutur: bolehWarna && !!r.warna_per_penutur });
     } catch (e) {
       setGalat(e.message);
@@ -1302,19 +1296,19 @@ function PilihTemaAI({ klip, presets, set }) {
                        alignItems: 'center', justifyContent: 'center', gap: '7px',
                        color: 'var(--accent-cyan)' }}>
         {sibuk ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-        {sibuk ? 'Membaca isi klipnya…' : 'Pilihkan tema untuk klip ini'}
+        {sibuk ? t('temaai.membaca') : t('temaai.pilihkan')}
       </button>
       {hasil && (
         <p style={{ fontSize: '0.69rem', color: 'var(--text-muted)', lineHeight: 1.5,
                     margin: '7px 0 0' }}>
           <b style={{ color: 'var(--text-secondary)' }}>{hasil.label}</b>
           {hasil.alasan ? ` - ${hasil.alasan}` : ''}
-          {hasil.warna_per_penutur ? '. Warna dibedakan per orang.' : ''}
-          {hasil.sumber === 'lokal' ? ' (dipilih mesin lokal)' : ''}{' '}
+          {hasil.warna_per_penutur ? t('temaai.per_orang') : ''}
+          {hasil.sumber === 'lokal' ? t('temaai.lokal') : ''}{' '}
           <button onClick={() => minta(true)} disabled={sibuk}
                   style={{ background: 'none', border: 0, padding: 0, cursor: 'pointer',
                            color: 'var(--accent-cyan)', font: 'inherit' }}>
-            Pilih ulang
+            {t('temaai.ulang')}
           </button>
         </p>
       )}
@@ -1341,6 +1335,7 @@ export function StylePanel({
   // dijalankan, jadi kesalahan di dalamnya tidak akan tertangkap.
   defaultSection = 'preset',
 }) {
+  const t = useT();
   const [openId, setOpenId] = useState(defaultSection);
   const [fonts, setFonts] = useState(cachedFonts);
 
@@ -1451,7 +1446,7 @@ export function StylePanel({
                     }} />
                   </span>
                   <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-secondary)' }}>
-                    {c.name}
+                    {t(c.name)}
                   </span>
                 </button>
               );
@@ -1638,7 +1633,7 @@ export function StylePanel({
                note={ANIMATIONS.find(([v]) => v === style.animation)?.[1]}>
         <div>
           <div style={{ ...label, marginBottom: '8px' }}>Jangkar teks</div>
-          <Segmented columns={3} options={[['top', 'Atas'], ['middle', 'Tengah'], ['bottom', 'Bawah']]}
+          <Segmented columns={3} options={[['top', t('gaya.atas')], ['middle', t('gaya.tengah')], ['bottom', t('gaya.bawah')]]}
                      value={style.position} onChange={(v) => set({ position: v })} />
         </div>
 
@@ -1682,11 +1677,11 @@ export function StylePanel({
 
         <div>
           <div style={{ ...label, marginBottom: '8px' }}>Animasi</div>
-          <Segmented columns={2} options={ANIMATIONS} value={style.animation}
+          <Segmented columns={2} options={ANIMATIONS.map(([v, k]) => [v, t(k)])} value={style.animation}
                      onChange={(v) => set({ animation: v })} />
 
           <div style={{ ...label, marginTop: '14px' }}>Sorotan kata yang diucapkan</div>
-          <Segmented columns={2} options={SOROT} value={modeSorot(style)}
+          <Segmented columns={2} options={SOROT.map(([v, k]) => [v, t(k)])} value={modeSorot(style)}
                      onChange={(v) => set({ sorot: v, highlight_words: v !== 'mati' })} />
 
           {(modeSorot(style) === 'kotak' || modeSorot(style) === 'kotak_pop') && (

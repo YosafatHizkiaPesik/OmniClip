@@ -123,14 +123,22 @@ export default function Watch() {
     let cancelled = false;
     setNotice(null);
     setPending(null);
-    if (location.state?.video?.id === videoId) {
-      setVideo(location.state.video);
-      return undefined;
-    }
-    setVideo(null);
+    // Dibuka dari kartu: tampil seketika dari data kartunya, lalu dilengkapi
+    // dari /video-info. Deskripsi di hasil pencarian hanya cuplikan pendek,
+    // jadi tanpa ini "Selengkapnya" tidak membuka apa-apa (dilaporkan pemilik
+    // 15 Oktober 2026). Kegagalan melengkapi tidak menjadi galat halaman.
+    const dariKartu = location.state?.video?.id === videoId;
+    if (dariKartu) setVideo(location.state.video);
+    else setVideo(null);
     apiGet(`/video-info?url=${encodeURIComponent(videoId)}`)
-      .then((info) => { if (!cancelled) setVideo({ ...info, id: videoId }); })
-      .catch((err) => { if (!cancelled) setInfoError(err); });
+      .then((info) => {
+        if (cancelled) return;
+        setVideo((lama) => (dariKartu
+          ? { ...lama, description: info.description || lama?.description,
+              channel_id: lama?.channel_id || info.channel_id }
+          : { ...info, id: videoId }));
+      })
+      .catch((err) => { if (!cancelled && !dariKartu) setInfoError(err); });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [videoId]);

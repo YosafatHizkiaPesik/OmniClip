@@ -16,19 +16,19 @@ export const RECENT_KEY = 'omniclip_color_recent';
 /** Palet lengkap, dikelompokkan supaya bisa dipindai cepat. */
 export const COLOR_GROUPS = [
   {
-    name: 'Netral',
+    name: 'grup_warna.netral',
     colors: ['#FFFFFF', '#F5F1E6', '#D8DEE9', '#B9C6D6', '#1A1A1A'],
   },
   {
-    name: 'Hangat',
+    name: 'grup_warna.hangat',
     colors: ['#FFE500', '#FFD166', '#FF9F1C', '#FF7A45', '#FF4D6D', '#FF2E63'],
   },
   {
-    name: 'Sejuk',
+    name: 'grup_warna.sejuk',
     colors: ['#00E5FF', '#5BC8FF', '#4D7CFF', '#7C5CFF', '#B39DFF', '#00F5D4'],
   },
   {
-    name: 'Segar',
+    name: 'grup_warna.segar',
     colors: ['#7CFF6B', '#7CFFB2', '#B8FF3A', '#39FF88', '#FFB3C7', '#FF8FE5'],
   },
 ];
@@ -42,14 +42,14 @@ export const ALL_COLORS = COLOR_GROUPS.flatMap((g) => g.colors);
  * adalah KONTRAS antara warna dasar dan warna sorotnya, bukan salah satunya.
  */
 export const COLOR_PAIRS = [
-  { id: 'klasik', name: 'Klasik', primary: '#FFFFFF', highlight: '#FFE500' },
-  { id: 'neon', name: 'Neon', primary: '#FFFFFF', highlight: '#00E5FF' },
-  { id: 'permen', name: 'Permen', primary: '#FFFFFF', highlight: '#FF4D6D' },
-  { id: 'limau', name: 'Limau', primary: '#FFFFFF', highlight: '#B8FF3A' },
-  { id: 'senja', name: 'Senja', primary: '#FFD166', highlight: '#FF7A45' },
-  { id: 'mint', name: 'Mint', primary: '#F5F1E6', highlight: '#00F5D4' },
-  { id: 'ungu', name: 'Ultraviolet', primary: '#FFFFFF', highlight: '#B39DFF' },
-  { id: 'esbiru', name: 'Es biru', primary: '#D8DEE9', highlight: '#5BC8FF' },
+  { id: 'klasik', name: 'pasangan.klasik', primary: '#FFFFFF', highlight: '#FFE500' },
+  { id: 'neon', name: 'pasangan.neon', primary: '#FFFFFF', highlight: '#00E5FF' },
+  { id: 'permen', name: 'pasangan.permen', primary: '#FFFFFF', highlight: '#FF4D6D' },
+  { id: 'limau', name: 'pasangan.limau', primary: '#FFFFFF', highlight: '#B8FF3A' },
+  { id: 'senja', name: 'pasangan.senja', primary: '#FFD166', highlight: '#FF7A45' },
+  { id: 'mint', name: 'pasangan.mint', primary: '#F5F1E6', highlight: '#00F5D4' },
+  { id: 'ungu', name: 'pasangan.ungu', primary: '#FFFFFF', highlight: '#B39DFF' },
+  { id: 'esbiru', name: 'pasangan.esbiru', primary: '#D8DEE9', highlight: '#5BC8FF' },
 ];
 
 export function normalizeHex(input) {

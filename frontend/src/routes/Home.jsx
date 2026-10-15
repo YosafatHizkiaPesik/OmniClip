@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Loader2, Video, RefreshCw, X, Scissors, CheckCircle2, Flame, Mic, MessagesSquare, GraduationCap,
-  Gamepad2, Music2, Cpu, TrendingUp, Laugh, UtensilsCrossed, Plane, ChevronLeft, ChevronRight,
+  Gamepad2, Music2, Cpu, TrendingUp, Laugh, UtensilsCrossed, Plane, ChevronLeft, ChevronRight, SlidersHorizontal,
 } from 'lucide-react';
 import { bahasa, useT } from '../lib/i18n';
 import { apiGet, apiPost } from '../lib/api';
@@ -173,6 +173,12 @@ export default function Home() {
   const [durasi, setDurasi] = useState('');
   const [tanggal, setTanggal] = useState('');
   const [jenis, setJenis] = useState('');
+  // Panel penyaring tertutup sampai tombol Filter ditekan, seperti YouTube
+  // (diminta pemilik 15 Oktober 2026). Jumlah penyaring yang aktif tetap
+  // terlihat di tombolnya, jadi hasil yang tersaring tidak terbaca sebagai
+  // hasil lengkap.
+  const [bukaSaring, setBukaSaring] = useState(false);
+  const jumlahSaring = [jenis, durasi, tanggal].filter(Boolean).length + (sort !== 'relevan' ? 1 : 0);
   // Tanggal unggah datang MENYUSUL, dari panggilan terpisah: hasil pencarian
   // YouTube tidak membawanya sama sekali, dan mengambilnya berarti membuka tiap
   // videonya. Kartunya tampil dulu, tanggalnya mengisi belakangan.
@@ -362,6 +368,22 @@ export default function Home() {
       {/* Penyaring hanya untuk pencarian: beranda tanpa kata kunci sudah
           mengambil kueri acak tiap muat. Pil gaya YouTube, dua bahasa. */}
       {q && (
+        <div className="tombol-saring-baris">
+          <button type="button" className={`tombol-saring${bukaSaring ? ' is-on' : ''}`}
+                  aria-expanded={bukaSaring} onClick={() => setBukaSaring((v) => !v)}>
+            <SlidersHorizontal size={15} />
+            {t('saring.tombol')}
+            {jumlahSaring > 0 && <span className="tombol-saring-jumlah">{jumlahSaring}</span>}
+          </button>
+          {jumlahSaring > 0 && (
+            <button type="button" className="saring"
+                    onClick={() => { setJenis(''); setSort('relevan'); setDurasi(''); setTanggal(''); }}>
+              {t('saring.reset')}
+            </button>
+          )}
+        </div>
+      )}
+      {q && bukaSaring && (
         <div className="baris-saring">
           {[
             [t('saring.jenis'), jenis, setJenis, [['', t('saring.semua')], ['video', t('saring.video')],
