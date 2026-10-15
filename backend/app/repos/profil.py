@@ -76,7 +76,9 @@ def ubah(pid: int, **kolom) -> None:
 #   klip  preferensi pengklipan: berapa klip per video, model transkrip, model AI.
 #   komentar  gaya komentar pemilik kanal, untuk draf komentar AI (JOB-2 F1-2).
 #   merek  intro, outro, dan outro teks kanal (JOB-2 F2-5, services/merek.py).
-KELOMPOK = ("gaya", "klip", "komentar", "merek")
+#   ikuti, riwayat_tonton  channel yang diikuti dan video yang dibuka
+#          (JOB-3, services/channel.py). Disimpan {"daftar": [...]}.
+KELOMPOK = ("gaya", "klip", "komentar", "merek", "ikuti", "riwayat_tonton")
 
 
 def setelan(pid: int, kelompok: str = "") -> dict:

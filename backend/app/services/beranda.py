@@ -145,6 +145,7 @@ def _kartu(item: dict) -> Optional[dict]:
         "url": f"https://www.youtube.com/watch?v={vid}",
         "duration": durasi,
         "channel": s.get("channelTitle") or "",
+        "channel_id": s.get("channelId") or "",
         "views": tayangan,
         "thumbnail": gambar.get("url") or f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg",
         "description": "",

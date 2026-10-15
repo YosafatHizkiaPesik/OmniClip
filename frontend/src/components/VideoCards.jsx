@@ -1,6 +1,9 @@
 import React from 'react';
 import { Play } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { formatTime } from '../utils/timeFormat';
+import { angkaRingkas, t } from '../lib/i18n';
+import { useChannelInfo } from '../lib/avatarChannel';
 
 /**
  * Kartu video yang dipakai bersama oleh feed dan daftar rekomendasi.
@@ -25,23 +28,32 @@ export function formatAge(uploadDate) {
   const then = new Date(+t.slice(0, 4), +t.slice(4, 6) - 1, +t.slice(6, 8));
   const days = Math.floor((Date.now() - then.getTime()) / 86400000);
   if (!Number.isFinite(days) || days < 0) return '';
-  if (days < 1) return 'hari ini';
-  if (days < 7) return `${days} hari lalu`;
-  if (days < 30) return `${Math.floor(days / 7)} minggu lalu`;
-  if (days < 365) return `${Math.floor(days / 30)} bulan lalu`;
-  const years = Math.floor(days / 365);
-  return `${years} tahun lalu`;
+  if (days < 1) return t('umur.hari_ini');
+  if (days < 7) return t('umur.hari', { n: days });
+  if (days < 30) return t('umur.minggu', { n: Math.floor(days / 7) });
+  if (days < 365) return t('umur.bulan', { n: Math.floor(days / 30) });
+  return t('umur.tahun', { n: Math.floor(days / 365) });
 }
 
 export function formatViews(views) {
   if (!views) return '';
-  if (views >= 1_000_000) return `${(views / 1_000_000).toFixed(1)}Jt`;
-  if (views >= 1_000) return `${(views / 1_000).toFixed(0)}Rb`;
-  return `${views}`;
+  return angkaRingkas(views);
 }
 
-// Avatar Channel
-export function ChannelAvatar({ name, size = 36 }) {
+// Avatar channel: foto aslinya bila sudah diketahui, inisial berwarna selama
+// menunggu atau bila channel tidak dikenal.
+export function ChannelAvatar({ name, size = 36, channelId, src }) {
+  const info = useChannelInfo(src ? null : channelId);
+  const url = src || info?.avatar;
+  const [rusak, setRusak] = React.useState(false);
+  if (url && !rusak) {
+    return (
+      <img src={url} alt="" width={size} height={size} referrerPolicy="no-referrer"
+           onError={() => setRusak(true)}
+           style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover',
+                    flexShrink: 0, background: 'var(--plate-2)' }} />
+    );
+  }
   const initials = name ? name.slice(0, 2).toUpperCase() : '?';
   const colors = ['var(--reh)', '#4facfe', '#7f00ff', 'var(--danger)', 'var(--entry)', '#f59e0b'];
   const colorIdx = name ? name.charCodeAt(0) % colors.length : 0;
@@ -56,8 +68,21 @@ export function ChannelAvatar({ name, size = 36 }) {
   );
 }
 
+/** Avatar + nama channel yang bisa diklik ke halaman channel (seperti YouTube). */
+export function useKeChannel() {
+  const navigate = useNavigate();
+  return (e, id) => {
+    if (!id) return;
+    e.stopPropagation();
+    e.preventDefault();
+    navigate(`/channel/${encodeURIComponent(id)}`);
+  };
+}
+
 // Video Card — mirip YouTube
-export function VideoCard({ video, isSelected, onClick }) {
+export function VideoCard({ video, isSelected, onClick, vertikal = false }) {
+  const keChannel = useKeChannel();
+  const bisaKlik = Boolean(video.channel_id);
   return (
     <div
       onClick={onClick}
@@ -76,7 +101,7 @@ export function VideoCard({ video, isSelected, onClick }) {
     >
       {/* Thumbnail */}
       <div className="pit-frame">
-        <div className="pit-well" style={{ paddingTop: '56.25%' }}>
+        <div className="pit-well" style={{ paddingTop: vertikal ? '177.78%' : '56.25%' }}>
         <img
           src={video.thumbnail}
           alt={video.title}
@@ -95,7 +120,7 @@ export function VideoCard({ video, isSelected, onClick }) {
             background: 'var(--reh)', color: '#fff',
             fontSize: '0.66rem', fontWeight: 800, padding: '2px 7px',
             borderRadius: '99px', letterSpacing: '0.02em',
-          }}>SEDANG RAMAI</span>
+          }}>{t('kartu.sedang_ramai')}</span>
         )}
         {/* Duration badge */}
         {video.duration > 0 && (
@@ -128,21 +153,26 @@ export function VideoCard({ video, isSelected, onClick }) {
 
       {/* Info */}
       <div style={{ display: 'flex', gap: '10px', padding: '10px 2px 4px' }}>
-        <ChannelAvatar name={video.channel} size={36} />
+        <span onClick={(e) => keChannel(e, video.channel_id)}
+              title={bisaKlik ? video.channel : undefined}
+              style={{ cursor: bisaKlik ? 'pointer' : 'inherit', display: 'inline-flex' }}>
+          <ChannelAvatar name={video.channel} channelId={video.channel_id} size={36} />
+        </span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{
             fontSize: '0.87rem', fontWeight: 660, lineHeight: 1.35, color: 'var(--ink)',
             display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
           }}>{video.title}</div>
           <div style={{ fontSize: '0.75rem', color: 'var(--ink-2)', marginTop: '3px' }}>
-            {video.channel}
+            <span className={bisaKlik ? 'tautan-channel' : undefined}
+                  onClick={(e) => keChannel(e, video.channel_id)}>{video.channel}</span>
           </div>
           <div style={{ fontSize: '0.72rem', color: 'var(--ink-3)', marginTop: '1px', display: 'flex', gap: '6px' }}>
             {/* Durasi TIDAK diulang di sini: lencana di pojok gambar sudah
                 menyebutkannya, dan menuliskannya dua kali dengan format berbeda
                 ("56:42" dan "56 mnt 42 dtk") membuat keduanya terbaca seperti
                 dua angka yang berbeda. */}
-            {video.views > 0 && <span>{formatViews(video.views)} tayangan</span>}
+            {video.views > 0 && <span>{t('kartu.tayangan', { n: formatViews(video.views) })}</span>}
             {formatAge(video.upload_date) && <span>• {formatAge(video.upload_date)}</span>}
           </div>
         </div>
@@ -179,7 +209,7 @@ export function RelatedVideoCard({ video, onClick }) {
           display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
         }}>{video.title}</div>
         <div style={{ fontSize: '0.72rem', color: 'var(--ink-2)', marginTop: '4px' }}>{video.channel}</div>
-        {video.views > 0 && <div style={{ fontSize: '0.68rem', color: 'var(--ink-3)' }}>{formatViews(video.views)} views</div>}
+        {video.views > 0 && <div style={{ fontSize: '0.68rem', color: 'var(--ink-3)' }}>{t('kartu.tayangan', { n: formatViews(video.views) })}</div>}
       </div>
     </div>
   );

@@ -1,3 +1,4 @@
+import { bahasa } from './i18n';
 /**
  * Satu-satunya tempat frontend berbicara dengan backend.
  *
@@ -147,7 +148,9 @@ async function request(path, options = {}) {
   const { timeout = BATAS_MS, ...sisa } = options;
   const batas = _dengan_batas(sisa.signal, timeout);
   options = { ...sisa, signal: batas.signal,
-              headers: { ...(sisa.headers || {}), 'X-Omniclip-Profil': String(profilAktif()) } };
+              headers: { ...(sisa.headers || {}), 'X-Omniclip-Profil': String(profilAktif()),
+                         // Bahasa pilihan, untuk pesan dari server (JOB-3 J3-11).
+                         'Accept-Language': bahasa() } };
   try {
     // credentials same-origin: cookie sesi ikut terkirim. Ini bawaan fetch
     // modern, ditulis eksplisit karena gerbang masuk bergantung padanya.
@@ -241,6 +244,7 @@ export function apiUnggah(path, formData, onProgress) {
     xhr.open('POST', `${BASE}${path}`);
     xhr.withCredentials = true;
     xhr.setRequestHeader('X-Omniclip-Profil', String(profilAktif()));
+    xhr.setRequestHeader('Accept-Language', bahasa());
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable && onProgress) onProgress(e.loaded / e.total);
     };

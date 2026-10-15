@@ -4,10 +4,12 @@ import {
   Search, Download, Scissors, ArrowLeft, CheckCircle2, Sparkles, Loader2,
   Eye, Clock, AlertTriangle,
 } from 'lucide-react';
-import { apiGet, apiPost, downloadToDisk } from '../lib/api';
+import { apiDelete, apiGet, apiPost, downloadToDisk } from '../lib/api';
+import { angkaRingkas, useT } from '../lib/i18n';
+import { useChannelInfo } from '../lib/avatarChannel';
 import { useJobRunner } from '../hooks/useJob';
 import JobProgress from '../components/JobProgress';
-import { ChannelAvatar, RelatedVideoCard, formatViews } from '../components/VideoCards';
+import { ChannelAvatar, RelatedVideoCard, formatViews, useKeChannel } from '../components/VideoCards';
 import { formatDurationHuman } from '../utils/timeFormat';
 
 // 1080p jadi bawaan, sama dengan RESOLUSI_BAWAAN di backend/app/services/ytdlp.
@@ -75,6 +77,45 @@ export default function Watch() {
   const [notice, setNotice] = useState(null);
 
   useEffect(() => { window.scrollTo({ top: 0 }); }, [videoId]);
+
+  // --- Gaya YouTube (JOB-3 J3-6, J3-7) ---------------------------------------
+  const t = useT();
+  const keChannel = useKeChannel();
+  const infoChannel = useChannelInfo(video?.channel_id);
+  const [diikuti, setDiikuti] = useState(false);
+  const [deskripsiBuka, setDeskripsiBuka] = useState(false);
+  const [dariChannel, setDariChannel] = useState([]);
+
+  // Riwayat tontonan: dicatat sekali tiap video dibuka.
+  useEffect(() => {
+    if (!video?.title || video.id !== videoId) return;
+    apiPost('/riwayat-tonton', {
+      id: videoId, title: video.title || '', channel: video.channel || '',
+      channel_id: video.channel_id || '', thumbnail: video.thumbnail || '',
+      duration: video.duration || null, views: video.views || null,
+    }).catch(() => {});
+  }, [video?.title, video?.id, videoId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!video?.channel_id) return undefined;
+    let batal = false;
+    apiGet('/channel/ikuti').then((r) => {
+      if (!batal) setDiikuti((r.channel ?? []).some((c) => c.channel_id === video.channel_id));
+    }).catch(() => {});
+    apiGet(`/channel/${encodeURIComponent(video.channel_id)}?batas=12`, { timeout: 90000 })
+      .then((r) => { if (!batal) setDariChannel((r.video ?? []).filter((v) => v.id !== videoId)); })
+      .catch(() => {});
+    return () => { batal = true; };
+  }, [video?.channel_id, videoId]);
+
+  const ubahIkuti = async () => {
+    const cid = video?.channel_id;
+    if (!cid) return;
+    if (diikuti) await apiDelete(`/channel/ikuti/${encodeURIComponent(cid)}`);
+    else await apiPost('/channel/ikuti', { channel_id: cid, nama: video.channel || '', avatar: infoChannel?.avatar || '' });
+    setDiikuti(!diikuti);
+    window.dispatchEvent(new Event('omniclip:ikuti'));
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -248,12 +289,22 @@ export default function Watch() {
             flexWrap: 'wrap', gap: '12px',
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <ChannelAvatar name={video?.channel} size={32} />
+              <span onClick={(e) => keChannel(e, video?.channel_id)}
+                    style={{ cursor: video?.channel_id ? 'pointer' : 'default', display: 'inline-flex' }}>
+                <ChannelAvatar name={video?.channel} channelId={video?.channel_id} size={40} />
+              </span>
               <div>
-                <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>{video?.channel}</div>
+                <div className={video?.channel_id ? 'tautan-channel' : undefined}
+                     onClick={(e) => keChannel(e, video?.channel_id)}
+                     style={{ fontWeight: 700, fontSize: '0.95rem' }}>{video?.channel}</div>
+                {infoChannel?.pelanggan != null && (
+                  <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+                    {t('channel.subscriber', { n: angkaRingkas(infoChannel.pelanggan) })}
+                  </div>
+                )}
                 <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'flex', gap: '8px' }}>
                   {video?.views > 0 && (
-                    <span><Eye size={10} style={{ verticalAlign: 'middle' }} /> {formatViews(video.views)} views</span>
+                    <span><Eye size={10} style={{ verticalAlign: 'middle' }} /> {t('kartu.tayangan', { n: formatViews(video.views) })}</span>
                   )}
                   {video?.duration > 0 && (
                     <span><Clock size={10} style={{ verticalAlign: 'middle' }} /> {formatDurationHuman(video.duration)}</span>
@@ -262,6 +313,12 @@ export default function Watch() {
               </div>
             </div>
 
+            {video?.channel_id && (
+              <button onClick={ubahIkuti} className={diikuti ? 'btn-secondary' : 'btn-primary'}
+                      style={{ borderRadius: 999, padding: '8px 16px', marginRight: 'auto' }}>
+                {diikuti ? t('channel.berhenti_ikuti') : t('channel.ikuti')}
+              </button>
+            )}
             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
               <button onClick={() => { downloadJob.reset(); setShowDownload(true); }}
                       className="btn-secondary"
@@ -281,6 +338,21 @@ export default function Watch() {
             </div>
 
           </div>
+
+          {video?.description && (
+            <div onClick={() => setDeskripsiBuka((v) => !v)}
+                 style={{ marginTop: 14, padding: '12px 14px', borderRadius: 12, cursor: 'pointer',
+                          background: 'var(--plate-2)', fontSize: '.84rem', lineHeight: 1.55,
+                          whiteSpace: 'pre-line', color: 'var(--ink-2)' }}>
+              <div style={{ ...(deskripsiBuka ? {} : { display: '-webkit-box', WebkitLineClamp: 3,
+                                                        WebkitBoxOrient: 'vertical', overflow: 'hidden' }) }}>
+                {video.description}
+              </div>
+              <div style={{ fontWeight: 700, marginTop: 6, color: 'var(--ink)' }}>
+                {deskripsiBuka ? t('tonton.lebih_sedikit') : t('tonton.selengkapnya')}
+              </div>
+            </div>
+          )}
 
           {pilihMutu && (
             <div style={{
@@ -387,7 +459,8 @@ export default function Watch() {
             Tidak ada video terkait ditemukan.
           </div>
         ) : (
-          related.map((v) => (
+          [...dariChannel.slice(0, 6),
+            ...related.filter((v) => !dariChannel.slice(0, 6).some((d) => d.id === v.id))].map((v) => (
             <RelatedVideoCard key={v.id} video={v}
                               onClick={() => navigate(`/watch/${v.id}`, { state: { video: v } })} />
           ))

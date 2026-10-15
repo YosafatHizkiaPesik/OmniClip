@@ -1,7 +1,7 @@
-import React, { useMemo, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Search, Loader2, Video, RefreshCw, History, X, Scissors, CheckCircle2 } from 'lucide-react';
-import { apiDelete, apiGet, apiPost } from '../lib/api';
+import { Loader2, Video, RefreshCw, X, Scissors, CheckCircle2 } from 'lucide-react';
+import { apiGet, apiPost } from '../lib/api';
 import { VideoCard } from '../components/VideoCards';
 import CookiesAwal from '../components/CookiesAwal';
 
@@ -85,7 +85,6 @@ export default function Home() {
     setHasilAntre({ masuk, sudah, gagal });
   };
   const q = params.get('q') ?? '';
-  const [draft, setDraft] = useState(q);
   const [feed, setFeed] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -121,57 +120,6 @@ export default function Home() {
   // memicu pemuatan berikutnya.
   const feedRef = useRef([]);
 
-  useEffect(() => { setDraft(q); }, [q]);
-
-  // Riwayat pencarian PROFIL AKTIF — tiap profil punya minatnya sendiri, dan
-  // pencarian satu profil tidak ikut muncul di profil lain.
-  const [riwayat, setRiwayat] = useState([]);
-  const [cariAktif, setCariAktif] = useState(false);
-  useEffect(() => {
-    apiGet('/riwayat-cari').then((r) => setRiwayat(r.riwayat ?? [])).catch(() => {});
-  }, [q]);
-  const buangRiwayat = (kueri) => {
-    setRiwayat((r) => r.filter((x) => x.query !== kueri));
-    apiDelete(`/riwayat-cari?q=${encodeURIComponent(kueri)}`).catch(() => {});
-  };
-
-  // Saran di bawah kotak cari, seperti YouTube dan Google: riwayat yang
-  // cocok dengan yang sedang diketik, bukan seluruh riwayat apa adanya.
-  // Kosong berarti yang terbaru lebih dulu.
-  const [sorot, setSorot] = useState(-1);
-  const saran = useMemo(() => {
-    const k = draft.trim().toLowerCase();
-    const cocok = k ? riwayat.filter((r) => r.query.toLowerCase().includes(k)
-                                         && r.query.toLowerCase() !== k)
-                    : riwayat;
-    return cocok.slice(0, 8);
-  }, [riwayat, draft]);
-  useEffect(() => { setSorot(-1); }, [draft, cariAktif]);
-
-  const pilihSaran = (kueri) => {
-    setDraft(kueri);
-    setCariAktif(false);
-    setParams({ q: kueri }, { replace: false });
-  };
-
-  const tombolCari = (e) => {
-    if (!cariAktif || !saran.length) {
-      if (e.key === 'ArrowDown' && saran.length) { setCariAktif(true); e.preventDefault(); }
-      return;
-    }
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      setSorot((i) => (i + 1) % saran.length);
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      setSorot((i) => (i <= 0 ? saran.length - 1 : i - 1));
-    } else if (e.key === 'Enter' && sorot >= 0) {
-      e.preventDefault();
-      pilihSaran(saran[sorot].query);
-    } else if (e.key === 'Escape') {
-      setCariAktif(false);
-    }
-  };
 
   // Identitas daftar yang sedang ditampilkan. Kueri, urutan, atau tombol
   // Segarkan yang berubah berarti daftar yang lain sama sekali.
@@ -284,11 +232,6 @@ export default function Home() {
     return () => obs.disconnect();
   }, [habis, loading, feed.length, batas]);
 
-  const submit = (e) => {
-    e.preventDefault();
-    const value = draft.trim();
-    setParams(value ? { q: value } : {}, { replace: false });
-  };
 
   const activeCategory = CATEGORIES.findIndex((c) => c.query === q);
 
@@ -311,109 +254,19 @@ export default function Home() {
           memilih sendiri; lihat components/CookiesAwal.jsx. */}
       <CookiesAwal />
 
-      <div className="work-block">
-        <div style={{ minWidth: 0, flex: '1 1 260px' }}>
-          <h1 className="work-title">Cari video</h1>
-          <div className="sub">
-            Tempel tautan YouTube, atau telusuri untuk mencari bahan.
-          </div>
-        </div>
-        {!q && (
-          <div className="actions">
-            <button className="btn-secondary" disabled={loading}
-                    onClick={() => setNonce((n) => n + 1)}>
-              <RefreshCw size={14} className={loading ? 'animate-spin' : undefined} />
-              Segarkan
-            </button>
-          </div>
-        )}
-      </div>
-
-      <form onSubmit={(e) => { setCariAktif(false); submit(e); }}
-            className="search-container">
-        <div className="search-input-wrapper">
-          {/* Kotak dan saran-sarannya satu kesatuan: saran MENEMPEL di bawah
-              kotaknya, selebar kotaknya, seperti YouTube dan Google.
-
-              Versi sebelumnya menaruh riwayat sebagai deretan chip DI LUAR
-              kotak, di bawah seluruh formulir. Diminta pemiliknya diganti:
-              "buat search bar itu mirip milik youtube atau google karena
-              lebih bagus seperti itu dan clean". */}
-          <div className="cari-kotak">
-            <Search size={16} className="cari-ikon" aria-hidden="true" />
-            <input
-              type="text"
-              className="search-input"
-              placeholder="Tempel tautan YouTube, atau ketik kata kunci"
-              value={draft}
-              role="combobox"
-              aria-expanded={cariAktif && saran.length > 0}
-              aria-controls="cari-saran"
-              aria-activedescendant={sorot >= 0 ? `saran-${sorot}` : undefined}
-              autoComplete="off"
-              onChange={(e) => { setDraft(e.target.value); setCariAktif(true); }}
-              onFocus={() => setCariAktif(true)}
-              onBlur={() => setCariAktif(false)}
-              onKeyDown={tombolCari}
-            />
-            {draft && (
-              <button type="button" className="cari-hapus" aria-label="Kosongkan"
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => { setDraft(''); setCariAktif(true); }}>
-                <X size={16} />
-              </button>
-            )}
-            {cariAktif && saran.length > 0 && (
-              <ul id="cari-saran" className="cari-saran" role="listbox">
-                {saran.map((r, i) => {
-                  const k = draft.trim();
-                  const at = k ? r.query.toLowerCase().indexOf(k.toLowerCase()) : -1;
-                  return (
-                    <li key={r.query} id={`saran-${i}`} role="option"
-                        aria-selected={i === sorot}
-                        className={i === sorot ? 'is-on' : undefined}
-                        // Tekan tetikus menjalankan pilihan SEBELUM kotak
-                        // kehilangan fokus. Dulu jeda 180 milidetik dipakai
-                        // untuk itu, dan klik yang sedikit lebih lambat
-                        // hilang begitu saja.
-                        onMouseDown={(e) => { e.preventDefault(); pilihSaran(r.query); }}
-                        onMouseEnter={() => setSorot(i)}>
-                      <History size={15} className="cari-saran-ikon" aria-hidden="true" />
-                      <span className="cari-saran-teks">
-                        {at < 0 ? r.query : (
-                          <>
-                            {r.query.slice(0, at)}
-                            <b>{r.query.slice(at, at + k.length)}</b>
-                            {r.query.slice(at + k.length)}
-                          </>
-                        )}
-                      </span>
-                      <button type="button" className="cari-saran-buang"
-                              aria-label={`Hapus "${r.query}" dari riwayat`}
-                              onMouseDown={(e) => {
-                                e.preventDefault(); e.stopPropagation();
-                                buangRiwayat(r.query);
-                              }}>
-                        Hapus
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </div>
-          <button type="submit" className="btn-primary" disabled={loading}
-                  style={{ minWidth: '104px' }}>
-            {loading ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
-            Cari
-          </button>
-        </div>
-      </form>
-
+      {/* Judul dan kolom cari pindah ke header, seperti YouTube (JOB-3 J3-2).
+          Kata kunci tetap dibaca dari URL (`/?q=`), jadi tidak ada yang
+          berubah pada cara pencarian bekerja. */}
       <div style={{
         display: 'flex', gap: '8px', overflowX: 'auto',
         paddingBottom: '8px', marginBottom: '20px', scrollbarWidth: 'none',
       }}>
+        {!q && (
+          <button className="chip" disabled={loading} onClick={() => setNonce((n) => n + 1)}
+                  title="Segarkan" style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+            <RefreshCw size={13} className={loading ? 'animate-spin' : undefined} />
+          </button>
+        )}
         {CATEGORIES.map((cat, i) => (
           <button
             key={cat.label}

@@ -132,7 +132,9 @@ class KotakCariSepertiYouTube(unittest.TestCase):
     itu dan clean".
     """
 
-    HOME = Path(__file__).resolve().parents[2] / "frontend" / "src" / "routes" / "Home.jsx"
+    # Pindah dari Beranda ke header pada JOB-3 J3-2 (15 Oktober 2026),
+    # perilakunya dibawa utuh.
+    HOME = Path(__file__).resolve().parents[2] / "frontend" / "src" / "components" / "KotakCari.jsx"
 
     def test_dropdown_dengan_papan_ketik(self):
         jsx = self.HOME.read_text(encoding="utf-8")

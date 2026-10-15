@@ -15,6 +15,9 @@ import AnalitikTab from './components/AnalitikTab.jsx';
 import DownloadsTab from './components/DownloadsTab.jsx';
 import ProfileTab from './components/ProfileTab.jsx';
 import MesinTab from './components/MesinTab';
+import Channel from './routes/Channel.jsx';
+import Langganan from './routes/Langganan.jsx';
+import Riwayat from './routes/Riwayat.jsx';
 
 // Profil terakhir diambil dari server SEBELUM apa pun digambar. Setiap
 // permintaan membawa nomor profil di headernya, jadi menggambar dulu lalu
@@ -29,6 +32,9 @@ createRoot(document.getElementById('root')).render(
         <Route path="/" element={<App />}>
           <Route index element={<Home />} />
           <Route path="watch/:videoId" element={<Watch />} />
+          <Route path="channel/:ref" element={<Channel />} />
+          <Route path="langganan" element={<Langganan />} />
+          <Route path="riwayat" element={<Riwayat />} />
           <Route path="studio" element={<Studio />} />
           {/* Editor punya alamat sendiri, jadi sebuah project bisa dibuka
               langsung lewat tautan dan tombol back kembali ke daftar kartu. */}

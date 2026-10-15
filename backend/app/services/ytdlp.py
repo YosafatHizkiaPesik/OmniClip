@@ -511,6 +511,7 @@ def search_youtube_videos(query: str, limit: int = 20, sort: str = "relevan",
                     "url": f"https://www.youtube.com/watch?v={video_id}",
                     "duration": duration,
                     "channel": uploader,
+                    "channel_id": entry.get('channel_id') or '',
                     "views": view_count,
                     "thumbnail": thumbnail,
                     "description": entry.get('description', '')
@@ -590,6 +591,7 @@ def _channel_latest(channel_id: str, limit: int = 20) -> list:
             "channel": (e.get('uploader') or e.get('channel')
                         or (info.get('uploader') or info.get('channel'))
                         or re.sub(r'\s*-\s*Videos$', '', info.get('title') or '')),
+            "channel_id": e.get('channel_id') or info.get('channel_id') or channel_id,
             "views": e.get('view_count') or 0,
             "thumbnail": (e.get('thumbnail')
                           or (e.get('thumbnails', [{}])[-1].get('url') if e.get('thumbnails') else None)
