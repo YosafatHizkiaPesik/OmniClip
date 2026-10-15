@@ -43,6 +43,7 @@ import {
   susunGaming,
   CANVAS_ASPECT, layoutDariCrop, pusatWajahPada,
 } from './frames';
+import { t as tr, useT } from '../../lib/i18n';
 
 const DEFAULT_STYLE = {
   size: 96, primary: '#FFFFFF', highlight: '#FFE500',
@@ -156,20 +157,21 @@ function loadStoredStyle() {
 // memakan sekitar seratus piksel.
 const DOCK_MIN = 132;
 
+// `label` adalah kunci kamus, diterjemahkan saat dirender.
 const TABS = [
-  { id: 'trim', label: 'Batas', Icon: Scissors },
-  { id: 'subtitle', label: 'Subtitle', Icon: Type },
-  { id: 'style', label: 'Gaya', Icon: Palette },
-  { id: 'frame', label: 'Bingkai', Icon: Crop },
-  { id: 'title', label: 'Judul', Icon: Tag },
+  { id: 'trim', label: 'tab.trim', Icon: Scissors },
+  { id: 'subtitle', label: 'tab.subtitle', Icon: Type },
+  { id: 'style', label: 'tab.style', Icon: Palette },
+  { id: 'frame', label: 'tab.frame', Icon: Crop },
+  { id: 'title', label: 'tab.title', Icon: Tag },
   // Pendapat pemilik kanal: yang membuat klip bukan sekadar potongan ulang
   // di mata YouTube (JOB-2 F1-3).
-  { id: 'komentar', label: 'Komentar', Icon: MessageSquareQuote },
+  { id: 'komentar', label: 'tab.komentar', Icon: MessageSquareQuote },
   // Berkas dari luar video sumber.
-  { id: 'media', label: 'Sisipan', Icon: Clapperboard },
+  { id: 'media', label: 'tab.media', Icon: Clapperboard },
   // Sutradara berdiri sendiri: ia menyusun SELURUH klip, bukan menambahkan
   // satu benda ke dalamnya, dan akan tumbuh ke gaya subtitle juga.
-  { id: 'sutradara', label: 'Sutradara', Icon: Wand2 },
+  { id: 'sutradara', label: 'tab.sutradara', Icon: Wand2 },
 ];
 
 /**
@@ -180,6 +182,7 @@ const TABS = [
  * bisa digeser sambil melihat gelombang suara dan posisi klip lain sekaligus.
  */
 export default function Editor({ project, onBack }) {
+  const t = useT();
   const videoId = project?.video_id;
   const editor = useClipEditor();
   const videoRef = useRef(null);
@@ -331,10 +334,10 @@ export default function Editor({ project, onBack }) {
    */
   const kunciBingkaiAktif = useMemo(() => {
     if (!selected || !frameKeys.length) return null;
-    const t = clipTimeFor(selected.segments, sourceTime);
+    const tk = clipTimeFor(selected.segments, sourceTime);
     let aktif = null;
     for (const k of [...frameKeys].sort((a, b) => (a.t ?? 0) - (b.t ?? 0))) {
-      if ((k.t ?? 0) <= t + 1e-6) aktif = k;
+      if ((k.t ?? 0) <= tk + 1e-6) aktif = k;
     }
     return aktif;
   }, [frameKeys, selected, sourceTime]);
@@ -377,10 +380,10 @@ export default function Editor({ project, onBack }) {
       // Sudah ada linimasa: yang diganti adalah potongan tempat garis main
       // berdiri. Mengganti seluruh klip di sini akan menghapus pekerjaan
       // memotong yang sudah dilakukan.
-      const t = clipTimeFor(selected.segments, sourceTime);
+      const tk = clipTimeFor(selected.segments, sourceTime);
       let sasaran = kunci[0];
       for (const k of [...kunci].sort((a, b) => (a.t ?? 0) - (b.t ?? 0))) {
-        if ((k.t ?? 0) <= t + 1e-6) sasaran = k;
+        if ((k.t ?? 0) <= tk + 1e-6) sasaran = k;
       }
       setFrameKeys(kunci.map((k) => (k === sasaran
         ? { ...k, mode, layout: mode === 'layout' ? (k.layout ?? layout) : k.layout }
@@ -413,12 +416,12 @@ export default function Editor({ project, onBack }) {
         // susunannya mulai dari kotak bawaan yang tidak ada hubungannya dengan
         // apa yang barusan di layar, dan yang terlihat adalah gambar melompat
         // lalu berkedip hitam sesaat.
-        const t = clipTimeFor(selected.segments, sourceTime);
+        const tk = clipTimeFor(selected.segments, sourceTime);
         setLayout(layoutDariCrop(
           (reframe?.source_w && reframe?.source_h)
             ? reframe.source_w / reframe.source_h : 16 / 9,
           CANVAS_ASPECT[aspectRatio] ?? 9 / 16,
-          pusatWajahPada(reframe, t)));
+          pusatWajahPada(reframe, tk)));
       }
       setFrameMode(mode);
     }
@@ -537,7 +540,7 @@ export default function Editor({ project, onBack }) {
         if (batal) return;
         const l = susunanDariServer(r?.layout);
         if (!l?.frames?.length) {
-          setGamingKabar('tidak ada kamera wajah pemain yang terlihat di klip ini');
+          setGamingKabar(t('editor.tanpa_facecam'));
         }
         const srcAspek = (r?.src_w && r?.src_h) ? r.src_w / r.src_h : 16 / 9;
         // Dihitung ulang untuk rasio keluaran yang sedang dipilih — server
@@ -599,7 +602,7 @@ export default function Editor({ project, onBack }) {
         // Render tetap mencari facecamnya sendiri, jadi ini bukan kegagalan
         // yang menghentikan apa pun. Tapi ia harus KELIHATAN: tanpa ini
         // panelnya menulis "mencari kamera wajah pemain" tanpa akhir.
-        if (!batal) setGamingKabar('pencarian kamera wajah gagal, coba lagi');
+        if (!batal) setGamingKabar(t('editor.facecam_gagal'));
       })
       .finally(() => { if (!batal) setGamingSibuk(false); });
     return () => { batal = true; };
@@ -794,8 +797,9 @@ export default function Editor({ project, onBack }) {
     const nama = (klip.title || klip.hook_text || '').trim().slice(0, 48);
     // eslint-disable-next-line no-alert
     if (!window.confirm(
-      `Hapus klip ${nomor}${nama ? ` "${nama}"` : ''}?\n\n`
-      + `${formatTime(klip.segments[0].start)} · ${formatDurationHuman(klip.duration || 0)}`)) {
+      t('editor.hapus_klip', { nomor, nama: nama ? ` "${nama}"` : '',
+                               mulai: formatTime(klip.segments[0].start),
+                               lama: formatDurationHuman(klip.duration || 0) }))) {
       return;
     }
     editor.removeClip(clipId);
@@ -825,7 +829,7 @@ export default function Editor({ project, onBack }) {
   // Penyimpanan ditunda: menyeret subtitle memanggil patchStyle tiap frame, dan
   // menulis ke localStorage 60 kali per detik akan tersendat di perangkat lambat.
   useEffect(() => {
-    const t = setTimeout(() => {
+    const tk = setTimeout(() => {
       try {
         localStorage.setItem(styleKey(profilAktif()), JSON.stringify(style));
       } catch { /* mode privat: gaya tetap berlaku, hanya tidak diingat */ }
@@ -834,7 +838,7 @@ export default function Editor({ project, onBack }) {
       // peramban sudah cukup untuk sesi ini.
       apiPut('/profil/setelan', { kelompok: 'gaya', nilai: style }).catch(() => {});
     }, 400);
-    return () => clearTimeout(t);
+    return () => clearTimeout(tk);
   }, [style]);
 
   // Gaya milik akun ini, dibaca dari server sekali saat editor dibuka.
@@ -1185,8 +1189,8 @@ export default function Editor({ project, onBack }) {
    * Ini yang menentukan pratinjau menampilkan klipnya atau video sumbernya, dan
    * karena itu juga menentukan subtitle dan kotak ikut-wajah muncul atau tidak.
    */
-  const insideClip = useCallback((t) => (
-    (selected?.segments ?? []).some((sg) => t >= sg.start - 0.05 && t <= sg.end + 0.05)
+  const insideClip = useCallback((tk) => (
+    (selected?.segments ?? []).some((sg) => tk >= sg.start - 0.05 && tk <= sg.end + 0.05)
   ), [selected]);
 
   // Sasaran lompatan terakhir. Menyetel `currentTime` bersifat asinkron: menekan
@@ -1234,10 +1238,10 @@ export default function Editor({ project, onBack }) {
     const mulai = Number(segs[0].start) || 0;
     const akhir = Number(segs[segs.length - 1].end) || mulai;
     const parkir = () => {
-      const t = v.currentTime;
+      const tk = v.currentTime;
       // Hanya dipindahkan bila memang berada DI LUAR klipnya: kalau tidak,
       // setiap penyuntingan kecil akan menyentak pemutar kembali ke awal.
-      if (t < mulai - 0.5 || t > akhir + 0.5) {
+      if (tk < mulai - 0.5 || tk > akhir + 0.5) {
         try { v.currentTime = mulai; } catch { /* elemen belum siap */ }
       }
     };
@@ -1268,13 +1272,13 @@ export default function Editor({ project, onBack }) {
   ), [selected]);
 
   /** Melompat ke detik tertentu DI DALAM klip. */
-  const seekClip = useCallback((t) => {
+  const seekClip = useCallback((tk) => {
     const v = videoRef.current;
     if (!v || !selected) return;
     seekTargetRef.current = null;
     // Melompat ke dalam klip, jadi pratinjaunya harus kembali menampilkan klip.
     setConstrained(true);
-    v.currentTime = sourceTimeFor(selected.segments, t);
+    v.currentTime = sourceTimeFor(selected.segments, tk);
   }, [selected]);
 
   /**
@@ -1301,9 +1305,9 @@ export default function Editor({ project, onBack }) {
    */
   const aimPerson = useCallback((person) => {
     setPersonKeys((keys) => {
-      const t = clipNow();
-      const sekarang = personKeyAt(keys, t);
-      return withPersonKey(keys, t, sekarang === person ? null : person);
+      const tk = clipNow();
+      const sekarang = personKeyAt(keys, tk);
+      return withPersonKey(keys, tk, sekarang === person ? null : person);
     });
   }, [clipNow]);
 
@@ -1323,13 +1327,13 @@ export default function Editor({ project, onBack }) {
    * sini.
    */
   const tandaiPotong = useCallback(() => {
-    const t = videoRef.current?.currentTime ?? 0;
+    const tk = videoRef.current?.currentTime ?? 0;
     setMark((m) => {
-      if (m.in === null) return { in: t, out: null };
+      if (m.in === null) return { in: tk, out: null };
       if (m.out === null) {
-        return t < m.in ? { in: t, out: m.in } : { in: m.in, out: t };
+        return tk < m.in ? { in: tk, out: m.in } : { in: m.in, out: tk };
       }
-      return { in: t, out: null };
+      return { in: tk, out: null };
     });
   }, []);
 
@@ -1361,10 +1365,10 @@ export default function Editor({ project, onBack }) {
     if (!v) return;
     const dur = duration || v.duration || 0;
     const base = seekTargetRef.current ?? v.currentTime;
-    const t = Math.max(0, Math.min(dur, base + delta));
-    seekTargetRef.current = t;
-    setConstrained(insideClip(t));
-    v.currentTime = t;
+    const tk = Math.max(0, Math.min(dur, base + delta));
+    seekTargetRef.current = tk;
+    setConstrained(insideClip(tk));
+    v.currentTime = tk;
   }, [duration, insideClip]);
 
   const saveRef = useRef(null);
@@ -1486,27 +1490,27 @@ export default function Editor({ project, onBack }) {
       const { job_id: jobId } = await apiPost('/clip-speakers', {
         video_id: videoId, speakers,
       });
-      setExportLog([{ name: 'Narasumber', status: 'running', progress: 0,
-                      message: 'Menunggu giliran…' }]);
+      setExportLog([{ name: t('editor.narasumber'), status: 'running', progress: 0,
+                      message: t('proses.menunggu') }]);
       const job = await waitForJob(jobId, {
         interval: 2000,
         onProgress: (j) => setExportLog([{
-          name: 'Narasumber', status: 'running', progress: j.progress ?? 0,
-          message: j.message || 'Menandai penutur…', eta: j.eta_seconds ?? null,
+          name: t('editor.narasumber'), status: 'running', progress: j.progress ?? 0,
+          message: j.message || t('editor.menandai'), eta: j.eta_seconds ?? null,
         }]),
       });
       if (job.status === 'done') {
         const fresh = await apiGet(`/projects/${videoId}`);
         setData(fresh);
         editor.load(videoId, fresh.clips || []);
-        setExportLog([{ name: 'Narasumber', status: 'done', progress: 1,
-                        message: 'Penutur ditandai ulang.' }]);
+        setExportLog([{ name: t('editor.narasumber'), status: 'done', progress: 1,
+                        message: t('editor.ditandai') }]);
       } else {
-        setExportLog([{ name: 'Narasumber', status: 'failed',
-                        message: job.error || 'Deteksi ulang gagal.' }]);
+        setExportLog([{ name: t('editor.narasumber'), status: 'failed',
+                        message: job.error || t('editor.deteksi_gagal') }]);
       }
     } catch (err) {
-      setExportLog([{ name: 'Narasumber', status: 'failed', message: err.message }]);
+      setExportLog([{ name: t('editor.narasumber'), status: 'failed', message: err.message }]);
     } finally {
       setRedetecting(false);
     }
@@ -1518,27 +1522,27 @@ export default function Editor({ project, onBack }) {
     setRetitling(true);
     try {
       const { job_id: jobId } = await apiPost('/clip-titles', { video_id: videoId });
-      setExportLog([{ name: 'Judul', status: 'running', progress: 0,
-                      message: 'Menunggu giliran…' }]);
+      setExportLog([{ name: t('editor.judul'), status: 'running', progress: 0,
+                      message: t('proses.menunggu') }]);
       const job = await waitForJob(jobId, {
         interval: 2000,
         onProgress: (j) => setExportLog([{
-          name: 'Judul', status: 'running', progress: j.progress ?? 0,
-          message: j.message || 'Menulis ulang judul…', eta: j.eta_seconds ?? null,
+          name: t('editor.judul'), status: 'running', progress: j.progress ?? 0,
+          message: j.message || t('editor.menulis_judul'), eta: j.eta_seconds ?? null,
         }]),
       });
       if (job.status === 'done') {
         const fresh = await apiGet(`/projects/${videoId}`);
         setData(fresh);
         editor.load(videoId, fresh.clips || []);
-        setExportLog([{ name: 'Judul', status: 'done', progress: 1,
-                        message: 'Judul dan tagar diperbarui.' }]);
+        setExportLog([{ name: t('editor.judul'), status: 'done', progress: 1,
+                        message: t('editor.judul_baru') }]);
       } else {
-        setExportLog([{ name: 'Judul', status: 'failed',
-                        message: job.error || 'Gagal menulis ulang judul.' }]);
+        setExportLog([{ name: t('editor.judul'), status: 'failed',
+                        message: job.error || t('editor.judul_gagal') }]);
       }
     } catch (err) {
-      setExportLog([{ name: 'Judul', status: 'failed', message: err.message }]);
+      setExportLog([{ name: t('editor.judul'), status: 'failed', message: err.message }]);
     } finally {
       setRetitling(false);
     }
@@ -1634,8 +1638,8 @@ export default function Editor({ project, onBack }) {
     transisi: clip.transisi || 'potong',
     pakai_merek: clip.pakai_merek !== false,
     bilah_progres: clip.bilah_progres ? { posisi: clip.bilah_progres, warna: '#F5C400' } : null,
-    punch_in: (clip.punch_in ?? []).map(({ t, dur, skala, asal, alasan }) => ({
-      t, dur, skala, ...(asal ? { asal } : {}), ...(alasan ? { alasan: String(alasan).slice(0, 120) } : {}),
+    punch_in: (clip.punch_in ?? []).map(({ t: tk, dur, skala, asal, alasan }) => ({
+      t: tk, dur, skala, ...(asal ? { asal } : {}), ...(alasan ? { alasan: String(alasan).slice(0, 120) } : {}),
     })),
     // Subtitle kedua milik klip ini. `sumber_sidik` hanya penanda usang di editor.
     subtitle_kedua: clip.subtitle_kedua
@@ -1669,10 +1673,10 @@ export default function Editor({ project, onBack }) {
     setExporting(true);
     setExportLog([]);
     for (const [nomor, clip] of targets.entries()) {
-      const name = `Klip #${clip.index}`;
+      const name = t('editor.klip_n', { n: clip.index });
       const urut = targets.length > 1 ? `${nomor + 1}/${targets.length} · ` : '';
       setExportLog((l) => [...l, {
-        name, status: 'running', urut, progress: 0, message: 'Menunggu giliran…',
+        name, status: 'running', urut, progress: 0, message: t('proses.menunggu'),
       }]);
       const kabar = (patch) => setExportLog((l) => l.map((e) => {
         if (e.name !== name) return e;
@@ -1692,7 +1696,7 @@ export default function Editor({ project, onBack }) {
           // mengatakan apa pun.
           onProgress: (j) => kabar({
             progress: j.progress ?? 0,
-            message: j.message || 'Merender…',
+            message: j.message || t('editor.merender'),
             eta: j.eta_seconds ?? null,
           }),
         });
@@ -1719,35 +1723,38 @@ export default function Editor({ project, onBack }) {
           const unggahan = (job.result.unggahan ?? []).filter((u) => u.job_id);
           const galatUnggah = (job.result.unggahan ?? []).find((u) => u.galat);
           if (unggahan.length) {
-            const nama = (t) => (t === 'youtube' ? 'YouTube' : 'Drive');
+            const nama = (target) => (target === 'youtube' ? 'YouTube' : 'Drive');
+            // `pesanDasar` disimpan supaya kabar akhir unggahan menggantikan
+            // tulisan "mengunggah" tanpa bergantung pada bahasa tampilannya.
             setExportLog((l) => l.map((e) => (e.name === name
-              ? { ...e, message: `${e.message} · mengunggah ke ${unggahan.map((u) => nama(u.target)).join(' & ')}…` }
+              ? { ...e, pesanDasar: e.message,
+                  message: e.message + t('editor.mengunggah_ke', { tujuan: unggahan.map((u) => nama(u.target)).join(' & ') }) }
               : e)));
             // Tidak ditunggu dengan `await`: render klip berikutnya jalan
             // terus, dan kabar unggahan menyusul ke barisnya sendiri.
             Promise.all(unggahan.map(async (u) => {
               try {
                 const j = await waitForJob(u.job_id, {});
-                return { t: nama(u.target),
+                return { tujuan: nama(u.target),
                          ok: j.status === 'done',
-                         pesan: j.status === 'done' ? '' : (j.error || 'gagal') };
+                         pesan: j.status === 'done' ? '' : (j.error || t('editor.gagal_kecil')) };
               } catch (err) {
-                return { t: nama(u.target), ok: false, pesan: err.message };
+                return { tujuan: nama(u.target), ok: false, pesan: err.message };
               }
             })).then((hasil) => {
-              const naik = hasil.filter((h) => h.ok).map((h) => h.t);
+              const naik = hasil.filter((h) => h.ok).map((h) => h.tujuan);
               const gagal = hasil.filter((h) => !h.ok);
               // Gerbang tinjau (JOB-2 F0-4) bisa menurunkannya ke private.
               // Tanpa kalimat ini, "terunggah ke YouTube" terbaca seperti
               // sudah tayang publik padahal belum.
               const turun = (job.result.unggahan ?? []).find((u) => (u.gerbang ?? []).length);
               const kata = [
-                naik.length ? `terunggah ke ${naik.join(' & ')}` : '',
-                turun ? `sebagai PRIVATE, belum lolos tinjau: ${turun.gerbang.join(' ')}` : '',
-                ...gagal.map((h) => `${h.t} gagal: ${h.pesan}`),
+                naik.length ? t('editor.terunggah', { tujuan: naik.join(' & ') }) : '',
+                turun ? t('editor.private', { alasan: turun.gerbang.join(' ') }) : '',
+                ...gagal.map((h) => t('editor.tujuan_gagal', { tujuan: h.tujuan, pesan: h.pesan })),
               ].filter(Boolean).join(' · ');
               setExportLog((l) => l.map((e) => (e.name === name
-                ? { ...e, message: `${e.message.split(' · mengunggah')[0]} · ${kata}`,
+                ? { ...e, message: `${e.pesanDasar ?? e.message} · ${kata}`,
                     unggahGagal: gagal.length > 0 }
                 : e)));
             });
@@ -1757,7 +1764,7 @@ export default function Editor({ project, onBack }) {
               : e)));
           }
         } else {
-          kabar({ status: 'failed', eta: null, message: job.error || 'Gagal' });
+          kabar({ status: 'failed', eta: null, message: job.error || t('editor.gagal') });
         }
       } catch (err) {
         kabar({ status: 'failed', eta: null, message: err.message });
@@ -1789,11 +1796,11 @@ export default function Editor({ project, onBack }) {
         setExporting(true);
         setExportLog(jobs.map((j, i) => ({
           name: `render-${j.id}`,
-          label: jobs.length > 1 ? `Render berjalan ${i + 1}/${jobs.length}` : 'Render berjalan',
+          label: jobs.length > 1 ? t('editor.render_berjalan_n', { n: i + 1, total: jobs.length }) : t('editor.render_berjalan'),
           status: 'running',
           urut: '',
           progress: j.progress ?? 0,
-          message: j.message || 'Melanjutkan…',
+          message: j.message || t('editor.melanjutkan'),
           eta: j.eta_seconds ?? null,
           sejak: j.started_at ? j.started_at * 1000 : Date.now(),
         })));
@@ -1804,15 +1811,15 @@ export default function Editor({ project, onBack }) {
           waitForJob(j.id, {
             onProgress: (job) => kabar({
               progress: job.progress ?? 0,
-              message: job.message || 'Merender…',
+              message: job.message || t('editor.merender'),
               eta: job.eta_seconds ?? null,
             }),
           }).then((job) => {
             if (batal) return;
             kabar(job.status === 'done'
               ? { status: 'done', progress: 1, eta: null,
-                  message: 'Tersimpan di folder klip' }
-              : { status: 'failed', eta: null, message: job.error || 'Gagal' });
+                  message: t('editor.tersimpan_folder') }
+              : { status: 'failed', eta: null, message: job.error || t('editor.gagal') });
             setExporting(false);
           });
         });
@@ -1850,11 +1857,11 @@ export default function Editor({ project, onBack }) {
       <Centered>
         <AlertTriangle size={30} style={{ color: 'var(--danger)', marginBottom: '10px' }} />
         <h3 className="work-title" style={{ fontSize: '1.1rem', marginBottom: '7px' }}>
-          Partitur ini tidak bisa dibuka
+          {t('editor.tak_bisa_buka')}
         </h3>
         <p style={{ fontSize: '.85rem', color: 'var(--ink-2)' }}>{error.message}</p>
         <button className="btn-secondary" onClick={onBack} style={{ marginTop: '16px' }}>
-          <ArrowLeft size={14} /> Kembali
+          <ArrowLeft size={14} /> {t('umum.kembali')}
         </button>
       </Centered>
     );
@@ -1865,7 +1872,7 @@ export default function Editor({ project, onBack }) {
       <Centered>
         <Loader2 size={24} className="animate-spin" style={{ color: 'var(--reh)' }} />
         <p style={{ marginTop: '10px', fontSize: '.85rem', color: 'var(--ink-2)' }}>
-          Membuka partitur…
+          {t('editor.membuka')}
         </p>
       </Centered>
     );
@@ -1888,28 +1895,28 @@ export default function Editor({ project, onBack }) {
        dipanggil, dan menutup lagi dengan menekan ikon yang sama. */
     <div className="studio" style={{ '--dock-h': `${dockH}px` }}>
       <header className="studio-bar">
-        <button className="btn-secondary studio-icon" onClick={onBack} aria-label="Kembali">
+        <button className="btn-secondary studio-icon" onClick={onBack} aria-label={t('umum.kembali')}>
           <ArrowLeft size={15} />
         </button>
         <button className={`btn-secondary studio-icon${railOpen ? ' is-on' : ''}`}
                 onClick={() => setRailOpen((v) => !v)}
-                title={railOpen ? 'Sembunyikan daftar klip' : 'Tampilkan daftar klip'}
-                aria-label="Daftar klip">
+                title={railOpen ? t('editor.sembunyi_daftar') : t('editor.tampil_daftar')}
+                aria-label={t('editor.daftar_klip')}>
           <Menu size={15} />
         </button>
 
         <div className="studio-title">
           <h1>{data.title}</h1>
           <div className="sub">
-            {clips.length} klip · {formatTime(duration)} ·{' '}
+            {t('editor.n_klip', { n: clips.length })} · {formatTime(duration)} ·{' '}
             {data.speaker_count > 1
-              ? `${data.speaker_confident ? '' : '± '}${data.speaker_count} narasumber`
-              : 'satu narasumber'}
+              ? `${data.speaker_confident ? '' : '± '}${t('editor.n_narasumber', { n: data.speaker_count })}`
+              : t('editor.satu_narasumber')}
           </div>
         </div>
 
         <div className="studio-actions">
-          <label className="studio-check" title="Pilih semua klip untuk dirender">
+          <label className="studio-check" title={t('editor.pilih_semua')}>
             <input type="checkbox"
                    checked={checked.size === clips.length && clips.length > 0}
                    onChange={(e) => editor.setAllChecked(e.target.checked)} />
@@ -1918,13 +1925,13 @@ export default function Editor({ project, onBack }) {
           {googleReady && (
             <>
               <label className="studio-check"
-                     title="Klip yang selesai dirender langsung diantrekan ke kanal YouTube akun profil ini">
+                     title={t('editor.antre_yt')}>
                 <input type="checkbox" checked={unggahSetelah.youtube}
                        onChange={(e) => setUnggahSetelah((u) => ({ ...u, youtube: e.target.checked }))} />
                 YouTube
               </label>
               <label className="studio-check"
-                     title="Klip yang selesai dirender langsung diantrekan ke Google Drive akun profil ini">
+                     title={t('editor.antre_drive')}>
                 <input type="checkbox" checked={unggahSetelah.drive}
                        onChange={(e) => setUnggahSetelah((u) => ({ ...u, drive: e.target.checked }))} />
                 Drive
@@ -1946,9 +1953,9 @@ export default function Editor({ project, onBack }) {
               tombolnya di sini untuk yang tidak. Judulnya menyebutkan
               pintasannya, jadi keduanya saling mengajarkan. */}
           <button className="btn-secondary" onClick={() => setCariUlang(true)}
-                  title="Cari ulang rekomendasi klip, hook, dan judul dengan Gemini atau mesin lokal, tanpa mengunduh ulang">
+                  title={t('editor.cari_ulang_judul')}>
             <RefreshCw size={14} />
-            Cari ulang
+            {t('editor.cari_ulang')}
           </button>
           {cariUlang && (
             <CariUlangDialog videoId={videoId} data={data} dirty={editor.dirty}
@@ -1961,24 +1968,24 @@ export default function Editor({ project, onBack }) {
           )}
           <button className="btn-secondary" onClick={editor.undo}
                   disabled={!editor.canUndo}
-                  title="Urungkan suntingan terakhir (Ctrl+Z)">
+                  title={t('editor.urungkan')}>
             <Undo2 size={14} />
           </button>
           <button className="btn-secondary" onClick={editor.redo}
                   disabled={!editor.canRedo}
-                  title="Ulangi yang diurungkan (Ctrl+Shift+Z)">
+                  title={t('editor.ulangi')}>
             <Redo2 size={14} />
           </button>
           <button className="btn-secondary" onClick={handleSaveClips}
                   disabled={saving === 'running' || (!editor.dirty && saving !== 'failed')}
                   title={editor.dirty
-                    ? 'Menyimpan susunan klip, batas, subtitle, judul, dan tanda bingkai ke penyimpanan lokal'
-                    : 'Semua perubahan sudah tersimpan'}>
+                    ? t('editor.simpan_judul')
+                    : t('editor.semua_tersimpan')}>
             {saving === 'running' ? <Loader2 size={14} className="animate-spin" />
               : saving === 'failed' ? <AlertTriangle size={14} style={{ color: 'var(--danger)' }} />
                 : editor.dirty ? <Save size={14} />
                   : <CheckCircle2 size={14} style={{ color: 'var(--entry)' }} />}
-            {saving === 'failed' ? 'Gagal simpan' : editor.dirty ? 'Simpan' : 'Tersimpan'}
+            {saving === 'failed' ? t('editor.gagal_simpan') : editor.dirty ? t('umum.simpan') : t('editor.tersimpan')}
           </button>
           <button className="btn-primary" disabled={exporting || checked.size === 0}
                   onClick={handleExportSelected}>
@@ -1987,7 +1994,7 @@ export default function Editor({ project, onBack }) {
                 tergulir keluar layar, tombol inilah yang tetap terlihat. */}
             {exporting ? (kerjaRender
               ? `${kerjaRender.urut || ''}${Math.round((kerjaRender.progress ?? 0) * 100)}%`
-              : 'Merender…') : 'Render'}
+              : t('editor.merender')) : t('editor.render')}
           </button>
         </div>
       </header>
@@ -1998,7 +2005,7 @@ export default function Editor({ project, onBack }) {
         {railOpen && (
           <aside className="studio-rail">
             <div className="plate-head">
-              <span className="mark" style={{ color: 'var(--ink)' }}>Klip</span>
+              <span className="mark" style={{ color: 'var(--ink)' }}>{t('editor.klip')}</span>
               {/* Urutan daftar. Bawaannya tetap urutan waktu di video mentah,
                   dan itu disengaja: nomor klip ikut urutan itu, dan orang
                   menyusun cerita dari awal ke akhir. Yang mau memilih beberapa
@@ -2006,13 +2013,13 @@ export default function Editor({ project, onBack }) {
                   menunjuk klip yang sama supaya tidak ada yang tertukar. */}
               <button className="chip" onClick={() => setUrutNilai((v) => !v)}
                       title={urutNilai
-                        ? 'Kembali ke urutan waktu di video'
-                        : 'Urutkan dari nilai tertinggi ke terendah'}
+                        ? t('editor.urut_waktu_judul')
+                        : t('editor.urut_nilai_judul')}
                       style={{ marginLeft: 'auto', fontSize: '.66rem',
                                padding: '2px 7px', cursor: 'pointer',
                                color: urutNilai ? 'var(--accent-cyan)' : 'var(--ink-3)',
                                borderColor: urutNilai ? 'var(--accent-cyan)' : undefined }}>
-                {urutNilai ? 'Nilai' : 'Waktu'}
+                {urutNilai ? t('editor.nilai') : t('editor.waktu')}
               </button>
               <span className="tc" style={{ fontSize: '.72rem', color: 'var(--ink-3)' }}>
                 {clips.length}
@@ -2035,7 +2042,7 @@ export default function Editor({ project, onBack }) {
                       <div className="tc" style={{ fontSize: '.7rem', color: 'var(--ink-3)' }}>
                         {formatTime(clip.segments[0].start)} · {formatDurationHuman(clip.duration || 0)}
                         {clip.score != null && ` · ${Math.round(clip.score)}`}
-                        {clip.source === 'manual' && ' · tangan'}
+                        {clip.source === 'manual' && t('editor.tangan')}
                       </div>
                       <div style={{
                         fontSize: '.76rem', color: 'var(--ink-2)', lineHeight: 1.35,
@@ -2048,8 +2055,8 @@ export default function Editor({ project, onBack }) {
                         klip yang tidak diinginkannya — dan di sini ia tidak
                         ada sama sekali. Diminta pemiliknya. */}
                     <button type="button" className="studio-row-x"
-                            aria-label={`Hapus klip ${nomorKlip(i)}`}
-                            title={`Hapus klip ${nomorKlip(i)}`}
+                            aria-label={t('editor.hapus_klip_n', { n: nomorKlip(i) })}
+                            title={t('editor.hapus_klip_n', { n: nomorKlip(i) })}
                             onClick={(e) => { e.stopPropagation();
                                               hapusKlip(clip.clip_id, nomorKlip(i)); }}>
                       <Trash2 size={13} />
@@ -2066,8 +2073,8 @@ export default function Editor({ project, onBack }) {
                     disabled={editor.busy}>
               {editor.busy ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
               {mark.in !== null || mark.out !== null
-                ? 'Jadikan klip dari rentang bertanda'
-                : 'Klip baru dari playhead'}
+                ? t('editor.dari_rentang')
+                : t('editor.dari_playhead')}
             </button>
           </aside>
         )}
@@ -2076,9 +2083,8 @@ export default function Editor({ project, onBack }) {
         <main className="studio-stage">
           {data.model_requested && data.model && data.model_requested !== data.model && (
             <div className="plate studio-note" style={{ borderLeftColor: 'var(--warn)' }}>
-              Model <b>{data.model_requested}</b> tidak bisa dipakai saat analisis ini
-              berjalan, biasanya karena kuota hariannya habis. Sistem memakai{' '}
-              <b>{data.model}</b> sebagai cadangan.
+              {t('editor.model_a')} <b>{data.model_requested}</b> {t('editor.model_b')}{' '}
+              <b>{data.model}</b> {t('editor.model_c')}
             </div>
           )}
           {data.pratinjau_disiapkan && (
@@ -2086,13 +2092,10 @@ export default function Editor({ project, onBack }) {
                                                          gap: '8px', alignItems: 'center' }}>
               <Loader2 size={14} className="animate-spin" style={{ flexShrink: 0 }} />
               <span>
-                Video ini beresolusi besar dan bisa tersendat saat diputar di browser.
-                Salinan pratinjau yang ringan sedang disiapkan
+                {t('editor.pratinjau_a')}
                 {Number.isFinite(data.pratinjau_kemajuan)
-                  ? ` (${Math.round(data.pratinjau_kemajuan * 100)}%)` : ''}.
-                Studio akan berpindah sendiri begitu siap. Hasil render tetap memakai
-                video asli, jadi menunggunya tidak wajib: batas klip, subtitle, dan
-                bingkai semuanya sudah bisa disetel sekarang.
+                  ? ` (${Math.round(data.pratinjau_kemajuan * 100)}%)` : ''}
+                {t('editor.pratinjau_b')}
               </span>
             </div>
           )}
@@ -2116,7 +2119,7 @@ export default function Editor({ project, onBack }) {
                                  alignItems: 'center', gap: '6px' }}
                         onClick={() => apiPost('/settings/penyimpanan/folder/buka',
                                                { jenis: 'klip' }).catch(() => {})}>
-                  <FolderOpen size={13} /> Buka folder klip
+                  <FolderOpen size={13} /> {t('editor.buka_folder')}
                 </button>
               )}
               {exportLog.map((e) => (
@@ -2137,9 +2140,9 @@ export default function Editor({ project, onBack }) {
                                      fontVariantNumeric: 'tabular-nums' }}>
                         {Math.round((e.progress ?? 0) * 100)}%
                         {e.eta > 1 && e.progress > 0.05
-                          ? ` · sisa ${sisaWaktu(e.eta)}`
+                          ? t('editor.sisa', { n: sisaWaktu(e.eta, t) })
                           : e.sejak && Date.now() - e.sejak > 3000
-                            ? ` · berjalan ${sisaWaktu((Date.now() - e.sejak) / 1000)}` : ''}
+                            ? t('editor.berjalan', { n: sisaWaktu((Date.now() - e.sejak) / 1000, t) }) : ''}
                       </span>
                     )}
                   </div>
@@ -2217,8 +2220,8 @@ export default function Editor({ project, onBack }) {
                              // pratinjau sendiri — kalau tidak, yang bergerak
                              // bisa baris lain.
                              const ls = selected?.subtitles ?? [];
-                             const t = tKlip;
-                             const i = ls.findIndex((l) => t >= l.start && t <= l.end);
+                             const tk = tKlip;
+                             const i = ls.findIndex((l) => tk >= l.start && tk <= l.end);
                              if (i >= 0) editor.updateSubtitle(selected.clip_id, i, pos);
                            }}
                            onJudulVideoChange={patchJudulVideo}
@@ -2256,10 +2259,10 @@ export default function Editor({ project, onBack }) {
             <div className="plate-head">
               <span className={`reh${selected?.source === 'manual' ? ' reh--manual' : ''}`}>{letter}</span>
               <span className="mark" style={{ color: 'var(--ink)' }}>
-                {TABS.find((t) => t.id === tab)?.label}
+                {t(TABS.find((tb) => tb.id === tab)?.label ?? '')}
               </span>
               <button className="btn-secondary studio-icon" style={{ marginLeft: 'auto' }}
-                      onClick={() => setTab(null)} title="Tutup panel" aria-label="Tutup panel">
+                      onClick={() => setTab(null)} title={t('editor.tutup_panel')} aria-label={t('editor.tutup_panel')}>
                 <X size={14} />
               </button>
             </div>
@@ -2276,7 +2279,7 @@ export default function Editor({ project, onBack }) {
                       display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center',
                     }}>
                       <b style={{ width: '100%' }}>
-                        Klip {letter} menyambung {selected.segments.length} potongan:
+                        {t('editor.menyambung', { huruf: letter, n: selected.segments.length })}
                       </b>
                       {selected.segments.map((s, i) => (
                         <span key={i} className="tc" style={{
@@ -2292,14 +2295,14 @@ export default function Editor({ project, onBack }) {
                       {/* Sambungan antar potongan (JOB-2 F2-4). Panjang klip
                           tidak berubah: gambarnya hanya meredup sekejap. */}
                       <label style={{ width: '100%', display: 'flex', gap: '8px', alignItems: 'center' }}>
-                        Sambungan
+                        {t('editor.sambungan')}
                         <select className="field" value={selected.transisi || 'potong'}
                                 style={{ width: 'auto', padding: '3px 6px' }}
                                 onChange={(e) => editor.updateClip(selected.clip_id,
                                   { transisi: e.target.value })}>
-                          <option value="potong">Potong langsung</option>
-                          <option value="celup">Redup sekejap (hitam)</option>
-                          <option value="kilat">Kilatan putih</option>
+                          <option value="potong">{t('editor.potong_langsung')}</option>
+                          <option value="celup">{t('editor.redup')}</option>
+                          <option value="kilat">{t('editor.kilat')}</option>
                         </select>
                       </label>
                     </div>
@@ -2332,8 +2335,8 @@ export default function Editor({ project, onBack }) {
                             aspectRatio={aspectRatio} onAspectChange={setAspectRatio}
                             showHook={showHook} onShowHookChange={setShowHook}
                             hookText={selected?.hook_text ?? ''}
-                            onHookTextChange={(t) => selected
-                              && editor.updateClip(selected.clip_id, { hook_text: t })}
+                            onHookTextChange={(tk) => selected
+                              && editor.updateClip(selected.clip_id, { hook_text: tk })}
                             klipUntukTema={selected ? {
                               video_id: videoId,
                               title: selected.title || selected.hook_text || '',
@@ -2443,11 +2446,11 @@ export default function Editor({ project, onBack }) {
             bisa dikembalikan ke lebar penuh tanpa mencari tombol lain. */}
         <nav className="studio-tools">
           {TABS.map(({ id, label, Icon }) => (
-            <button key={id} title={label} aria-label={label}
+            <button key={id} title={t(label)} aria-label={t(label)}
                     className={`studio-tool${tab === id ? ' is-on' : ''}`}
                     onClick={() => setTab((cur) => (cur === id ? null : id))}>
               <Icon size={17} strokeWidth={1.8} />
-              <span>{label}</span>
+              <span>{t(label)}</span>
             </button>
           ))}
         </nav>
@@ -2459,7 +2462,7 @@ export default function Editor({ project, onBack }) {
             dan papan ketik juga bisa memakainya, bukan hanya tetikus. */}
         <div className="dock-grip" onPointerDown={dragDock}
              role="separator" aria-orientation="horizontal"
-             aria-label="Seret untuk mengubah tinggi linimasa"
+             aria-label={t('editor.seret_dok')}
              tabIndex={0}
              onKeyDown={(e) => {
                const d = e.key === 'ArrowUp' ? 24 : e.key === 'ArrowDown' ? -24 : 0;
@@ -2474,10 +2477,10 @@ export default function Editor({ project, onBack }) {
              }} />
         <div className="dock-bar">
           <button className="btn-secondary" onClick={togglePlay} style={{ minWidth: '78px' }}>
-            <Play size={13} /> Spasi
+            <Play size={13} /> {t('editor.spasi')}
           </button>
           <div className="tc dock-clock">
-            <span className="mark" style={{ color: 'var(--ink-3)' }}>Video</span>
+            <span className="mark" style={{ color: 'var(--ink-3)' }}>{t('editor.video')}</span>
             {formatTimecode(sourceTime)}
             <span style={{ color: 'var(--ink-3)', fontWeight: 500, fontSize: '.82rem' }}>
               {' / '}{formatTimecode(duration)}
@@ -2495,28 +2498,28 @@ export default function Editor({ project, onBack }) {
           <div className="cutter">
             <button className="btn-secondary cutter-btn" onClick={tandaiPotong}
                     title={mark.in === null
-                      ? 'Menandai awal klip baru di posisi playhead'
+                      ? t('editor.tandai_awal')
                       : mark.out === null
-                        ? 'Menandai akhir klip baru di posisi playhead'
-                        : 'Mulai menandai ulang dari posisi playhead'}>
+                        ? t('editor.tandai_akhir')
+                        : t('editor.tandai_ulang_judul')}>
               <Scissors size={13} />
-              {mark.in === null ? 'Mulai potong'
-                : mark.out === null ? 'Akhiri potong' : 'Tandai ulang'}
+              {mark.in === null ? t('editor.mulai_potong')
+                : mark.out === null ? t('editor.akhiri_potong') : t('editor.tandai_ulang')}
               <kbd style={kbd}>{mark.in === null || mark.out !== null ? 'I' : 'O'}</kbd>
             </button>
             <span className="tc cutter-range">
               {mark.in === null && mark.out === null
-                ? 'tandai awal & akhirnya'
+                ? t('editor.tandai_ket')
                 : `${mark.in === null ? '…' : formatTime(mark.in)}-${mark.out === null ? '…' : formatTime(mark.out)}`
                   + (mark.in !== null && mark.out !== null
-                    ? ` · ${Math.max(0, mark.out - mark.in).toFixed(1)} dtk` : '')}
+                    ? t('editor.n_dtk', { n: Math.max(0, mark.out - mark.in).toFixed(1) }) : '')}
             </span>
             {mark.in !== null && mark.out !== null && (
               <button className="btn-primary cutter-btn" onClick={createFromMarks}
-                      title="Membuat klip baru dari rentang yang ditandai"
+                      title={t('editor.jadikan_judul')}
                       disabled={editor.busy || mark.out - mark.in < 1.5}>
                 {editor.busy ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
-                Jadikan klip
+                {t('editor.jadikan')}
               </button>
             )}
           </div>
@@ -2528,25 +2531,25 @@ export default function Editor({ project, onBack }) {
               dok berarti tidak ada yang cukup tinggi untuk dipegang. */}
           <button className="btn-secondary cutter-btn"
                   onClick={addSegmentAtPlayhead} disabled={!selected || editor.busy}
-                  title="Menyambungkan potongan baru dari posisi playhead ke klip ini">
-            <Plus size={12} /> Sambung dari sini
+                  title={t('editor.sambung_judul')}>
+            <Plus size={12} /> {t('editor.sambung')}
           </button>
           {!constrained && (
             <button className="btn-secondary cutter-btn"
                     onClick={() => selected && selectClip(selected.clip_id)}>
-              Kembali ke klip
+              {t('editor.kembali_klip')}
             </button>
           )}
 
           <div className="dock-switch">
             <button className={dockView === 'clip' ? 'is-on' : ''}
-                    onClick={() => setDockView('clip')}>Klip ini</button>
+                    onClick={() => setDockView('clip')}>{t('editor.klip_ini')}</button>
             <button className={dockView === 'all' ? 'is-on' : ''}
-                    onClick={() => setDockView('all')}>Seluruh rekaman</button>
+                    onClick={() => setDockView('all')}>{t('editor.seluruh')}</button>
           </div>
 
           <span className="mark dock-keys">
-            ← → 1 dtk · Shift 10 dtk · J K L 5 dtk
+            {t('editor.pintasan')}
           </span>
         </div>
 
@@ -2600,7 +2603,7 @@ async function waitForJob(jobId, { interval = 1200, limit = 2400000, onProgress 
     const job = await apiGet(`/jobs/${jobId}`);
     onProgress?.(job);
     if (['done', 'failed', 'cancelled'].includes(job.status)) return job;
-    if (Date.now() - started > limit) return { status: 'failed', error: 'Waktu render habis.' };
+    if (Date.now() - started > limit) return { status: 'failed', error: tr('editor.waktu_habis') };
     // eslint-disable-next-line no-await-in-loop
     await new Promise((r) => setTimeout(r, interval));
   }
@@ -2616,11 +2619,12 @@ function bersihkanPesan(pesan) {
 }
 
 /** "sisa 1 mnt 20 dtk" — perkiraan dari job, dibulatkan supaya tidak gelisah. */
-function sisaWaktu(detik) {
+function sisaWaktu(detik, t) {
   const d = Math.max(0, Math.round(detik));
-  if (d < 60) return `${d} dtk`;
+  if (d < 60) return t('waktu.detik', { n: d });
   const m = Math.floor(d / 60);
-  return m < 60 ? `${m} mnt ${d % 60} dtk` : `${Math.floor(m / 60)} jam ${m % 60} mnt`;
+  return m < 60 ? t('waktu.menit_detik_pendek', { m, s: d % 60 })
+    : t('waktu.jam_menit', { h: Math.floor(m / 60), m: m % 60 });
 }
 
 const kbd = {
@@ -2638,11 +2642,11 @@ const kbd = {
  * pengguna sedang mencoba membedakannya.
  */
 function formatTimecode(seconds) {
-  const t = Math.max(0, Number(seconds) || 0);
-  const h = Math.floor(t / 3600);
-  const m = Math.floor((t % 3600) / 60);
-  const s = Math.floor(t % 60);
-  const d = Math.floor((t % 1) * 10);
+  const tk = Math.max(0, Number(seconds) || 0);
+  const h = Math.floor(tk / 3600);
+  const m = Math.floor((tk % 3600) / 60);
+  const s = Math.floor(tk % 60);
+  const d = Math.floor((tk % 1) * 10);
   const pad = (n) => String(n).padStart(2, '0');
   return `${pad(h)}:${pad(m)}:${pad(s)}.${d}`;
 }

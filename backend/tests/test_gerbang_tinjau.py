@@ -87,7 +87,8 @@ class TidakDibuangHanyaDiturunkan(unittest.TestCase):
     def test_penurunan_dikatakan_di_layar(self):
         src = Path("app/services/pipeline.py").read_text(encoding="utf-8")
         self.assertIn("Diunggah sebagai PRIVATE, belum lolos tinjau", src)
-        editor = Path("../frontend/src/features/studio/Editor.jsx").read_text(encoding="utf-8")
+        from teks_ui import teks_ui
+        editor = teks_ui(Path("../frontend/src/features/studio/Editor.jsx").resolve())
         self.assertIn("sebagai PRIVATE, belum lolos tinjau", editor)
 
     def test_formulir_manual_tidak_mengubah_pilihan_orang(self):
