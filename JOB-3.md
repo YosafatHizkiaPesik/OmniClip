@@ -23,29 +23,45 @@ commit <hash>)`. Hash = commit kodenya; centangan ikut commit berikutnya.
 
 ## Fase A: fondasi dan kerangka
 
-- [ ] **J3-1** Sistem terjemahan: `lib/i18n.js` (kamus `id` dan `en`, fungsi
+- [x] **J3-1** Sistem terjemahan: `lib/i18n.js` (kamus `id` dan `en`, fungsi
   `t()`, hook `useT`), pilihan bahasa di Pengaturan dan di menu akun,
   disimpan per peramban + setelan server. Bawaan mengikuti bahasa peramban.
-- [ ] **J3-2** Header: hapus "Mesin Gemini + mesin lokal". Menu samping gaya
+  (selesai 15 Oktober 2026, commit d1d5b1c) Bawaan masih Indonesia sampai
+  Fase C selesai; pilihan bahasa di header. Server belum memakai
+  Accept-Language (J3-11).
+- [x] **J3-2** Header: hapus "Mesin Gemini + mesin lokal". Menu samping gaya
   YouTube: Beranda, Langganan, Riwayat / Studio Anda (Partitur, Klip jadi,
   Analitik, Unduhan) / Langganan (avatar channel) / Akun, Pengaturan, Mesin.
   Mode ringkas (ikon saja) di layar sempit.
-
+  (selesai 15 Oktober 2026, commit d1d5b1c) Kotak cari dengan dropdown
+  riwayat dipindah dari Beranda ke header. Mode ringkas: bilah bawah di
+  layar < 900 px berisi menu utama dan Studio.
 ## Fase B: YouTube
 
-- [ ] **J3-3** Avatar channel di kartu video; avatar dan nama channel bisa
+- [x] **J3-3** Avatar channel di kartu video; avatar dan nama channel bisa
   diklik ke halaman channel.
-- [ ] **J3-4** Halaman channel: banner, avatar, nama, @handle, subscriber,
+  (selesai 15 Oktober 2026, commit d1d5b1c) Satu panggilan per layar;
+  YouTube Data API bila ada kunci, yt-dlp bila tidak; disimpan seminggu.
+- [x] **J3-4** Halaman channel: banner, avatar, nama, @handle, subscriber,
   jumlah video, tab Video / Shorts / Live, urutkan Terbaru / Populer, tombol
   "Ikuti" dan "Klip video ini" di tiap kartu.
-- [ ] **J3-5** Ikuti channel (Langganan) per akun OmniClip, disimpan lokal:
+  (selesai 15 Oktober 2026, commit d1d5b1c) Tab yang tidak dimiliki
+  channel (Live) tampil kosong, tidak galat. "Populer" diurutkan dari
+  jumlah tayangan karena YouTube tidak menyediakan urutan lewat yt-dlp.
+- [x] **J3-5** Ikuti channel (Langganan) per akun OmniClip, disimpan lokal:
   daftar di menu samping, halaman Langganan berisi video terbaru dari
   channel yang diikuti.
-- [ ] **J3-6** Halaman tonton lengkap: video terkait di samping, deskripsi yang
+  (selesai 15 Oktober 2026, commit d1d5b1c) Feed bergiliran antar channel:
+  daftar datar yt-dlp tidak membawa tanggal unggah.
+- [x] **J3-6** Halaman tonton lengkap: video terkait di samping, deskripsi yang
   bisa dibuka, info channel + Ikuti, tombol klip yang jelas.
+  (selesai 15 Oktober 2026, commit d1d5b1c) "Video lain" = 6 video channel
+  yang sama lalu hasil pencarian terkait.
 - [ ] **J3-7** Riwayat tontonan per akun + filter pencarian (durasi, tanggal
   unggah, jenis: video / shorts / live, urutan).
-
+  **SEBAGIAN** (15 Oktober 2026, commit d1d5b1c): riwayat tontonan selesai;
+  filter durasi, tanggal, dan urutan sudah ada sejak sebelumnya. Belum:
+  filter jenis video / shorts / live.
 ## Fase C: seluruh UI dua bahasa
 
 - [ ] **J3-8** Terjemahkan kerangka, beranda, channel, tonton, Klip jadi,
