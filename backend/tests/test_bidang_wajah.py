@@ -17,6 +17,8 @@ import re
 import unittest
 from pathlib import Path
 
+from teks_ui import teks_ui
+
 from app.services.render import (
     GAMING_WAJAH_MAKS, GAMING_WAJAH_MIN, GAMING_WAJAH_TINGGI,
     kotak_reaksi, susun_layout_gaming, tinggi_wajah_otomatis,
@@ -243,7 +245,7 @@ class MutuPratinjauDiKanvas(unittest.TestCase):
     """
 
     def setUp(self):
-        self.jsx = PRATINJAU.read_text(encoding="utf-8")
+        self.jsx = teks_ui(PRATINJAU)
 
     def test_kerapatan_mengikuti_berjalan_atau_dijeda(self):
         self.assertIn("const diam = v.paused && !berubah;", self.jsx)

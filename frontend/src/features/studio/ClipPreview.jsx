@@ -8,6 +8,7 @@ import { beginRectDrag } from './rectDrag';
 import MediaOverlay from './MediaOverlay';
 import { sensorTeks } from '../../lib/sensor';
 import { LapisJudul, iniTema, useDaftarTema } from './JudulTema';
+import { useT } from '../../lib/i18n';
 
 // `r` adalah rasio yang sama dengan `aspect`, dalam bentuk angka. Batas tinggi
 // kanvas dinyatakan lewat lebar (lebar = tinggi x rasio) karena membatasi
@@ -54,8 +55,8 @@ function padPalette(warna) {
 
 /** m:dd — satuan yang sama dengan yang tertulis di bilah transport. */
 function clockTime(seconds) {
-  const t = Math.max(0, Number(seconds) || 0);
-  return `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
+  const det = Math.max(0, Number(seconds) || 0);
+  return `${Math.floor(det / 60)}:${String(Math.floor(det % 60)).padStart(2, '0')}`;
 }
 
 /**
@@ -134,6 +135,7 @@ export default function ClipPreview({
   frameZoom = 1,
   frameGeserY = 0,
 }) {
+  const t = useT();
   const innerRef = useRef(null);
   const videoRef = externalRef ?? innerRef;
   const bgRef = useRef(null);
@@ -188,7 +190,7 @@ export default function ClipPreview({
 
   const card = clip?.title_card;
   const daftarTema = useDaftarTema();
-  const gerakTema = (id) => daftarTema.find((t) => t.id === id)?.gerak || '';
+  const gerakTema = (id) => daftarTema.find((tm) => tm.id === id)?.gerak || '';
   const cardText = ((card?.text || '').trim() || (clip?.title || '').trim());
   const cardSeconds = Math.max(1.2, Number(card?.card_seconds || card?.seconds || 3));
   const cardOn = !!card?.enabled && !!cardText;
@@ -377,16 +379,16 @@ export default function ClipPreview({
     lepasRef.current = null;
     videoRef.current = el;
     if (!lama || lama === el || !posisiRef.current) return;
-    const { t, main } = posisiRef.current;
+    const { t: tk, main } = posisiRef.current;
     posisiRef.current = null;
     // Disetel SEKETIKA, bahkan sebelum metadatanya ada: browser menyimpannya
     // sebagai posisi awal. Menunggu `loadedmetadata` saja tidak cukup — di
     // sela itu penjaga "parkir" Editor melihat elemen baru di detik 0 sumber,
     // memindahkannya ke awal klip, dan jam editor ikut terlempar ke sana.
     // Terlacak lewat penyadap currentTime: 142,47 → 134,36 dalam satu denyut.
-    el.currentTime = t;
+    el.currentTime = tk;
     const lanjut = () => {
-      if (Math.abs(el.currentTime - t) > 0.3) el.currentTime = t;
+      if (Math.abs(el.currentTime - tk) > 0.3) el.currentTime = tk;
       if (main) el.play().catch(() => {});
     };
     if (el.readyState >= 1) lanjut();
@@ -665,8 +667,8 @@ export default function ClipPreview({
       // sama dengan yang dipakai render.
       let kiri = geo.left;
       if (f.follow && reframe?.people?.length) {
-        const t = clipTimeFor(clip?.segments, v.currentTime);
-        const x = followX(reframe, f, t);
+        const tk = clipTimeFor(clip?.segments, v.currentTime);
+        const x = followX(reframe, f, tk);
         if (x !== null) kiri = geo.left + ((f.src.x - x) / 100) * geo.width;
       }
       g.save();
@@ -693,13 +695,13 @@ export default function ClipPreview({
   const cropXAt = useMemo(() => {
     const kf = reframe?.keyframes;
     if (!kf?.length) return null;
-    return (t) => {
+    return (tk) => {
       let lo = 0;
       let hi = kf.length - 1;
-      if (t <= kf[0][0]) return kf[0][1];
+      if (tk <= kf[0][0]) return kf[0][1];
       while (lo < hi) {
         const mid = Math.ceil((lo + hi) / 2);
-        if (kf[mid][0] <= t) lo = mid;
+        if (kf[mid][0] <= tk) lo = mid;
         else hi = mid - 1;
       }
       return kf[lo][1];
@@ -787,12 +789,12 @@ export default function ClipPreview({
         // Sebelum pemutar sempat melompat ke awal segmen, currentTime masih 0
         // dan selisihnya negatif. Angka negatif di timecode terbaca sebagai
         // kerusakan, padahal ia hanya berarti "belum mulai".
-        const t = constrained && seg
+        const tk = constrained && seg
           ? Math.max(0, (offsets[segIndex] ?? 0) + (v.currentTime - seg.start))
           : v.currentTime;
 
         if (useReframe && cropXAt) {
-          const x = cropXAt(Math.max(0, t));
+          const x = cropXAt(Math.max(0, tk));
           // Persen di `translate` dihitung terhadap ukuran ELEMEN, dan
           // elemen sudah ikut membesar bersama perbesarannya. Jadi pecahan
           // "x terhadap lebar sumber" tetap benar apa pun perbesarannya, dan
@@ -807,7 +809,7 @@ export default function ClipPreview({
           for (const f of frames) {
             const entry = frameVideoRefs.current[f.id];
             if (!f.follow || !entry?.el || !entry.geo) continue;
-            const x = followX(reframe, f, t);
+            const x = followX(reframe, f, tk);
             if (x === null) continue;
             entry.el.style.left =
               `${entry.geo.left + ((f.src.x - x) / 100) * entry.geo.width}%`;
@@ -868,9 +870,9 @@ export default function ClipPreview({
             segarkan(m);
           }
         }
-        if (Math.abs(t - lastPushed) > 0.05) {
-          lastPushed = t;
-          setClipTime(t);
+        if (Math.abs(tk - lastPushed) > 0.05) {
+          lastPushed = tk;
+          setClipTime(tk);
         }
       }
       raf = requestAnimationFrame(tick);
@@ -1076,10 +1078,10 @@ export default function ClipPreview({
     for (const [idx, k] of daftar.entries()) {
       const teks = (k.teks || '').trim();
       if ((!teks && !k.suara) || st.sudah.has(idx)) continue;
-      const t = k.posisi === 'pembuka' ? 0 : k.posisi === 'penutup' ? totalDuration : Number(k.t) || 0;
+      const tk = k.posisi === 'pembuka' ? 0 : k.posisi === 'penutup' ? totalDuration : Number(k.t) || 0;
       const kena = k.posisi === 'pembuka' ? clipTime < 0.4
         : k.posisi === 'penutup' ? clipTime >= totalDuration - 0.25
-          : clipTime >= t && clipTime < t + 0.6;
+          : clipTime >= tk && clipTime < tk + 0.6;
       if (!kena) continue;
       st.sudah.add(idx);
       const d = k.suara ? (Number(k.durasi_suara) || 2) + 0.3
@@ -1708,9 +1710,9 @@ export default function ClipPreview({
                 </div>
                 <div style={{ fontSize: '.72rem', lineHeight: 1.5, textAlign: 'center',
                               color: 'rgba(255,255,255,.82)' }}>
-                  Menyiapkan pratinjau…
+                  {t('pratinjau.menyiapkan_judul')}
                   <div style={{ fontSize: '.66rem', color: 'rgba(255,255,255,.55)' }}>
-                    menunggu bingkai pertama dari videonya
+                    {t('pratinjau.menunggu_bingkai')}
                   </div>
                 </div>
               </div>
@@ -1810,7 +1812,7 @@ export default function ClipPreview({
             {useLayout && frameMode === 'gaming'
               && onGamingWajah && gamingWajah != null && !fullscreen && (
               <div onPointerDown={startBatasDrag}
-                   title="Seret untuk mengatur besar bidang wajah dan bidang permainan"
+                   title={t('pratinjau.seret_batas_game')}
                    style={{
                      position: 'absolute', left: 0, right: 0,
                      top: `${gamingWajah}%`, height: '22px',
@@ -1843,7 +1845,7 @@ export default function ClipPreview({
             justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.8rem',
             textAlign: 'center', padding: '20px',
           }}>
-            Video sumber belum tersedia untuk pratinjau.
+            {t('pratinjau.tanpa_sumber')}
           </div>
         )}
 
@@ -1856,14 +1858,15 @@ export default function ClipPreview({
             display: 'flex', alignItems: 'center', gap: '5px', pointerEvents: 'none',
           }}>
             {reframeLoading && <Loader2 size={10} className="animate-spin" />}
-            {reframeLoading ? (frameMode === 'motion' ? 'Melacak gerakan…' : 'Melacak wajah…')
-              : useLayout ? `${frames.length} bingkai`
-                : useReframe ? `${frameMode === 'motion' ? 'Ikut gerakan' : 'Ikut wajah'} ${Math.round((reframe.face_coverage ?? 0) * 100)}%`
-                  : frameMode === 'motion' && reframe && !reframe.available ? 'Gerakan terlalu sedikit, bilah kabur'
-                  : useOriginal ? 'Bingkai orisinal'
-                    : useBox ? 'Kotak tetap'
-                      : frameMode === 'gaming' ? 'Main game'
-                        : useCenter ? 'Potong tengah' : 'Bilah kabur'}
+            {reframeLoading ? (frameMode === 'motion' ? t('pratinjau.lacak_gerak') : t('pratinjau.lacak_wajah'))
+              : useLayout ? t('pratinjau.n_bingkai', { n: frames.length })
+                : useReframe ? t(frameMode === 'motion' ? 'pratinjau.ikut_gerak_n' : 'pratinjau.ikut_wajah_n',
+                  { n: Math.round((reframe.face_coverage ?? 0) * 100) })
+                  : frameMode === 'motion' && reframe && !reframe.available ? t('pratinjau.gerak_sedikit')
+                  : useOriginal ? t('pratinjau.orisinal')
+                    : useBox ? t('bingkai.mode_box')
+                      : frameMode === 'gaming' ? t('mode.gaming')
+                        : useCenter ? t('mode.center') : t('mode.blur')}
           </div>
         )}
 
@@ -1877,10 +1880,10 @@ export default function ClipPreview({
             {dragging === 'move'
               ? `X ${Math.round(style?.pos_x ?? 50)}% · Y ${style?.margin_v ?? 300}`
               : dragging === 'scale'
-                ? `${Math.round(style?.box_w ?? 84)}% · teks ${style?.size ?? 96}`
+                ? `${Math.round(style?.box_w ?? 84)}${t('pratinjau.teks_n', { n: style?.size ?? 96 })}`
                 : dragging === 'size'
-                  ? `Ukuran teks ${style?.size ?? 96}`
-                  : `Lebar kotak ${Math.round(style?.box_w ?? 84)}%`}
+                  ? t('pratinjau.ukuran_teks', { n: style?.size ?? 96 })
+                  : t('pratinjau.lebar_kotak', { n: Math.round(style?.box_w ?? 84) })}
           </div>
         )}
 
@@ -1912,7 +1915,7 @@ export default function ClipPreview({
               {onCardChange && !iniTema(card?.variant) && (
                 <span
                   onPointerDown={startCardDrag('size')}
-                  title="Seret untuk mengubah ukuran judul"
+                  title={t('judul.seret_ukuran')}
                   style={{
                     position: 'absolute', right: '-7px', bottom: '-7px',
                     width: '15px', height: '15px', borderRadius: '50%',
@@ -1957,8 +1960,8 @@ export default function ClipPreview({
             fontSize: '0.62rem', fontWeight: 700,
           }}>
             {cardBusy
-              ? 'Menyiapkan suara judul…'
-              : `Kartu judul · ${(cardLeft ?? cardSeconds).toFixed(1)}s`}
+              ? t('pratinjau.suara_judul')
+              : t('pratinjau.kartu_judul', { n: (cardLeft ?? cardSeconds).toFixed(1) })}
           </div>
         )}
 
@@ -1973,7 +1976,7 @@ export default function ClipPreview({
         {constrained && (style?.watermark || '').trim() && (
           <div
             onPointerDown={onStyleChange ? startDrag('wm-move') : undefined}
-            title={onStyleChange ? 'Seret untuk memindahkan tanda air' : undefined}
+            title={onStyleChange ? t('pratinjau.seret_tanda_air') : undefined}
             style={{
               position: 'absolute', zIndex: 3,
               // Titik yang disimpan adalah TITIK TENGAH teksnya, sama seperti
@@ -2012,9 +2015,9 @@ export default function ClipPreview({
 
         {constrained && (
           <button onClick={sakelarPanduan}
-                  title={panduan ? 'Sembunyikan area aman TikTok/Reels/Shorts'
-                                 : 'Tunjukkan area yang tertutup tombol TikTok/Reels/Shorts'}
-                  aria-label="Area aman"
+                  title={panduan ? t('pratinjau.sembunyi_aman')
+                                 : t('pratinjau.tunjuk_aman')}
+                  aria-label={t('pratinjau.area_aman')}
                   style={{
                     position: 'absolute', right: '44px', bottom: '8px', zIndex: 3,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -2031,8 +2034,8 @@ export default function ClipPreview({
 
         {src && (
           <button onClick={toggleFullscreen}
-                  title={fullscreen ? 'Keluar dari layar penuh' : 'Lihat layar penuh'}
-                  aria-label="Layar penuh"
+                  title={fullscreen ? t('pratinjau.keluar_penuh') : t('pratinjau.lihat_penuh')}
+                  aria-label={t('pratinjau.layar_penuh')}
                   style={{
                     position: 'absolute', right: '8px', bottom: '8px', zIndex: 3,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -2074,8 +2077,9 @@ export default function ClipPreview({
             )}
             <div style={{ fontSize: 11, color: '#fff', background: 'rgba(14,20,32,.75)',
                           padding: '3px 8px', borderRadius: 99 }}>
-              Komentar {komentarTampil.posisi}{komentarTampil.bekukan ? ' · gambar ditahan' : ''}
-              {komentarTampil.suara ? ' · bersuara' : ''}
+              {t('pratinjau.komentar', { posisi: t(`komentar.${komentarTampil.posisi}`) })}
+              {komentarTampil.bekukan ? t('pratinjau.ditahan') : ''}
+              {komentarTampil.suara ? t('pratinjau.bersuara') : ''}
             </div>
           </div>
         )}
@@ -2121,13 +2125,13 @@ export default function ClipPreview({
             yang benar-benar universal. */}
         <button className="btn-secondary preview-btn preview-btn--icon"
                 onClick={toggle} disabled={!src}
-                aria-label={playing ? 'Jeda' : 'Putar'}
-                title={playing ? 'Jeda' : 'Putar klip dari posisi sekarang'}>
+                aria-label={playing ? t('pratinjau.jeda') : t('pratinjau.putar')}
+                title={playing ? t('pratinjau.jeda') : t('pratinjau.putar_judul')}>
           {playing ? <Pause size={13} /> : <Play size={13} />}
         </button>
         <button className="btn-secondary preview-btn preview-btn--icon"
                 onClick={restart} disabled={!src}
-                title="Ulang dari awal klip" aria-label="Ulang dari awal">
+                title={t('pratinjau.ulang_judul')} aria-label={t('pratinjau.ulang')}>
           <RotateCcw size={13} />
         </button>
         {/* Dua jam berjalan di layar ini sekaligus, dan tanpa nama keduanya
@@ -2140,7 +2144,7 @@ export default function ClipPreview({
           {constrained
             ? `${clockTime(clipTime)} / ${clockTime(totalDuration)}`
               + (segments.length > 1 ? ` · ${segIndex + 1}/${segments.length}` : '')
-            : 'jelajah video sumber'}
+            : t('pratinjau.jelajah')}
         </span>
       </div>
 
@@ -2213,6 +2217,7 @@ export function CaptionOverlay({
   // pilihan itu tidak berlaku di sini (pratinjau di luar Studio).
   onLepasBaris = null,
 }) {
+  const t = useT();
   const [hover, setHover] = useState(false);
   // Baris tanpa waktu per kata — subtitle kedua (terjemahan) — tetap dipecah
   // per kata di sini, bukan digambar sebagai satu potong teks. Sebabnya jarak
@@ -2353,8 +2358,8 @@ export function CaptionOverlay({
       onPointerDown={(e) => { e.stopPropagation(); }}
       onClick={(e) => { e.stopPropagation(); onLepasBaris(!bebas); }}
       title={bebas
-        ? 'Baris ini punya letaknya sendiri. Klik untuk mengembalikannya mengikuti gaya klip.'
-        : 'Klik untuk memindahkan baris INI saja, tanpa memindahkan yang lain.'}
+        ? t('pratinjau.baris_bebas')
+        : t('pratinjau.baris_lepas')}
       style={{
         position: 'absolute', left: '50%', transform: 'translate(-50%, -130%)',
         top: 0, whiteSpace: 'nowrap', cursor: 'pointer',
@@ -2364,7 +2369,7 @@ export function CaptionOverlay({
         background: bebas ? 'rgba(0,229,255,.92)' : 'rgba(17,17,17,.82)',
         color: bebas ? '#06202a' : '#fff',
       }}>
-      {bebas ? 'baris ini saja' : 'semua baris'}
+      {bebas ? t('pratinjau.baris_ini') : t('pratinjau.semua_baris')}
     </button>
   ) : null;
 
@@ -2457,7 +2462,7 @@ export function CaptionOverlay({
               dimensi; gagang sudut mengubah keseluruhan proporsinya. */}
           <span
             onPointerDown={onScaleStart ?? onSizeStart}
-            title="Tarik menyerong untuk memperbesar/memperkecil kotak beserta hurufnya"
+            title={t('pratinjau.tarik_skala')}
             style={{
               position: 'absolute', right: '-15px', bottom: '-15px',
               width: '19px', height: '19px', borderRadius: '50%',
@@ -2487,6 +2492,7 @@ export function CaptionOverlay({
 const AMAN = { atas: 8, bawah: 20, kanan: 13, kiri: 5 };
 
 function AreaAman() {
+  const t = useT();
   const garis = '1px dashed rgba(255,80,80,0.75)';
   const label = {
     position: 'absolute', fontSize: '0.58rem', fontWeight: 800, letterSpacing: '0.04em',
@@ -2509,11 +2515,11 @@ function AreaAman() {
                       ${AMAN.kiri}% ${AMAN.atas}%)` }} />
       <span style={{ ...label, bottom: `${AMAN.bawah}%`, left: `${AMAN.kiri}%`,
                      transform: 'translateY(100%)' }}>
-        nama akun & keterangan
+        {t('pratinjau.aman_bawah')}
       </span>
       <span style={{ ...label, top: '38%', right: 0, transform: 'rotate(90deg) translate(0, 0)',
                      transformOrigin: 'right center' }}>
-        tombol
+        {t('pratinjau.aman_kanan')}
       </span>
     </div>
   );

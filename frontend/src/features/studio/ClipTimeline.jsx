@@ -936,7 +936,7 @@ export default function ClipTimeline({
                            }
                          }}>
                       {cut.keyIndex >= 0 && (
-                        <span className="tl-grip tl-grip--l" title="Geser batas potongan"
+                        <span className="tl-grip tl-grip--l" title={t('tl.geser_batas')}
                               onPointerDown={beginDrag({
                                 kind: 'bingkai', index: ci, handle: 'start',
                                 start: cut.start, end: cut.end,
@@ -962,7 +962,7 @@ export default function ClipTimeline({
                           ))}
                           {cut.keyIndex >= 0 && (
                             <button type="button" className="tl-aim-btn tl-aim-btn--x"
-                                    title="Hapus batas ini dan sambung dengan potongan sebelumnya"
+                                    title={t('tl.hapus_batas')}
                                     onPointerDown={(e) => e.stopPropagation()}
                                     onClick={() => gabungBingkai(cut)}>×</button>
                           )}
@@ -973,7 +973,7 @@ export default function ClipTimeline({
                           {muatHapus && (
                             <span className="tl-aim-pick tl-aim-pick--mini">
                               <button type="button" className="tl-aim-btn tl-aim-btn--x"
-                                      title="Hapus batas ini dan sambung dengan potongan sebelumnya"
+                                      title={t('tl.hapus_batas')}
                                       onPointerDown={(e) => e.stopPropagation()}
                                       onClick={() => gabungBingkai(cut)}>×</button>
                             </span>
@@ -1096,7 +1096,7 @@ export default function ClipTimeline({
                            : `${formatTime(cut.start)} → ${formatTime(cut.end)} · ${t('tl.ambil_wajah', { n: cut.person + 1 })}`}>
                       {cut.keyIndex >= 0 && (
                         <span className="tl-grip tl-grip--l"
-                              title="Geser batas potongan"
+                              title={t('tl.geser_batas')}
                               onPointerDown={beginDrag({
                                 kind: 'aim', index: ci, handle: 'start',
                                 start: cut.start, end: cut.end,
@@ -1125,7 +1125,7 @@ export default function ClipTimeline({
                         ))}
                         {cut.keyIndex >= 0 && (
                           <button type="button" className="tl-aim-btn tl-aim-btn--x"
-                                  title="Hapus batas ini dan sambung dengan potongan sebelumnya"
+                                  title={t('tl.hapus_batas')}
                                   onPointerDown={(e) => e.stopPropagation()}
                                   onClick={() => mergeCut(cut)}>×</button>
                         )}
@@ -1139,7 +1139,7 @@ export default function ClipTimeline({
                       {!muat && muatHapus && (
                         <span className="tl-aim-pick tl-aim-pick--mini">
                           <button type="button" className="tl-aim-btn tl-aim-btn--x"
-                                  title="Hapus batas ini dan sambung dengan potongan sebelumnya"
+                                  title={t('tl.hapus_batas')}
                                   onPointerDown={(e) => e.stopPropagation()}
                                   onClick={() => mergeCut(cut)}>×</button>
                         </span>

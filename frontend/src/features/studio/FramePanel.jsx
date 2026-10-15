@@ -410,7 +410,7 @@ export default function FramePanel({
                       onLayoutChange({ ...layout, frames: [...frames, f] });
                       onSelectFrame(f.id);
                     }}>
-              <Plus size={12} /> Tambah
+              <Plus size={12} /> {t('judul.tambah')}
             </button>
           </div>
 
