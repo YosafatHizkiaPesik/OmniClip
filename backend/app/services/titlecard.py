@@ -317,6 +317,11 @@ def plan_card(spec: TitleCardSpec, workdir: Path, out_w: int, out_h: int) -> Opt
     if spec.voice:
         from . import tts
 
+        # Judul berbahasa Inggris dengan suara bawaan (Piper, Indonesia): suara
+        # Indonesia salah mengucapkan setiap kata Inggris, jadi dipakai suara
+        # Inggris bawaan. Suara yang dipilih sendiri tidak diubah.
+        if spec.voice_id == tts.DEFAULT_VOICE:
+            spec.voice_id = tts.suara_bawaan(spec.text)
         if tts.voice_by_id(spec.voice_id)["engine"] == "edge" or tts.available():
             try:
                 wav_path = workdir / "title.wav"

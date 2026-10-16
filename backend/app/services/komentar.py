@@ -38,6 +38,8 @@ import tempfile
 from pathlib import Path
 from typing import Optional
 
+from . import bahasa_ai
+
 from ..config import STORAGE_DIR
 from .teks import tanpa_pisah
 
@@ -253,7 +255,7 @@ def draf(klip: dict, *, api_key: str = "", models: Optional[list] = None,
         with pekerjaan("komentar"):
             hasil, model, _pakai = tanya(
                 [{"teks": _bahan(klip, baris, gaya)}], schema=_schema(),
-                sistem=SISTEM, api_key=api_key, models=models,
+                sistem=bahasa_ai.sistem(SISTEM, bahasa_ai.kode()), api_key=api_key, models=models,
                 suhu=0.8, maks_keluaran=1024, batas_detik=90)
     except SemuaGagal as e:
         log.info("Draf komentar AI tidak tersedia: %s", str(e)[:200])
@@ -373,7 +375,7 @@ def buat_tts(teks: str, suara: str = "") -> dict:
     teks = re.sub(r"\s+", " ", tanpa_pisah(teks or "")).strip()
     if not teks:
         raise ValueError("Tulis dulu komentarnya, baru bisa dibacakan.")
-    suara = suara or tts.DEFAULT_VOICE
+    suara = suara or tts.suara_bawaan(teks)
     tts.voice_by_id(suara)              # menolak nama suara yang tidak dikenal
     SUARA_DIR.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=SUARA_DIR) as d:

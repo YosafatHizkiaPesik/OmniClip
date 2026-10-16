@@ -21,6 +21,8 @@ import logging
 import time
 from typing import Optional
 
+from . import bahasa_ai
+
 from .clipmodel import normalize_hashtags
 from .heuristics import Candidate, make_hook_text
 from .peringkat_model import (catat_berhasil, catat_gagal, catat_habis_harian,
@@ -325,7 +327,7 @@ def refine_candidates(
         # seperti "model menolak" padahal ia kehabisan ruang menulis. Model seri
         # 3 juga memakai anggaran yang sama untuk penalaran internalnya.
         max_output_tokens=min(32768, 6144 + max_clips * 800),
-        system_instruction=SYSTEM_ID,
+        system_instruction=bahasa_ai.sistem(SYSTEM_ID, bahasa_ai.kode()),
     )
 
     last_error: Optional[Exception] = None
@@ -483,7 +485,7 @@ def refine_openrouter(
                            max_clips=max_clips, max_chars=max_chars,
                            max_seconds=max_seconds)
     data, model_name, _ = openrouter.tanya(
-        [{"teks": prompt}], skema=_skema_polos(), sistem=SYSTEM_ID,
+        [{"teks": prompt}], skema=_skema_polos(), sistem=bahasa_ai.sistem(SYSTEM_ID, bahasa_ai.kode()),
         api_key=openrouter.kunci(), models=models, suhu=0.4,
         maks_keluaran=min(32768, 6144 + max_clips * 800),
         kabar=kabar, batal=batal)
@@ -706,7 +708,7 @@ def rapikan_batas(
     config = types.GenerateContentConfig(
         response_mime_type="application/json", response_schema=_schema_batas(),
         temperature=0.2, max_output_tokens=min(32768, 4096 + 400 * len(candidates)),
-        system_instruction=SYSTEM_BATAS,
+        system_instruction=bahasa_ai.sistem(SYSTEM_BATAS, bahasa_ai.kode()),
     )
     client = genai.Client(api_key=api_key,
                           http_options=types.HttpOptions(timeout=120_000))
@@ -821,7 +823,8 @@ def rewrite_titles(
 
     prompt = (
         f"Judul video sumber: {video_title}\n\n"
-        "Untuk TIAP potongan di bawah, tulis satu judul pendek berbahasa Indonesia "
+        "Untuk TIAP potongan di bawah, tulis satu judul pendek dalam "
+        f"{bahasa_ai.NAMA[bahasa_ai.kode()]} "
         "untuk video vertikal, dan 5-8 tagar.\n\n"
         "Aturan judul:\n"
         "- Maksimal 60 karakter, tanpa tanda kutip, tanpa nama kanal.\n"
@@ -844,7 +847,7 @@ def rewrite_titles(
         response_schema=schema,
         temperature=0.75,      # judul butuh keberanian, bukan ketepatan
         max_output_tokens=max(2048, 260 * len(clips)),
-        system_instruction=SYSTEM_ID,
+        system_instruction=bahasa_ai.sistem(SYSTEM_ID, bahasa_ai.kode()),
     )
 
     # Batas waktu WAJIB ada di sini.

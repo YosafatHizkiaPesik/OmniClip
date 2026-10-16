@@ -193,7 +193,7 @@ function KartuKomentar({ k, onUbah, onHapus, waktuSekarang, durasiKlip, suaraTts
                 onChange={(e) => onUbah({ suara_tts: e.target.value })}>
           <option value="">{t('komentar.suara_tts_bawaan')}</option>
           {suaraTts.filter((v) => v.ready).map((v) => (
-            <option key={v.id} value={v.id}>{v.label}</option>
+            <option key={v.id} value={v.id}>{v.label}{v.bahasa === 'en' ? ' · English' : ''}</option>
           ))}
         </select>
         <button className="btn-secondary" onClick={bacakan}

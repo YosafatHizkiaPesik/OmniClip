@@ -362,7 +362,7 @@ export default function TitlePanel({
                                   className={`chip${card.voice_id === v.id ? ' is-on' : ''}`}
                                   title={v.note}
                                   onClick={() => { setHeard(null); patchCard({ voice_id: v.id }); }}>
-                            {v.label}
+                            {v.label}{v.bahasa === 'en' ? ' · EN' : ''}
                           </button>
                         ))}
                       </div>

@@ -27,6 +27,8 @@ import tempfile
 from pathlib import Path
 from typing import Callable, Optional
 
+from . import bahasa_ai
+
 from .proses import jalankan
 
 log = logging.getLogger("omniclip.sutradara_ai")
@@ -1904,7 +1906,7 @@ def susun_ai(src: Path, segments: list[dict], *, subtitles: list[dict],
         # terlihat oleh siapa pun.
         with pekerjaan("bingkai", video_id):
             hasil, model, pakai = tanya(
-                bahan, schema=_schema(), sistem=SISTEM, api_key=api_key, models=models,
+                bahan, schema=_schema(), sistem=bahasa_ai.sistem(SISTEM, bahasa_ai.kode()), api_key=api_key, models=models,
                 suhu=0.3, maks_keluaran=8192, cadangan=cadangan,
                 kabar=lambda p: lapor(p, 0.6), batal=batal)
 

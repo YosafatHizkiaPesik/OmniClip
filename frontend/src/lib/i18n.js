@@ -7,9 +7,9 @@
  * bahasa Indonesia (bahasa sumber), lalu ke kuncinya sendiri, jadi teks yang
  * terlewat terlihat, bukan kosong.
  *
- * Bawaan sementara Indonesia, bukan bahasa peramban: selama terjemahan UI
- * belum menyeluruh (JOB-3 Fase C), mengikuti peramban berbahasa Inggris
- * menghasilkan layar setengah Inggris setengah Indonesia.
+ * Bawaan mengikuti bahasa peramban (sejak Fase C selesai, 16 Oktober 2026):
+ * peramban berbahasa Indonesia mendapat Indonesia, selain itu English. Pilihan
+ * yang pernah dibuat sendiri disimpan dan selalu menang.
  */
 import { createElement, Fragment, useSyncExternalStore } from 'react';
 import id from '../locales/id';
@@ -23,12 +23,24 @@ export const BAHASA = [
 const KUNCI = 'omniclip.bahasa';
 const BAWAAN = 'id';
 
+function dariPeramban() {
+  try {
+    for (const l of navigator.languages || [navigator.language]) {
+      const k = String(l || '').slice(0, 2).toLowerCase();
+      if (KAMUS[k]) return k;
+    }
+    return 'en';
+  } catch {
+    return BAWAAN;
+  }
+}
+
 function awal() {
   try {
     const s = localStorage.getItem(KUNCI);
     if (s && KAMUS[s]) return s;
   } catch { /* penyimpanan peramban tidak tersedia */ }
-  return BAWAAN;
+  return dariPeramban();
 }
 
 let kini = awal();
@@ -103,35 +115,53 @@ export function tebal(teks) {
 /*
  * Negara konten (diminta pemilik 15 Oktober 2026: pengguna OmniClip belum
  * tentu orang Indonesia). Dipakai untuk daftar populer YouTube di Beranda dan
- * topik. Bawaan dari peramban (`en-GB` -> GB); bila peramban tidak menyebut
- * negara, dari bahasa pilihan. Bisa diganti di Pengaturan > Tampilan dan bahasa.
+ * topik.
+ *
+ * Bawaannya IKUT BAHASA ANTARMUKA, bukan negara peramban. Dilaporkan pemilik
+ * 16 Oktober 2026: di mode English topiknya berbahasa Inggris, tapi sesudah
+ * ganti ke Indonesia isinya tetap sama, karena Firefox-nya en-US dan negara
+ * diambil dari situ. Bahasa Indonesia = Indonesia; English = negara peramban
+ * bila perambannya berbahasa Inggris (en-GB -> GB), selain itu Amerika
+ * Serikat. Pilihan di Pengaturan > Tampilan dan bahasa mengalahkan semuanya;
+ * "Otomatis" menghapusnya.
  */
 const KUNCI_WILAYAH = 'omniclip.wilayah';
 export const NEGARA = [
   'ID', 'US', 'GB', 'IN', 'MY', 'SG', 'PH', 'AU', 'CA', 'DE', 'FR', 'ES', 'IT',
   'NL', 'BR', 'MX', 'JP', 'KR', 'TH', 'VN', 'TR', 'SA', 'AE', 'NG', 'ZA',
 ];
+const NEGARA_INGGRIS = new Set(['US', 'GB', 'AU', 'CA', 'IN', 'NZ', 'IE', 'SG', 'PH', 'ZA', 'NG']);
 
-function wilayahPeramban() {
-  try {
-    for (const l of navigator.languages || [navigator.language]) {
-      const m = /-([A-Za-z]{2})$/.exec(l || '');
-      if (m) return m[1].toUpperCase();
-    }
-  } catch { /* tidak ada navigator */ }
-  return null;
-}
-
-export function wilayah() {
+/** Negara yang dipilih sendiri di Pengaturan, atau '' (otomatis). */
+export function wilayahPilihan() {
   try {
     const s = localStorage.getItem(KUNCI_WILAYAH);
     if (s && /^[A-Z]{2}$/.test(s)) return s;
   } catch { /* abaikan */ }
-  return wilayahPeramban() || (kini === 'id' ? 'ID' : 'US');
+  return '';
 }
 
+export function wilayahOtomatis(kode = kini) {
+  if (kode === 'id') return 'ID';
+  try {
+    for (const l of navigator.languages || [navigator.language]) {
+      const m = /^en-([A-Za-z]{2})$/.exec(l || '');
+      if (m && NEGARA_INGGRIS.has(m[1].toUpperCase())) return m[1].toUpperCase();
+    }
+  } catch { /* tidak ada navigator */ }
+  return 'US';
+}
+
+export function wilayah() {
+  return wilayahPilihan() || wilayahOtomatis();
+}
+
+/** '' = otomatis (ikut bahasa). */
 export function setWilayah(kode) {
-  try { localStorage.setItem(KUNCI_WILAYAH, kode); } catch { /* abaikan */ }
+  try {
+    if (kode) localStorage.setItem(KUNCI_WILAYAH, kode);
+    else localStorage.removeItem(KUNCI_WILAYAH);
+  } catch { /* abaikan */ }
   pendengar.forEach((f) => f());
 }
 

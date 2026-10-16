@@ -308,6 +308,11 @@ class JobQueue:
         # akun Google milik siapa yang dipakainya.
         from . import profil as _profil
         payload = {**payload, "profil_id": payload.get("profil_id") or _profil.kini()}
+        # Bahasa antarmuka saat pekerjaan diminta: teks buatan AI mengikutinya
+        # (services/bahasa_ai.py), padahal pekerjaannya berjalan jauh sesudah
+        # permintaannya selesai.
+        from .. import bahasa as _bahasa
+        payload.setdefault("bahasa_ui", _bahasa.kini())
         resolved_lane = lane or self._handlers[type_][1]
         job_id, created = repo.create(
             type_=type_, payload=payload, lane=resolved_lane, priority=priority,
@@ -415,6 +420,10 @@ class JobQueue:
         # akun Google dibaca dari sini (services/profil.py).
         from . import profil as _profil
         _token_profil = _profil.setel(int((job.get("payload") or {}).get("profil_id") or _profil.UTAMA))
+        from .. import bahasa as _bahasa
+        _token_bahasa = _bahasa.setel(str((job.get("payload") or {}).get("bahasa_ui") or _bahasa.BAWAAN))
+        from . import bahasa_ai as _bahasa_ai
+        _token_video = _bahasa_ai.video_kini.set((job.get("payload") or {}).get("video_id"))
         try:
             if lane == "cpu":
                 ctx.giliran_cpu(lambda: ctx.progress(
@@ -436,6 +445,8 @@ class JobQueue:
             repo.finish(job_id, status="failed", error=message[:500], error_code=str(code)[:60])
         finally:
             _profil.pulihkan(_token_profil)
+            _bahasa.pulihkan(_token_bahasa)
+            _bahasa_ai.video_kini.reset(_token_video)
             if ctx._pegang_cpu:
                 ctx._pegang_cpu = False
                 gerbang_cpu.release()

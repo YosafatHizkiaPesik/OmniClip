@@ -38,6 +38,8 @@ import logging
 import re
 from typing import Optional
 
+from . import bahasa_ai
+
 log = logging.getLogger("omniclip.keterangan")
 
 VERSI = 1
@@ -297,7 +299,7 @@ def _minta_ai(meta: dict, *, api_key: str, models: list) -> Optional[dict]:
     try:
         from .penyedia_ai import pekerjaan
         with pekerjaan("caption"):
-            hasil, model, _pakai = tanya(bahan, schema=_schema(), sistem=SISTEM,
+            hasil, model, _pakai = tanya(bahan, schema=_schema(), sistem=bahasa_ai.sistem(SISTEM, bahasa_ai.kode()),
                                          api_key=api_key, models=models,
                                          suhu=0.7, maks_keluaran=1024,
                                          batas_detik=90)

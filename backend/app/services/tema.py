@@ -21,6 +21,8 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
+from . import bahasa_ai
+
 log = logging.getLogger("omniclip.tema")
 
 VERSI = 1
@@ -240,7 +242,7 @@ def pilih_banyak(daftar: list[dict], *, api_key: str = "", models: Optional[list
         with pekerjaan("tema-subtitle"):
             jawab, model, _ = tanya(
                 [{"teks": permintaan}], schema=_schema_banyak(),
-                sistem=SISTEM, api_key=api_key, models=models,
+                sistem=bahasa_ai.sistem(SISTEM, bahasa_ai.kode()), api_key=api_key, models=models,
                 suhu=0.3, maks_keluaran=min(8192, 300 + len(daftar) * 120),
                 kabar=kabar, batal=batal)
     except Exception as e:
@@ -290,7 +292,7 @@ def pilih(meta: dict, *, api_key: str = "", models: Optional[list] = None,
     try:
         with pekerjaan("tema-subtitle"):
             jawab, model, _ = tanya([{"teks": permintaan}], schema=_schema(),
-                                    sistem=SISTEM, api_key=api_key, models=models,
+                                    sistem=bahasa_ai.sistem(SISTEM, bahasa_ai.kode()), api_key=api_key, models=models,
                                     suhu=0.3, maks_keluaran=512,
                                     kabar=kabar, batal=batal)
     except Exception as e:

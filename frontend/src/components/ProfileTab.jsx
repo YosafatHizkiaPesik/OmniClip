@@ -4,7 +4,7 @@ import {
   CheckCircle2, AlertTriangle, Sparkles, Scissors, Mic,
   Trash2, Languages, UploadCloud, ShieldAlert, Captions, Volume2, Palette, Globe,
 } from 'lucide-react';
-import { BAHASA, NEGARA, bahasa, namaNegara, setBahasa, setWilayah, tebal, useT, wilayah } from '../lib/i18n';
+import { BAHASA, NEGARA, bahasa, namaNegara, setBahasa, setWilayah, tebal, useT, wilayahOtomatis, wilayahPilihan } from '../lib/i18n';
 import HalamanSetelan from './HalamanSetelan';
 import { apiDelete, apiGet, apiPost, apiPut } from '../lib/api';
 import { Link } from 'react-router-dom';
@@ -79,6 +79,9 @@ export default function ProfileTab() {
     () => Number(localStorage.getItem('omniclip_max_clips') || 0));
   const [whisperModel, setWhisperModel] = useState(
     () => localStorage.getItem('omniclip_whisper_model') || 'base');
+  // Bahasa teks yang ditulis AI (JOB-3 J3-12): judul, alasan, caption, draf
+  // komentar. 'ui' = ikut bahasa antarmuka.
+  const [bahasaAi, setBahasaAi] = useState('ui');
 
   // Setelan milik akun aktif, dibaca sekali. Server yang menang atas salinan
   // peramban: salinan itu satu untuk semua akun, dan justru itu masalahnya.
@@ -90,6 +93,7 @@ export default function ProfileTab() {
         if (batal || !k) return;
         if (k.max_clips !== undefined) setMaxClips(Number(k.max_clips) || 0);
         if (k.whisper_model) setWhisperModel(String(k.whisper_model));
+        if (k.bahasa_ai) setBahasaAi(String(k.bahasa_ai));
       })
       .catch(() => {});
     return () => { batal = true; };
@@ -100,7 +104,7 @@ export default function ProfileTab() {
   // tidak akan pernah sampai ke sana.
   const [langs, setLangs] = useState([]);
   const [bahasaUmum, setBahasaUmum] = useState(null);
-  const [negara, setNegara] = useState(wilayah);
+  const [negara, setNegara] = useState(wilayahPilihan);
   const [langDraft, setLangDraft] = useState('');
   const [langError, setLangError] = useState(null);
 
@@ -328,6 +332,31 @@ export default function ProfileTab() {
 
       <div style={card}>
         <div style={sectionTitle}>
+          <Languages size={18} style={{ color: 'var(--reh)' }} />
+          {t('set.bahasa_ai')}
+        </div>
+        <p className="bantu" style={helpText}>{t('set.bahasa_ai_ket')}</p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '8px', marginTop: '13px' }}>
+          {[
+            ['ui', t('set.bahasa_ai_ui'), t('set.bahasa_ai_ui_ket')],
+            ['video', t('set.bahasa_ai_video'), t('set.bahasa_ai_video_ket')],
+            ['id', 'Bahasa Indonesia', t('set.bahasa_ai_selalu')],
+            ['en', 'English', t('set.bahasa_ai_selalu')],
+          ].map(([v, judul, ket]) => (
+            <button key={v} onClick={() => { setBahasaAi(v); simpanKlip({ bahasa_ai: v }); }}
+                    style={pilihan(bahasaAi === v)}>
+              <div style={{
+                fontSize: '0.84rem', fontWeight: 800, marginBottom: '2px',
+                color: bahasaAi === v ? 'var(--accent-cyan)' : 'var(--text-primary)',
+              }}>{judul}</div>
+              <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{ket}</div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div style={card}>
+        <div style={sectionTitle}>
           <Mic size={18} style={{ color: 'var(--reh)' }} />
           {t('set.teliti')}
         </div>
@@ -492,7 +521,8 @@ export default function ProfileTab() {
                   border: '1px solid var(--border-color)',
                   background: 'var(--bg-glass)', color: 'var(--text-primary)',
                 }}>
-          {(NEGARA.includes(negara) ? NEGARA : [negara, ...NEGARA]).map((k) => (
+          <option value="">{t('set.negara_otomatis', { negara: namaNegara(wilayahOtomatis()) })}</option>
+          {(!negara || NEGARA.includes(negara) ? NEGARA : [negara, ...NEGARA]).map((k) => (
             <option key={k} value={k}>{namaNegara(k)}</option>
           ))}
         </select>

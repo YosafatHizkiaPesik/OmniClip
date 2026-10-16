@@ -88,8 +88,26 @@ def teks(s: str, kode: str | None = None) -> str:
     return s
 
 
+# Kunci yang isinya MILIK PENGGUNA atau videonya, tidak pernah diterjemahkan.
+#
+# Tanpa ini, kata transkrip yang kebetulan sama dengan entri katalog ikut
+# berubah: kata "belum" di subtitle menjadi "not yet" di mode English, dan
+# karena Studio menyimpan kembali subtitle yang dibacanya, perubahan itu bisa
+# tertulis permanen ke klip. Yang dilewati: kata dan kalimat transkrip, judul
+# dan deskripsi video, nama kanal dan berkas, tagar, teks komentar yang
+# ditulis pengguna, kueri pencarian.
+LEWATI = frozenset({
+    "w", "word", "words", "kata", "text", "teks", "sentences", "subtitles", "segments",
+    "baris_subtitle", "transcript_text", "hook_text", "hashtags", "tags", "title",
+    "description", "deskripsi", "channel", "channel_title", "uploader", "clip_name",
+    "file_name", "nama_berkas", "query", "q", "caption", "keterangan_klip",
+    "label_kalimat", "pengunggah", "nama_profil",
+})
+
+
 def terjemahkan(obj: Any, kode: str | None = None) -> Any:
-    """Menerjemahkan seluruh string di dalam struktur JSON, tanpa mengubah kuncinya."""
+    """Menerjemahkan string pesan di dalam struktur JSON, tanpa mengubah kunci
+    dan tanpa menyentuh isi milik pengguna (`LEWATI`)."""
     kode = kode or kini()
     if kode == BAWAAN:
         return obj
@@ -98,5 +116,5 @@ def terjemahkan(obj: Any, kode: str | None = None) -> Any:
     if isinstance(obj, list):
         return [terjemahkan(x, kode) for x in obj]
     if isinstance(obj, dict):
-        return {k: terjemahkan(v, kode) for k, v in obj.items()}
+        return {k: (v if k in LEWATI else terjemahkan(v, kode)) for k, v in obj.items()}
     return obj

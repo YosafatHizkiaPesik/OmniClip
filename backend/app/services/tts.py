@@ -85,8 +85,51 @@ VOICES = [
     {"id": "edge-gadis-cerah", "engine": "edge", "label": "Gadis (cerah)",
      "gender": "wanita", "online": True, "model": "id-ID-GadisNeural", "pitch": 20,
      "note": "Nada lebih tinggi; terdengar lebih ceria."},
+
+    # Suara berbahasa Inggris (JOB-3 J3-12): draf komentar dan judul kini bisa
+    # ditulis AI dalam bahasa Inggris, dan dibacakan suara Indonesia hasilnya
+    # terdengar salah ucap di setiap kata.
+    {"id": "edge-andrew", "engine": "edge", "label": "Andrew", "bahasa": "en",
+     "gender": "pria", "online": True, "model": "en-US-AndrewMultilingualNeural", "pitch": 0,
+     "note": "Suara pria Amerika, hangat dan santai."},
+    {"id": "edge-ava", "engine": "edge", "label": "Ava", "bahasa": "en",
+     "gender": "wanita", "online": True, "model": "en-US-AvaMultilingualNeural", "pitch": 0,
+     "note": "Suara perempuan Amerika, jernih dan ramah."},
+    {"id": "edge-guy", "engine": "edge", "label": "Guy", "bahasa": "en",
+     "gender": "pria", "online": True, "model": "en-US-GuyNeural", "pitch": 0,
+     "note": "Suara pria Amerika gaya pembawa berita."},
+    {"id": "edge-ryan", "engine": "edge", "label": "Ryan", "bahasa": "en",
+     "gender": "pria", "online": True, "model": "en-GB-RyanNeural", "pitch": 0,
+     "note": "Suara pria Inggris (British)."},
+    {"id": "edge-sonia", "engine": "edge", "label": "Sonia", "bahasa": "en",
+     "gender": "wanita", "online": True, "model": "en-GB-SoniaNeural", "pitch": 0,
+     "note": "Suara perempuan Inggris (British)."},
 ]
+for _v in VOICES:
+    _v.setdefault("bahasa", "id")
 DEFAULT_VOICE = "piper-news"
+DEFAULT_VOICE_EN = "edge-andrew"
+
+_KATA_INGGRIS = frozenset(
+    "the a an and is are was were you your this that it of to in on for with what "
+    "how why we they i my me be not do does have has just so but if".split())
+
+
+def bahasa_teks(teks: str) -> str:
+    """'en' bila teksnya jelas berbahasa Inggris, selain itu 'id'."""
+    import re
+    kata = re.findall(r"[a-zA-Z']+", (teks or "").lower())
+    if len(kata) < 3:
+        return "id"
+    inggris = sum(1 for k in kata if k in _KATA_INGGRIS)
+    return "en" if inggris / len(kata) >= 0.18 else "id"
+
+
+def suara_bawaan(teks: str = "") -> str:
+    """Suara bawaan untuk teks ini: Inggris dibacakan suara Inggris."""
+    if bahasa_teks(teks) == "en" and edge_available():
+        return DEFAULT_VOICE_EN
+    return DEFAULT_VOICE
 
 
 def voice_by_id(voice_id: str) -> dict:
