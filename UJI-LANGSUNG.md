@@ -14,11 +14,16 @@ jadi pekerjaan baru. Rincian tiap fitur ada di `JOB-2.md`.
   Selesai 15 Oktober 2026, commit d123bd2. Kartu konteks dan nama penutur
   ternyata sudah tampil (sisipan Tulisan). Komentar "bekukan" menjeda
   pratinjau selama komentar, "timpa" tampil tanpa menjeda. Suara klip yang
-  diredam oleh reaksi kamera BELUM ikut diredam di pratinjau, hanya di render.
-- [ ] **F3-3 retensi YouTube Analytics.** Butuh izin `yt-analytics.readonly`
-  dan persetujuan ulang setiap akun Google, jadi menunggu pemilik.
+  diredam oleh reaksi kamera kini ikut diredam di pratinjau (16 Oktober 2026,
+  commit b4712e1), rumusnya sama dengan render.
+- [x] **F3-3 retensi YouTube Analytics.** Kodenya selesai 16 Oktober 2026
+  (commit b4712e1): tombol "Sambungkan YouTube Analytics" di Akun, kolom
+  "Ditonton %" di Analitik. Yang perlu pemilik: nyalakan **YouTube Analytics
+  API** di Google Cloud project yang sama, lalu sambungkan (tes 30).
 - [ ] **Tiga masalah pembingkaian lama** (bawaan JOB-2). Butuh alat ukur
-  bingkai kosong yang dulu dijalankan di luar repo, dengan beban CPU berat.
+  bingkai kosong yang dulu dijalankan di luar repo, dengan beban CPU berat;
+  sengaja tidak dijalankan tanpa izin pemilik (memori laptop). Video "FANNY"
+  di catatannya tidak bisa dipastikan: ada 36 video FANNY di data.
   - Ukur ulang bingkai kosong sesudah commit `06958e0`.
   - Klip 5 Mancing: 6,6% bingkai kosong di 2,0 perpindahan per menit.
   - `reframe.group_people` kehilangan `people_seen` di video FANNY.
@@ -40,15 +45,20 @@ jadi pekerjaan baru. Rincian tiap fitur ada di `JOB-2.md`.
   (dilaporkan pemilik 15 Oktober 2026; termasuk kasus IShowSpeed IRL).
   Selesai, commit ff3e070. Diukur pada 6 klip: bingkai kosong 2,59% -> 0,74%,
   luncuran 138 -> 60 bingkai. Sisa terbesar: siaran IRL handheld (3%).
-- [ ] **(Sebagian, commit 4b1ae6f)** **Mesin lokal bisa memilih potongan iklan atau sisipan** di dalam episode
+- [ ] **(Sebagian, commit 4b1ae6f, b4712e1)** **Mesin lokal bisa memilih potongan iklan atau sisipan** di dalam episode
   podcast (klip demo Diary of a CEO: potongan wawancara CEO Uber di menit 36
   terpilih sebagai klip skor tertinggi saat Gemini tidak terjangkau).
   Bacaan sponsor ("disponsori oleh", "pakai kode", "link di deskripsi",
-  "sponsored by", "use code") kini memotong skor kandidat sampai 80%. Sisipan
-  wawancara lain di dalam episode belum bisa dikenali dari teks saja.
-- [ ] **Klip lama tidak punya skor nilai tambah.** Skor hanya ada di klip yang
-  dirender dengan v1.3.7 ke atas; klip lama tanpa komentar akan ditahan
-  gerbang tinjau untuk unggah otomatis ke publik.
+  "sponsored by", "use code") kini memotong skor kandidat sampai 80%.
+  16 Oktober 2026: kandidat yang sebagian besar diucapkan penutur yang jarang
+  muncul di episode (sisipan) dipotong 70%. Diperiksa pada klip demo itu
+  sendiri: TIDAK tertangkap, karena pemisahan suara menggabungkan suara Dara
+  (Uber) ke label pembawa acara. Mengukur ulang pemisahan suaranya berat untuk
+  laptop ini; jalur Gemini tidak punya masalah ini.
+- [x] **Klip lama tidak punya skor nilai tambah.** Selesai 16 Oktober 2026
+  (commit b4712e1): skornya dihitung dari sidecar saat Klip jadi dibuka. Klip
+  lama TANPA komentar tetap ditahan gerbang untuk unggah otomatis publik; itu
+  memang aturannya.
 
 - [ ] **Kunci Gemini tidak bisa dipakai (15 Oktober 2026, bukan bug kode).**
   Kunci 1 menjawab 429 (kuota gratis harian habis), kunci 2 menjawab 403
@@ -202,6 +212,30 @@ Urutannya sama dengan jalur pemakaian normal.
     Beranda > kembali ke Studio, lalu buka Klip jadi.
   - Diharapkan: bilah render muncul lagi di Studio; di Klip jadi ada lencana
     "Mengunggah ke YouTube… N%" lalu berganti tautan ↗ YouTube.
+
+### Tambahan 16 Oktober 2026: sisa JOB-3 dan catatan lama
+
+- [ ] **28. Topik ikut bahasa.** Mode English > Gaming, lalu ganti ke Bahasa
+  Indonesia. Diharapkan: isinya berganti (US → Indonesia). Pengaturan >
+  Tampilan dan bahasa > Negara konten "Otomatis" mengikuti bahasa; memilih
+  negara sendiri mengalahkannya.
+- [ ] **29. Bahasa teks AI.** Pengaturan > Klip > Bahasa teks AI = English.
+  Potong satu video (butuh kunci Gemini hidup), lalu Studio > Komentar >
+  Susun draf AI dan tab Judul. Diharapkan: judul, tagar, alasan, draf
+  komentar berbahasa Inggris; "Bacakan (TTS)" memakai suara Inggris (Andrew);
+  pilihan suara menampilkan "· English".
+- [ ] **30. Retensi YouTube Analytics.** Nyalakan YouTube Analytics API di
+  Google Cloud, Akun > Google dan YouTube > Sambungkan YouTube Analytics.
+  Diharapkan: Analitik punya kolom "Ditonton" berisi persen per klip yang
+  sudah diunggah (angka YouTube biasanya tertunda 1-2 hari).
+- [ ] **31. Pratinjau reaksi kamera.** Studio > klip dengan reaksi kamera >
+  putar. Diharapkan: suara klip mengecil saat Anda bicara, seperti hasil
+  render.
+- [ ] **32. Klip lama di Klip jadi.** Diharapkan: klip lama juga
+  bertuliskan "Nilai tambah X%".
+- [ ] **33. Mode English menyeluruh.** Ulangi tes 19-20; kini termasuk nama
+  tema subtitle, font, suara, alasan klip, temuan Analitik, pesan cookies dan
+  pembaruan.
 
 ### Jalur fitur unggulan (urutan disarankan, ±30 menit)
 

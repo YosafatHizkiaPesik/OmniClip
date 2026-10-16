@@ -92,19 +92,26 @@ commit <hash>)`. Hash = commit kodenya; centangan ikut commit berikutnya.
   daftarnya jadi pil. Pilihan bahasa juga ada di Pengaturan > Tampilan dan
   bahasa. Termasuk kunci aplikasi, pemilih folder, kartu cookies di Beranda,
   pesan galat `api.js`. `tebal()`: `**kata**` di kamus dirender tebal.
-- [ ] **J3-11** Pesan dari server (galat, kabar pekerjaan) mengikuti bahasa
+- [x] **J3-11** Pesan dari server (galat, kabar pekerjaan) mengikuti bahasa
   pilihan (header `Accept-Language`).
-  **SEBAGIAN** (15 Oktober 2026, commit e0747ef): mekanismenya selesai
-  (`bahasa.py`, middleware + SSE `?lang=`, katalog `kamus_en.py`). Sudah
-  terjemah: galat umum, antrean, unduh, transkrip, analisis, render, unggah,
-  gerbang tinjau, nilai tambah, punch-in, kesehatan sistem.
-  Tahap 2 (15 Oktober 2026 malam): 190 kalimat lagi, dikumpulkan otomatis
-  dari argumen AppError/_stage_progress/message= di seluruh backend: galat
-  router, cookies, saran FYP, sutradara bingkai, updater, unduhan, pemanasan
-  bingkai ("Framing clip 4 of 22"). Belum: daftar model/font/suara/tema dari
-  server dan kalimat yang disusun dari potongan di luar pola itu.
-- [ ] **J3-12** Teks yang dihasilkan AI (draf komentar, judul, caption)
+  (selesai 16 Oktober 2026, commit 07d15ce; bertahap sejak e0747ef)
+  Mekanisme `bahasa.py` + katalog `kamus_en.py` (±650 kalimat), dikumpulkan
+  otomatis dari literal di seluruh backend lalu diperiksa lewat pemindaian
+  semua endpoint GET dalam mode English. Pesan yang disusun dari potongan
+  diterjemahkan lewat templat berantai `{sisa}`. Isi milik pengguna (kata
+  transkrip, judul, caption) tidak pernah disentuh: `bahasa.LEWATI`. Yang
+  sengaja tidak diterjemahkan: nilai id internal (`kartu-putih`, `pilih-klip`).
+- [x] **J3-12** Teks yang dihasilkan AI (draf komentar, judul, caption)
   mengikuti bahasa pilihan atau bahasa video.
+  (selesai 16 Oktober 2026, commit 07d15ce) `services/bahasa_ai.py`; setelan
+  per akun Pengaturan > Klip > Bahasa teks AI (ikut antarmuka / ikut video /
+  Indonesia / English). Bahasa antarmuka ikut tersimpan di muatan pekerjaan
+  (`bahasa_ui`). Semua prompt (pilih klip, judul, batas, caption, komentar,
+  tema, sutradara) memakai bahasa keluaran itu. Suara Microsoft English
+  ditambahkan; teks Inggris otomatis dibacakan suara Inggris.
+- [x] **Bawaan bahasa** mengikuti peramban (16 Oktober 2026, commit 07d15ce).
+  Negara konten ikut bahasa antarmuka kecuali dipilih sendiri (laporan
+  pemilik: topik mode Indonesia sama dengan English).
 
 ## Temuan pemilik dari uji 14-21 (15 Oktober 2026 malam)
 
