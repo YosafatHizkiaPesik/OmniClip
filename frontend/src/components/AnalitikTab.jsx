@@ -257,6 +257,12 @@ export default function AnalitikTab() {
             <div style={sectionTitle}>
               <Eye size={18} style={{ color: 'var(--reh)' }} />{t('analitik.per_klip')}
             </div>
+            {!data.retensi_tersambung && (
+              <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: '4px 0 0' }}>
+                {t('analitik.retensi_belum')}{' '}
+                <Link to="/profil?bagian=google" style={{ color: 'var(--reh)' }}>{t('analitik.retensi_sambung')}</Link>
+              </p>
+            )}
             <div style={{ overflowX: 'auto', marginTop: '8px' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse',
                               fontSize: '0.78rem' }}>
@@ -267,6 +273,10 @@ export default function AnalitikTab() {
                     <th style={{ padding: '6px 8px 6px 0' }}>{t('analitik.kol_klip')}</th>
                     <th style={{ padding: '6px 8px', textAlign: 'right' }}>{t('analitik.kol_tayangan')}</th>
                     <th style={{ padding: '6px 8px', textAlign: 'right' }}>{t('analitik.kol_suka')}</th>
+                    {data.retensi_tersambung && (
+                      <th style={{ padding: '6px 8px', textAlign: 'right' }}
+                          title={t('analitik.kol_retensi_judul')}>{t('analitik.kol_retensi')}</th>
+                    )}
                     <th style={{ padding: '6px 8px', textAlign: 'right' }}>{t('analitik.kol_panjang')}</th>
                     <th style={{ padding: '6px 8px', textAlign: 'right' }}>{t('analitik.kol_periksa')}</th>
                     <th style={{ padding: '6px 0 6px 8px' }} />
@@ -314,6 +324,18 @@ export default function AnalitikTab() {
                           </span>
                         ) : '-'}
                       </td>
+                      {data.retensi_tersambung && (
+                        <td style={{ padding: '9px 8px', textAlign: 'right',
+                                     fontVariantNumeric: 'tabular-nums' }}
+                            title={k.retensi ? t('analitik.retensi_rinci', { detik: Math.round(k.retensi.detik) }) : ''}>
+                          {k.retensi ? (
+                            <span style={{ fontWeight: 800, color: k.retensi.persen >= 70 ? 'var(--entry)'
+                              : k.retensi.persen >= 40 ? 'var(--reh)' : 'var(--accent-red)' }}>
+                              {Math.round(k.retensi.persen)}%
+                            </span>
+                          ) : '-'}
+                        </td>
+                      )}
                       <td style={{ padding: '9px 8px', textAlign: 'right',
                                    color: 'var(--text-secondary)',
                                    fontVariantNumeric: 'tabular-nums' }}>

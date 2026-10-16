@@ -1068,6 +1068,28 @@ export default function ClipPreview({
 
   useEffect(() => () => hentikanKomentar(), [hentikanKomentar]);
 
+  // Suara klip mengecil selama sisipan bertanda `redam_utama` berbunyi
+  // (reaksi kamera pemilik kanal), dengan rumus yang SAMA dengan render
+  // (backend services/render.py rumus_redam: -11 dB, turun 0,18 dtk, naik
+  // 0,45 dtk). Sebelumnya peredaman ini hanya ada di hasil render, jadi
+  // pratinjau terdengar bertabrakan padahal hasil akhirnya tidak.
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    const DALAM = 0.28, TURUN = 0.18, NAIK = 0.45;
+    let puncak = 0;
+    for (const l of clip?.media_layers ?? []) {
+      if (!l.redam_utama || !((l.volume ?? 1) > 0)) continue;
+      const a = Number(l.t) || 0;
+      const b = a + (Number(l.dur) || 0);
+      const naik = Math.min(1, Math.max(0, (clipTime - (a - TURUN)) / TURUN));
+      const turun = Math.min(1, Math.max(0, (b + NAIK - clipTime) / NAIK));
+      puncak = Math.max(puncak, naik * turun);
+    }
+    const gain = 1 - (1 - DALAM) * puncak;
+    if (Math.abs(v.volume - gain) > 0.01) v.volume = gain;
+  }, [clipTime, clip?.media_layers, videoRef]);
+
   useEffect(() => {
     const st = komentarRef.current;
     const daftar = clip?.komentar ?? [];

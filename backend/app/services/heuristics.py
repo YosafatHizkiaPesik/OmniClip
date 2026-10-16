@@ -560,6 +560,20 @@ SPONSOR_POLA = re.compile(
 SPONSOR_PORSI_PENUH = 0.33
 SPONSOR_POTONG = 0.8
 
+# Sisipan wawancara atau cuplikan orang lain di dalam episode.
+#
+# Ditemukan 12 Oktober 2026 pada klip demo Diary of a CEO: saat Gemini tidak
+# terjangkau, mesin lokal memilih potongan wawancara CEO Uber yang diputar di
+# menit 36 sebagai klip terbaik. Teksnya tidak membedakan apa pun, tapi
+# SUARANYA iya: pemisahan penutur memberi orang di sisipan itu label sendiri,
+# dan label itu hampir tidak muncul di sisa episode. Kalimat yang diucapkan
+# penutur dengan porsi di bawah ASING_PORSI dari seluruh kata video dihitung
+# "asing"; kandidat yang sebagian besar kalimatnya asing kehilangan skornya.
+# Hanya berlaku bila penuturnya memang terpisah (lebih dari satu label).
+ASING_PORSI = 0.08
+ASING_PORSI_KANDIDAT = 0.6
+ASING_POTONG = 0.7
+
 
 def _iou(a: "Candidate", b: "Candidate") -> float:
     lo = max(a.start, b.start)
@@ -591,6 +605,37 @@ def _sependek_mungkin(kandidat: list["Candidate"]) -> Optional["Candidate"]:
 
 
 # --- Titik masuk utama --------------------------------------------------------
+def _asing_kumulatif(sentences: list, words: list) -> list[int]:
+    """
+    Jumlah kumulatif kalimat "asing": penutur dominannya jarang muncul di video
+    ini (lihat ASING_PORSI). Daftar kosong bila penuturnya tidak terpisah.
+    """
+    if not words:
+        return []
+    jumlah: dict[int, int] = {}
+    for w in words:
+        sp = w.get("sp") if isinstance(w, dict) else None
+        if sp is not None:
+            jumlah[sp] = jumlah.get(sp, 0) + 1
+    total = sum(jumlah.values())
+    if len(jumlah) < 2 or total < 200:
+        return []
+    jarang = {sp for sp, n in jumlah.items() if n / total < ASING_PORSI}
+    if not jarang:
+        return []
+    hasil = [0] * (len(sentences) + 1)
+    for k, s in enumerate(sentences):
+        a, b = (s.get("wi") or (0, 0))[:2]
+        per: dict[int, int] = {}
+        for w in words[max(0, a):max(a, b)]:
+            sp = w.get("sp") if isinstance(w, dict) else None
+            if sp is not None:
+                per[sp] = per.get(sp, 0) + 1
+        utama = max(per, key=per.get) if per else None
+        hasil[k + 1] = hasil[k] + (1 if utama in jarang else 0)
+    return hasil
+
+
 def generate_candidates(
     sentences: list[Sentence],
     words: list,
@@ -631,6 +676,7 @@ def generate_candidates(
     iklan_kumulatif = [0] * (n + 1)
     for k, s in enumerate(sentences):
         iklan_kumulatif[k + 1] = iklan_kumulatif[k] + (1 if SPONSOR_POLA.search(s["text"] or "") else 0)
+    asing_kumulatif = _asing_kumulatif(sentences, words)
 
     semua: list[Candidate] = []
 
@@ -768,6 +814,11 @@ def generate_candidates(
         if porsi_iklan > 0:
             c.score *= 1.0 - SPONSOR_POTONG * min(1.0, porsi_iklan / SPONSOR_PORSI_PENUH)
             c.breakdown["iklan"] = round(porsi_iklan, 3)
+        if asing_kumulatif:
+            porsi_asing = (asing_kumulatif[b] - asing_kumulatif[a]) / max(1, b - a)
+            if porsi_asing >= ASING_PORSI_KANDIDAT:
+                c.score *= 1.0 - ASING_POTONG
+                c.breakdown["sisipan"] = round(porsi_asing, 3)
 
     # Satu wakil per titik awal: yang terpendek di antara yang sama baiknya.
     # Tanpa ini, NMS di bawah akan menerima jendela terpanjang lebih dulu

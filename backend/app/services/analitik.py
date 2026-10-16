@@ -369,6 +369,20 @@ def laporan(profil_id: int, *, batas: int = 200) -> dict:
         # mengaku sebagai sebab.
         temuan = _temuan_terkumpul(klip)
 
+    # Retensi penonton (F3-3), hanya bila YouTube Analytics disambungkan.
+    # Berbeda dari tayangan, retensi terbaca juga untuk video pribadi.
+    from . import retensi as retensi_svc
+    retensi_ok = retensi_svc.tersambung(profil_id)
+    if retensi_ok:
+        try:
+            angka = retensi_svc.baca([k.get("remote_id") for k in klip], profil_id)
+        except Exception as e:                       # noqa: BLE001
+            log.info("Retensi dilewati: %s", str(e)[:160])
+            angka = {}
+        for k in klip:
+            if k.get("remote_id") in angka:
+                k["retensi"] = angka[k["remote_id"]]
+
     from ..repos import statistik_harian as sh
     try:
         deret = sh.harian_kanal([k["remote_id"] for k in klip])
@@ -386,6 +400,7 @@ def laporan(profil_id: int, *, batas: int = 200) -> dict:
         # pertama, dan itu dikatakan apa adanya di layar alih-alih digambar
         # sebagai garis datar yang seolah berarti "tidak ada penonton".
         "harian": deret,
+        "retensi_tersambung": retensi_ok,
         "catatan_kaki": (
             "Angka ini dibaca dengan kunci YouTube Data API, jadi hanya video "
             "PUBLIK yang terbaca; yang masih pribadi atau tidak publik tidak "

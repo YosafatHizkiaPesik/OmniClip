@@ -18,8 +18,8 @@ import { tebal, useT } from '../lib/i18n';
  * hanya "sudah tersambung atau belum" dan alamat surel akunnya.
  */
 // Cermin dari LAYANAN di backend/app/services/google_upload.py.
-const LAYANAN = ['youtube', 'drive'];
-const LABEL = { youtube: 'YouTube', drive: 'Drive' };
+const LAYANAN = ['youtube', 'drive', 'analitik'];
+const LABEL = { youtube: 'YouTube', drive: 'Drive', analitik: 'YouTube Analytics' };
 
 export default function GoogleAccountCard({ card, sectionTitle, helpText }) {
   const t = useT();

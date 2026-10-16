@@ -70,7 +70,12 @@ _IDENTITAS = ["openid", "https://www.googleapis.com/auth/userinfo.email"]
 SCOPES_LAYANAN = {
     "youtube": ["https://www.googleapis.com/auth/youtube.upload"] + _IDENTITAS,
     "drive": ["https://www.googleapis.com/auth/drive.file"] + _IDENTITAS,
+    # Retensi penonton (JOB-2 F3-3): hanya baca, dan disambungkan TERPISAH
+    # supaya sambungan unggah yang sudah ada tidak perlu disetujui ulang.
+    "analitik": ["https://www.googleapis.com/auth/yt-analytics.readonly"] + _IDENTITAS,
 }
+# Layanan yang dipakai MENGUNGGAH. `connected` di status berarti salah satunya.
+LAYANAN_UNGGAH = ("youtube", "drive")
 LAYANAN = tuple(SCOPES_LAYANAN)
 # Nama lama, masih dipakai beberapa pemanggil untuk menampilkan daftar izin.
 SCOPES = sorted({s for v in SCOPES_LAYANAN.values() for s in v})
@@ -426,7 +431,7 @@ def status(pid: Optional[int] = None) -> dict:
         per[nama] = {"connected": creds is not None,
                      "email": _stored_email(pid, nama) if creds else "",
                      "scopes": SCOPES_LAYANAN[nama]}
-    tersambung = [n for n in LAYANAN if per[n]["connected"]]
+    tersambung = [n for n in LAYANAN_UNGGAH if per[n]["connected"]]
     return {
         "client_configured": client_configured(),
         # Dari mana identitas aplikasinya datang. Antarmuka memakainya untuk
@@ -630,7 +635,8 @@ _LAYANAN_API = {"youtube": "youtube", "drive": "drive", "oauth2": "youtube"}
 def _require_credentials(layanan: str = "youtube"):
     creds = _load_credentials(None, layanan)
     if creds is None:
-        nama = "YouTube" if layanan == "youtube" else "Drive"
+        nama = {"youtube": "YouTube", "drive": "Drive",
+                "analitik": "YouTube Analytics"}.get(layanan, layanan)
         raise _fail(f"{nama} belum tersambung. Sambungkan dulu di halaman Akun.",
                     code="GOOGLE_NOT_CONNECTED", status=409)
     return creds

@@ -74,3 +74,15 @@ class IsiPenggunaTidakDiterjemahkan(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SisipanPenuturAsing(unittest.TestCase):
+    def test_kalimat_penutur_jarang_ditandai(self):
+        from app.services.heuristics import _asing_kumulatif
+        words = [{"w": "a", "sp": 0}] * 300 + [{"w": "b", "sp": 1}] * 300 + [{"w": "c", "sp": 2}] * 20
+        sentences = [{"wi": (0, 300)}, {"wi": (300, 600)}, {"wi": (600, 620)}]
+        self.assertEqual(_asing_kumulatif(sentences, words), [0, 0, 0, 1])
+
+    def test_tanpa_label_tidak_ada_yang_asing(self):
+        from app.services.heuristics import _asing_kumulatif
+        self.assertEqual(_asing_kumulatif([{"wi": (0, 2)}], [{"w": "a"}, {"w": "b"}]), [])

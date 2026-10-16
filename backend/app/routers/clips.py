@@ -1850,8 +1850,21 @@ async def get_clips():
         # baru, bukan yang aslinya dikurangi. Berkas sidecar-nya tetap utuh.
         meta = c.get("metadata")
         if isinstance(meta, dict):
+            # Klip yang dirender sebelum v1.3.7 tidak membawa skor nilai
+            # tambah di sidecar-nya, jadi kartunya tidak menyebut apa pun dan
+            # gerbang tinjau menahannya tanpa terlihat kenapa. Skornya dihitung
+            # dari sidecar yang sama, saat dibaca.
+            tambah = meta.get("nilai_tambah")
+            if not isinstance(tambah, dict):
+                try:
+                    from ..services.nilai_tambah import hitung
+                    tambah = hitung(meta)
+                except Exception:                     # noqa: BLE001
+                    tambah = None
             c["metadata"] = {k: v for k, v in meta.items()
                              if k not in ("subtitles", "media_layers", "frame_layout")}
+            if tambah:
+                c["metadata"]["nilai_tambah"] = tambah
     return {"local_clips": clips}
 
 

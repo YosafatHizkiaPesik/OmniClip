@@ -31,6 +31,7 @@ import { tebal, useT } from '../lib/i18n';
 const SCOPES_TEKS = [
   'https://www.googleapis.com/auth/youtube.upload',
   'https://www.googleapis.com/auth/drive.file',
+  'https://www.googleapis.com/auth/yt-analytics.readonly',
   'https://www.googleapis.com/auth/userinfo.email',
 ].join('\n');
 
