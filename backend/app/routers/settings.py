@@ -550,6 +550,66 @@ async def _uji_kunci(key: str) -> str | None:
         return None
 
 
+# --- Pengelola kunci Gemini (16 Oktober 2026) -----------------------------------
+
+class KunciAiBaru(BaseModel):
+    api_key: str = Field(..., min_length=1, max_length=400)
+    nama: str = Field("", max_length=60)
+
+
+class KunciAiNama(BaseModel):
+    nama: str = Field("", max_length=60)
+
+
+@router.get("/ai-keys")
+async def daftar_kunci_ai():
+    from ..services import kunci_ai
+    return {"kunci": await asyncio.to_thread(kunci_ai.daftar)}
+
+
+@router.post("/ai-keys")
+async def tambah_kunci_ai(req: KunciAiBaru):
+    """Menguji kunci dengan permintaan sungguhan, lalu MENAMBAHKANNYA."""
+    from ..services import kunci_ai
+    try:
+        hasil = await asyncio.to_thread(kunci_ai.tambah, req.api_key, req.nama)
+    except ValueError as e:
+        raise AppError(str(e), code="AI_KEY_INVALID", status=422) from e
+    return {**hasil, "kunci": await asyncio.to_thread(kunci_ai.daftar)}
+
+
+@router.post("/ai-keys/{sid}/uji")
+async def uji_kunci_ai(sid: str):
+    from ..services import kunci_ai
+    try:
+        hasil = await asyncio.to_thread(kunci_ai.uji, sid)
+    except KeyError as e:
+        raise AppError("Kunci tidak ditemukan.", code="AI_KEY_UNKNOWN", status=404) from e
+    return {"uji": hasil, "kunci": await asyncio.to_thread(kunci_ai.daftar)}
+
+
+@router.put("/ai-keys/{sid}")
+async def nama_kunci_ai(sid: str, req: KunciAiNama):
+    from ..services import kunci_ai
+    await asyncio.to_thread(kunci_ai.ganti_nama, sid, req.nama)
+    return {"kunci": await asyncio.to_thread(kunci_ai.daftar)}
+
+
+@router.delete("/ai-keys/{sid}")
+async def hapus_kunci_ai(sid: str):
+    from ..services import kunci_ai
+    try:
+        await asyncio.to_thread(kunci_ai.hapus, sid)
+    except PermissionError as e:
+        raise AppError(
+            "Kunci ini datang dari backend/.env, jadi tidak bisa dihapus dari sini. "
+            "Hapus barisnya di berkas itu lalu mulai ulang backend.",
+            code="AI_KEY_FROM_ENV", status=409) from e
+    except KeyError as e:
+        raise AppError("Kunci tidak ditemukan.", code="AI_KEY_UNKNOWN", status=404) from e
+    return {"kunci": await asyncio.to_thread(kunci_ai.daftar)}
+
+
 @router.delete("/api-key")
 async def delete_api_key():
     if get_api_key_source() == "env":

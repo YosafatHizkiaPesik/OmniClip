@@ -29,6 +29,9 @@ function lamanya(detik, t) {
 
 export default function BilahBingkaiAwal({ videoId }) {
   const t = useT();
+  // Bahasa ikut jadi kebergantungan aliran: aliran SSE membawa bahasanya
+  // sejak dibuka, jadi ganti bahasa = buka ulang alirannya.
+  const kodeBahasa = bahasa();
   const [job, setJob] = useState(null);
   // Video yang sedang dikerjakan auto bingkai SEKARANG, yang mungkin bukan
   // video ini. "Antre" tanpa itu tidak menjawab pertanyaan yang sebenarnya:
@@ -36,6 +39,8 @@ export default function BilahBingkaiAwal({ videoId }) {
   const [sedangDikerjakan, setSedangDikerjakan] = useState(null);
   const [, paksaGambar] = useState(0);
   const esRef = useRef(null);
+  const jobRef = useRef(null);
+  jobRef.current = job;
 
   // Satu tanyaan ringan saat dibuka, lalu ikut aliran kabar semua pekerjaan.
   //
@@ -97,7 +102,25 @@ export default function BilahBingkaiAwal({ videoId }) {
       })
       .catch(() => { /* gagal dibaca bukan alasan menampilkan galat */ });
 
-    const es = new EventSource(`/api/jobs/events?lang=${bahasa()}`);
+    // Pemeriksaan berkala ke server, di samping aliran SSE.
+    //
+    // Dilaporkan pemilik 16 Oktober 2026: bilah "Bingkai klip 11 dari 22"
+    // berputar lebih dari satu jam, padahal pekerjaannya selesai dalam empat
+    // menit. Aliran ini hanya mengirim PERUBAHAN, tanpa keadaan awal; bila
+    // sambungannya sempat putus (laptop kehabisan memori, jaringan tersendat)
+    // tepat saat kabar "selesai" dikirim, kabar itu hilang dan bilahnya tidak
+    // pernah tahu. Sekarang tiap 15 detik keadaannya ditanyakan langsung.
+    const periksa = () => {
+      const lama = jobRef.current;
+      const id = lama && !SELESAI.has(lama.status) ? (lama.job_id ?? lama.id) : null;
+      if (!id) return;
+      apiGet(`/jobs/${encodeURIComponent(id)}`)
+        .then((d) => { if (!batal && d) pakai({ ...d, job_id: d.job_id ?? d.id ?? id }); })
+        .catch(() => { /* coba lagi di putaran berikutnya */ });
+    };
+    const jamPeriksa = setInterval(periksa, 15000);
+
+    const es = new EventSource(`/api/jobs/events?lang=${kodeBahasa}`);
     esRef.current = es;
     es.onmessage = (evt) => {
       if (batal) return;
@@ -114,10 +137,11 @@ export default function BilahBingkaiAwal({ videoId }) {
     return () => {
       batal = true;
       clearInterval(jamGiliran);
+      clearInterval(jamPeriksa);
       es.close();
       esRef.current = null;
     };
-  }, [videoId]);
+  }, [videoId, kodeBahasa]);
 
   // Sesudah selesai, bilahnya bertahan sebentar lalu hilang — cukup lama untuk
   // terbaca, tidak cukup lama untuk jadi perabot.

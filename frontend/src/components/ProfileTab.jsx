@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import {
-  KeyRound, Loader2, Sun, Moon, Eye, EyeOff, Info,
-  CheckCircle2, AlertTriangle, Sparkles, Scissors, Mic,
-  Trash2, Languages, UploadCloud, ShieldAlert, Captions, Volume2, Palette, Globe,
+  Sun, Moon, Info, AlertTriangle, Sparkles, Scissors, Mic,
+  Languages, UploadCloud, ShieldAlert, Captions, Volume2, Palette, Globe,
 } from 'lucide-react';
 import { BAHASA, NEGARA, bahasa, namaNegara, setBahasa, setWilayah, tebal, useT, wilayahOtomatis, wilayahPilihan } from '../lib/i18n';
 import HalamanSetelan from './HalamanSetelan';
-import { apiDelete, apiGet, apiPost, apiPut } from '../lib/api';
+import KunciGeminiCard from './KunciGeminiCard';
+import { apiGet, apiPost, apiPut } from '../lib/api';
 import { Link } from 'react-router-dom';
 import SakelarSensor from './SakelarSensor';
 import SakelarGumam from './SakelarGumam';
@@ -52,11 +52,7 @@ const helpText = {
 export default function ProfileTab() {
   const t = useT();
   const [theme, setTheme] = useState(() => localStorage.getItem('omniclip_theme') || 'light');
-  const [apiKey, setApiKey] = useState('');
-  const [showApiKey, setShowApiKey] = useState(false);
-  const [savingKey, setSavingKey] = useState(false);
-  const [feedback, setFeedback] = useState(null); // {kind:'ok'|'error', text}
-  const [settings, setSettings] = useState(null);
+  const [, setSettings] = useState(null);
   const [settingsError, setSettingsError] = useState(null);
   // Model AI yang dipakai untuk memilih klip. Disimpan di browser dan dikirim
   // bersama setiap permintaan auto-clip.
@@ -67,7 +63,6 @@ export default function ProfileTab() {
     terkuat: null, tanpaKuota: [], habisHarian: [], jamKePutaran: null,
   });
   const [model, setModel] = useState(() => localStorage.getItem('omniclip_gemini_model') || '');
-  const [deletingKey, setDeletingKey] = useState(false);
   // Versi datang dari backend: satu sumber, bukan angka yang ditulis ulang
   // di sini dan diam-diam tertinggal saat versinya naik.
   const [versiApp, setVersiApp] = useState('');
@@ -227,42 +222,6 @@ export default function ProfileTab() {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('omniclip_theme', theme);
   }, [theme]);
-
-  const handleSaveApiKey = async () => {
-    if (!apiKey.trim()) return;
-    setSavingKey(true);
-    setFeedback(null);
-    try {
-      const res = await apiPost('/settings/api-key',
-        { api_key: apiKey.trim(), provider: settings?.ai_provider || 'gemini' });
-      setApiKey('');
-      setFeedback({ kind: 'ok', text: res.message || t('set.kunci_tersimpan') });
-      loadSettings();
-    } catch (err) {
-      setFeedback({ kind: 'error', text: err.message });
-    } finally {
-      setSavingKey(false);
-    }
-  };
-
-  const handleDeleteApiKey = async () => {
-    setDeletingKey(true);
-    setFeedback(null);
-    try {
-      const res = await apiDelete('/settings/api-key');
-      setFeedback({ kind: 'ok', text: res.message || t('set.kunci_dihapus') });
-      loadSettings();
-    } catch (err) {
-      setFeedback({ kind: 'error', text: err.message });
-    } finally {
-      setDeletingKey(false);
-    }
-  };
-
-  const provider = settings?.providers?.find((p) => p.id === settings.ai_provider)
-    || settings?.providers?.[0]
-    || { id: 'gemini', label: 'Google Gemini',
-         key_url: 'https://aistudio.google.com/app/apikey' };
 
   // Keterangan panjang dilipat secara BAWAAN.
   //
@@ -582,108 +541,8 @@ export default function ProfileTab() {
         )}
       </div>
 
-      <div style={card}>
-        <div style={sectionTitle}>
-          <KeyRound size={18} style={{ color: 'var(--reh)' }} />
-          {t('set.kunci')}
-        </div>
-        <p className="bantu" style={helpText}>
-          {t('set.kunci_ket_a', { penyedia: provider.label })}{' '}
-          <a href={provider.key_url} target="_blank" rel="noreferrer"
-             style={{ color: 'var(--reh)' }}>
-            {new URL(provider.key_url).host}
-          </a>.
-        </p>
-        <p className="bantu" style={{ ...helpText, marginTop: '8px' }}>
-          {tebal(t('set.kunci_ket_b', { penyedia: provider.label }))}
-        </p>
-        <p className="bantu" style={{ ...helpText, marginTop: '8px' }}>{tebal(t('set.kunci_banyak'))}</p>
-
-        {settings && (
-          <div style={{ ...helpText, marginTop: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            {settings.gemini_api_key_set ? (
-              <>
-                <CheckCircle2 size={15} style={{ color: 'var(--entry)' }} />
-                {(settings.gemini_api_key_count ?? 1) > 1
-                  ? t('set.n_kunci', { n: settings.gemini_api_key_count })
-                  : <>{t('set.tersimpan_akhiran')} <code>{settings.gemini_api_key_last4}</code>)</>}
-                {settings.gemini_api_key_source === 'env' && (
-                  <span style={{ color: 'var(--text-muted)' }}>
-                    {t('set.dari')} <code>backend/.env</code>
-                  </span>
-                )}
-              </>
-            ) : (
-              <>
-                <Info size={15} style={{ color: 'var(--text-muted)' }} />
-                {t('set.belum_kunci')}
-              </>
-            )}
-          </div>
-        )}
-
-        <div style={{ display: 'flex', gap: '8px', marginTop: '14px' }}>
-          <div style={{ position: 'relative', flex: 1 }}>
-            {/* Kotak bertingkat, bukan satu baris: kolom satu baris mengatakan
-                "satu kunci saja" tanpa sepatah kata pun. */}
-            <textarea
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleSaveApiKey();
-              }}
-              rows={apiKey.includes('\n') ? 3 : 1}
-              spellCheck={false}
-              placeholder={t('set.kunci_placeholder')}
-              style={{
-                width: '100%', padding: '11px 40px 11px 14px',
-                borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)',
-                background: 'var(--bg-glass)', color: 'var(--text-primary)',
-                fontSize: '0.85rem', fontFamily: 'inherit', resize: 'vertical', lineHeight: 1.5,
-                WebkitTextSecurity: showApiKey ? 'none' : 'disc',
-              }}
-            />
-            <button type="button" onClick={() => setShowApiKey((v) => !v)}
-                    aria-label={showApiKey ? t('set.sembunyi_kunci') : t('set.tampil_kunci')}
-                    style={{
-                      position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)',
-                      background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)',
-                      display: 'flex', alignItems: 'center',
-                    }}>
-              {showApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
-            </button>
-          </div>
-          <button className="btn-primary" onClick={handleSaveApiKey}
-                  disabled={savingKey || !apiKey.trim()}
-                  style={{ opacity: savingKey || !apiKey.trim() ? 0.5 : 1, whiteSpace: 'nowrap' }}>
-            {savingKey ? <Loader2 size={15} className="animate-spin" /> : t('umum.simpan')}
-          </button>
-        </div>
-
-        {settings?.gemini_api_key_set && settings.gemini_api_key_source !== 'env' && (
-          <button onClick={handleDeleteApiKey} disabled={deletingKey}
-                  style={{
-                    marginTop: '10px', display: 'flex', alignItems: 'center', gap: '7px',
-                    background: 'none', border: 'none', padding: '4px 0', cursor: 'pointer',
-                    fontSize: '0.78rem', fontWeight: 700, fontFamily: 'inherit',
-                    color: 'var(--danger)', opacity: deletingKey ? 0.5 : 1,
-                  }}>
-            {deletingKey ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-            {t('set.hapus_kunci')}
-          </button>
-        )}
-
-        {feedback && (
-          <div style={{
-            ...helpText, marginTop: '10px',
-            color: feedback.kind === 'ok' ? 'var(--entry)' : 'var(--accent-red)',
-            display: 'flex', alignItems: 'center', gap: '7px',
-          }}>
-            {feedback.kind === 'ok' ? <CheckCircle2 size={15} /> : <AlertTriangle size={15} />}
-            {feedback.text}
-          </div>
-        )}
-      </div>
+      <KunciGeminiCard card={card} sectionTitle={sectionTitle} helpText={helpText}
+                       onBerubah={loadSettings} />
       <OpenRouterCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
     </>
   );

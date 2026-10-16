@@ -90,6 +90,10 @@ def _ambil_daftar() -> list[dict]:
     for m in data.get("data") or []:
         arsitektur = m.get("architecture") or {}
         masuk = set(arsitektur.get("input_modalities") or [])
+        # Keluaran harus teks: `google/lyria-3-clip-preview` (pembuat musik)
+        # pernah terpilih untuk memilih klip karena harga prompt/completion-nya
+        # nol, lalu menjawab 402 (16 Oktober 2026).
+        keluar_mod = set(arsitektur.get("output_modalities") or ["text"])
         harga = m.get("pricing") or {}
         def angka(x) -> float:
             try:
@@ -104,10 +108,12 @@ def _ambil_daftar() -> list[dict]:
             "gambar": "image" in masuk,
             "json": "response_format" in (m.get("supported_parameters") or [])
                     or "structured_outputs" in (m.get("supported_parameters") or []),
-            "gratis": angka("prompt") == 0 and angka("completion") == 0,
+            "gratis": (angka("prompt") == 0 and angka("completion") == 0
+                       and all(angka(x) == 0 for x in harga if x not in ("prompt", "completion"))),
+            "teks": "text" in keluar_mod,
             "konteks": int(m.get("context_length") or 0),
         })
-    return [m for m in keluar if m["id"]]
+    return [m for m in keluar if m["id"] and m["teks"]]
 
 
 def daftar(segarkan: bool = False) -> list[dict]:

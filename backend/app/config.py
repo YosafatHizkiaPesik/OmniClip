@@ -509,6 +509,17 @@ def get_api_keys() -> list[str]:
         if k not in terlihat:
             terlihat.add(k)
             keluar.append(k)
+    # Kunci yang baru saja diuji dan DITOLAK Google (proyek diblokir) dilewati,
+    # supaya tiap analisis tidak menghabiskan belasan detik mencobanya lebih
+    # dulu. Bila semuanya ditolak, daftarnya dikembalikan utuh: alasan
+    # kegagalannya tetap harus sampai ke layar. Lihat services/kunci_ai.py.
+    try:
+        from .services.kunci_ai import boleh_dipakai
+        dipakai = [k for k in keluar if boleh_dipakai(k)]
+        if dipakai:
+            keluar = dipakai
+    except Exception:  # noqa: BLE001
+        pass
     return keluar
 
 

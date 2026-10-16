@@ -1136,4 +1136,8 @@ KATALOG = [
     ("{a} jeda, {b} diam di awal, {c} diam di akhir", "{a} pauses, {b} silence at the start, {c} silence at the end"),
     ("{a} gumaman, {b} diam di awal, {c} diam di akhir", "{a} filler sounds, {b} silence at the start, {c} silence at the end"),
     ("{a} jeda, {b} gumaman, {c} diam di awal, {d} diam di akhir", "{a} pauses, {b} filler sounds, {c} silence at the start, {d} silence at the end"),
+    ("Kunci tidak ditemukan.", "Key not found."),
+    ("API key kosong.", "The API key is empty."),
+    ("Google menolak kunci ini: proyeknya tidak diizinkan memakai Gemini API (\"Your project has been denied access\"). Kunci baru dari akun Google yang sama biasanya ikut ditolak; buat kunci dari akun Google lain.",
+     "Google rejected this key: its project is not allowed to use the Gemini API (\"Your project has been denied access\"). New keys from the same Google account are usually rejected too; create a key from another Google account."),
 ]
