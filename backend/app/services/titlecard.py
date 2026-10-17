@@ -124,6 +124,7 @@ class TitleCardSpec:
     # Dua font berbeda dalam satu klip terbaca sebagai dua tangan yang berbeda,
     # dan pratinjau memang menggambar keduanya dengan font yang sama.
     font: str = "Montserrat"
+    aksen: str = ""               # warna aksen tema judul; kosong = bawaan
 
     @classmethod
     def from_payload(cls, data: Optional[dict]) -> "TitleCardSpec":
@@ -149,6 +150,7 @@ class TitleCardSpec:
                          or str(data.get("variant") or "") in _tema_judul().TEMA)
                      else DEFAULT_VARIANT),
             font=str(data.get("font") or "Montserrat"),
+            aksen=str(data.get("aksen") or ""),
         )
 
 
@@ -273,7 +275,8 @@ def _card_ass_tema(spec: TitleCardSpec, seconds: float, out_w: int, out_h: int) 
     tj = _tema_judul()
     baris = tj.ass_judul(spec.variant, spec.text, mulai=0.0, akhir=seconds,
                          pos_x=spec.pos_x, pos_y=spec.pos_y, box_w=spec.box_w,
-                         ukuran=spec.size, out_w=out_w, out_h=out_h)
+                         ukuran=spec.size, out_w=out_w, out_h=out_h,
+                         aksen=spec.aksen or None)
     return (f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {out_w}

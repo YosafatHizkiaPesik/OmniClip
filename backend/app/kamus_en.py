@@ -1186,4 +1186,17 @@ KATALOG = [
      "Paste a link to a .gguf file on huggingface.co (for example .../resolve/main/model-Q4_K_M.gguf)."),
     ("Hugging Face menjawab {kode} untuk tautan itu.", "Hugging Face answered {kode} for that link."),
     ("Ukuran atau sidik berkas tidak terbaca dari Hugging Face.", "The file size or checksum could not be read from Hugging Face."),
+    # --- katalog tema subtitle 17 Oktober 2026 ---
+    ("kata yang diucapkan diberi kotak berwarna; paling umum di TikTok, cocok untuk hampir semua podcast dan obrolan", "the spoken word gets a colored box; the most common on TikTok, fits almost any podcast or conversation"),
+    ("kotak yang membesar sesaat dan baris memantul; cocok untuk konten bertenaga, komedi, dan pernyataan yang mengejutkan", "a box that pops and lines that bounce; fits energetic content, comedy, and shocking statements"),
+    ("putih tebal dengan kata aktif berwarna; aman untuk apa pun bila tidak ada yang lebih cocok", "bold white with a colored active word; safe for anything when nothing fits better"),
+    ("tanpa garis luar dengan bayangan tebal; cocok untuk konten tantangan, hiburan besar, dan gaya kanal populer", "no outline with a thick shadow; fits challenge content, big entertainment, and the popular-channel look"),
+    ("kata aktif menyala; cocok untuk teknologi, game, dan konten yang latarnya gelap", "the active word glows; fits tech, games, and content on dark backgrounds"),
+    ("seluruh teks berpendar lembut; cocok untuk musik, kehidupan malam, dan konten estetik", "the whole text glows softly; fits music, nightlife, and aesthetic content"),
+    ("garis luar tebal berwarna gaya stiker; cocok untuk konten ceria, anak muda, dan reaksi", "a thick colored sticker-style outline; fits cheerful, youth, and reaction content"),
+    ("pelat warna penuh dan huruf miring; cocok untuk berita viral, fakta mengejutkan, dan gosip", "a solid color plate with italics; fits viral news, shocking facts, and gossip"),
+    ("huruf berkait miring tanpa garis; cocok untuk kutipan, renungan, dan cerita yang menyentuh", "italic serif without outline; fits quotes, reflections, and touching stories"),
+    ("huruf tinggi dengan jarak lebar; cocok untuk momen dramatis dan konten sinematik", "tall letters with wide spacing; fits dramatic moments and cinematic content"),
+    ("huruf komik tebal yang memantul; cocok untuk anak-anak, hewan, dan konten lucu", "bold bouncing comic letters; fits kids, animals, and funny content"),
+    ("huruf miring meluncur cepat; cocok untuk olahraga, game, dan aksi", "italic letters sliding in fast; fits sports, games, and action"),
 ]

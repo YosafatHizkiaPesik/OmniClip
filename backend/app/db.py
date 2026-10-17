@@ -425,6 +425,35 @@ MIGRATIONS: list[str] = [
     );
     CREATE INDEX idx_statistik_harian_tanggal ON statistik_harian(tanggal);
     """,
+    # Mesin pemilih klip apa pun boleh disimpan.
+    #
+    # Cacat migrasi 6 terulang: sejak koneksi AI universal, mesinnya bisa
+    # 'lokal', 'anthropic', 'openai', 'groq', dan seterusnya, tapi batasannya
+    # masih tiga nama. Tertangkap 17 Oktober 2026 pada pemiliknya: Qwen3 lokal
+    # sudah selesai memilih klip wawancara 91 menit, lalu hasilnya dibuang di
+    # 98,8% dengan "CHECK constraint failed: engine IN
+    # ('heuristic','gemini','openrouter')". Daftar penyedia akan terus
+    # bertambah, jadi yang dijaga sekarang hanya "tidak kosong"; nama yang sah
+    # sudah dijaga `koneksi_ai.PENYEDIA` sebelum sampai ke sini.
+    """
+    CREATE TABLE analyses_baru (
+      id             INTEGER PRIMARY KEY AUTOINCREMENT,
+      video_id       TEXT NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+      transcript_id  INTEGER REFERENCES transcripts(id) ON DELETE SET NULL,
+      engine         TEXT NOT NULL CHECK (length(engine) > 0),
+      model          TEXT,
+      params_json    TEXT,
+      result_json    TEXT NOT NULL,
+      created_at     REAL NOT NULL
+    );
+    INSERT INTO analyses_baru (id, video_id, transcript_id, engine, model,
+                               params_json, result_json, created_at)
+      SELECT id, video_id, transcript_id, engine, model,
+             params_json, result_json, created_at FROM analyses;
+    DROP TABLE analyses;
+    ALTER TABLE analyses_baru RENAME TO analyses;
+    CREATE INDEX idx_analyses_video ON analyses(video_id, created_at DESC);
+    """,
 ]
 
 

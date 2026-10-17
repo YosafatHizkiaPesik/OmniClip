@@ -165,3 +165,56 @@ class StudioTersambung(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WarnaAksen(unittest.TestCase):
+    """Satu model, warna bebas (diminta pemiliknya 17 Oktober 2026)."""
+
+    def test_semua_tema_punya_bidang_aksen(self):
+        from app.services import tema_judul as tj
+        self.assertEqual(set(tj.AKSEN), set(tj.TEMA))
+        for tid, bidang in tj.AKSEN.items():
+            for b in bidang:
+                self.assertTrue(hasattr(tj.TEMA[tid], b), (tid, b))
+
+    def test_latar_berwarna_membawa_huruf_kontras(self):
+        from app.services import tema_judul as tj
+        kuning = tj.warnai(tj.TEMA["kartu-putih"], "#FFE500")
+        self.assertEqual(kuning.warna_latar, "#FFE500")
+        self.assertEqual(kuning.teks, "#111111")
+        ungu = tj.warnai(tj.TEMA["sorot-kuning"], "#3A0CA3")
+        self.assertEqual(ungu.teks, "#FFFFFF")
+
+    def test_warna_tidak_sah_diabaikan(self):
+        from app.services import tema_judul as tj
+        for buruk in (None, "", "merah", "#12345", "#GGGGGG"):
+            self.assertIs(tj.warnai(tj.TEMA["neon"], buruk), tj.TEMA["neon"])
+
+    def test_aksen_sampai_ke_ass(self):
+        from app.services import tema_judul as tj
+        kata = dict(mulai=0, akhir=2, pos_x=50, pos_y=50, box_w=80, ukuran=90,
+                    out_w=1080, out_h=1920)
+        asli = tj.ass_judul("merah-tebal", "Halo dunia", **kata)
+        hijau = tj.ass_judul("merah-tebal", "Halo dunia", aksen="#00E676", **kata)
+        self.assertNotEqual(asli, hijau)
+        self.assertIn(r"\1c&H76E600&", hijau[0])
+
+    def test_kartu_dan_judul_video_meneruskan_aksen(self):
+        from app.services import titlecard as tc
+        self.assertEqual(tc.TitleCardSpec.from_payload({"aksen": "#9B5CFF"}).aksen, "#9B5CFF")
+        from app.services import render
+        with mock.patch("app.services.tema_judul.ass_judul", return_value=[]) as aj:
+            render._baris_judul_video({"aktif": True, "teks": "x", "aksen": "#9B5CFF"},
+                                      5.0, 1080, 1920)
+        self.assertEqual(aj.call_args.kwargs["aksen"], "#9B5CFF")
+
+    def test_pewaktu_tidak_menimpa_jeda(self):
+        """
+        `const jeda = setTimeout(..., jeda)` membaca dirinya sendiri sebelum
+        ada, jadi setiap judul yang gambarnya belum tersimpan menjatuhkan
+        Studio ("Cannot access 'jeda' before initialization"). Masuk 15
+        Oktober 2026, tertangkap 18 Oktober saat menguji warna aksen.
+        """
+        jsx = (Path(__file__).resolve().parents[2] / "frontend" / "src" / "features"
+               / "studio" / "JudulTema.jsx").read_text(encoding="utf-8")
+        self.assertNotIn("const jeda =", jsx)

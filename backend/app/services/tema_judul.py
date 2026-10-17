@@ -25,7 +25,7 @@ yang meleset 30% dari teksnya terlihat seperti kesalahan, bukan gaya.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional
@@ -127,6 +127,79 @@ TEMA: dict[str, Tema] = {t.id: t for t in (
 )}
 
 BAWAAN = "kartu-putih"
+
+
+# Bidang yang diwarnai "Warna aksen" pada tiap tema.
+#
+# Diminta pemiliknya 17 Oktober 2026: "lebih baik dijadikan satu model saja
+# yang sama baru dari sana kita bisa custom warnanya". Tiap tema tetap satu
+# model (huruf, latar, gerak), dan warna aksennya bisa diganti. Bila yang
+# diwarnai adalah latar, warna hurufnya ikut dipilih yang kontras supaya
+# pelat kuning tidak membawa huruf putih yang tidak terbaca.
+AKSEN: dict[str, tuple[str, ...]] = {
+    "kartu-putih": ("warna_latar",),
+    "pita-hitam": ("warna_latar",),
+    "sorot-kuning": ("warna_latar",),
+    "berita": ("warna_cip",),
+    "merah-tebal": ("warna_latar",),
+    "kaca-gelap": ("teks",),
+    "neon": ("warna_garis",),
+    "horor": ("teks",),
+    "stiker": ("warna_garis",),
+    "kutipan": ("teks",),
+}
+
+
+def _sah(hex_: Optional[str]) -> bool:
+    h = (hex_ or "").lstrip("#")
+    return len(h) == 6 and all(c in "0123456789abcdefABCDEF" for c in h)
+
+
+def _kontras(hex_: str) -> str:
+    """
+    Hitam atau putih, mana yang terbaca di atas warna ini.
+
+    Diukur dengan rasio kontras WCAG (kembarannya `kontrasDari` di
+    EditorPanels.jsx), bukan kecerahan saja: hijau #00E676 tampak "sedang"
+    menurut rumus kecerahan dan mendapat huruf putih yang nyaris tak terbaca.
+    Putih tetap dipilih selama kontrasnya 3:1 (batas WCAG untuk teks besar),
+    karena huruf putih di atas ungu atau pink adalah rupa yang lazim.
+    """
+    def kanal(v: int) -> float:
+        c = v / 255
+        return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+    h = hex_.lstrip("#")
+    r, g, b = (kanal(int(h[i:i + 2], 16)) for i in (0, 2, 4))
+    L = 0.2126 * r + 0.7152 * g + 0.0722 * b
+    return "#FFFFFF" if 1.05 / (L + 0.05) >= 3.0 else "#111111"
+
+
+def _terangkan(hex_: str, k: float = 0.55) -> str:
+    """Dicampur ke putih: inti huruf neon lebih terang dari cahayanya."""
+    h = hex_.lstrip("#")
+    r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))
+    return "#" + "".join(f"{round(c + (255 - c) * k):02X}" for c in (r, g, b))
+
+
+def aksen_bawaan(tema: Tema) -> str:
+    """Warna aksen tema sebelum diganti, untuk menandai keping yang aktif."""
+    return str(getattr(tema, AKSEN.get(tema.id, ("teks",))[0])).upper()
+
+
+def warnai(tema: Tema, aksen: Optional[str]) -> Tema:
+    """Tema yang sama dengan warna aksen lain. Warna tidak sah diabaikan."""
+    if not _sah(aksen):
+        return tema
+    aksen = "#" + aksen.lstrip("#").upper()
+    bidang = AKSEN.get(tema.id, ("teks",))
+    ubah = {b: aksen for b in bidang}
+    if "warna_latar" in bidang:
+        ubah["teks"] = _kontras(aksen)
+    if "warna_cip" in bidang:
+        ubah["teks_cip"] = _kontras(aksen)
+    if tema.id == "neon":
+        ubah["teks"] = _terangkan(aksen)
+    return replace(tema, **ubah)
 
 
 # Gerak masuk: tag ASS, dan lama gerak dalam milidetik (untuk CSS).
@@ -388,14 +461,14 @@ def ass_judul(tema_id: str, teks: str, *, mulai: float, akhir: float,
               pos_x: float, pos_y: float, box_w: float, ukuran: float,
               out_w: int, out_h: int, warna_teks: Optional[str] = None,
               warna_latar: Optional[str] = None, lapis: int = 5,
-              dengan_gerak: bool = True) -> list[str]:
+              dengan_gerak: bool = True, aksen: Optional[str] = None) -> list[str]:
     """
     Baris-baris Dialogue ASS untuk satu judul bertema.
 
     Setiap baris membawa semua gayanya sebagai tag sebaris, jadi ia bisa
     ditempelkan ke berkas ASS mana pun tanpa menambahkan baris Style.
     """
-    tema = TEMA.get(tema_id) or TEMA[BAWAAN]
+    tema = warnai(TEMA.get(tema_id) or TEMA[BAWAAN], aksen)
     if not teks.strip():
         return []
     # Gambar pratinjau diam memakai keadaan AKHIR, bukan bingkai pertama gerak

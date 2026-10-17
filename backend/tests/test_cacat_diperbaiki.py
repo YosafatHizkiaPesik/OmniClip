@@ -684,3 +684,36 @@ class HapusProyekBisaIkutVideonya(unittest.TestCase):
                / "studio" / "StudioHome.jsx").read_text(encoding="utf-8")
         self.assertIn("hapus_video=true", jsx)
         self.assertIn("bita_dibebaskan", jsx)
+
+
+class HasilAiApaPunTersimpan(unittest.TestCase):
+    """
+    17 Oktober 2026: hasil Qwen3 lokal untuk wawancara 91 menit dibuang di
+    98,8% karena batasan `engine` di tabel analyses hanya mengenal tiga nama.
+    """
+
+    def _db(self):
+        import sqlite3
+        from app import db
+        conn = sqlite3.connect(":memory:")
+        for skrip in db.MIGRATIONS:
+            for kalimat in db._split_statements(skrip):
+                conn.execute(kalimat)
+        return conn
+
+    def test_semua_penyedia_bisa_jadi_mesin(self):
+        from app.services import koneksi_ai
+        conn = self._db()
+        conn.execute("PRAGMA foreign_keys = OFF")
+        for mesin in ["heuristic", *koneksi_ai.PENYEDIA]:
+            conn.execute("INSERT INTO analyses (video_id, engine, result_json, created_at)"
+                         " VALUES ('v', ?, '{}', 0)", (mesin,))
+        self.assertIn("lokal", koneksi_ai.PENYEDIA)
+
+    def test_mesin_kosong_tetap_ditolak(self):
+        import sqlite3
+        conn = self._db()
+        conn.execute("PRAGMA foreign_keys = OFF")
+        with self.assertRaises(sqlite3.IntegrityError):
+            conn.execute("INSERT INTO analyses (video_id, engine, result_json, created_at)"
+                         " VALUES ('v', '', '{}', 0)")

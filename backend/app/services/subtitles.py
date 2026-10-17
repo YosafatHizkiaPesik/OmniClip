@@ -98,6 +98,15 @@ class CaptionStyle:
     # Warna bayangan. Bayangan berwarna yang digeser jauh adalah seluruh isi
     # gaya retro/riso; dengan hitam ia hanya menambah keterbacaan.
     bayang_warna: str = "#000000"
+    # Gaya tambahan untuk preset gaya CapCut (17 Oktober 2026): warna garis
+    # luar (selama ini selalu hitam), garis luar yang berpendar (\\blur),
+    # huruf miring, jarak antar huruf (piksel kanvas), dan kemiringan baris
+    # (derajat, positif = berlawanan jarum jam).
+    garis_warna: str = "#000000"
+    pendar: int = 0
+    miring: bool = False
+    spasi_huruf: float = 0.0
+    kemiringan: float = 0.0
 
     # Sorotan per kata, TERPISAH dari animasi masuk.
     #
@@ -444,8 +453,12 @@ def _sela(st: CaptionStyle) -> str:
     """
     from .fonts import lebar_spasi
     tambahan = max(0.0, jarak_kata(st) - lebar_spasi(st.font))
-    n = int(round(st.size * tambahan))
-    return rf"{{\fsp{n}}} {{\fsp0}}" if n > 0 else " "
+    # Jarak antar HURUF dari gaya (preset Lebar, spasi_huruf) harus kembali
+    # sesudah spasi, bukan nol; spasinya sendiri sudah memuat jarak huruf itu.
+    huruf = float(_spasi(st))
+    n = int(round(st.size * tambahan + huruf))
+    kembali = _spasi(st)
+    return rf"{{\fsp{n}}} {{\fsp{kembali}}}" if n > huruf else " "
 
 
 def _lebarkan(teks: str, sela: str) -> str:
@@ -623,11 +636,23 @@ def _style_line(nama: str, st: CaptionStyle, lebar: int) -> str:
         garis = hex_to_ass_alpha(st.bg_color, st.bg_opacity)
     else:
         bs, tebal, bayang = 1, st.outline_px, st.shadow_px
-        garis = "&H00000000"
+        garis = hex_to_ass(st.garis_warna or "#000000")
     return (f"Style: {nama},{st.font},{st.size},{hex_to_ass(st.primary)},&H000000FF,"
             f"{garis},{hex_to_ass(st.bayang_warna or '#000000')},"
-            f"-1,0,0,0,100,100,0,0,{bs},{tebal},{bayang},"
+            f"-1,{_italik(st)},0,0,100,100,{_spasi(st)},{_sudut(st)},{bs},{tebal},{bayang},"
             f"{align},{ml},{mr},{st.margin_v},1")
+
+
+def _italik(st: "CaptionStyle") -> int:
+    return -1 if getattr(st, "miring", False) else 0
+
+
+def _spasi(st: "CaptionStyle") -> str:
+    return f"{max(-4.0, min(30.0, float(getattr(st, 'spasi_huruf', 0) or 0))):g}"
+
+
+def _sudut(st: "CaptionStyle") -> str:
+    return f"{max(-20.0, min(20.0, float(getattr(st, 'kemiringan', 0) or 0))):g}"
 
 
 def _tanpa_tumpang(lines: list[dict]) -> list[dict]:
@@ -773,7 +798,7 @@ def build_ass(
         garis_warna = hex_to_ass_alpha(st.bg_color, st.bg_opacity)
     else:
         border_style, garis_tebal, bayang = 1, st.outline_px, st.shadow_px
-        garis_warna = "&H00000000"
+        garis_warna = hex_to_ass(st.garis_warna or "#000000")
 
     # Font untuk aksara yang tiga belas font display bawaan tidak punya
     # hurufnya. Tanpa ini, subtitle Jepang keluar sebagai barisan kotak kosong
@@ -793,7 +818,7 @@ def build_ass(
         empuk = max(6, int(round(st.size * 0.16)))
         gaya_kotak = (
             f"Style: CaptionKotak,{st.font},{st.size},{primary},&H000000FF,"
-            f"&HFF000000,&H00000000,-1,0,0,0,100,100,0,0,3,{empuk},0,"
+            f"&HFF000000,&H00000000,-1,{_italik(st)},0,0,100,100,{_spasi(st)},{_sudut(st)},3,{empuk},0,"
             f"{align},{margin_l},{margin_r},{st.margin_v},1\n")
 
     gaya_kedua = ""
@@ -819,7 +844,7 @@ YCbCr Matrix: TV.709
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Caption,{st.font},{st.size},{primary},&H000000FF,{garis_warna},{bayang_ass},-1,0,0,0,100,100,0,0,{border_style},{garis_tebal},{bayang},{align},{margin_l},{margin_r},{st.margin_v},1
+Style: Caption,{st.font},{st.size},{primary},&H000000FF,{garis_warna},{bayang_ass},-1,{_italik(st)},0,0,100,100,{_spasi(st)},{_sudut(st)},{border_style},{garis_tebal},{bayang},{align},{margin_l},{margin_r},{st.margin_v},1
 {gaya_kotak}{gaya_kedua}Style: Hook,{st.font},{hook.size if hook else 64},{hook_color},&H000000FF,&H00000000,&HB4000000,-1,0,0,0,100,100,0,0,3,0,0,8,100,100,150,1
 Style: Mark,{wm_font},{st.wm_size},{wm_warna},&H000000FF,&H80000000,&H00000000,0,0,0,0,100,100,0,0,1,{st.wm_outline},0,5,0,0,0,1
 {gaya_judul}
@@ -904,6 +929,11 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             except (TypeError, ValueError):
                 pos_tag = ""
         base_tag = pos_tag + base_tag
+        # Garis luar berpendar: garis luarnya dikaburkan, jadi warna garisnya
+        # memancar seperti nyala (preset Neon, Pendar). Tidak untuk gaya
+        # berpelat: di sana garis luar ADALAH pelatnya.
+        if st.pendar and not st.bg:
+            base_tag += rf"{{\blur{max(1, min(20, int(st.pendar)))}}}"
 
         # Sorotan per kata TIDAK lagi terikat pada animasi masuk.
         #

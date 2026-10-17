@@ -16,7 +16,7 @@ export const DEFAULT_CARD = {
   voice: true, voice_id: 'piper-news', rate: 1.05, size: 104,
   // Letak dan lebar judul, dalam persen kanvas — diseret langsung di atas
   // pratinjau, bukan diketik di sini. Angka default menaruhnya di tengah.
-  pos_x: 50, pos_y: 50, box_w: 84, variant: 'garis',
+  pos_x: 50, pos_y: 50, box_w: 84, variant: 'garis', aksen: '',
 };
 
 const MODES = [
@@ -295,8 +295,9 @@ export default function TitlePanel({
                   "buatkan juga preview tampilannya seperti apa agar jelas saat
                   kita memilih". Gerakannya diputar ulang saat disentuh tetikus,
                   memakai CSS yang SAMA dengan pratinjau klip. */}
-              <GaleriTema teks={cardText} pilihan={card.variant}
-                          onPilih={(id) => patchCard({ variant: id })} />
+              <GaleriTema teks={cardText} pilihan={card.variant} aksen={card.aksen || ''}
+                          onAksen={(c) => patchCard({ aksen: c })}
+                          onPilih={(id) => patchCard({ variant: id, aksen: '' })} />
               <div className="mark" style={{ color: 'var(--ink-3)', margin: '12px 0 6px' }}>
                 {t('judul.hanya_teks')}
               </div>
@@ -469,8 +470,9 @@ export default function TitlePanel({
               <div className="mark" style={{ color: 'var(--ink)', marginBottom: '6px' }}>
                 {t('judul.tema')}
               </div>
-              <GaleriTema teks={jvText} pilihan={jv.tema}
-                          onPilih={(id) => patchJv({ tema: id })} />
+              <GaleriTema teks={jvText} pilihan={jv.tema} aksen={jv.aksen || ''}
+                          onAksen={(c) => patchJv({ aksen: c })}
+                          onPilih={(id) => patchJv({ tema: id, aksen: '' })} />
               <p style={{ fontSize: '.72rem', color: 'var(--ink-3)', lineHeight: 1.55, margin: '8px 0 0' }}>
                 {catatanTema(jv.tema)}
               </p>

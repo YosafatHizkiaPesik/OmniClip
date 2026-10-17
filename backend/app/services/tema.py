@@ -25,63 +25,67 @@ from . import bahasa_ai
 
 log = logging.getLogger("omniclip.tema")
 
-VERSI = 1
+VERSI = 2          # 2: katalog model 17 Oktober 2026 (id lama tidak lagi disarankan)
 
 # id -> untuk klip seperti apa tema ini. Kalimatnya ditulis untuk DIBACA MODEL,
 # jadi ia menyebut sifat klipnya, bukan sifat hurufnya: model tidak melihat
 # hasilnya, ia hanya membaca keterangan ini.
 TEMA: dict[str, str] = {
-    "kotak_kuning": "paling umum di TikTok sekarang; cocok untuk hampir semua "
-                    "podcast dan obrolan, terbaca di atas latar apa pun",
-    "kotak_hijau": "seperti kotak kuning tapi lebih segar; cocok untuk konten "
-                   "ringan, komedi, dan obrolan anak muda",
-    "kotak_merah": "keras dan mendesak; cocok untuk berita, kemarahan, "
-                   "perdebatan, dan pernyataan yang mengejutkan",
-    "kotak_ungu": "kotak ungu dengan huruf miring naik; cocok untuk cerita "
-                  "misteri, horor, dan hal aneh",
-    "neon_biru": "kata menyala biru; cocok untuk teknologi, game, dan konten "
-                 "yang latarnya gelap",
-    "neon_pink": "nyala merah muda gaya klub malam; cocok untuk musik, "
-                 "kehidupan malam, dan gosip selebritas",
+    # Katalog 17 Oktober 2026: satu MODEL satu tema; warnanya diatur terpisah
+    # di Studio. Id lama (kotak_kuning, neon_biru, ...) dipetakan antarmuka ke
+    # model barunya (ALIAS_TEMA di EditorPanels.jsx).
+    "kotak_sorot": "kata yang diucapkan diberi kotak berwarna; paling umum di TikTok, "
+                   "cocok untuk hampir semua podcast dan obrolan",
+    "kotak_pantul": "kotak yang membesar sesaat dan baris memantul; cocok untuk konten "
+                    "bertenaga, komedi, dan pernyataan yang mengejutkan",
+    "tebal": "putih tebal dengan kata aktif berwarna; aman untuk apa pun bila tidak "
+             "ada yang lebih cocok",
+    "bayang_tegas": "tanpa garis luar dengan bayangan tebal; cocok untuk konten "
+                    "tantangan, hiburan besar, dan gaya kanal populer",
     "satu_kata": "satu kata besar berganti cepat; cocok untuk klip pendek yang "
                  "bicaranya cepat dan bertenaga, bukan untuk penjelasan panjang",
-    "pantul": "baris melompat masuk; cocok untuk konten ceria dan reaksi",
-    "putar": "baris masuk sambil berputar; cocok untuk konten main-main",
-    "geser": "baris meluncur dari kiri; cocok untuk cerita yang mengalir tenang",
-    "getar": "hentakan kecil tiap baris; cocok untuk klip game, jumpscare, "
-             "dan reaksi kaget",
-    "fokus": "masuk dari buram jadi tajam; cocok untuk momen serius dan "
-             "pengakuan",
-    "garis_bawah": "kata diucapkan digarisbawahi; tenang, cocok untuk "
-                   "penjelasan dan edukasi",
-    "retro": "bayangan berwarna yang digeser; cocok untuk nostalgia dan "
-             "konten bertema lama",
-    "tebal": "putih tebal dengan kata aktif kuning; aman untuk apa pun bila "
-             "tidak ada yang lebih cocok",
-    "neon": "besar dengan sorot biru elektrik; cocok untuk konten bertenaga",
-    "lembut": "huruf biasa yang memudar masuk; cocok untuk cerita sedih, "
-              "haru, dan renungan",
-    "naik": "baris naik dari bawah; netral dan rapi, cocok bila tidak "
-        "ada yang perlu ditonjolkan",
-    "papan": "blok tebal sangat mencolok; cocok untuk klip yang ditonton "
-             "tanpa suara dan butuh teks paling terbaca",
-    "ramping": "sempit sehingga banyak kata muat; cocok untuk bicara cepat "
-               "dengan kalimat panjang",
-    "ceria": "bulat gaya kartun; cocok untuk anak-anak, hewan, dan animasi",
-    "bersih": "tanpa animasi di tengah bawah; cocok bila gambarnya sendiri "
-              "sudah ramai",
+    "neon": "kata aktif menyala; cocok untuk teknologi, game, dan konten yang "
+            "latarnya gelap",
+    "pendar": "seluruh teks berpendar lembut; cocok untuk musik, kehidupan malam, "
+              "dan konten estetik",
+    "garis_warna": "garis luar tebal berwarna gaya stiker; cocok untuk konten ceria, "
+                   "anak muda, dan reaksi",
     "apple": "pelat gelap dengan huruf biasa; tenang, cocok untuk wawancara "
              "serius dan konten profesional",
     "sinema": "pelat tipis seperti subtitle film; cocok untuk cuplikan film, "
               "anime, dan konten bersubtitle terjemahan",
+    "stiker": "pelat berwarna gaya kartun; cocok untuk konten lucu dan ringan",
+    "label_miring": "pelat warna penuh dan huruf miring; cocok untuk berita viral, "
+                    "fakta mengejutkan, dan gosip",
+    "retro": "bayangan berwarna yang digeser; cocok untuk nostalgia dan "
+             "konten bertema lama",
+    "elegan": "huruf berkait miring tanpa garis; cocok untuk kutipan, renungan, "
+              "dan cerita yang menyentuh",
+    "lebar": "huruf tinggi dengan jarak lebar; cocok untuk momen dramatis dan "
+             "konten sinematik",
+    "komik": "huruf komik tebal yang memantul; cocok untuk anak-anak, hewan, "
+             "dan konten lucu",
+    "miring_cepat": "huruf miring meluncur cepat; cocok untuk olahraga, game, "
+                    "dan aksi",
+    "garis_bawah": "kata diucapkan digarisbawahi; tenang, cocok untuk "
+                   "penjelasan dan edukasi",
+    "ramping": "sempit sehingga banyak kata muat; cocok untuk bicara cepat "
+               "dengan kalimat panjang",
     "ketik": "kata muncul satu per satu seperti diketik; cocok untuk membaca "
              "pesan, komentar, atau kutipan",
-    "stiker": "pelat berwarna gaya kartun; cocok untuk konten lucu dan ringan",
+    "lembut": "huruf biasa yang memudar masuk; cocok untuk cerita sedih, "
+              "haru, dan renungan",
+    "fokus": "masuk dari buram jadi tajam; cocok untuk momen serius dan "
+             "pengakuan",
+    "getar": "hentakan kecil tiap baris; cocok untuk klip game, jumpscare, "
+             "dan reaksi kaget",
+    "bersih": "tanpa animasi di tengah bawah; cocok bila gambarnya sendiri "
+              "sudah ramai",
 }
 
 # Tema yang dipakai bila tidak ada yang lebih cocok. Bukan diambil acak: ini
 # yang paling banyak dipakai orang dan paling jarang salah.
-BAWAAN = "kotak_kuning"
+BAWAAN = "kotak_sorot"
 
 SISTEM = """Anda penyunting video pendek berbahasa Indonesia yang memilih GAYA
 SUBTITLE untuk satu klip.
@@ -158,7 +162,7 @@ def pilih_lokal(meta: dict) -> dict:
     if jenis == "game":
         tema, alasan = "getar", "klip game, hentakan tiap baris"
     elif jenis in ("tanpa_wajah", "gerak"):
-        tema, alasan = "papan", "tidak ada wajah, teks dibuat sejelas mungkin"
+        tema, alasan = "tebal", "tidak ada wajah, teks dibuat sejelas mungkin"
     elif 0 < durasi <= 20:
         tema, alasan = "satu_kata", "klip sangat pendek, satu kata besar"
     else:

@@ -14,7 +14,7 @@ import logging
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Optional
 
 from fastapi import APIRouter
 from fastapi.responses import Response
@@ -56,7 +56,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 async def daftar_tema():
     """Tema yang tersedia, untuk galeri pilihan."""
     return {"tema": [{"id": t.id, "label": t.label, "catatan": t.catatan,
-                      "gerak": t.gerak, "latar": t.latar}
+                      "gerak": t.gerak, "latar": t.latar,
+                      "aksen": tema_judul.aksen_bawaan(t)}
                      for t in tema_judul.TEMA.values()],
             "bawaan": tema_judul.BAWAAN}
 
@@ -69,6 +70,7 @@ class GambarRequest(BaseModel):
     box_w: float = Field(84.0, ge=10, le=100)
     ukuran: float = Field(96.0, ge=20, le=260)
     aspek: Literal["9:16", "16:9", "1:1", "4:5"] = "9:16"
+    aksen: Optional[str] = Field(None, pattern=r"^#?[0-9A-Fa-f]{6}$")
 
 
 @router.post("/gambar")
@@ -94,7 +96,7 @@ async def gambar(req: GambarRequest):
 
 
 # Dinaikkan setiap kali rupa tema berubah, supaya gambar lama tidak dipakai lagi.
-_VERSI = 2
+_VERSI = 3
 
 
 def _gambar(req: GambarRequest, w: int, h: int, berkas: Path) -> bool:
@@ -113,7 +115,8 @@ def _gambar(req: GambarRequest, w: int, h: int, berkas: Path) -> bool:
     _SIMPANAN.mkdir(parents=True, exist_ok=True)
     baris = tema_judul.ass_judul(
         req.tema, req.teks, mulai=0.0, akhir=5.0, pos_x=req.pos_x, pos_y=req.pos_y,
-        box_w=req.box_w, ukuran=req.ukuran, out_w=w, out_h=h, dengan_gerak=False)
+        box_w=req.box_w, ukuran=req.ukuran, out_w=w, out_h=h, dengan_gerak=False,
+        aksen=req.aksen)
     ass = berkas.with_suffix(".ass")
     ass.write_text(_KEPALA.format(w=w, h=h) + "\n".join(baris) + "\n", encoding="utf-8")
     jalur_ass = str(ass).replace("\\", "/").replace(":", "\\:")

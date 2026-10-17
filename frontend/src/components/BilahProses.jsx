@@ -13,12 +13,13 @@ import { useT } from '../lib/i18n';
  *
  * Rentangnya SAMA dengan STAGES di backend/app/services/pipeline.py.
  */
-// `label` adalah kunci kamus (kecuali nama merek Gemini), diterjemahkan saat dirender.
+// `label` adalah kunci kamus, diterjemahkan saat dirender. Tahap AI tidak lagi
+// bernama "Gemini": sejak 17 Oktober 2026 pemilihnya bisa koneksi AI mana pun.
 const TAHAP = [
   { label: 'proses.unduh', stages: ['resolve', 'download'], lo: 0.0, hi: 0.45 },
   { label: 'proses.transkrip', stages: ['captions', 'transcribe'], lo: 0.45, hi: 0.8 },
   { label: 'proses.analisis', stages: ['analyze'], lo: 0.8, hi: 0.92 },
-  { label: 'Gemini', stages: ['gemini'], lo: 0.92, hi: 0.98 },
+  { label: 'proses.ai', stages: ['gemini'], lo: 0.92, hi: 0.98 },
   { label: 'proses.simpan', stages: ['persist', 'done'], lo: 0.98, hi: 1.0 },
 ];
 

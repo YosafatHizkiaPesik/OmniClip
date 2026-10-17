@@ -1841,7 +1841,7 @@ def _baris_judul_video(judul: Optional[dict], durasi_klip: float,
                      box_w=float(judul.get("box_w", 84.0)), ukuran=float(judul.get("ukuran", 72.0)),
                      out_w=out_w, out_h=out_h,
                      # Di atas subtitle, di bawah tanda air.
-                     lapis=20)
+                     lapis=20, aksen=judul.get("aksen") or None)
 
 
 def render_clip(

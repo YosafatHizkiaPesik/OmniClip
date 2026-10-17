@@ -19,7 +19,8 @@ PANEL = AKAR / "frontend" / "src" / "features" / "studio" / "EditorPanels.jsx"
 def id_antarmuka() -> list[str]:
     teks = PANEL.read_text(encoding="utf-8")
     blok = teks[teks.index("const STYLE_PRESETS = ["):]
-    return re.findall(r"id: '([a-z_0-9]+)', label: '", blok)
+    blok = blok[:blok.index("];")]
+    return re.findall(r"\{ id: '([a-z_0-9]+)',", blok)
 
 
 class DaftarSama(unittest.TestCase):
@@ -51,7 +52,7 @@ class TebakanLokal(unittest.TestCase):
         self.assertEqual(tema.pilih_lokal(self.klip(jenis="game"))["tema"], "getar")
 
     def test_tanpa_wajah_dapat_yang_paling_terbaca(self):
-        self.assertEqual(tema.pilih_lokal(self.klip(jenis="tanpa_wajah"))["tema"], "papan")
+        self.assertEqual(tema.pilih_lokal(self.klip(jenis="tanpa_wajah"))["tema"], "tebal")
 
     def test_klip_sangat_pendek_dapat_satu_kata(self):
         self.assertEqual(tema.pilih_lokal(self.klip(duration=14))["tema"], "satu_kata")

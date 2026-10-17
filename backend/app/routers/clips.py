@@ -125,6 +125,12 @@ class CaptionStyleModel(BaseModel):
     # dirender tanpa bayangan sama sekali. Pratinjaunya menampilkannya.
     shadow_px: Optional[int] = Field(None, ge=0, le=40)
     bayang_warna: Optional[str] = None
+    # Preset gaya CapCut (17 Oktober 2026), lihat subtitles.CaptionStyle.
+    garis_warna: Optional[str] = None
+    pendar: Optional[int] = Field(None, ge=0, le=20)
+    miring: Optional[bool] = None
+    spasi_huruf: Optional[float] = Field(None, ge=-4, le=30)
+    kemiringan: Optional[float] = Field(None, ge=-20, le=20)
     # Batas pemenggalan baris. Belum ada di antarmuka, tapi diterima supaya
     # gaya yang datang dari luar tidak kehilangan nilainya diam-diam.
     max_words_per_line: Optional[int] = Field(None, ge=1, le=20)
@@ -141,7 +147,7 @@ class CaptionStyleModel(BaseModel):
     wm_y: Optional[float] = Field(None, ge=0.0, le=100.0)
     wm_outline: Optional[int] = Field(None, ge=0, le=16)
 
-    @field_validator("primary", "highlight", "wm_color", "bg_color", "bayang_warna")
+    @field_validator("primary", "highlight", "wm_color", "bg_color", "bayang_warna", "garis_warna")
     @classmethod
     def _cek_warna(cls, v):
         return _warna(v)
@@ -344,6 +350,8 @@ class TitleCardModel(BaseModel):
     box_w: float = Field(84.0, ge=20.0, le=100.0)
     variant: str = "garis"
     font: str = ""
+    # Warna aksen tema judul; kosong = warna bawaan temanya.
+    aksen: str = Field("", pattern=r"^(#?[0-9A-Fa-f]{6})?$")
     # Panjang kartu yang SEBENARNYA, dari lama bacaannya. Disimpan klien setelah
     # suaranya dibuat supaya linimasa dan pratinjau memakai angka yang sama
     # dengan yang nanti dipakai ffmpeg.
@@ -362,6 +370,7 @@ class JudulVideoModel(BaseModel):
     aktif: bool = False
     teks: str = Field("", max_length=240)
     tema: str = Field("kartu-putih", max_length=40)
+    aksen: str = Field("", pattern=r"^(#?[0-9A-Fa-f]{6})?$")
     pos_x: float = Field(50.0, ge=0.0, le=100.0)
     pos_y: float = Field(14.0, ge=0.0, le=100.0)
     box_w: float = Field(84.0, ge=10.0, le=100.0)

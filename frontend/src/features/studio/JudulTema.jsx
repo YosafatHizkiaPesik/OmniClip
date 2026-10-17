@@ -15,7 +15,7 @@ import { t as tr, useT } from '../../lib/i18n';
  */
 
 export const DEFAULT_JUDUL_VIDEO = {
-  aktif: false, teks: '', tema: 'kartu-putih',
+  aktif: false, teks: '', tema: 'kartu-putih', aksen: '',
   pos_x: 50, pos_y: 14, box_w: 84, ukuran: 72,
   mulai: 0, durasi: null,
 };
@@ -108,13 +108,13 @@ export function useGambarJudul(p, jeda = 140) {
     const siap = _gambar.get(kunci);
     if (siap) { setHasil(siap); return undefined; }
     setMemuat(true);
-    const jeda = setTimeout(() => {
+    const pewaktu = setTimeout(() => {
       ambilGambar(p)
         .then((h) => { if (!batal) setHasil(h); })
         .catch(() => {})
         .finally(() => { if (!batal) setMemuat(false); });
     }, jeda);
-    return () => { batal = true; clearTimeout(jeda); };
+    return () => { batal = true; clearTimeout(pewaktu); };
   }, [kunci]);       // eslint-disable-line react-hooks/exhaustive-deps
   return { hasil, memuat };
 }
@@ -138,8 +138,18 @@ function ContohTema({ tema, teks, aktif, onPilih }) {
   );
 }
 
-/** Galeri tema lengkap. */
-export function GaleriTema({ teks, pilihan, onPilih }) {
+// Sama dengan keping Warna aksen subtitle di panel Gaya.
+const WARNA_AKSEN = ['#FFE500', '#FF9F1C', '#E11D2E', '#FF3DCB', '#9B5CFF', '#5BC8FF',
+                     '#00E5FF', '#00E676', '#B8FF3A', '#FFFFFF', '#101010'];
+
+/**
+ * Galeri tema lengkap, ditambah Warna aksen untuk tema yang dipilih.
+ *
+ * Diminta pemiliknya 17 Oktober 2026: satu model, warnanya bebas. `aksen`
+ * kosong berarti warna bawaan temanya; memilih tema lain mengosongkannya
+ * (lihat pemanggilnya) supaya tiap model mulai dari rupa aslinya.
+ */
+export function GaleriTema({ teks, pilihan, onPilih, aksen = '', onAksen }) {
   const t = useT();
   const daftar = useDaftarTema();
   const pendek = (teks || t('judul.contoh')).trim();
@@ -148,13 +158,41 @@ export function GaleriTema({ teks, pilihan, onPilih }) {
   if (!daftar.length) {
     return <p style={{ fontSize: '.74rem', color: 'var(--ink-3)', margin: 0 }}>{t('judul.memuat_tema')}</p>;
   }
+  const dipilih = daftar.find((tm) => tm.id === pilihan);
+  const kini = (aksen || dipilih?.aksen || '').toUpperCase();
   return (
-    <div className="judul-galeri">
-      {daftar.map((tm) => (
-        <ContohTema key={tm.id} tema={tm} teks={contoh} aktif={pilihan === tm.id}
-                    onPilih={() => onPilih(tm.id)} />
-      ))}
-    </div>
+    <>
+      <div className="judul-galeri">
+        {daftar.map((tm) => (
+          <ContohTema key={tm.id} tema={tm} teks={contoh} aktif={pilihan === tm.id}
+                      onPilih={() => onPilih(tm.id)} />
+        ))}
+      </div>
+      {dipilih && onAksen && (
+        <div style={{ marginTop: 10 }}>
+          <div className="mark" style={{ color: 'var(--ink-3)', marginBottom: 6 }}>{t('gs.warna_aksen')}</div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+            {WARNA_AKSEN.map((c) => (
+              <button key={c} type="button" title={c} onClick={() => onAksen(c)}
+                      style={{
+                        width: 22, height: 22, borderRadius: '50%', background: c, cursor: 'pointer', padding: 0,
+                        border: kini === c ? '2px solid var(--ink)' : '1px solid var(--border-color)',
+                        boxShadow: kini === c ? '0 0 0 2px var(--bg-primary, #000) inset' : 'none',
+                      }} />
+            ))}
+            <input type="color" value={kini || '#FFE500'} title={t('gs.warna_bebas')}
+                   onChange={(e) => onAksen(e.target.value.toUpperCase())}
+                   style={{ width: 26, height: 24, padding: 0, border: 0, background: 'none', cursor: 'pointer' }} />
+            {aksen && (
+              <button type="button" className="btn-secondary" onClick={() => onAksen('')}
+                      style={{ padding: '3px 9px', fontSize: '.7rem' }}>
+                {t('judul.aksen_asli')}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -176,6 +214,8 @@ export function LapisJudul({ nilai, aspek = '9:16', boxW, boxH, onUbah, gerak = 
     pos_x: Number(nilai.pos_x ?? 50), pos_y: Number(nilai.pos_y ?? 50),
     box_w: Number(nilai.box_w ?? 84), ukuran: Number(nilai.ukuran ?? 72),
     aspek,
+    // Kosong tidak dikirim, jadi gambar tema bawaan tetap memakai simpanan yang sama.
+    ...(nilai.aksen ? { aksen: nilai.aksen } : {}),
   };
   const { hasil } = useGambarJudul(p);
   const [seret, setSeret] = useState(null);

@@ -93,6 +93,30 @@ export function zoomPunch(titik, t) {
   return 1 + puncak;
 }
 
+/**
+ * Bayangan teks pratinjau, cermin dari libass: `pendar` mengaburkan garis luar
+ * berwarna (\\blur), dan bayangan berwarna (`bayang_warna`, `shadow_px`)
+ * digeser tegas tanpa kabur seperti Shadow pada ASS.
+ */
+export function bayanganTeks(style, scale, fontPx) {
+  const lapis = [];
+  const pendar = Number(style?.pendar) || 0;
+  if (pendar > 0) {
+    const warna = style?.garis_warna || '#000000';
+    const r = Math.max(2, pendar * scale * 3.2);
+    lapis.push(`0 0 ${r.toFixed(1)}px ${warna}`, `0 0 ${(r * 1.8).toFixed(1)}px ${warna}`);
+  }
+  const geser = Number(style?.shadow_px) || 0;
+  const bayang = style?.bayang_warna;
+  if (geser > 3 || (bayang && bayang.toUpperCase() !== '#000000' && geser > 0)) {
+    const d = (geser * scale * 1.3).toFixed(1);
+    lapis.push(`${d}px ${d}px 0 ${bayang || '#000000'}`);
+  } else if (!pendar) {
+    lapis.push(`0 ${(fontPx * 0.06).toFixed(1)}px ${(fontPx * 0.2).toFixed(1)}px rgba(0,0,0,0.55)`);
+  }
+  return lapis.join(', ');
+}
+
 export default function ClipPreview({
   src, clip, aspectRatio = '9:16', style,
   videoRef: externalRef,
@@ -1954,6 +1978,7 @@ export default function ClipPreview({
             nilai={{
               tema: card.variant, teks: cardText, pos_x: card.pos_x ?? 50,
               pos_y: card.pos_y ?? 50, box_w: card.box_w ?? 84, ukuran: card.size ?? 104,
+              aksen: card.aksen,
             }}
             aspek={aspectRatio} boxW={boxW} boxH={boxH} zIndex={3}
             gerak={gerakTema(card.variant)}
@@ -1968,6 +1993,7 @@ export default function ClipPreview({
             nilai={{
               tema: jv.tema || 'kartu-putih', teks: jvTeks, pos_x: jv.pos_x ?? 50,
               pos_y: jv.pos_y ?? 14, box_w: jv.box_w ?? 84, ukuran: jv.ukuran ?? 72,
+              aksen: jv.aksen,
             }}
             aspek={aspectRatio} boxW={boxW} boxH={boxH} zIndex={3}
             gerak={gerakTema(jv.tema || 'kartu-putih')}
@@ -2331,8 +2357,11 @@ export function CaptionOverlay({
   // Posisi tengah dan animasi masuk sama-sama memakai `transform`, jadi
   // keduanya digabung — bukan saling menimpa, yang membuat baris melompat ke
   // bawah tiap kali animasi menyala.
+  // Kemiringan baris: Angle ASS positif = berlawanan jarum jam, CSS kebalikannya.
+  const sudut = Number(style?.kemiringan) || 0;
   const transform = [(anchorMiddle || bebas) ? 'translateY(-50%)' : '',
-                     entry.transform || ''].filter(Boolean).join(' ');
+                     entry.transform || '',
+                     sudut ? `rotate(${-sudut}deg)` : ''].filter(Boolean).join(' ');
 
   // Sorotan per kata adalah saklarnya SENDIRI, terpisah dari animasi masuk.
   // Gaya bersih berpelat memakai animasi masuk tanpa sorotan; tanpa pemisahan
@@ -2423,10 +2452,11 @@ export function CaptionOverlay({
         // BorderStyle 3 di libass menghilangkan garis luar huruf. Kalau
         // pratinjau tetap menggambarnya, gaya berpelat akan terlihat berbeda
         // di editor dan di video.
-        WebkitTextStroke: style?.bg ? 'none' : `${strokePx}px #000`,
+        WebkitTextStroke: style?.bg ? 'none' : `${strokePx}px ${style?.garis_warna || '#000'}`,
         paintOrder: 'stroke fill',
-        textShadow: style?.bg ? 'none'
-          : `0 ${(fontPx * 0.06).toFixed(1)}px ${(fontPx * 0.2).toFixed(1)}px rgba(0,0,0,0.55)`,
+        textShadow: style?.bg ? 'none' : bayanganTeks(style, scale, fontPx),
+        fontStyle: style?.miring ? 'italic' : 'normal',
+        ...(style?.spasi_huruf ? { letterSpacing: `${(style.spasi_huruf * scale).toFixed(2)}px` } : {}),
         textTransform: uppercase ? 'uppercase' : 'none',
         opacity: ghost ? 0.45 : 1,
         // Kotak batas ditampilkan saat disentuh. Tanpa melihat kotaknya, tidak

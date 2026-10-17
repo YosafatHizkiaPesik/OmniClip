@@ -2,9 +2,9 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from
 import { Plus, Trash2, Loader2, Star, ChevronRight, Users, Palette, Sparkles, AlertTriangle, Scissors, Move } from 'lucide-react';
 import { apiGet, apiPost } from '../../lib/api';
 import { formatTime, parseTimeString } from '../../utils/timeFormat';
-import { inkSafe } from '../../lib/contrast';
+import { contrastRatio, inkSafe } from '../../lib/contrast';
 import { cachedFonts, fontStack, loadFonts } from '../../lib/fonts';
-import { JARAK_KATA, JARAK_KATA_MAKS, JARAK_KATA_MIN, gayaKata, hexAlpha, jarakKata } from './ClipPreview';
+import { JARAK_KATA, JARAK_KATA_MAKS, JARAK_KATA_MIN, bayanganTeks, gayaKata, hexAlpha, jarakKata } from './ClipPreview';
 import {
   COLOR_GROUPS, COLOR_PAIRS, normalizeHex, useFavoriteColors, useRecentColors,
 } from '../../lib/colors';
@@ -771,194 +771,184 @@ function SpeakerCountPicker({ current, busy, onRedetect }) {
 // --- Gaya teks ----------------------------------------------------------------
 
 
-// Preset gaya. Bukan sekadar warna: tiap preset menyetel ukuran, animasi, font,
-// dan posisi sekaligus, karena kombinasi itulah yang membuat sebuah gaya
-// terbaca utuh — mengganti warna saja tidak mengubah kesannya.
-// `label` dan `hint` adalah kunci kamus, diterjemahkan saat dirender.
-const STYLE_PRESETS = [
-  // --- Kotak sorot per kata -------------------------------------------------
-  // Gaya yang paling banyak ditiru orang sekarang: tiap kata mendapat kotak
-  // berwarna saat diucapkan. Di ASS ini tidak sederhana — lihat `SOROT_KOTAK`
-  // di backend/app/services/subtitles.py — tapi hasilnya memang yang membuat
-  // klip terlihat dikerjakan editor, bukan dikerjakan mesin.
-  {
-    id: 'kotak_kuning', label: 'tema_sub.kotak_kuning', hint: 'tema_sub.kotak_kuning_ket',
-    patch: { size: 86, primary: '#FFFFFF', highlight: '#FFE500', font: 'Montserrat',
-             uppercase: true, animation: 'pop_in', position: 'bottom', outline_px: 7,
-             sorot: 'kotak', kotak_warna: '#FFE500', kotak_teks: '#101010',
-             highlight_words: true, bg: false },
-  },
-  {
-    id: 'kotak_hijau', label: 'tema_sub.kotak_hijau', hint: 'tema_sub.kotak_hijau_ket',
-    patch: { size: 92, primary: '#FFFFFF', highlight: '#00E676', font: 'Anton',
-             uppercase: true, animation: 'pantul', position: 'bottom', outline_px: 7,
-             sorot: 'kotak', kotak_warna: '#00E676', kotak_teks: '#06210F',
-             highlight_words: true, bg: false },
-  },
-  {
-    id: 'kotak_merah', label: 'tema_sub.kotak_merah', hint: 'tema_sub.kotak_merah_ket',
-    patch: { size: 82, primary: '#FFFFFF', highlight: '#FF3B5C', font: 'Archivo Black',
-             uppercase: true, animation: 'fade', position: 'bottom', outline_px: 7,
-             sorot: 'kotak_pop', kotak_warna: '#FF3B5C', kotak_teks: '#FFFFFF',
-             highlight_words: true, bg: false },
-  },
-  {
-    id: 'kotak_ungu', label: 'tema_sub.kotak_ungu', hint: 'tema_sub.kotak_ungu_ket',
-    patch: { size: 88, primary: '#FFFFFF', highlight: '#9B5CFF', font: 'Poppins',
-             uppercase: true, animation: 'slide_up', position: 'bottom', outline_px: 6,
-             sorot: 'kotak', kotak_warna: '#9B5CFF', kotak_teks: '#FFFFFF',
-             highlight_words: true, bg: false },
-  },
-  // --- Nyala ----------------------------------------------------------------
-  {
-    id: 'neon_biru', label: 'tema_sub.neon_biru', hint: 'tema_sub.neon_biru_ket',
-    patch: { size: 94, primary: '#FFFFFF', highlight: '#00E5FF', font: 'Anton',
-             uppercase: true, animation: 'blur_masuk', position: 'bottom', outline_px: 7,
-             sorot: 'glow', highlight_words: true, bg: false },
-  },
-  {
-    id: 'neon_pink', label: 'tema_sub.neon_pink', hint: 'tema_sub.neon_pink_ket',
-    patch: { size: 106, primary: '#FFFFFF', highlight: '#FF3DCB', font: 'Bebas Neue',
-             uppercase: true, animation: 'fade', position: 'bottom', outline_px: 6,
-             sorot: 'glow', highlight_words: true, bg: false },
-  },
-  // --- Gerak ----------------------------------------------------------------
-  {
-    id: 'satu_kata', label: 'tema_sub.satu_kata', hint: 'tema_sub.satu_kata_ket',
-    patch: { size: 150, primary: '#FFFFFF', highlight: '#FFE500', font: 'Anton',
-             uppercase: true, animation: 'satu_kata', position: 'middle', outline_px: 9,
-             highlight_words: true, bg: false, margin_v: 300 },
-  },
-  {
-    id: 'pantul', label: 'tema_sub.pantul', hint: 'tema_sub.pantul_ket',
-    patch: { size: 92, primary: '#FFFFFF', highlight: '#FFE500', font: 'Montserrat',
-             uppercase: true, animation: 'pantul', position: 'bottom', outline_px: 7,
-             sorot: 'pop', highlight_words: true, bg: false },
-  },
-  {
-    id: 'putar', label: 'tema_sub.putar', hint: 'tema_sub.putar_ket',
-    patch: { size: 90, primary: '#FFFFFF', highlight: '#5BC8FF', font: 'Rubik',
-             uppercase: true, animation: 'putar', position: 'bottom', outline_px: 7,
-             sorot: 'pop', highlight_words: true, bg: false },
-  },
-  {
-    id: 'geser', label: 'tema_sub.geser', hint: 'tema_sub.geser_ket',
-    patch: { size: 88, primary: '#FFFFFF', highlight: '#B8FF3A', font: 'Oswald',
-             uppercase: true, animation: 'geser_kiri', position: 'bottom', outline_px: 7,
-             sorot: 'warna', highlight_words: true, bg: false },
-  },
-  {
-    id: 'getar', label: 'tema_sub.getar', hint: 'tema_sub.getar_ket',
-    patch: { size: 84, primary: '#FFFFFF', highlight: '#FF4D5E', font: 'Bungee',
-             uppercase: true, animation: 'getar', position: 'bottom', outline_px: 8,
-             sorot: 'pop', highlight_words: true, bg: false },
-  },
-  {
-    id: 'fokus', label: 'tema_sub.fokus', hint: 'tema_sub.fokus_ket',
-    patch: { size: 88, primary: '#FFFFFF', highlight: '#FFD166', font: 'Poppins',
-             uppercase: false, animation: 'blur_masuk', position: 'bottom', outline_px: 6,
-             sorot: 'warna', highlight_words: true, bg: false },
-  },
-  // --- Penanda kata ----------------------------------------------------------
-  {
-    id: 'garis_bawah', label: 'tema_sub.garis_bawah', hint: 'tema_sub.garis_bawah_ket',
-    patch: { size: 80, primary: '#FFFFFF', highlight: '#FFE500', font: 'Poppins',
-             uppercase: false, animation: 'fade', position: 'bottom', outline_px: 6,
-             sorot: 'garis_bawah', highlight_words: true, bg: false },
-  },
-  {
-    id: 'retro', label: 'tema_sub.retro', hint: 'tema_sub.retro_ket',
-    patch: { size: 88, primary: '#FFFFFF', highlight: '#FFE500', font: 'Lilita One',
-             uppercase: true, animation: 'putar', position: 'bottom', outline_px: 0,
-             shadow_px: 9, bayang_warna: '#FF00AA',
-             sorot: 'warna', highlight_words: true, bg: false },
-  },
-  // --- Gaya awal -------------------------------------------------------------
-  {
-    id: 'tebal', label: 'tema_sub.tebal', hint: 'tema_sub.tebal_ket',
-    patch: { size: 96, primary: '#FFFFFF', highlight: '#FFE500', font: 'Montserrat',
-             uppercase: true, animation: 'karaoke_pop', position: 'bottom', outline_px: 7,
-             highlight_words: true, bg: false },
-  },
-  {
-    id: 'neon', label: 'tema_sub.neon', hint: 'tema_sub.neon_ket',
-    patch: { size: 110, primary: '#FFFFFF', highlight: '#00E5FF', font: 'Anton',
-             uppercase: true, animation: 'karaoke_pop', position: 'bottom', outline_px: 8,
-             highlight_words: true, bg: false },
-  },
-  {
-    id: 'lembut', label: 'tema_sub.lembut', hint: 'tema_sub.lembut_ket',
-    patch: { size: 84, primary: '#FFFFFF', highlight: '#FFD166', font: 'Poppins',
-             uppercase: false, animation: 'fade', position: 'bottom', outline_px: 5,
-             highlight_words: true, bg: false },
-  },
-  {
-    id: 'naik', label: 'tema_sub.naik', hint: 'tema_sub.naik_ket',
-    patch: { size: 92, primary: '#FFFFFF', highlight: '#7CFF6B', font: 'Oswald',
-             uppercase: true, animation: 'slide_up', position: 'bottom', outline_px: 7,
-             highlight_words: true, bg: false },
-  },
-  {
-    id: 'papan', label: 'tema_sub.papan', hint: 'tema_sub.papan_ket',
-    // Warna DITULIS sebagai heksadesimal, bukan sebagai var(--danger).
-    // Nilai preset ini dikirim apa adanya ke ffmpeg, dan variabel CSS tidak
-    // berarti apa-apa di sana — sah di peramban, putih di video, tanpa satu
-    // pun pesan yang menunjukkan ada yang salah.
-    patch: { size: 88, primary: '#FFFFFF', highlight: '#FF4D5E', font: 'Archivo Black',
-             uppercase: true, animation: 'pop_in', position: 'bottom', outline_px: 9,
-             highlight_words: true, bg: false },
-  },
-  {
-    id: 'ramping', label: 'tema_sub.ramping', hint: 'tema_sub.ramping_ket',
-    patch: { size: 116, primary: '#FFFFFF', highlight: '#00F5D4', font: 'Bebas Neue',
-             uppercase: true, animation: 'karaoke_wipe', position: 'bottom', outline_px: 6,
-             highlight_words: true, bg: false },
-  },
-  {
-    id: 'ceria', label: 'tema_sub.ceria', hint: 'tema_sub.ceria_ket',
-    patch: { size: 94, primary: '#FFFFFF', highlight: '#FF9F1C', font: 'Lilita One',
-             uppercase: true, animation: 'pop_in', position: 'bottom', outline_px: 8,
-             highlight_words: true, bg: false },
-  },
-  {
-    id: 'bersih', label: 'tema_sub.bersih', hint: 'tema_sub.bersih_ket',
-    patch: { size: 88, primary: '#FFFFFF', highlight: '#FFFFFF', font: 'Rubik',
-             uppercase: false, animation: 'none', position: 'bottom', outline_px: 5,
-             highlight_words: true, bg: false },
-  },
-  // --- Gaya berpelat --------------------------------------------------------
-  // Teks duduk di atas pelat gelap tembus pandang, bukan di balik garis luar
-  // tebal. Keduanya sama terbacanya di atas latar apa pun; yang pertama
-  // terlihat tenang, yang kedua terlihat keras. Sampai sekarang hanya yang
-  // kedua yang bisa dibuat.
-  {
-    id: 'apple', label: 'tema_sub.apple', hint: 'tema_sub.apple_ket',
-    patch: { size: 76, primary: '#FFFFFF', highlight: '#FFFFFF', font: 'Poppins',
-             uppercase: false, animation: 'fade', position: 'bottom', outline_px: 0,
-             highlight_words: false, bg: true, bg_color: '#000000',
-             bg_opacity: 0.55, bg_pad: 14 },
-  },
-  {
-    id: 'sinema', label: 'tema_sub.sinema', hint: 'tema_sub.sinema_ket',
-    patch: { size: 64, primary: '#FFFFFF', highlight: '#FFFFFF', font: 'Rubik',
-             uppercase: false, animation: 'none', position: 'bottom', outline_px: 0,
-             highlight_words: false, bg: true, bg_color: '#000000',
-             bg_opacity: 0.72, bg_pad: 10 },
-  },
-  {
-    id: 'ketik', label: 'tema_sub.ketik', hint: 'tema_sub.ketik_ket',
-    patch: { size: 92, primary: '#FFFFFF', highlight: '#FFE500', font: 'Montserrat',
-             uppercase: true, animation: 'typewriter', position: 'bottom', outline_px: 7,
-             highlight_words: false, bg: false },
-  },
-  {
-    id: 'stiker', label: 'tema_sub.stiker', hint: 'tema_sub.stiker_ket',
-    patch: { size: 84, primary: '#101010', highlight: '#101010', font: 'Lilita One',
-             uppercase: true, animation: 'pop_in', position: 'bottom', outline_px: 0,
-             highlight_words: false, bg: true, bg_color: '#FFE500',
-             bg_opacity: 0.95, bg_pad: 16 },
-  },
+// Preset gaya: tiap preset adalah satu MODEL tampilan (font, garis, bayangan,
+// cara menyorot, animasi), dan warnanya diatur terpisah lewat "Warna aksen".
+//
+// Diminta pemilik 17 Oktober 2026: banyak preset lama "sama hanya beda warna"
+// (Kotak kuning/hijau/merah/ungu, Neon biru/pink, Tebal/Naik/Papan/Ceria).
+// Sekarang satu model satu preset, dan `aksen` menyebut bidang mana yang
+// diwarnai oleh baris Warna aksen. Model-model baru memakai kemampuan render
+// yang ditambahkan hari yang sama: warna garis luar, pendar, huruf miring,
+// jarak huruf, dan kemiringan baris (backend services/subtitles.py).
+//
+// `label`, `hint`, dan `kategori` adalah kunci kamus. Id lama dipetakan ke
+// model baru + warnanya di ALIAS_TEMA, supaya saran tema yang tersimpan dan
+// tema yang dipilih AI dari daftar lama tetap bisa dipasang.
+const GAYA_DASAR = {
+  sorot: null, highlight_words: true, bg: false, outline_px: 7, shadow_px: 3,
+  bayang_warna: '#000000', garis_warna: '#000000', pendar: 0, miring: false,
+  spasi_huruf: 0, kemiringan: 0, primary: '#FFFFFF', position: 'bottom', margin_v: 300,
+};
+
+export const STYLE_PRESETS = [
+  // --- Populer ---------------------------------------------------------------
+  { id: 'kotak_sorot', kategori: 'gs.k_populer', label: 'tema_sub.kotak_sorot', hint: 'tema_sub.kotak_sorot_ket',
+    aksen: ['kotak_warna', 'highlight'],
+    patch: { size: 86, highlight: '#FFE500', font: 'Montserrat', uppercase: true, animation: 'pop_in',
+             outline_px: 7, sorot: 'kotak', kotak_warna: '#FFE500', kotak_teks: '#101010' } },
+  { id: 'kotak_pantul', kategori: 'gs.k_populer', label: 'tema_sub.kotak_pantul', hint: 'tema_sub.kotak_pantul_ket',
+    aksen: ['kotak_warna', 'highlight'],
+    patch: { size: 84, highlight: '#FF3B5C', font: 'Archivo Black', uppercase: true, animation: 'pantul',
+             outline_px: 7, sorot: 'kotak_pop', kotak_warna: '#FF3B5C', kotak_teks: '#FFFFFF' } },
+  { id: 'tebal', kategori: 'gs.k_populer', label: 'tema_sub.tebal', hint: 'tema_sub.tebal_ket',
+    aksen: ['highlight'],
+    patch: { size: 96, highlight: '#FFE500', font: 'Montserrat', uppercase: true, animation: 'karaoke_pop',
+             outline_px: 7 } },
+  { id: 'bayang_tegas', kategori: 'gs.k_populer', label: 'tema_sub.bayang_tegas', hint: 'tema_sub.bayang_tegas_ket',
+    aksen: ['highlight'],
+    patch: { size: 98, highlight: '#00E676', font: 'Montserrat', uppercase: true, animation: 'pop_in',
+             outline_px: 0, shadow_px: 7, bayang_warna: '#000000', sorot: 'pop' } },
+  { id: 'satu_kata', kategori: 'gs.k_populer', label: 'tema_sub.satu_kata', hint: 'tema_sub.satu_kata_ket',
+    aksen: ['highlight'],
+    patch: { size: 150, highlight: '#FFE500', font: 'Anton', uppercase: true, animation: 'satu_kata',
+             position: 'middle', outline_px: 9, margin_v: 300 } },
+  // --- Nyala -----------------------------------------------------------------
+  { id: 'neon', kategori: 'gs.k_nyala', label: 'tema_sub.neon', hint: 'tema_sub.neon_ket',
+    aksen: ['highlight'],
+    patch: { size: 100, highlight: '#00E5FF', font: 'Anton', uppercase: true, animation: 'blur_masuk',
+             outline_px: 7, sorot: 'glow' } },
+  { id: 'pendar', kategori: 'gs.k_nyala', label: 'tema_sub.pendar', hint: 'tema_sub.pendar_ket',
+    aksen: ['garis_warna'],
+    patch: { size: 90, highlight: '#FFFFFF', font: 'Poppins', uppercase: false, animation: 'fade',
+             outline_px: 6, shadow_px: 0, garis_warna: '#FF3DCB', pendar: 10, highlight_words: false,
+             sorot: 'mati' } },
+  { id: 'garis_warna', kategori: 'gs.k_nyala', label: 'tema_sub.garis_warna', hint: 'tema_sub.garis_warna_ket',
+    aksen: ['garis_warna'],
+    patch: { size: 94, highlight: '#FFE500', font: 'Lilita One', uppercase: true, animation: 'pop_in',
+             outline_px: 10, shadow_px: 0, garis_warna: '#7B2CFF', sorot: 'warna' } },
+  // --- Pelat -----------------------------------------------------------------
+  { id: 'apple', kategori: 'gs.k_pelat', label: 'tema_sub.apple', hint: 'tema_sub.apple_ket',
+    aksen: ['bg_color'],
+    patch: { size: 76, highlight: '#FFFFFF', font: 'Poppins', uppercase: false, animation: 'fade',
+             outline_px: 0, highlight_words: false, sorot: 'mati', bg: true, bg_color: '#000000',
+             bg_opacity: 0.55, bg_pad: 14 } },
+  { id: 'sinema', kategori: 'gs.k_pelat', label: 'tema_sub.sinema', hint: 'tema_sub.sinema_ket',
+    aksen: ['primary'],
+    patch: { size: 64, highlight: '#FFFFFF', font: 'Rubik', uppercase: false, animation: 'none',
+             outline_px: 0, highlight_words: false, sorot: 'mati', bg: true, bg_color: '#000000',
+             bg_opacity: 0.72, bg_pad: 10 } },
+  { id: 'stiker', kategori: 'gs.k_pelat', label: 'tema_sub.stiker', hint: 'tema_sub.stiker_ket',
+    aksen: ['bg_color'], kontras: true,
+    patch: { size: 84, primary: '#101010', highlight: '#101010', font: 'Lilita One', uppercase: true,
+             animation: 'pop_in', outline_px: 0, highlight_words: false, sorot: 'mati', bg: true,
+             bg_color: '#FFE500', bg_opacity: 0.95, bg_pad: 16 } },
+  { id: 'label_miring', kategori: 'gs.k_pelat', label: 'tema_sub.label_miring', hint: 'tema_sub.label_miring_ket',
+    aksen: ['bg_color'], kontras: true,
+    patch: { size: 86, primary: '#FFFFFF', highlight: '#FFFFFF', font: 'Anton', uppercase: true,
+             animation: 'pop_in', outline_px: 0, highlight_words: false, sorot: 'mati', bg: true,
+             bg_color: '#FF3B5C', bg_opacity: 1, bg_pad: 16, miring: true, kemiringan: 4 } },
+  // --- Gaya huruf ------------------------------------------------------------
+  { id: 'retro', kategori: 'gs.k_huruf', label: 'tema_sub.retro', hint: 'tema_sub.retro_ket',
+    aksen: ['bayang_warna'],
+    patch: { size: 88, highlight: '#FFE500', font: 'Lilita One', uppercase: true, animation: 'putar',
+             outline_px: 0, shadow_px: 9, bayang_warna: '#FF00AA', sorot: 'warna' } },
+  { id: 'elegan', kategori: 'gs.k_huruf', label: 'tema_sub.elegan', hint: 'tema_sub.elegan_ket',
+    aksen: ['primary'],
+    patch: { size: 84, primary: '#FFF6E0', highlight: '#FFF6E0', font: 'Playfair Display', uppercase: false,
+             animation: 'fade', outline_px: 0, shadow_px: 3, miring: true, highlight_words: false,
+             sorot: 'mati' } },
+  { id: 'lebar', kategori: 'gs.k_huruf', label: 'tema_sub.lebar', hint: 'tema_sub.lebar_ket',
+    aksen: ['primary'],
+    patch: { size: 104, highlight: '#FFFFFF', font: 'Bebas Neue', uppercase: true, animation: 'fade',
+             outline_px: 5, spasi_huruf: 10, highlight_words: false, sorot: 'mati' } },
+  { id: 'komik', kategori: 'gs.k_huruf', label: 'tema_sub.komik', hint: 'tema_sub.komik_ket',
+    aksen: ['highlight'],
+    patch: { size: 92, highlight: '#FF9F1C', font: 'Luckiest Guy', uppercase: true, animation: 'pantul',
+             outline_px: 9, kemiringan: -3, sorot: 'warna' } },
+  { id: 'miring_cepat', kategori: 'gs.k_huruf', label: 'tema_sub.miring_cepat', hint: 'tema_sub.miring_cepat_ket',
+    aksen: ['highlight'],
+    patch: { size: 96, highlight: '#B8FF3A', font: 'Anton', uppercase: true, animation: 'geser_kiri',
+             outline_px: 7, miring: true, sorot: 'warna' } },
+  { id: 'garis_bawah', kategori: 'gs.k_huruf', label: 'tema_sub.garis_bawah', hint: 'tema_sub.garis_bawah_ket',
+    aksen: ['highlight'],
+    patch: { size: 80, highlight: '#FFE500', font: 'Poppins', uppercase: false, animation: 'fade',
+             outline_px: 6, sorot: 'garis_bawah' } },
+  { id: 'ramping', kategori: 'gs.k_huruf', label: 'tema_sub.ramping', hint: 'tema_sub.ramping_ket',
+    aksen: ['highlight'],
+    patch: { size: 118, highlight: '#00F5D4', font: 'Teko', uppercase: true, animation: 'karaoke_wipe',
+             outline_px: 6 } },
+  // --- Gerak -----------------------------------------------------------------
+  { id: 'ketik', kategori: 'gs.k_gerak', label: 'tema_sub.ketik', hint: 'tema_sub.ketik_ket',
+    aksen: ['primary'],
+    patch: { size: 92, highlight: '#FFE500', font: 'Montserrat', uppercase: true, animation: 'typewriter',
+             outline_px: 7, highlight_words: false, sorot: 'mati' } },
+  { id: 'lembut', kategori: 'gs.k_gerak', label: 'tema_sub.lembut', hint: 'tema_sub.lembut_ket',
+    aksen: ['highlight'],
+    patch: { size: 84, highlight: '#FFD166', font: 'Poppins', uppercase: false, animation: 'fade',
+             outline_px: 5, sorot: 'warna' } },
+  { id: 'fokus', kategori: 'gs.k_gerak', label: 'tema_sub.fokus', hint: 'tema_sub.fokus_ket',
+    aksen: ['highlight'],
+    patch: { size: 88, highlight: '#FFD166', font: 'Rubik', uppercase: false, animation: 'blur_masuk',
+             outline_px: 6, sorot: 'pop' } },
+  { id: 'getar', kategori: 'gs.k_gerak', label: 'tema_sub.getar', hint: 'tema_sub.getar_ket',
+    aksen: ['highlight'],
+    patch: { size: 84, highlight: '#FF4D5E', font: 'Bungee', uppercase: true, animation: 'getar',
+             outline_px: 8, sorot: 'pop' } },
+  { id: 'bersih', kategori: 'gs.k_gerak', label: 'tema_sub.bersih', hint: 'tema_sub.bersih_ket',
+    aksen: ['primary'],
+    patch: { size: 88, highlight: '#FFFFFF', font: 'Rubik', uppercase: false, animation: 'none',
+             outline_px: 5, highlight_words: false, sorot: 'mati' } },
 ];
+// Gabungkan dasar ke tiap patch: preset selalu mulai dari keadaan yang sama.
+STYLE_PRESETS.forEach((p) => { p.patch = { ...GAYA_DASAR, ...p.patch }; });
+
+// Id tema lama -> [model baru, warna aksen]. Lihat catatan di atas.
+export const ALIAS_TEMA = {
+  kotak_kuning: ['kotak_sorot', '#FFE500'], kotak_hijau: ['kotak_sorot', '#00E676'],
+  kotak_merah: ['kotak_pantul', '#FF3B5C'], kotak_ungu: ['kotak_sorot', '#9B5CFF'],
+  neon_biru: ['neon', '#00E5FF'], neon_pink: ['neon', '#FF3DCB'],
+  pantul: ['tebal', '#FFE500'], putar: ['tebal', '#5BC8FF'], geser: ['miring_cepat', '#B8FF3A'],
+  naik: ['tebal', '#7CFF6B'], papan: ['tebal', '#FF4D5E'], ceria: ['komik', '#FF9F1C'],
+};
+
+/** Warna teks yang terbaca di atas warna `hex`: gelap di atas terang, putih di atas gelap. */
+function kontrasDari(hex) {
+  // Rasio kontras WCAG, bukan kecerahan saja: hijau #00E676 tampak "sedang"
+  // menurut rumus kecerahan dan mendapat huruf putih yang nyaris tak terbaca.
+  // Putih tetap dipilih selama kontrasnya 3:1 (teks besar), karena huruf putih
+  // di atas ungu atau pink adalah rupa yang lazim di klip pendek. Kembarannya
+  // `_kontras` di backend/app/services/tema_judul.py.
+  return (contrastRatio(hex, '#FFFFFF') ?? 21) >= 3 ? '#FFFFFF' : '#101010';
+}
+
+/** Patch untuk mewarnai `preset` dengan warna aksen `c`. */
+export function warnaiPreset(preset, c) {
+  const patch = {};
+  for (const f of preset.aksen || ['highlight']) patch[f] = c;
+  if ((preset.aksen || []).includes('kotak_warna')) patch.kotak_teks = kontrasDari(c);
+  if (preset.kontras) {
+    patch.primary = kontrasDari(c);
+    patch.highlight = patch.primary;
+  }
+  return patch;
+}
+
+/** Patch lengkap untuk id tema (baru atau lama), atau null. */
+export function patchTema(id) {
+  const [baru, warna] = ALIAS_TEMA[id] || [id, null];
+  const p = STYLE_PRESETS.find((x) => x.id === baru);
+  if (!p) return null;
+  return { ...p.patch, tema: p.id, ...(warna ? warnaiPreset(p, warna) : {}) };
+}
+
+/** Warna aksen gaya yang sedang dipakai, untuk menandai keping yang aktif. */
+function aksenKini(preset, style) {
+  const f = (preset?.aksen || ['highlight'])[0];
+  return style?.[f];
+}
+
+const WARNA_AKSEN = ['#FFE500', '#FF9F1C', '#FF3B5C', '#FF3DCB', '#9B5CFF', '#5BC8FF',
+                     '#00E5FF', '#00E676', '#B8FF3A', '#FFFFFF', '#101010'];
 
 /**
  * Contoh sebuah preset, digambar memakai gaya preset itu sendiri.
@@ -1009,9 +999,14 @@ function PresetTile({ preset, active, onPick }) {
             padding: `${(p.bg_pad ?? 14) * 0.22}px ${(p.bg_pad ?? 14) * 0.4}px`,
             borderRadius: '4px',
           } : {
-            WebkitTextStroke: `${Math.max(0.5, (p.outline_px ?? 7) * 0.16)}px #000`,
+            WebkitTextStroke: p.outline_px === 0 ? 'none'
+              : `${Math.max(0.5, (p.outline_px ?? 7) * 0.16)}px ${p.garis_warna || '#000'}`,
             paintOrder: 'stroke fill',
+            textShadow: bayanganTeks(p, 0.12, 15),
           }),
+          fontStyle: p.miring ? 'italic' : 'normal',
+          ...(p.spasi_huruf ? { letterSpacing: `${p.spasi_huruf * 0.12}px` } : {}),
+          ...(p.kemiringan ? { transform: `rotate(${-p.kemiringan}deg)` } : {}),
         }}>
           <span style={{ color: p.primary }}>{words[0]}</span>
           {/* Kata kedua digambar dengan fungsi yang SAMA dengan pratinjau dan
@@ -1273,13 +1268,15 @@ function PilihTemaAI({ klip, presets, set }) {
     setGalat(null);
     try {
       const r = await apiPost('/clip-gaya', { ...klip, segarkan }, { timeout: 120000 });
-      const preset = presets.find((p) => p.id === r.tema);
-      if (!preset) throw new Error(t('temaai.tak_dikenal', { tema: r.tema }));
+      // Id lama (sebelum katalog 17 Oktober 2026) dipetakan ke model barunya.
+      const patchAi = patchTema(r.tema);
+      const preset = presets.find((p) => p.id === patchAi?.tema);
+      if (!preset || !patchAi) throw new Error(t('temaai.tak_dikenal', { tema: r.tema }));
       // Usul model soal warna per penutur hanya berlaku bila sakelar induknya
       // menyala. Model menilai transkrip, bukan ketepatan pemisahan suaranya,
       // jadi ia tidak berhak menyalakan sesuatu yang sedang dimatikan.
       const bolehWarna = await muatWarnaPenutur();
-      set({ ...preset.patch,
+      set({ ...patchAi,
             per_speaker_colors: bolehWarna && !!r.warna_per_penutur });
       setHasil({ ...r, label: t(preset.label),
                  warna_per_penutur: bolehWarna && !!r.warna_per_penutur });
@@ -1343,9 +1340,10 @@ export function StylePanel({
   useEffect(() => { loadFonts().then(setFonts); }, []);
 
   const set = (patch) => onChange({ ...style, ...patch });
-  const activePreset = STYLE_PRESETS.find(
-    (p) => Object.entries(p.patch).every(([k, v]) => style[k] === v),
-  );
+  // Preset aktif dikenali dari id temanya (disimpan saat dipilih), karena
+  // warnanya boleh diubah sesudah itu; gaya lama tanpa id dicocokkan isinya.
+  const activePreset = STYLE_PRESETS.find((p) => p.id === (ALIAS_TEMA[style.tema]?.[0] ?? style.tema))
+    ?? STYLE_PRESETS.find((p) => Object.entries(p.patch).every(([k, v]) => style[k] === v));
   const speakers = Math.max(1, Math.min(8, speakerCount || 1));
   const palette = style.speaker_colors ?? DEFAULT_SPEAKER_COLORS;
   const bolehWarnaPenutur = useWarnaPenutur();
@@ -1404,12 +1402,34 @@ export function StylePanel({
         {klipUntukTema && (
           <PilihTemaAI klip={klipUntukTema} presets={STYLE_PRESETS} set={set} />
         )}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '7px' }}>
-          {STYLE_PRESETS.map((p) => (
-            <PresetTile key={p.id} preset={p} active={activePreset?.id === p.id}
-                        onPick={() => set(p.patch)} />
-          ))}
+        {/* Warna aksen: mewarnai model yang sedang dipilih. Satu model, warna
+            bebas (diminta pemilik 17 Oktober 2026). Tanpa model (gaya lama atau
+            ubahan sendiri) warnanya jatuh ke kata sorot. */}
+        <div>
+          <div style={{ ...label, marginBottom: '6px' }}>{t('gs.warna_aksen')}</div>
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+            {WARNA_AKSEN.map((c) => (
+              <Swatch key={c} color={c} size={22}
+                      selected={String(aksenKini(activePreset, style) || '').toUpperCase() === c}
+                      onClick={() => set(activePreset ? warnaiPreset(activePreset, c) : { highlight: c })} />
+            ))}
+            <input type="color" value={aksenKini(activePreset, style) || '#FFE500'}
+                   title={t('gs.warna_bebas')}
+                   onChange={(e) => { const c = e.target.value.toUpperCase(); set(activePreset ? warnaiPreset(activePreset, c) : { highlight: c }); }}
+                   style={{ width: 26, height: 24, padding: 0, border: 0, background: 'none', cursor: 'pointer' }} />
+          </div>
         </div>
+        {[...new Set(STYLE_PRESETS.map((p) => p.kategori))].map((kat) => (
+          <div key={kat}>
+            <div style={{ ...label, margin: '6px 0' }}>{t(kat)}</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '7px' }}>
+              {STYLE_PRESETS.filter((p) => p.kategori === kat).map((p) => (
+                <PresetTile key={p.id} preset={p} active={activePreset?.id === p.id}
+                            onPick={() => set({ ...p.patch, tema: p.id })} />
+              ))}
+            </div>
+          </div>
+        ))}
         <p style={{ fontSize: '0.67rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
           {t('gs.contoh_ket')}
         </p>
@@ -1610,6 +1630,38 @@ export function StylePanel({
             {t('gs.garis_ket')}
           </p>
         </div>
+
+        {/* Gaya huruf tambahan (17 Oktober 2026): warna garis, pendar, jarak
+            huruf, kemiringan, miring. Semuanya dirender libass apa adanya. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          <span style={{ ...label, margin: 0 }}>{t('gs.warna_garis')}</span>
+          {['#000000', '#FFFFFF', '#FF3DCB', '#7B2CFF', '#00E5FF', '#FF3B5C', '#FFE500'].map((c) => (
+            <Swatch key={c} color={c} size={18}
+                    selected={String(style.garis_warna || '#000000').toUpperCase() === c}
+                    onClick={() => set({ garis_warna: c })} />
+          ))}
+          <input type="color" value={style.garis_warna || '#000000'} title={t('gs.warna_bebas')}
+                 onChange={(e) => set({ garis_warna: e.target.value.toUpperCase() })}
+                 style={{ width: 24, height: 22, padding: 0, border: 0, background: 'none', cursor: 'pointer' }} />
+        </div>
+        {[
+          ['pendar', 'gs.pendar_n', 0, 16, 1, 0],
+          ['spasi_huruf', 'gs.spasi_huruf_n', 0, 24, 1, 0],
+          ['kemiringan', 'gs.kemiringan_n', -15, 15, 1, 0],
+        ].map(([f, kunci, min, max, step, dasar]) => (
+          <div key={f}>
+            <div style={{ ...label, marginBottom: '6px' }}>{t(kunci, { n: style[f] ?? dasar })}</div>
+            <input type="range" min={min} max={max} step={step} value={style[f] ?? dasar}
+                   onChange={(e) => set({ [f]: Number(e.target.value) })}
+                   style={{ width: '100%', accentColor: 'var(--accent-cyan)' }} />
+          </div>
+        ))}
+        <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontSize: '0.84rem' }}>
+          <input type="checkbox" checked={!!style.miring}
+                 onChange={(e) => set({ miring: e.target.checked })}
+                 style={{ accentColor: 'var(--accent-cyan)', width: '16px', height: '16px' }} />
+          {t('gs.miring')}
+        </label>
 
         <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontSize: '0.84rem' }}>
           <input type="checkbox" checked={style.uppercase}
