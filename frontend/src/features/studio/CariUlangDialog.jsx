@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { namaMesin as namaMesinUmum } from '../../lib/mesin';
-import { Loader2, RotateCcw, Sparkles, X, Cpu } from 'lucide-react';
+import { Loader2, RotateCcw, Sparkles, X, Cpu, Laptop } from 'lucide-react';
 import { apiGet, apiPost } from '../../lib/api';
 import BilahProses from '../../components/BilahProses';
 import { useT } from '../../lib/i18n';
@@ -35,6 +35,8 @@ export default function CariUlangDialog({ videoId, data, dirty, onSimpanDulu, on
   const [daftarModel, setDaftarModel] = useState([]);
   const [infoModel, setInfoModel] = useState({ terkuat: null, habisHarian: [] });
   const [adaKunci, setAdaKunci] = useState(null);
+  // Koneksi AI aktif (Pengaturan > Mesin AI), masing-masing jadi pilihan.
+  const [koneksi, setKoneksi] = useState([]);
   const [jumlah, setJumlah] = useState(0);
   const [sibuk, setSibuk] = useState(false);
   const [pesan, setPesan] = useState('');
@@ -45,9 +47,11 @@ export default function CariUlangDialog({ videoId, data, dirty, onSimpanDulu, on
     // AI tersedia bila ADA koneksi aktif (Gemini, Claude, AI lokal, ...),
     // bukan hanya kunci Gemini (17 Oktober 2026).
     apiGet('/settings/koneksi-ai').then((r) => {
-      const ada = (r.koneksi || []).some((k) => k.aktif);
-      setAdaKunci(ada);
-      if (!ada) setMesin('heuristik');
+      const aktif = (r.koneksi || []).filter((k) => k.aktif);
+      setKoneksi(aktif);
+      setAdaKunci(aktif.length > 0);
+      const utama = aktif.find((k) => k.utama) || aktif[0];
+      setMesin(utama ? `k:${utama.id}` : 'heuristik');
     }).catch(() => setAdaKunci(null));
     apiGet('/settings/models').then((r) => {
       // Model yang kunci ini tidak punya aksesnya dibuang dari daftar, bukan
@@ -98,8 +102,11 @@ export default function CariUlangDialog({ videoId, data, dirty, onSimpanDulu, on
         setPesan(t('ulang.menyimpan'));
         await onSimpanDulu();
       }
+      const pakaiAi = mesin !== 'heuristik';
       const { job_id: jobId } = await apiPost(`/projects/${videoId}/cari-ulang`, {
-        mesin, gemini_model: mesin === 'gemini' && model ? model : null,
+        mesin: pakaiAi ? 'gemini' : 'heuristik',
+        koneksi_id: pakaiAi && mesin.startsWith('k:') ? mesin.slice(2) : null,
+        gemini_model: koneksiPilih?.penyedia === 'gemini' && model ? model : null,
         max_clips: Number(jumlah) || 0,
       });
       const job = await pantau(jobId);
@@ -128,6 +135,8 @@ export default function CariUlangDialog({ videoId, data, dirty, onSimpanDulu, on
   };
 
   const sebelumnya = data?.sebelumnya;
+  const koneksiPilih = koneksi.find((k) => `k:${k.id}` === mesin);
+
   const pilihan = (nilai, ikon, judul, ket, mati) => (
     <button type="button" onClick={() => !mati && setMesin(nilai)} disabled={sibuk || mati}
             style={{
@@ -174,16 +183,28 @@ export default function CariUlangDialog({ videoId, data, dirty, onSimpanDulu, on
         </p>
 
         <div style={{ display: 'grid', gap: '7px' }}>
-          {pilihan('gemini', <Sparkles size={16} style={{ color: 'var(--accent-cyan)', marginTop: 2 }} />,
-                   t('ulang.ai'), adaKunci === false
-                     ? t('ulang.butuh_kunci')
-                     : t('ulang.gemini_ket'),
-                   adaKunci === false)}
+          {koneksi.map((k) => {
+            const st = k.uji?.status;
+            const mati = st === 'ditolak' || st === 'tidak_sah';
+            return (
+              <React.Fragment key={k.id}>
+                {pilihan(`k:${k.id}`,
+                  k.penyedia === 'lokal'
+                    ? <Laptop size={16} style={{ color: 'var(--reh)', marginTop: 2 }} />
+                    : <Sparkles size={16} style={{ color: 'var(--accent-cyan)', marginTop: 2 }} />,
+                  `${k.nama}${k.utama ? ` · ${t('koneksi.utama')}` : ''}`,
+                  `${k.penyedia_nama} · ${st ? t(`koneksi.s_${st}`) : t('kunci.s_belum')}`
+                    + (k.penyedia === 'lokal' ? ` · ${t('ulang.lokal_lama')}` : ''),
+                  mati)}
+              </React.Fragment>
+            );
+          })}
+          {adaKunci === false && <p style={{ ...kecil, margin: 0 }}>{t('ulang.butuh_kunci')}</p>}
           {pilihan('heuristik', <Cpu size={16} style={{ color: 'var(--text-secondary)', marginTop: 2 }} />,
                    t('sutradara.lokal'), t('ulang.lokal_ket'))}
         </div>
 
-        {mesin === 'gemini' && daftarModel.length > 0 && (
+        {koneksiPilih?.penyedia === 'gemini' && daftarModel.length > 0 && (
           <label style={label}>{t('ulang.model')}
             <select value={model} onChange={(e) => setModel(e.target.value)} disabled={sibuk}
                     style={{ ...kontrol, width: '100%', marginTop: '5px' }}>

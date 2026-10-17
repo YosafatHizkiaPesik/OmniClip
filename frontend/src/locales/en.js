@@ -1908,5 +1908,11 @@ export default {
   'lokal.yakin_hapus': "Delete model {nama} from this computer?",
   'mesin.kustom': "Own AI server",
   'ulang.ai': "AI (per AI connections)",
+  'lokal.ket_model': "**Gemini cannot be installed locally**: it is a closed model that runs only on Google's servers. The closest is **Gemma**, Google's open model. The models here are run by OmniClip itself with llama.cpp, so **Ollama is not needed**. If you already use Ollama or LM Studio, connect it through AI connections > OpenAI-style server. Other GGUF models can be added from a Hugging Face link.",
+  'lokal.dari_hf': "from Hugging Face",
+  'lokal.hf_placeholder': "Link to a .gguf file on huggingface.co",
+  'lokal.hf_tambah': "Add model",
+  'lokal.hf_ok': "Model added to the list. Select it and press Install.",
+  'ulang.lokal_lama': "may take several minutes",
   'bahasa.pilih': 'Language',
 };

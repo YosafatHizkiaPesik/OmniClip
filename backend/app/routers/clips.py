@@ -629,6 +629,10 @@ async def lanjutkan_proses(video_id: str):
 class CariUlangRequest(BaseModel):
     # "gemini" = peringkat disusun ulang oleh model; "heuristik" = mesin lokal.
     mesin: Literal["gemini", "heuristik"] = "gemini"
+    # Koneksi AI tertentu (Pengaturan > Mesin AI). Kosong = ikut urutan, mulai
+    # dari yang utama. Diminta pemilik 17 Oktober 2026: AI lokal harus bisa
+    # dipilih langsung di Cari ulang, bukan hanya lewat urutan.
+    koneksi_id: Optional[str] = Field(None, max_length=40)
     gemini_model: Optional[str] = Field(None, max_length=80)
     # 0 = dihitung dari durasi video.
     max_clips: int = Field(0, ge=0, le=60)
@@ -670,6 +674,7 @@ async def cari_ulang(video_id: str, req: CariUlangRequest):
             "ulang": True,
             "use_gemini": req.mesin == "gemini",
             "gemini_model": req.gemini_model if req.mesin == "gemini" else None,
+            "koneksi_id": req.koneksi_id if req.mesin == "gemini" else None,
             "max_clips": req.max_clips,
         },
         video_id=vid,

@@ -669,6 +669,21 @@ async def pasang_ai_lokal(req: AiLokalPasang):
     return {"job_id": job_id, "created": created}
 
 
+class AiLokalKustom(BaseModel):
+    url: str = Field(..., min_length=10, max_length=500)
+
+
+@router.post("/ai-lokal/kustom")
+async def tambah_model_kustom(req: AiLokalKustom):
+    """Model GGUF lain dari tautan Hugging Face (ukuran + sha256 dibaca dari sana)."""
+    from ..services import ai_lokal
+    try:
+        await asyncio.to_thread(ai_lokal.tambah_kustom, req.url)
+    except ValueError as e:
+        raise AppError(str(e), code="AI_LOKAL_MODEL", status=422) from e
+    return await asyncio.to_thread(ai_lokal.status)
+
+
 @router.delete("/ai-lokal/model/{model}")
 async def hapus_model_ai_lokal(model: str):
     from ..services import ai_lokal

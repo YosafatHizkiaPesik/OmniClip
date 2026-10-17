@@ -15,6 +15,7 @@ export default function AiLokalCard({ card, sectionTitle, helpText, onBerubah })
   const [pilih, setPilih] = useState('');
   const [kabar, setKabar] = useState(null);
   const [sibuk, setSibuk] = useState(false);
+  const [tautan, setTautan] = useState('');
   const pasang = useJobRunner();
 
   const muat = () => apiGet('/settings/ai-lokal').then((r) => {
@@ -50,6 +51,7 @@ export default function AiLokalCard({ card, sectionTitle, helpText, onBerubah })
         {t('lokal.judul')}
       </div>
       <p className="bantu" style={helpText}>{tebal(t('lokal.ket'))}</p>
+      <p className="bantu" style={{ ...helpText, marginTop: 6 }}>{tebal(t('lokal.ket_model'))}</p>
       {!st.didukung && <p style={{ ...helpText, color: 'var(--danger)' }}>{t('lokal.tidak_didukung')}</p>}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 8, marginTop: 12 }}>
@@ -67,6 +69,7 @@ export default function AiLokalCard({ card, sectionTitle, helpText, onBerubah })
             </div>
             <div style={{ fontSize: '.7rem', marginTop: 3, color: x.terpasang ? 'var(--entry)' : 'var(--text-muted)' }}>
               {x.terpasang ? t('lokal.terpasang') : t('lokal.belum')}
+              {x.kustom ? ` · ${t('lokal.dari_hf')}` : ''}
             </div>
           </button>
         ))}
@@ -98,6 +101,24 @@ export default function AiLokalCard({ card, sectionTitle, helpText, onBerubah })
             </button>
           </>
         )}
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 14 }}>
+        <input value={tautan} onChange={(e) => setTautan(e.target.value)} spellCheck={false}
+               placeholder={t('lokal.hf_placeholder')}
+               style={{ flex: '1 1 320px', padding: '9px 11px', borderRadius: 'var(--radius-md)',
+                        border: '1px solid var(--border-color)', background: 'var(--bg-glass)',
+                        color: 'var(--text-primary)', fontSize: '0.8rem', fontFamily: 'inherit' }} />
+        <button className="btn-secondary" disabled={!tautan.trim() || sibuk}
+                onClick={() => {
+                  setSibuk(true); setKabar(null);
+                  apiPost('/settings/ai-lokal/kustom', { url: tautan.trim() }, { timeout: 60000 })
+                    .then((r) => { setSt(r); setTautan(''); setKabar({ ok: true, teks: t('lokal.hf_ok') }); })
+                    .catch((e) => setKabar({ ok: false, teks: e.message }))
+                    .finally(() => setSibuk(false));
+                }}>
+          {t('lokal.hf_tambah')}
+        </button>
       </div>
 
       {pasang.active && (

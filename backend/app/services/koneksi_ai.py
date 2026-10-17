@@ -479,7 +479,7 @@ def uji_koneksi(k: dict) -> dict:
             nama = []
         if k["penyedia"] == "lokal" and not nama:
             raise Gagal("AI lokal belum dipasang.", "tidak_ada")
-        if not _model(k) and k["penyedia"] not in ("lokal",):
+        if not _model(k) and k["penyedia"] not in ("lokal", "openrouter"):
             hasil.update(status="pilih_model")
             _simpan_uji(k["id"], hasil)
             return hasil

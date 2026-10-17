@@ -1909,5 +1909,11 @@ export default {
   'lokal.yakin_hapus': "Hapus model {nama} dari komputer ini?",
   'mesin.kustom': "Server AI sendiri",
   'ulang.ai': "AI (sesuai Koneksi AI)",
+  'lokal.ket_model': "**Gemini tidak bisa dipasang lokal** karena modelnya tertutup dan hanya berjalan di server Google. Yang paling dekat adalah **Gemma**, model terbuka dari Google. Model di sini dijalankan OmniClip sendiri dengan llama.cpp, jadi **tidak butuh Ollama**. Bila Anda sudah memakai Ollama atau LM Studio, sambungkan lewat Koneksi AI > Server bergaya OpenAI. Model lain berformat GGUF bisa ditambahkan dari tautan Hugging Face.",
+  'lokal.dari_hf': "dari Hugging Face",
+  'lokal.hf_placeholder': "Tautan berkas .gguf di huggingface.co",
+  'lokal.hf_tambah': "Tambah model",
+  'lokal.hf_ok': "Model ditambahkan ke daftar. Pilih lalu tekan Pasang.",
+  'ulang.lokal_lama': "bisa beberapa menit",
   'bahasa.pilih': 'Bahasa',
 };

@@ -1230,6 +1230,11 @@ def run_auto_clip(ctx: JobContext) -> dict:
         galat_kunci: list[str] = []
         galat_lain: list[str] = []
         rantai_k = _kon.rantai() if use_gemini else []
+        if use_gemini and ctx.payload.get("koneksi_id"):
+            # Koneksi yang dipilih sendiri di Cari ulang: hanya itu yang
+            # dicoba; gagal = mesin lokal, dengan alasannya.
+            dipilih = [k for k in _kon.semua() if k["id"] == ctx.payload["koneksi_id"]]
+            rantai_k = dipilih or rantai_k
         if use_gemini and ctx.payload.get("api_key"):
             rantai_k = [{"id": "-", "nama": "Gemini", "penyedia": "gemini",
                          "kunci": ctx.payload["api_key"], "model": ""}] + rantai_k

@@ -36,6 +36,7 @@ import sys
 import tarfile
 import threading
 import time
+import urllib.error
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -88,7 +89,119 @@ MODEL = {
         "sha256": "6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e",
         "bita": 1117320736, "ram_mb": 1500,
     },
+    # Gemma 3: model TERBUKA dari Google, dari riset yang sama dengan Gemini.
+    # Gemini sendiri tidak bisa dijalankan lokal (modelnya tertutup); Gemma
+    # adalah "Gemini lokal" yang paling dekat (ditanyakan pemilik 17 Oktober).
+    "gemma3-4b": {
+        "nama": "Gemma 3 4B (Google)",
+        "url": "https://huggingface.co/bartowski/google_gemma-3-4b-it-GGUF/resolve/main/"
+               "google_gemma-3-4b-it-Q4_K_M.gguf",
+        "sha256": "4996030242583a40aa151ff93f49ed787ac8c25e4120c3ae4588b2e2a7d1ae94",
+        "bita": 2489758112, "ram_mb": 3500,
+    },
+    "gemma3-1b": {
+        "nama": "Gemma 3 1B (Google)",
+        "url": "https://huggingface.co/bartowski/google_gemma-3-1b-it-GGUF/resolve/main/"
+               "google_gemma-3-1b-it-Q4_K_M.gguf",
+        "sha256": "12bf0fff8815d5f73a3c9b586bd8fee8e7b248c935de70dec367679873d0f29d",
+        "bita": 806058496, "ram_mb": 1300,
+    },
+    "llama3.2-3b": {
+        "nama": "Llama 3.2 3B (Meta)",
+        "url": "https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/"
+               "Llama-3.2-3B-Instruct-Q4_K_M.gguf",
+        "sha256": "6c1a2b41161032677be168d354123594c0e6e67d2b9227c84f296ad037c728ff",
+        "bita": 2019377696, "ram_mb": 2700,
+    },
+    "phi4-mini": {
+        "nama": "Phi-4 mini (Microsoft)",
+        "url": "https://huggingface.co/bartowski/microsoft_Phi-4-mini-instruct-GGUF/resolve/main/"
+               "microsoft_Phi-4-mini-instruct-Q4_K_M.gguf",
+        "sha256": "01999f17c39cc3074afae5e9c539bc82d45f2dd7faa3917c66cbef76fce8c0c2",
+        "bita": 2491874688, "ram_mb": 3300,
+    },
+    # Hanya untuk komputer RAM 16 GB ke atas.
+    "gemma3-12b": {
+        "nama": "Gemma 3 12B (Google)",
+        "url": "https://huggingface.co/bartowski/google_gemma-3-12b-it-GGUF/resolve/main/"
+               "google_gemma-3-12b-it-Q4_K_M.gguf",
+        "sha256": "fc57f67efa46d711c346e587cbef7d049e95f3df8db2eb2271153343ef0acc7b",
+        "bita": 7300575264, "ram_mb": 9000,
+    },
 }
+KATALOG = set(MODEL)
+
+# Model GGUF lain yang ditambahkan sendiri lewat tautan Hugging Face, disimpan
+# di setelan `ai.lokal_kustom`. Ukuran dan sha256 dibaca dari Hugging Face
+# (x-linked-size, x-linked-etag) saat ditambahkan, jadi unduhannya tetap
+# diverifikasi seperti model bawaan.
+KUSTOM = "ai.lokal_kustom"
+
+
+def _muat_kustom() -> None:
+    try:
+        import json
+        from ..repos import settings as settings_repo
+        daftar = json.loads(settings_repo.get(KUSTOM) or "[]")
+    except Exception:                                     # noqa: BLE001
+        return
+    for m in daftar if isinstance(daftar, list) else []:
+        if isinstance(m, dict) and m.get("id") and m["id"] not in KATALOG:
+            MODEL[m["id"]] = {k: m[k] for k in ("nama", "url", "sha256", "bita", "ram_mb")}
+            MODEL[m["id"]]["kustom"] = True
+
+
+def tambah_kustom(url: str) -> dict:
+    """Menambahkan model GGUF dari tautan Hugging Face (resolve/blob)."""
+    import json
+    import re as _re
+    url = (url or "").strip()
+    m = _re.match(r"https://huggingface\.co/([\w.\-]+/[\w.\-]+)/(?:resolve|blob)/([\w.\-]+)/(.+\.gguf)$",
+                  url, _re.I)
+    if not m:
+        raise ValueError("Tempel tautan berkas .gguf dari huggingface.co "
+                         "(misalnya .../resolve/main/model-Q4_K_M.gguf).")
+    url = f"https://huggingface.co/{m.group(1)}/resolve/{m.group(2)}/{m.group(3)}"
+    req = urllib.request.Request(url, method="HEAD", headers={"User-Agent": "OmniClip"})
+
+    class _TanpaAlih(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, *a, **k):
+            return None
+    try:
+        r = urllib.request.build_opener(_TanpaAlih).open(req, timeout=30)
+        kepala = r.headers
+    except urllib.error.HTTPError as e:
+        if e.code not in (301, 302, 303, 307, 308):
+            raise ValueError(f"Hugging Face menjawab {e.code} untuk tautan itu.") from e
+        kepala = e.headers
+    bita = int(kepala.get("x-linked-size") or 0)
+    sha = (kepala.get("x-linked-etag") or "").strip('"')
+    if not bita or not _re.fullmatch(r"[0-9a-f]{64}", sha):
+        raise ValueError("Ukuran atau sidik berkas tidak terbaca dari Hugging Face.")
+    berkas = m.group(3).rsplit("/", 1)[-1]
+    mid = "hf-" + hashlib.sha256(url.encode()).hexdigest()[:10]
+    data = {"id": mid, "nama": berkas.removesuffix(".gguf"), "url": url, "sha256": sha,
+            "bita": bita, "ram_mb": int(bita / 1e6 * 1.25) + 600}
+    from ..repos import settings as settings_repo
+    try:
+        daftar = json.loads(settings_repo.get(KUSTOM) or "[]")
+    except ValueError:
+        daftar = []
+    daftar = [x for x in daftar if x.get("id") != mid] + [data]
+    settings_repo.set_value(KUSTOM, json.dumps(daftar, ensure_ascii=False))
+    _muat_kustom()
+    return data
+
+
+def hapus_kustom(mid: str) -> None:
+    import json
+    from ..repos import settings as settings_repo
+    try:
+        daftar = json.loads(settings_repo.get(KUSTOM) or "[]")
+    except ValueError:
+        daftar = []
+    settings_repo.set_value(KUSTOM, json.dumps([x for x in daftar if x.get("id") != mid]))
+    MODEL.pop(mid, None)
 MODEL_BAWAAN = "qwen3-4b"
 
 KONTEKS = 8192
@@ -171,12 +284,14 @@ def ram_bebas_mb() -> int:
 # --- Status ---------------------------------------------------------------------
 
 def status() -> dict:
+    _muat_kustom()
     sistem, mesin = _platform()
     model = []
     for kunci, m in MODEL.items():
         p = _berkas_model(kunci)
         model.append({"id": kunci, "nama": m["nama"], "ukuran_mb": round(m["bita"] / 1e6),
-                      "ram_mb": m["ram_mb"], "terpasang": p.is_file() and p.stat().st_size == m["bita"]})
+                      "ram_mb": m["ram_mb"], "kustom": bool(m.get("kustom")),
+                      "terpasang": p.is_file() and p.stat().st_size == m["bita"]})
     return {
         "didukung": (sistem, mesin) in MESIN,
         "mesin_terpasang": _server() is not None,
@@ -237,6 +352,7 @@ def _unduh_ke(url: str, tujuan: Path, sha: str, ukuran: int,
 
 def pasang(model: str = MODEL_BAWAAN, kabar=None, batal=None) -> dict:
     """Mengunduh mesin llama.cpp (sekali) dan satu model."""
+    _muat_kustom()
     if model not in MODEL:
         raise ValueError("Model AI lokal tidak dikenal.")
     sistem, mesin = _platform()
@@ -277,12 +393,15 @@ def pasang(model: str = MODEL_BAWAAN, kabar=None, batal=None) -> dict:
 
 
 def hapus_model(model: str) -> None:
+    _muat_kustom()
     if model not in MODEL:
         raise ValueError("Model AI lokal tidak dikenal.")
     if _model_jalan == model:
         hentikan()
     _berkas_model(model).unlink(missing_ok=True)
     _berkas_model(model).with_suffix(".gguf.part").unlink(missing_ok=True)
+    if MODEL.get(model, {}).get("kustom"):
+        hapus_kustom(model)
 
 
 # --- Menjalankan ---------------------------------------------------------------
@@ -388,6 +507,7 @@ _atexit.register(hentikan)
 def alamat(model: str = MODEL_BAWAAN) -> str:
     """Alamat API bergaya OpenAI dari server yang menyala (dinyalakan bila perlu)."""
     global _proses, _port, _model_jalan, _terakhir, _pengawas
+    _muat_kustom()
     if model not in MODEL:
         model = MODEL_BAWAAN
     with _kunci:

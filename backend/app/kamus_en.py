@@ -1182,4 +1182,8 @@ KATALOG = [
     ("Batas permintaan Anthropic tercapai, coba lagi sebentar lagi.", "Anthropic rate limit reached, try again shortly."),
     ("Tidak bisa menghubungi Anthropic.", "Could not reach Anthropic."),
     ("Claude menolak permintaan ini.", "Claude declined this request."),
+    ("Tempel tautan berkas .gguf dari huggingface.co (misalnya .../resolve/main/model-Q4_K_M.gguf).",
+     "Paste a link to a .gguf file on huggingface.co (for example .../resolve/main/model-Q4_K_M.gguf)."),
+    ("Hugging Face menjawab {kode} untuk tautan itu.", "Hugging Face answered {kode} for that link."),
+    ("Ukuran atau sidik berkas tidak terbaca dari Hugging Face.", "The file size or checksum could not be read from Hugging Face."),
 ]
