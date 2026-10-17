@@ -119,6 +119,9 @@ async def lifespan(app: FastAPI):
     queue.register("tts_voice", run_tts_voice, lane="net")
     queue.register("retitle", run_retitle, lane="net")
     queue.register("update", run_update, lane="net")
+    # AI lokal: unduhan mesin llama.cpp dan model GGUF (gigabita), lajur net.
+    from .services.ai_lokal import run_pasang as run_ai_lokal
+    queue.register("ai_lokal_pasang", run_ai_lokal, lane="net")
     # Lajur jaringan: sebagian besar waktunya menunggu model menonton klip, dan
     # di lajur cpu itu menahan render yang tidak ada hubungannya.
     from .services.sutradara_ai import run_sutradara

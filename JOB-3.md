@@ -135,6 +135,27 @@ Semua dikerjakan; uji langsungnya tes 22-27 di UJI-LANGSUNG.md.
   analisis; giliran diambil hanya bila perlu Whisper/pemisahan penutur.
 - Unggahan yang sedang berjalan tampil di Klip jadi dengan persennya.
 
+## Lepas dari ketergantungan API (17 Oktober 2026)
+
+Semua proyek Google AI Studio pemilik berstatus "Restricted". Diminta: AI
+lokal yang bagus dan ringan, pengaturan API universal (Gemini, OpenRouter,
+Claude, dan lainnya) dengan pilihan mana yang utama, dan tautan non-YouTube
+yang bisa diputar.
+
+- `services/koneksi_ai.py`: daftar koneksi berurutan (yang teratas dan aktif
+  = utama). Penyedia: gemini, openrouter, anthropic (SDK `anthropic`,
+  `penyedia_anthropic.py`), openai, groq, mistral, deepseek, cerebras, kustom
+  (Ollama/LM Studio), lokal. Kunci lama dimigrasikan; `.env` tampil sebagai
+  koneksi bersumber env. Pemilihan klip (pipeline), komentar, caption, tema,
+  dan sutradara mengikuti urutan itu.
+- `services/ai_lokal.py`: llama.cpp b11390 + GGUF (Qwen3 4B disarankan,
+  Qwen2.5 3B, Qwen2.5 1.5B), semuanya dipatok sha256; menyala saat dipakai,
+  mati sesudah 90 dtk menganggur, menolak bila RAM bebas kurang, nice 10.
+  Diuji pada wawancara 78 menit: Qwen3 4B memilih 8 klip dengan judul spesifik
+  dalam ±8 menit; Qwen2.5 3B lebih cepat tapi judulnya seragam.
+- Halaman Tonton: pemutar sematan resmi untuk TikTok, Instagram, Vimeo,
+  Dailymotion, Facebook, Twitch, Bilibili; klip lewat /impor/tautan.
+
 ## Fase D: sesudahnya
 
 - [ ] **J3-13** Rekam ulang tangkapan dan render ulang video portofolio

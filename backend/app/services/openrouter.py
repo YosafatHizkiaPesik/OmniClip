@@ -57,21 +57,19 @@ _daftar: tuple[float, list[dict]] = (0.0, [])
 
 # --- Kunci dan pilihan pengguna ------------------------------------------------
 def kunci() -> str:
-    """Kunci OpenRouter yang berlaku: basis data dulu, lalu lingkungan."""
+    """Kunci OpenRouter aktif pertama di daftar koneksi AI (koneksi_ai.py)."""
     try:
-        from ..repos import settings as settings_repo
-        nilai = (settings_repo.get(NAMA_KUNCI) or "").strip()
-        if nilai:
-            return nilai
+        from .koneksi_ai import openrouter_aktif
+        k = openrouter_aktif()
+        return (k or {}).get("kunci", "")
     except Exception:          # basis data belum siap
-        pass
-    return os.environ.get("OPENROUTER_API_KEY", "").strip()
+        return os.environ.get("OPENROUTER_API_KEY", "").strip()
 
 
 def model_pilihan() -> str:
     try:
-        from ..repos import settings as settings_repo
-        return (settings_repo.get(NAMA_MODEL) or "").strip()
+        from .koneksi_ai import openrouter_aktif
+        return ((openrouter_aktif() or {}).get("model") or "").strip()
     except Exception:
         return ""
 

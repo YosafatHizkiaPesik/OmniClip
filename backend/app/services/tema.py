@@ -220,7 +220,8 @@ def pilih_banyak(daftar: list[dict], *, api_key: str = "", models: Optional[list
     """
     if not daftar:
         return []
-    if not (pakai_ai and api_key and models):
+    from .penyedia_ai import ada_ai
+    if not (pakai_ai and ada_ai(api_key)):
         return [pilih_lokal(m) for m in daftar]
 
     from .penyedia_ai import pekerjaan, tanya
@@ -276,7 +277,8 @@ def pilih(meta: dict, *, api_key: str = "", models: Optional[list] = None,
     diketahui (game / wajah / tanpa_wajah) dan `duration`.
     """
     teks = _teks_klip(meta)
-    if not (pakai_ai and api_key and models and teks.strip()):
+    from .penyedia_ai import ada_ai
+    if not (pakai_ai and ada_ai(api_key) and teks.strip()):
         return pilih_lokal(meta)
 
     from .penyedia_ai import pekerjaan, tanya

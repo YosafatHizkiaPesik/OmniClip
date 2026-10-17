@@ -481,46 +481,19 @@ def _pecah_kunci(raw: str) -> list[str]:
 
 def get_api_keys() -> list[str]:
     """
-    SEMUA kunci Gemini yang boleh dipakai, urut dari yang pertama dicoba.
+    Kunci Gemini yang AKTIF, urut seperti dicoba.
 
-    Kuota Gemini dihitung per PROJECT Google, bukan per kunci. Itu kalimat dari
-    dokumentasi Google sendiri, dan bedanya penting: dua kunci dari project yang
-    sama berbagi jatah yang sama persis. Yang menambah jatah adalah kunci dari
-    project KEDUA, dan itu pula yang memberi jalan keluar saat satu project
-    sedang tidak bisa dipakai.
-
-    Karena itu kolom kuncinya menerima lebih dari satu, dipisah baris baru atau
-    koma. Yang di basis data lebih dulu daripada `.env`, dengan alasan yang
-    sama seperti dulu: basis data bisa diisi dari HP, dan isian lewat
-    antarmuka adalah yang lebih baru dan lebih disengaja.
+    Sejak 17 Oktober 2026 sumbernya daftar koneksi AI universal
+    (services/koneksi_ai.py): urutan, aktif/nonaktif, dan kunci dari `.env`
+    diatur di sana. Kuota Gemini dihitung per PROJECT Google, jadi kunci kedua
+    dari project lain menambah jatah; kunci yang baru saja ditolak Google
+    dilewati (koneksi_ai.rantai).
     """
-    dari_db: list[str] = []
     try:
-        from .repos import settings as settings_repo
-        dari_db = _pecah_kunci(settings_repo.get("ai.api_key"))
-    except Exception:  # basis data belum siap saat impor paling awal
-        pass
-    dari_env = _pecah_kunci(os.environ.get("GEMINI_API_KEY", ""))
-    # Keduanya digabung, bukan salah satu saja: kunci di `.env` milik pemilik
-    # aplikasi dan kunci di basis data ditambahkan belakangan; membuang yang
-    # satu karena yang lain terisi berarti membuang jatah yang sudah ada.
-    keluar, terlihat = [], set()
-    for k in dari_db + dari_env:
-        if k not in terlihat:
-            terlihat.add(k)
-            keluar.append(k)
-    # Kunci yang baru saja diuji dan DITOLAK Google (proyek diblokir) dilewati,
-    # supaya tiap analisis tidak menghabiskan belasan detik mencobanya lebih
-    # dulu. Bila semuanya ditolak, daftarnya dikembalikan utuh: alasan
-    # kegagalannya tetap harus sampai ke layar. Lihat services/kunci_ai.py.
-    try:
-        from .services.kunci_ai import boleh_dipakai
-        dipakai = [k for k in keluar if boleh_dipakai(k)]
-        if dipakai:
-            keluar = dipakai
-    except Exception:  # noqa: BLE001
-        pass
-    return keluar
+        from .services.koneksi_ai import kunci_gemini
+        return kunci_gemini()
+    except Exception:  # noqa: BLE001  basis data belum siap saat impor paling awal
+        return _pecah_kunci(os.environ.get("GEMINI_API_KEY", ""))
 
 
 def get_api_key() -> str:

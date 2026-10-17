@@ -815,6 +815,20 @@ async def video_info(url: str = Query(...)):
     pemiliknya, bahkan dengan wifi yang kencang.
     """
     video_id = extract_youtube_id(url)
+    from ..services.ytdlp import adalah_tautan_youtube, info_tautan
+    if re.match(r"https?://", url or "", re.I) and not adalah_tautan_youtube(url):
+        # Video dari situs lain (TikTok, Instagram, ...): halaman Tonton memakai
+        # pemutar sematan situs itu sendiri.
+        kunci = f"info-tautan:{url}"
+        kartu = await asyncio.to_thread(cache_repo.ambil, kunci, ttl=INFO_VIDEO_TTL)
+        if not isinstance(kartu, dict):
+            try:
+                kartu = (await asyncio.to_thread(info_tautan, url))["kartu"]
+            except YtdlpError as e:
+                raise _as_app_error(e) from e
+            await asyncio.to_thread(cache_repo.simpan, kunci, kartu)
+        return {**kartu, "id": url, "downloaded": False, "local_url": None,
+                "available_resolutions": [], "has_captions": False}
     if not video_id:
         raise NotFound("ID video YouTube tidak dikenali.")
 

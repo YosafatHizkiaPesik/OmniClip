@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { apiDelete, apiGet, apiPost } from '../../lib/api';
 import ImportBar from './ImportBar';
+import { namaMesin } from '../../lib/mesin';
 import { formatTime } from '../../utils/timeFormat';
 import BilahProses from '../../components/BilahProses';
 import { useT } from '../../lib/i18n';
@@ -294,8 +295,7 @@ export default function StudioHome({ onOpen, onFindVideos }) {
                   <span style={{ fontWeight: 700 }}>{t(meta.label)}</span>
                   {p.engine && p.status === 'done' && (
                     <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>
-                      · {p.engine === 'gemini' ? 'Gemini'
-                        : p.engine === 'openrouter' ? 'OpenRouter' : t('partitur.mesin_lokal')}
+                      · {namaMesin(p.engine)}
                     </span>
                   )}
                 </div>

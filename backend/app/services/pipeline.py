@@ -686,6 +686,51 @@ ULANG_MAKS = 2
 ULANG_JEDA = (25 * 60, 90 * 60)
 
 
+def _pilih_gemini(ctx, kunci: str, sentences, candidates, title: str, max_clips: int,
+                  duration: float, video_id: str):
+    """Pemilihan klip dengan SATU kunci Gemini, lalu pemeriksaan batas."""
+    from ..config import MAX_TRANSCRIPT_CHARS, get_model_override
+    from .gemini import rapikan_batas, refine_candidates
+    from .heuristics import DURASI_MAKS
+    from .peringkat_model import rantai
+    # Tanpa pilihan pengguna, yang dicoba pertama adalah model TERKUAT yang
+    # benar-benar bisa dipakai kunci ini.
+    urutan_model = rantai(kunci, ctx.payload.get("gemini_model") or get_model_override() or None)
+    hasil, model_used = refine_candidates(
+        sentences=sentences, candidates=candidates, video_title=title,
+        api_key=kunci, models=urutan_model, max_clips=max_clips,
+        max_chars=MAX_TRANSCRIPT_CHARS, max_seconds=DURASI_MAKS,
+        kabar=lambda pesan: _stage_progress(ctx, "gemini", 0.3, pesan),
+        batal=ctx.check_cancelled)
+    # Pemeriksaan kedua, khusus batas. Gagal di sini tidak membatalkan apa pun.
+    try:
+        _stage_progress(ctx, "gemini", 0.75, "Memeriksa awal dan akhir tiap klip…")
+        diubah = rapikan_batas(
+            sentences=sentences, candidates=hasil, api_key=kunci,
+            models=[model_used] + [m for m in urutan_model if m != model_used],
+            max_seconds=DURASI_MAKS,
+            kabar=lambda pesan: _stage_progress(ctx, "gemini", 0.75, pesan),
+            batal=ctx.check_cancelled)
+        log.info("Pemeriksaan batas: %d dari %d klip dirapikan", diubah, len(hasil))
+    except JobCancelled:
+        raise
+    except Exception as e:
+        log.warning("Pemeriksaan batas dilewati: %s", str(e)[:200])
+    return hasil, model_used
+
+
+def alasan_ai(galat_gemini: list[str], galat_lain: list[str]) -> str:
+    """Alasan semua koneksi AI gagal, yang paling berguna lebih dulu."""
+    for g in galat_lain:
+        if "RAM bebas" in g:
+            return g.split(". ")[0]
+        if "belum dipasang" in g:
+            return "AI lokal belum dipasang"
+    if galat_gemini:
+        return alasan_gemini(galat_gemini)
+    return "AI gagal"
+
+
 def alasan_gemini(galat: list[str]) -> str:
     """
     Alasan Gemini gagal yang bisa dimengerti dan ditindaklanjuti pemiliknya.
@@ -1173,120 +1218,78 @@ def run_auto_clip(ctx: JobContext) -> dict:
         model_used = None
         ctx.check_cancelled()
 
-        # --- 5. Penajaman oleh Gemini (opsional) -----------------------------
-        api_key = ctx.payload.get("api_key") or get_api_key()
+        # --- 5. Penajaman oleh AI (opsional) -----------------------------------
+        #
+        # Koneksi AI dicoba sesuai urutan di Pengaturan > Mesin AI (services/
+        # koneksi_ai.py, 17 Oktober 2026): Gemini, OpenRouter, Claude, server
+        # bergaya OpenAI, atau AI lokal OmniClip. Yang pertama berhasil yang
+        # dipakai; yang gagal (kuota, ditolak, sibuk, RAM kurang) membuat
+        # koneksi berikutnya dicoba. Semuanya gagal = mesin lokal, seperti dulu.
+        from . import koneksi_ai as _kon
         gemini_gagal = None
         galat_kunci: list[str] = []
-        if use_gemini and api_key and candidates:
-            _stage_progress(ctx, "gemini", 0.2, "Menyusun ulang peringkat dengan Gemini…")
-            try:
-                from ..config import get_api_keys
-                from .gemini import refine_candidates
-                from .peringkat_model import rantai
-                # Kuota Gemini dihitung per PROJECT Google, bukan per orang.
-                # Kunci kedua dari project kedua punya jatah sendiri, jadi
-                # kegagalan satu kunci bukan alasan menyerah selama masih ada
-                # kunci lain — dan pada hari yang buruk itulah bedanya antara
-                # klip pilihan model dan klip pilihan mesin lokal.
-                kunci_semua = ([api_key] if api_key not in get_api_keys()
-                               else []) + get_api_keys()
-                gagal_kunci = None
-                for nomor, kunci in enumerate(kunci_semua, 1):
-                    # Tanpa pilihan pengguna, yang dicoba pertama adalah model
-                    # TERKUAT yang benar-benar bisa dipakai kunci ini, bukan
-                    # daftar tetap yang ditulis tangan dan cepat tertinggal.
-                    urutan_model = rantai(kunci, ctx.payload.get("gemini_model")
-                                          or get_model_override() or None)
-                    if len(kunci_semua) > 1:
-                        _stage_progress(ctx, "gemini", 0.25,
-                                        f"Memakai kunci Gemini ke-{nomor} "
-                                        f"dari {len(kunci_semua)}…")
-                    try:
-                        from .penyedia_ai import pekerjaan as _kerja
-                        with _kerja("pilih-klip", video_id):
-                          candidates, model_used = refine_candidates(
-                            sentences=sentences, candidates=candidates,
-                            video_title=title,
-                            api_key=kunci,
-                            models=urutan_model,
-                            max_clips=max_clips,
-                            max_chars=MAX_TRANSCRIPT_CHARS,
-                            max_seconds=DURASI_MAKS,
-                            kabar=lambda pesan: _stage_progress(ctx, "gemini", 0.3, pesan),
-                            batal=ctx.check_cancelled,
-                        )
-                        api_key = kunci
-                        break
-                    except JobCancelled:
-                        raise
-                    except Exception as e:
-                        gagal_kunci = e
-                        galat_kunci.append(str(e))
-                        log.warning("Kunci Gemini ke-%d gagal: %s", nomor, str(e)[:160])
+        galat_lain: list[str] = []
+        rantai_k = _kon.rantai() if use_gemini else []
+        if use_gemini and ctx.payload.get("api_key"):
+            rantai_k = [{"id": "-", "nama": "Gemini", "penyedia": "gemini",
+                         "kunci": ctx.payload["api_key"], "model": ""}] + rantai_k
+        if rantai_k and candidates:
+            from .penyedia_ai import pekerjaan as _kerja
+            berhasil = False
+            for nomor, k in enumerate(rantai_k, 1):
+                if len(rantai_k) > 1:
+                    _stage_progress(ctx, "gemini", 0.2,
+                                    f"Memakai {k['nama']} ({nomor} dari {len(rantai_k)})…")
                 else:
-                    raise gagal_kunci or RuntimeError("Tidak ada kunci Gemini.")
-                # Pemeriksaan kedua, khusus batas. Gagal di sini tidak
-                # membatalkan apa pun: batas dari pemilihan tetap dipakai.
+                    _stage_progress(ctx, "gemini", 0.2, f"Memilih klip dengan {k['nama']}…")
                 try:
-                    from .gemini import rapikan_batas
-                    _stage_progress(ctx, "gemini", 0.75,
-                                    "Memeriksa awal dan akhir tiap klip…")
-                    diubah = rapikan_batas(
-                        sentences=sentences, candidates=candidates, api_key=api_key,
-                        models=[model_used] + [m for m in urutan_model if m != model_used],
-                        max_seconds=DURASI_MAKS,
-                        kabar=lambda pesan: _stage_progress(ctx, "gemini", 0.75, pesan),
-                        batal=ctx.check_cancelled,
-                    )
-                    log.info("Pemeriksaan batas: %d dari %d klip dirapikan",
-                             diubah, len(candidates))
+                    with _kerja("pilih-klip", video_id):
+                        if k["penyedia"] == "gemini":
+                            candidates, model_used = _pilih_gemini(
+                                ctx, k["kunci"], sentences, candidates, title, max_clips,
+                                duration, video_id)
+                        elif k["penyedia"] == "openrouter":
+                            from .gemini import refine_openrouter
+                            candidates, model_used = refine_openrouter(
+                                sentences=sentences, candidates=heuristic_pool,
+                                video_title=title, max_clips=max_clips,
+                                max_chars=MAX_TRANSCRIPT_CHARS, max_seconds=DURASI_MAKS,
+                                kabar=lambda pesan: _stage_progress(ctx, "gemini", 0.6, pesan),
+                                batal=ctx.check_cancelled, api_key=k["kunci"],
+                                model=k.get("model") or None)
+                        else:
+                            from .gemini import refine_koneksi
+                            if k["penyedia"] == "lokal":
+                                _stage_progress(ctx, "gemini", 0.3,
+                                                "Menyalakan AI lokal dan menilai kandidat klip…",
+                                                paksa=True)
+                            candidates, model_used = refine_koneksi(
+                                k, sentences=sentences, candidates=heuristic_pool,
+                                video_title=title, max_clips=max_clips,
+                                max_chars=MAX_TRANSCRIPT_CHARS, max_seconds=DURASI_MAKS)
+                    candidates = validate_and_snap(candidates, sentences, duration,
+                                                   max_duration=DURASI_MAKS)
+                    engine = k["penyedia"]
+                    berhasil = True
+                    _stage_progress(ctx, "gemini", 1.0, f"Dipilih {k['nama']} ({model_used}).")
+                    break
                 except JobCancelled:
                     raise
                 except Exception as e:
-                    log.warning("Pemeriksaan batas dilewati: %s", str(e)[:200])
-                candidates = validate_and_snap(candidates, sentences, duration,
-                                               max_duration=DURASI_MAKS)
-                engine = "gemini"
-            except JobCancelled:
-                raise
-            except Exception as e:
-                # Kegagalan Gemini TIDAK boleh menjatuhkan pipeline: hasil
-                # heuristik tetap valid dan tetap jujur.
-                log.warning("Gemini gagal, memakai cadangan: %s", str(e)[:200])
-                gemini_gagal = alasan_gemini(galat_kunci or [str(e)])
-                # Sebelum menyerah ke mesin lokal: OpenRouter, bila kuncinya
-                # ada. Mesin lokal menemukan momen yang terukur keras dan
-                # berjeda tepat, tapi tidak bisa menilai apakah sebuah momen
-                # lucu atau mengejutkan, dan itu yang terasa sebagai "klipnya
-                # tidak menarik".
-                try:
-                    from .gemini import refine_openrouter
-                    _stage_progress(ctx, "gemini", 0.5,
-                                    f"{gemini_gagal}. Mencoba OpenRouter…")
-                    candidates, model_used = refine_openrouter(
-                        sentences=sentences, candidates=heuristic_pool,
-                        video_title=title, max_clips=max_clips,
-                        max_chars=MAX_TRANSCRIPT_CHARS, max_seconds=DURASI_MAKS,
-                        kabar=lambda pesan: _stage_progress(ctx, "gemini", 0.6, pesan),
-                        batal=ctx.check_cancelled)
-                    candidates = validate_and_snap(candidates, sentences, duration,
-                                                   max_duration=DURASI_MAKS)
-                    engine, gemini_gagal = "openrouter", None
-                    _stage_progress(ctx, "gemini", 1.0,
-                                    f"Dipilih OpenRouter ({model_used}).")
-                except JobCancelled:
-                    raise
-                except Exception as e2:
-                    log.info("OpenRouter tidak dipakai: %s", str(e2)[:200])
-                    nanti = _jadwalkan_coba_lagi(ctx, video_id, str(e))
-                    _stage_progress(ctx, "gemini", 1.0,
-                                    f"{gemini_gagal}, memakai mesin lokal."
-                                    + (f" Akan dicoba lagi sendiri {nanti}." if nanti else ""))
-                    # Hitungan mundurnya SENGAJA tidak ikut disimpan ke sini.
-                    # Ia dibekukan pada saat penulisan, dan kartu yang dibuka
-                    # setengah jam kemudian akan tetap berkata "25 menit lagi"
-                    # sementara jadwal sebenarnya sudah lewat. Waktunya dikirim
-                    # apa adanya sebagai `coba_lagi_pada` dan dihitung di layar.
+                    log.warning("Koneksi AI %s gagal: %s", k["nama"], str(e)[:200])
+                    candidates = list(heuristic_pool)
+                    if k["penyedia"] == "gemini":
+                        galat_kunci.append(str(e))
+                    else:
+                        galat_lain.append(str(e))
+            if not berhasil:
+                # Kegagalan AI TIDAK boleh menjatuhkan pipeline: hasil heuristik
+                # tetap valid dan tetap jujur.
+                gemini_gagal = alasan_ai(galat_kunci, galat_lain)
+                nanti = _jadwalkan_coba_lagi(ctx, video_id, " | ".join(galat_kunci + galat_lain))
+                _stage_progress(ctx, "gemini", 1.0,
+                                f"{gemini_gagal}, memakai mesin lokal."
+                                + (f" Akan dicoba lagi sendiri {nanti}." if nanti else ""))
 
         # Gemini sering mengembalikan lebih sedikit dari yang diminta — pada
         # video ini 11 dari 19. Sisa jatahnya diisi dari kandidat heuristik

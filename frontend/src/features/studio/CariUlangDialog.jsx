@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { namaMesin as namaMesinUmum } from '../../lib/mesin';
 import { Loader2, RotateCcw, Sparkles, X, Cpu } from 'lucide-react';
 import { apiGet, apiPost } from '../../lib/api';
 import BilahProses from '../../components/BilahProses';
@@ -13,8 +14,8 @@ const kontrol = {
 };
 
 function namaMesin(engine, model, t) {
-  if (engine === 'gemini') return `Gemini${model ? ` (${model})` : ''}`;
-  return t('ulang.mesin_lokal_heuristik');
+  if (!engine || engine === 'heuristic') return t('ulang.mesin_lokal_heuristik');
+  return namaMesinUmum(engine, model);
 }
 
 /**
@@ -41,8 +42,14 @@ export default function CariUlangDialog({ videoId, data, dirty, onSimpanDulu, on
   const [job, setJob] = useState(null);
 
   useEffect(() => {
+    // AI tersedia bila ADA koneksi aktif (Gemini, Claude, AI lokal, ...),
+    // bukan hanya kunci Gemini (17 Oktober 2026).
+    apiGet('/settings/koneksi-ai').then((r) => {
+      const ada = (r.koneksi || []).some((k) => k.aktif);
+      setAdaKunci(ada);
+      if (!ada) setMesin('heuristik');
+    }).catch(() => setAdaKunci(null));
     apiGet('/settings/models').then((r) => {
-      setAdaKunci(r.configured !== false);
       // Model yang kunci ini tidak punya aksesnya dibuang dari daftar, bukan
       // ditampilkan sebagai pilihan yang mati.
       const tak = new Set(r.tanpa_kuota || []);
@@ -53,8 +60,7 @@ export default function CariUlangDialog({ videoId, data, dirty, onSimpanDulu, on
       // Otomatis, bukan diam-diam dikirim ke server.
       setModel((m) => (m && !daftar.includes(m) ? '' : m));
       setInfoModel({ terkuat: r.terkuat || null, habisHarian: r.habis_harian || [] });
-      if (r.configured === false) setMesin('heuristik');
-    }).catch(() => setAdaKunci(null));
+    }).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -169,7 +175,7 @@ export default function CariUlangDialog({ videoId, data, dirty, onSimpanDulu, on
 
         <div style={{ display: 'grid', gap: '7px' }}>
           {pilihan('gemini', <Sparkles size={16} style={{ color: 'var(--accent-cyan)', marginTop: 2 }} />,
-                   'Gemini', adaKunci === false
+                   t('ulang.ai'), adaKunci === false
                      ? t('ulang.butuh_kunci')
                      : t('ulang.gemini_ket'),
                    adaKunci === false)}

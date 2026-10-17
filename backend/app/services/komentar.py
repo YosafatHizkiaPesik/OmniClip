@@ -248,7 +248,8 @@ def draf(klip: dict, *, api_key: str = "", models: Optional[list] = None,
     if sum(len(b["text"]) for b in baris) < 40:
         return kosong("Klip ini hampir tidak berisi ucapan, jadi tidak ada "
                       "yang bisa dikomentari dari transkripnya.")
-    if not api_key or not models:
+    from .penyedia_ai import ada_ai
+    if not ada_ai(api_key):
         return kosong("Draf komentar butuh AI, dan kunci API belum diisi. "
                       "Tulis komentarnya sendiri, atau isi kunci di Pengaturan.")
     try:

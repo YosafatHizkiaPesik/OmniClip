@@ -377,7 +377,8 @@ def paket(meta: dict, *, api_key: str = "", models: Optional[list] = None,
     duration), ditambah `video_title` dan `channel` bila ada.
     """
     inti = None
-    if pakai_ai and api_key and models:
+    from .penyedia_ai import ada_ai
+    if pakai_ai and ada_ai(api_key):
         inti = _minta_ai(meta, api_key=api_key, models=models)
     if inti is None:
         inti = _lokal(meta)

@@ -2100,7 +2100,8 @@ def run_sutradara(ctx) -> dict:
     # Kunci Gemini bukan lagi syarat: OpenRouter sendirian pun cukup untuk
     # menonton klip, dan sesudah kuota harian Gemini habis ia satu-satunya yang
     # tersisa.
-    if p.get("mesin", "ai") == "ai" and (api_key or openrouter.aktif()):
+    from .penyedia_ai import ada_ai
+    if p.get("mesin", "ai") == "ai" and ada_ai(api_key, butuh_gambar=True):
         try:
             hasil = susun_ai(src, segments, subtitles=subtitles, api_key=api_key,
                              video_id=p.get("video_id"),

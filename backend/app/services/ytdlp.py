@@ -496,6 +496,13 @@ def search_youtube_videos(query: str, limit: int = 20, sort: str = "relevan",
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         try:
             info = ydl.extract_info(search_target, download=False)
+            if is_url and not adalah_tautan_youtube(query):
+                # Tautan TikTok, Instagram, dan situs lain: satu kartu dengan
+                # alamat aslinya, bukan id yang disangka id YouTube.
+                pertama = info
+                if info.get('_type') == 'playlist' or info.get('entries'):
+                    pertama = next((e for e in (info.get('entries') or []) if e), None) or info
+                return [kartu_tautan(pertama, query)]
             entries = info.get('entries', []) if 'entries' in info else [info]
 
             for entry in entries:
@@ -1194,6 +1201,63 @@ def _galat_tautan(e: Exception) -> YtdlpError:
     return YtdlpError("TAUTAN_GAGAL", f"Video dari tautan ini tidak bisa dibaca: {ringkas[:160]}", teks)
 
 
+def sematan(situs: str, vid: str, alamat: str = "") -> tuple[str, str]:
+    """
+    (alamat pemutar sematan resmi situsnya, rasio) untuk halaman Tonton.
+
+    Dilaporkan pemilik 17 Oktober 2026: tautan TikTok yang ditempel di kotak
+    cari tampil sebagai kartu, tapi videonya tidak bisa diputar karena halaman
+    Tonton selalu memakai pemutar YouTube. Situs yang punya pemutar sematan
+    resmi memakai pemutarnya sendiri; selebihnya halaman menampilkan sampul dan
+    tautan ke situs aslinya. Twitch butuh `parent` = nama host halaman, jadi
+    alamatnya dilengkapi di peramban.
+    """
+    from urllib.parse import quote
+    s = (situs or "").lower()
+    if not vid:
+        return "", ""
+    if s.startswith("tiktok"):
+        return f"https://www.tiktok.com/player/v1/{vid}?autoplay=1&rel=0", "9:16"
+    if s.startswith("instagram"):
+        return f"https://www.instagram.com/reel/{vid}/embed", "9:16"
+    if s.startswith("vimeo"):
+        return f"https://player.vimeo.com/video/{vid}?autoplay=1", "16:9"
+    if s.startswith("dailymotion"):
+        return f"https://www.dailymotion.com/embed/video/{vid}?autoplay=1", "16:9"
+    if s.startswith("facebook") and alamat:
+        return ("https://www.facebook.com/plugins/video.php?show_text=false&href="
+                + quote(alamat, safe=""), "16:9")
+    if s == "twitch:vod" or s == "twitchvod":
+        return f"https://player.twitch.tv/?video={vid.lstrip('v')}&autoplay=true", "16:9"
+    if s.startswith("bilibili"):
+        return f"https://player.bilibili.com/player.html?bvid={vid}", "16:9"
+    return "", ""
+
+
+def kartu_tautan(info: dict, url: str) -> dict:
+    """Satu kartu Beranda untuk video dari situs lain (bentuk sama dengan hasil cari)."""
+    situs = info.get('extractor_key') or info.get('extractor') or ''
+    vid = str(info.get('id') or '')
+    alamat = info.get('webpage_url') or url
+    embed, rasio = sematan(situs, vid, alamat)
+    return {
+        "id": f"{situs.lower() or 'web'}-{vid}",
+        "title": info.get('title') or info.get('fulltitle') or alamat,
+        "url": alamat,
+        "sumber_url": alamat,
+        "situs": situs,
+        "embed": embed,
+        "rasio": rasio,
+        "duration": info.get('duration') or 0,
+        "channel": info.get('uploader') or info.get('channel') or info.get('creator') or situs,
+        "channel_id": "",
+        "views": info.get('view_count') or 0,
+        "thumbnail": info.get('thumbnail') or '',
+        "upload_date": info.get('upload_date') or '',
+        "description": info.get('description') or '',
+    }
+
+
 def info_tautan(url: str) -> dict:
     """Judul, pengunggah, durasi, sampul, dan nama situs sebuah tautan non-YouTube."""
     opts = _base_opts()
@@ -1212,7 +1276,12 @@ def info_tautan(url: str) -> dict:
         info = pertama
     if not (info.get('formats') or info.get('url')):
         raise YtdlpError("TAUTAN_KOSONG", "Tautan ini tidak berisi video.")
+    embed, rasio = sematan(info.get('extractor_key') or info.get('extractor') or '',
+                           str(info.get('id') or ''), info.get('webpage_url') or url)
     return {
+        "kartu": kartu_tautan(info, url),
+        "embed": embed,
+        "rasio": rasio,
         "judul": (info.get('title') or info.get('fulltitle') or '').strip()[:120],
         "pengunggah": info.get('uploader') or info.get('channel') or info.get('creator') or '',
         "durasi": info.get('duration') or 0,

@@ -36,6 +36,41 @@ const LABEL_RESOLUSI = { Terbaik: 'tonton.terbaik', 'Audio MP3': 'tonton.audio_m
  * sekarang ditentukan isinya, bukan oleh preset yang harus ditebak sebelum
  * videonya dianalisis.
  */
+/**
+ * Pemutar untuk video dari situs lain: pemutar sematan resmi situsnya bila ada
+ * (TikTok, Instagram, Vimeo, Dailymotion, Facebook, Twitch), selain itu
+ * sampulnya dengan tautan ke situs aslinya. Video tegak ditampilkan tegak.
+ */
+function PemutarLuar({ video, t }) {
+  if (!video) return <div style={{ height: '420px' }} />;
+  let src = video.embed || '';
+  if (src.includes('player.twitch.tv')) src += `&parent=${window.location.hostname}`;
+  const tegak = video.rasio === '9:16';
+  if (src) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center' }}>
+        <iframe key={src} src={src} title={video.title || 'Video'}
+                style={{ width: tegak ? '340px' : '100%', maxWidth: '100%',
+                         height: tegak ? '600px' : '420px', border: 'none', display: 'block' }}
+                allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+                allowFullScreen referrerPolicy="strict-origin-when-cross-origin" />
+      </div>
+    );
+  }
+  return (
+    <div style={{ position: 'relative', height: '420px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      {video.thumbnail && (
+        <img src={video.thumbnail} alt="" referrerPolicy="no-referrer"
+             style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain', opacity: 0.6 }} />
+      )}
+      <a href={video.sumber_url} target="_blank" rel="noreferrer" className="btn-primary"
+         style={{ position: 'absolute', textDecoration: 'none' }}>
+        {t('tonton.buka_di', { situs: video.situs || 'web' })}
+      </a>
+    </div>
+  );
+}
+
 export default function Watch() {
   const { videoId } = useParams();
   const navigate = useNavigate();
@@ -44,6 +79,10 @@ export default function Watch() {
   // Video dari kartu yang diklik dipakai langsung supaya judul tampil seketika;
   // kalau halaman dibuka dari tautan langsung, metadatanya diambil dari server.
   const [video, setVideo] = useState(location.state?.video ?? null);
+  // Video dari situs lain (TikTok, Instagram, ...): alamatnya sendiri jadi id
+  // halaman ini. Pemutarnya pemutar sematan situs itu, dan mengkliknya lewat
+  // jalur "tempel tautan" (/impor/tautan), bukan id YouTube.
+  const luar = /^https?:\/\//i.test(videoId || '');
   const [infoError, setInfoError] = useState(null);
   const [related, setRelated] = useState([]);
   const [relatedLoading, setRelatedLoading] = useState(true);
@@ -90,7 +129,7 @@ export default function Watch() {
 
   // Riwayat tontonan: dicatat sekali tiap video dibuka.
   useEffect(() => {
-    if (!video?.title || video.id !== videoId) return;
+    if (!video?.title || video.id !== videoId || luar) return;
     apiPost('/riwayat-tonton', {
       id: videoId, title: video.title || '', channel: video.channel || '',
       channel_id: video.channel_id || '', thumbnail: video.thumbnail || '',
@@ -127,7 +166,8 @@ export default function Watch() {
     // dari /video-info. Deskripsi di hasil pencarian hanya cuplikan pendek,
     // jadi tanpa ini "Selengkapnya" tidak membuka apa-apa (dilaporkan pemilik
     // 15 Oktober 2026). Kegagalan melengkapi tidak menjadi galat halaman.
-    const dariKartu = location.state?.video?.id === videoId;
+    const dariKartu = location.state?.video?.id === videoId
+      || (luar && location.state?.video?.sumber_url === videoId);
     if (dariKartu) setVideo(location.state.video);
     else setVideo(null);
     apiGet(`/video-info?url=${encodeURIComponent(videoId)}`)
@@ -146,6 +186,7 @@ export default function Watch() {
   useEffect(() => {
     let cancelled = false;
     if (!video?.title) return undefined;
+    if (luar) { setRelated([]); setRelatedLoading(false); return undefined; }
     setRelatedLoading(true);
     const q = `${video.channel ?? ''} ${video.title.split(' ').slice(0, 4).join(' ')}`;
     // `catat=0`: kueri ini buatan halaman, bukan ketikan orangnya, jadi tidak
@@ -168,8 +209,13 @@ export default function Watch() {
     setPending(null);
     setQueueing(true);
     try {
+      let idKlip = videoId;
+      if (luar) {
+        const r = await apiPost('/impor/tautan', { url: videoId }, { timeout: 60000 });
+        idKlip = r.video_id;
+      }
       const res = await apiPost('/auto-clip', {
-        video_id: videoId,
+        video_id: idKlip,
         // Resolusi sumber yang diunduh untuk diklip. Dipilih di kotak sebelum
         // tombolnya, dan diingat untuk video berikutnya.
         ...(mutuFinal ? { quality: mutuFinal } : {}),
@@ -209,6 +255,7 @@ export default function Watch() {
   const handleClip = async () => {
     if (queueing) return;
     setNotice(null);
+    if (luar) { await startClip(); return; }
     setQueueing(true);
     try {
       const info = await apiGet(`/video-info?url=${encodeURIComponent(videoId)}`);
@@ -270,15 +317,17 @@ export default function Watch() {
     <div className="watch-layout" style={{ display: 'flex', gap: '24px', maxWidth: '100%' }}>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ background: '#000', borderRadius: '14px', overflow: 'hidden' }}>
-          <iframe
-            key={videoId}
-            src={`https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&rel=0&enablejsapi=1&origin=${window.location.origin}`}
-            title={video?.title ?? 'Video'}
-            style={{ width: '100%', height: '420px', border: 'none', display: 'block' }}
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-            referrerPolicy="strict-origin-when-cross-origin"
-          />
+          {luar ? <PemutarLuar video={video} t={t} /> : (
+            <iframe
+              key={videoId}
+              src={`https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&rel=0&enablejsapi=1&origin=${window.location.origin}`}
+              title={video?.title ?? 'Video'}
+              style={{ width: '100%', height: '420px', border: 'none', display: 'block' }}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+              referrerPolicy="strict-origin-when-cross-origin"
+            />
+          )}
         </div>
 
         <div style={{ padding: '14px 0' }}>
@@ -321,15 +370,22 @@ export default function Watch() {
               </button>
             )}
             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-              <button onClick={() => { downloadJob.reset(); setShowDownload(true); }}
-                      className="btn-secondary"
-                      style={{
-                        background: 'rgba(79, 172, 254, 0.12)',
-                        borderColor: 'rgba(79, 172, 254, 0.35)',
-                        color: '#4facfe', fontSize: '0.85rem',
-                      }}>
-                <Download size={16} /> {t('tonton.unduh')}
-              </button>
+              {luar ? (
+                <a href={videoId} target="_blank" rel="noreferrer" className="btn-secondary"
+                   style={{ fontSize: '0.85rem', textDecoration: 'none' }}>
+                  {t('tonton.buka_di', { situs: video?.situs || 'web' })}
+                </a>
+              ) : (
+                <button onClick={() => { downloadJob.reset(); setShowDownload(true); }}
+                        className="btn-secondary"
+                        style={{
+                          background: 'rgba(79, 172, 254, 0.12)',
+                          borderColor: 'rgba(79, 172, 254, 0.35)',
+                          color: '#4facfe', fontSize: '0.85rem',
+                        }}>
+                  <Download size={16} /> {t('tonton.unduh')}
+                </button>
+              )}
               <button onClick={handleClip} disabled={queueing} className="btn-primary"
                       style={{ background: 'linear-gradient(135deg, var(--danger), #ff4e50)', color: '#fff', fontSize: '0.85rem' }}>
                 {queueing

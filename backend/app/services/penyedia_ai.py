@@ -62,6 +62,17 @@ def _catat(model, pakai, *, berhasil: bool, sebab: str = "") -> None:
           berhasil=berhasil, sebab=sebab)
 
 
+def ada_ai(api_key: str = "", *, butuh_gambar: bool = False) -> bool:
+    """Apakah ada AI yang bisa ditanya: kunci dari pemanggil, atau koneksi aktif."""
+    if api_key:
+        return True
+    try:
+        from . import koneksi_ai
+        return bool(koneksi_ai.rantai(butuh_gambar=butuh_gambar))
+    except Exception:                                     # noqa: BLE001
+        return False
+
+
 class SemuaGagal(RuntimeError):
     """Tidak satu model pun menjawab dengan benar. `.rincian` berisi alasannya."""
 
@@ -200,46 +211,73 @@ def tanya(bahan: list[dict], *, schema, sistem: str, api_key: str,
           batas_detik: float = BATAS_TOTAL_DETIK,
           cadangan: Optional[Callable[[], list[dict]]] = None) -> tuple[dict, str, dict]:
     """
-    Gemini lebih dulu, OpenRouter bila Gemini tidak bisa. (data, model, pakai).
+    Koneksi AI dicoba sesuai urutan di Pengaturan (services/koneksi_ai.py).
+    (data, model, pakai).
 
-    Urutannya bukan selera: Gemini menerima video utuh dengan suaranya dan
-    menjawab terikat skema, dan itu yang paling cocok untuk menilai kapan orang
-    tertawa. OpenRouter dipakai saat kuota harian Gemini habis — yang pada
-    pemakaian sungguhan terjadi setiap sore — atau saat kuncinya memang belum
-    diisi sama sekali.
+    Gemini menerima video utuh dengan suaranya; OpenRouter memakai rantai
+    model gratisnya sendiri; koneksi lain (Claude, server bergaya OpenAI, AI
+    lokal) menerima teks, dan gambar kunci dari `cadangan()` bila mereka bisa
+    melihat. Koneksi yang tidak bisa melihat dilewati untuk bahan bergambar.
 
-    `cadangan()` menghasilkan gambar kunci dan suara untuk model OpenRouter
-    yang tidak menerima video.
+    `api_key`/`models` dari pemanggil tetap dihormati untuk Gemini: kunci itu
+    dicoba dengan daftar model yang diberikan.
     """
-    from . import openrouter
+    from . import koneksi_ai, openrouter
+    from .peringkat_model import rantai as rantai_gemini
 
     rincian: list[str] = []
-    if api_key and models:
-        try:
-            return tanya_gemini(bahan, schema=schema, sistem=sistem, api_key=api_key,
-                                models=models, suhu=suhu, maks_keluaran=maks_keluaran,
-                                kabar=kabar, batal=batal, batas_detik=batas_detik)
-        except SemuaGagal as e:
-            rincian = list(e.rincian)
-            log.warning("Gemini tidak menjawab, mencoba OpenRouter: %s",
-                        " | ".join(rincian)[:300])
-    else:
-        rincian.append("kunci Gemini belum diisi")
+    daftar = koneksi_ai.rantai()
+    if api_key and not any(k.get("kunci") == api_key for k in daftar):
+        daftar = [{"id": "-", "nama": "Gemini", "penyedia": "gemini", "kunci": api_key,
+                   "model": ""}] + daftar
+    butuh_lihat = any(("video" in b) or ("gambar" in b) for b in bahan)
+    _cad: Optional[list[dict]] = None
 
-    kunci_or = openrouter.kunci()
-    if not kunci_or:
-        rincian.append("kunci OpenRouter belum diisi")
-        raise SemuaGagal(rincian)
-    if batal is not None:
-        batal()
-    if kabar is not None:
-        kabar("Gemini tidak bisa dipakai, mencoba OpenRouter…")
-    try:
-        return openrouter.tanya(
-            bahan, skema=schema, sistem=sistem, api_key=kunci_or,
-            models=openrouter.rantai(openrouter.model_pilihan() or None),
-            suhu=suhu, maks_keluaran=maks_keluaran, kabar=kabar, batal=batal,
-            batas_detik=batas_detik, cadangan=cadangan)
-    except Exception as e:
-        rincian.append(str(e)[:400])
-        raise SemuaGagal(rincian) from e
+    for k in daftar:
+        if batal is not None:
+            batal()
+        try:
+            if k["penyedia"] == "gemini":
+                m = models if (k["kunci"] == api_key and models) else rantai_gemini(k["kunci"])
+                return tanya_gemini(bahan, schema=schema, sistem=sistem, api_key=k["kunci"],
+                                    models=m, suhu=suhu, maks_keluaran=maks_keluaran,
+                                    kabar=kabar, batal=batal, batas_detik=batas_detik)
+            if k["penyedia"] == "openrouter":
+                if kabar is not None:
+                    kabar("Mencoba OpenRouter…")
+                return openrouter.tanya(
+                    bahan, skema=schema, sistem=sistem, api_key=k["kunci"],
+                    models=openrouter.rantai(k.get("model") or None),
+                    suhu=suhu, maks_keluaran=maks_keluaran, kabar=kabar, batal=batal,
+                    batas_detik=batas_detik, cadangan=cadangan)
+            bisa_lihat = koneksi_ai.PENYEDIA.get(k["penyedia"], {}).get("gambar")
+            isi = bahan
+            if any("video" in b for b in bahan):
+                if not (bisa_lihat and cadangan is not None):
+                    rincian.append(f"{k['nama']}: tidak bisa menonton video")
+                    continue
+                if _cad is None:
+                    if kabar is not None:
+                        kabar("Menyiapkan gambar kunci…")
+                    _cad = cadangan()
+                isi = [b for b in _cad if "suara" not in b]
+            elif butuh_lihat and not bisa_lihat:
+                rincian.append(f"{k['nama']}: tidak bisa melihat gambar")
+                continue
+            if kabar is not None:
+                kabar(f"Memakai {k['nama']}…")
+            data, nama_model, pakai = koneksi_ai.tanya_satu(
+                k, isi, skema=schema, sistem=sistem, suhu=suhu,
+                maks_keluaran=min(maks_keluaran, 4096) if k["penyedia"] == "lokal" else maks_keluaran)
+            _catat(nama_model, pakai, berhasil=True)
+            return data, nama_model, pakai
+        except SemuaGagal as e:
+            rincian.extend(e.rincian)
+        except Exception as e:                            # noqa: BLE001
+            if type(e).__name__ == "JobCancelled":
+                raise
+            rincian.append(f"{k['nama']}: {str(e)[:300]}")
+            log.warning("%s gagal: %s", k["nama"], str(e)[:200])
+    if not daftar:
+        rincian.append("belum ada koneksi AI yang aktif")
+    raise SemuaGagal(rincian)

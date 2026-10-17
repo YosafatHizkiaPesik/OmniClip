@@ -466,7 +466,7 @@ export default function Home() {
                 isSelected={pilih.has(video.id)}
                 onClick={() => (pilih.size
                   ? togglePilih(video.id)
-                  : navigate(`/watch/${video.id}`, { state: { video } }))}
+                  : navigate(`/watch/${video.sumber_url ? encodeURIComponent(video.sumber_url) : video.id}`, { state: { video } }))}
               />
               {/* Kotak centang selalu ada, supaya memilih yang PERTAMA tidak
                   perlu mencari mode tersembunyi lebih dulu. */}

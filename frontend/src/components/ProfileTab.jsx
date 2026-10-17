@@ -5,7 +5,8 @@ import {
 } from 'lucide-react';
 import { BAHASA, NEGARA, bahasa, namaNegara, setBahasa, setWilayah, tebal, useT, wilayahOtomatis, wilayahPilihan } from '../lib/i18n';
 import HalamanSetelan from './HalamanSetelan';
-import KunciGeminiCard from './KunciGeminiCard';
+import KoneksiAiCard from './KoneksiAiCard';
+import AiLokalCard from './AiLokalCard';
 import { apiGet, apiPost, apiPut } from '../lib/api';
 import { Link } from 'react-router-dom';
 import SakelarSensor from './SakelarSensor';
@@ -13,7 +14,6 @@ import SakelarGumam from './SakelarGumam';
 import SuaraCard from './SuaraCard';
 import CookiesCard from './CookiesCard';
 import TerjemahOtomatisCard from './TerjemahOtomatisCard';
-import OpenRouterCard from './OpenRouterCard';
 import LajuRenderCard from './LajuRenderCard';
 import WarnaPenuturCard from './WarnaPenuturCard';
 
@@ -53,6 +53,7 @@ export default function ProfileTab() {
   const t = useT();
   const [theme, setTheme] = useState(() => localStorage.getItem('omniclip_theme') || 'light');
   const [, setSettings] = useState(null);
+  const [segarKoneksi, setSegarKoneksi] = useState(0);
   const [settingsError, setSettingsError] = useState(null);
   // Model AI yang dipakai untuk memilih klip. Disimpan di browser dan dikirim
   // bersama setiap permintaan auto-clip.
@@ -491,7 +492,10 @@ export default function ProfileTab() {
 
   const aiIsi = (
     <>
-      <div style={card}>
+      {/* Pilihan model khusus Gemini; disembunyikan bila tidak ada kunci
+          Gemini yang bisa membaca daftar modelnya. Penyedia lain memilih
+          modelnya di kartu Koneksi AI. */}
+      <div style={{ ...card, display: models?.length === 0 && !modelsError ? 'none' : undefined }}>
         <div style={sectionTitle}>
           <Sparkles size={18} style={{ color: 'var(--reh)' }} />
           {t('set.model')}
@@ -541,9 +545,10 @@ export default function ProfileTab() {
         )}
       </div>
 
-      <KunciGeminiCard card={card} sectionTitle={sectionTitle} helpText={helpText}
-                       onBerubah={loadSettings} />
-      <OpenRouterCard card={card} sectionTitle={sectionTitle} helpText={helpText} />
+      <KoneksiAiCard card={card} sectionTitle={sectionTitle} helpText={helpText}
+                     onBerubah={loadSettings} segarkan={segarKoneksi} />
+      <AiLokalCard card={card} sectionTitle={sectionTitle} helpText={helpText}
+                   onBerubah={() => { setSegarKoneksi((n) => n + 1); loadSettings(); }} />
     </>
   );
 

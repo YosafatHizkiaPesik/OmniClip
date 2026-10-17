@@ -550,64 +550,133 @@ async def _uji_kunci(key: str) -> str | None:
         return None
 
 
-# --- Pengelola kunci Gemini (16 Oktober 2026) -----------------------------------
+# --- Koneksi AI universal (17 Oktober 2026) -------------------------------------
 
-class KunciAiBaru(BaseModel):
-    api_key: str = Field(..., min_length=1, max_length=400)
+class KoneksiBaru(BaseModel):
+    penyedia: str = Field(..., min_length=2, max_length=20)
+    api_key: str = Field("", max_length=400)
     nama: str = Field("", max_length=60)
+    model: str = Field("", max_length=120)
+    alamat: str = Field("", max_length=300)
 
 
-class KunciAiNama(BaseModel):
-    nama: str = Field("", max_length=60)
+class KoneksiUbah(BaseModel):
+    nama: Optional[str] = Field(None, max_length=60)
+    model: Optional[str] = Field(None, max_length=120)
+    alamat: Optional[str] = Field(None, max_length=300)
+    aktif: Optional[bool] = None
 
 
-@router.get("/ai-keys")
-async def daftar_kunci_ai():
-    from ..services import kunci_ai
-    return {"kunci": await asyncio.to_thread(kunci_ai.daftar)}
+class KoneksiUrutan(BaseModel):
+    ids: List[str] = Field(default_factory=list)
 
 
-@router.post("/ai-keys")
-async def tambah_kunci_ai(req: KunciAiBaru):
-    """Menguji kunci dengan permintaan sungguhan, lalu MENAMBAHKANNYA."""
-    from ..services import kunci_ai
+async def _daftar_koneksi() -> dict:
+    from ..services import koneksi_ai
+    return {"koneksi": await asyncio.to_thread(koneksi_ai.daftar_publik),
+            "penyedia": koneksi_ai.penyedia_publik()}
+
+
+@router.get("/koneksi-ai")
+async def daftar_koneksi_ai():
+    return await _daftar_koneksi()
+
+
+@router.post("/koneksi-ai")
+async def tambah_koneksi_ai(req: KoneksiBaru):
+    """Menguji koneksi dengan permintaan sungguhan, lalu menambahkannya."""
+    from ..services import koneksi_ai
     try:
-        hasil = await asyncio.to_thread(kunci_ai.tambah, req.api_key, req.nama)
+        hasil = await asyncio.to_thread(koneksi_ai.tambah, req.penyedia, req.api_key,
+                                        req.nama, req.model, req.alamat)
     except ValueError as e:
         raise AppError(str(e), code="AI_KEY_INVALID", status=422) from e
-    return {**hasil, "kunci": await asyncio.to_thread(kunci_ai.daftar)}
+    return {**hasil, **(await _daftar_koneksi())}
 
 
-@router.post("/ai-keys/{sid}/uji")
-async def uji_kunci_ai(sid: str):
-    from ..services import kunci_ai
+@router.post("/koneksi-ai/{kid}/uji")
+async def uji_koneksi_ai(kid: str):
+    from ..services import koneksi_ai
     try:
-        hasil = await asyncio.to_thread(kunci_ai.uji, sid)
+        hasil = await asyncio.to_thread(koneksi_ai.uji, kid)
     except KeyError as e:
-        raise AppError("Kunci tidak ditemukan.", code="AI_KEY_UNKNOWN", status=404) from e
-    return {"uji": hasil, "kunci": await asyncio.to_thread(kunci_ai.daftar)}
+        raise AppError("Koneksi tidak ditemukan.", code="AI_KEY_UNKNOWN", status=404) from e
+    return {"uji": hasil, **(await _daftar_koneksi())}
 
 
-@router.put("/ai-keys/{sid}")
-async def nama_kunci_ai(sid: str, req: KunciAiNama):
-    from ..services import kunci_ai
-    await asyncio.to_thread(kunci_ai.ganti_nama, sid, req.nama)
-    return {"kunci": await asyncio.to_thread(kunci_ai.daftar)}
-
-
-@router.delete("/ai-keys/{sid}")
-async def hapus_kunci_ai(sid: str):
-    from ..services import kunci_ai
+@router.put("/koneksi-ai/{kid}")
+async def ubah_koneksi_ai(kid: str, req: KoneksiUbah):
+    from ..services import koneksi_ai
     try:
-        await asyncio.to_thread(kunci_ai.hapus, sid)
+        await asyncio.to_thread(koneksi_ai.ubah, kid, **req.model_dump())
+    except KeyError as e:
+        raise AppError("Koneksi tidak ditemukan.", code="AI_KEY_UNKNOWN", status=404) from e
+    return await _daftar_koneksi()
+
+
+@router.post("/koneksi-ai/{kid}/utama")
+async def utama_koneksi_ai(kid: str):
+    from ..services import koneksi_ai
+    try:
+        await asyncio.to_thread(koneksi_ai.jadikan_utama, kid)
+    except KeyError as e:
+        raise AppError("Koneksi tidak ditemukan.", code="AI_KEY_UNKNOWN", status=404) from e
+    return await _daftar_koneksi()
+
+
+@router.put("/koneksi-ai-urutan")
+async def urutan_koneksi_ai(req: KoneksiUrutan):
+    from ..services import koneksi_ai
+    await asyncio.to_thread(koneksi_ai.urutkan, req.ids)
+    return await _daftar_koneksi()
+
+
+@router.delete("/koneksi-ai/{kid}")
+async def hapus_koneksi_ai(kid: str):
+    from ..services import koneksi_ai
+    try:
+        await asyncio.to_thread(koneksi_ai.hapus, kid)
     except PermissionError as e:
         raise AppError(
             "Kunci ini datang dari backend/.env, jadi tidak bisa dihapus dari sini. "
-            "Hapus barisnya di berkas itu lalu mulai ulang backend.",
+            "Nonaktifkan saja, atau hapus barisnya di berkas itu lalu mulai ulang backend.",
             code="AI_KEY_FROM_ENV", status=409) from e
     except KeyError as e:
-        raise AppError("Kunci tidak ditemukan.", code="AI_KEY_UNKNOWN", status=404) from e
-    return {"kunci": await asyncio.to_thread(kunci_ai.daftar)}
+        raise AppError("Koneksi tidak ditemukan.", code="AI_KEY_UNKNOWN", status=404) from e
+    return await _daftar_koneksi()
+
+
+class AiLokalPasang(BaseModel):
+    model: str = Field("", max_length=40)
+
+
+@router.get("/ai-lokal")
+async def status_ai_lokal():
+    from ..services import ai_lokal
+    return await asyncio.to_thread(ai_lokal.status)
+
+
+@router.post("/ai-lokal/pasang")
+async def pasang_ai_lokal(req: AiLokalPasang):
+    """Memasang mesin + model sebagai pekerjaan antrean (kemajuan lewat SSE)."""
+    from ..services import ai_lokal
+    from ..services.jobs import queue as _queue
+    model = req.model or ai_lokal.MODEL_BAWAAN
+    if model not in ai_lokal.MODEL:
+        raise AppError("Model AI lokal tidak dikenal.", code="AI_LOKAL_MODEL", status=422)
+    job_id, created = _queue.enqueue("ai_lokal_pasang", {"model": model},
+                                     dedupe_key=f"ai_lokal_pasang:{model}")
+    return {"job_id": job_id, "created": created}
+
+
+@router.delete("/ai-lokal/model/{model}")
+async def hapus_model_ai_lokal(model: str):
+    from ..services import ai_lokal
+    try:
+        await asyncio.to_thread(ai_lokal.hapus_model, model)
+    except ValueError as e:
+        raise AppError(str(e), code="AI_LOKAL_MODEL", status=422) from e
+    return await asyncio.to_thread(ai_lokal.status)
 
 
 @router.delete("/api-key")
@@ -881,13 +950,13 @@ async def kesehatan():
             "akibat": "Unggah ke YouTube dan Drive tidak bisa jalan.",
         })
 
-        kunci_ai = bool(get_api_key())
-        from ..services import openrouter
+        from ..services import koneksi_ai as _kon
+        aktif_ai = _kon.rantai()
         baris.append({
-            "nama": "Kunci AI",
-            "nilai": ("Gemini" + (" + OpenRouter" if openrouter.aktif() else "")) if kunci_ai
-                     else ("OpenRouter saja" if openrouter.aktif() else "belum diisi"),
-            "baik": kunci_ai or openrouter.aktif(),
+            "nama": "Koneksi AI",
+            "nilai": (f"{len(aktif_ai)} aktif, utama {aktif_ai[0]['nama']}" if aktif_ai
+                      else "belum diisi"),
+            "baik": bool(aktif_ai),
             "akibat": "Pemilihan klip dan sutradara bingkai memakai mesin lokal.",
         })
 

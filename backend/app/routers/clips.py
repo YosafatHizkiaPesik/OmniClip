@@ -658,8 +658,9 @@ async def cari_ulang(video_id: str, req: CariUlangRequest):
     if not (await asyncio.to_thread(tx_repo.get_best, vid)):
         raise AppError("Video ini belum punya transkrip, jalankan klip otomatis dulu.",
                        code="NO_TRANSCRIPT", status=409)
-    if req.mesin == "gemini" and not get_api_key():
-        raise AppError("Gemini butuh kunci API. Isi di Pengaturan → Model AI, "
+    from ..services.penyedia_ai import ada_ai
+    if req.mesin == "gemini" and not ada_ai(get_api_key()):
+        raise AppError("Belum ada koneksi AI yang aktif. Tambahkan di Pengaturan → Mesin AI, "
                        "atau pilih mesin lokal.", code="AI_KEY_MISSING", status=409)
 
     job_id, created = queue.enqueue(

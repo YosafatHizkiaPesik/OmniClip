@@ -456,6 +456,8 @@ def refine_openrouter(
     max_seconds: float = 80.0,
     kabar=None,
     batal=None,
+    api_key: Optional[str] = None,
+    model: Optional[str] = None,
 ) -> tuple[list[Candidate], Optional[str]]:
     """
     Pemilihan klip lewat OpenRouter, saat SELURUH model Gemini tidak menjawab.
@@ -474,9 +476,10 @@ def refine_openrouter(
     """
     from . import openrouter
 
-    if not openrouter.aktif():
+    api_key = api_key or openrouter.kunci()
+    if not api_key:
         raise RuntimeError("Kunci OpenRouter belum diisi.")
-    models = openrouter.rantai_teks()
+    models = openrouter.rantai_teks(model or None)
     if not models:
         raise RuntimeError("Tidak ada model OpenRouter berjendela cukup besar.")
 
@@ -486,7 +489,7 @@ def refine_openrouter(
                            max_seconds=max_seconds)
     data, model_name, _ = openrouter.tanya(
         [{"teks": prompt}], skema=_skema_polos(), sistem=bahasa_ai.sistem(SYSTEM_ID, bahasa_ai.kode()),
-        api_key=openrouter.kunci(), models=models, suhu=0.4,
+        api_key=api_key, models=models, suhu=0.4,
         maks_keluaran=min(32768, 6144 + max_clips * 800),
         kabar=kabar, batal=batal)
     refined = _apply_selections(data, pool, sentences, max_clips,
@@ -494,6 +497,91 @@ def refine_openrouter(
     if not refined:
         raise RuntimeError("OpenRouter tidak mengembalikan satupun kandidat yang dikenal")
     log.info("OpenRouter %s memilih %d klip", model_name, len(refined))
+    return refined, model_name
+
+
+SYSTEM_LOKAL = """Anda editor video pendek berbahasa Indonesia. Anda menerima
+kandidat potongan dari sebuah video panjang, masing-masing dengan isinya.
+Pilih yang paling layak jadi klip vertikal: pembukanya langsung menarik, bisa
+dimengerti tanpa konteks, dan berakhir di puncak gagasan.
+
+Untuk tiap pilihan isi:
+- candidate_id; start_sentence dan end_sentence = rentang kalimat kandidat itu.
+- score 0-100, JUJUR dan BERBEDA-BEDA: yang terbaik 80-95, yang biasa 50-70.
+- suggested_title maksimal 60 karakter. WAJIB menyebut hal spesifik dari ISI
+  kandidat itu (nama, angka, klaim, kejadian). Tiap judul memakai pola kalimat
+  yang BERBEDA. Dilarang pola "X dan Y: ... yang Tak Terduga", dilarang kata
+  "menarik", "luar biasa", "tak terduga".
+- reason satu kalimat yang menyebut APA yang dibahas di potongan itu.
+- hashtags 3-5, huruf kecil, dari topik isinya.
+- hook_text dan konteks boleh dikosongkan.
+Jangan memakai tanda pisah panjang (em dash).
+
+Contoh satu pilihan yang baik:
+{"candidate_id": 3, "start_sentence": 40, "end_sentence": 52, "score": 86,
+ "suggested_title": "Ronaldo menolak tawaran 200 juta dari Saudi",
+ "reason": "Ronaldo menceritakan alasan menolak tawaran klub Saudi pertama kali.",
+ "hashtags": ["ronaldo", "sepakbola", "saudi"], "hook_text": "", "konteks": ""}"""
+
+# Berapa kandidat dan klip untuk model kecil. Model 3B di CPU membaca sekitar
+# 27-40 token/detik dan menulis 10 token/detik: 12 kandidat dan 8 pilihan sudah
+# beberapa menit. Sisa jatah klip diisi kandidat mesin lokal (pipeline).
+LOKAL_KANDIDAT = 12
+LOKAL_KLIP = 8
+
+
+def refine_koneksi(
+    koneksi: dict,
+    *,
+    sentences: list[Sentence],
+    candidates: list[Candidate],
+    video_title: str,
+    max_clips: int = 8,
+    max_chars: int = 350000,
+    shortlist: int = 25,
+    max_seconds: float = 80.0,
+) -> tuple[list[Candidate], Optional[str]]:
+    """
+    Pemilihan klip lewat koneksi AI apa pun selain Gemini/OpenRouter
+    (Claude, OpenAI, Groq, Mistral, server lokal, AI lokal OmniClip).
+
+    Model besar menerima permintaan yang sama dengan Gemini (transkrip +
+    kandidat). AI lokal menerima versi RINGKAS: hanya kandidat yang sudah
+    disaring mesin lokal, tanpa transkrip penuh, karena jendela dan
+    kecepatannya jauh lebih kecil.
+    """
+    from . import koneksi_ai
+
+    lokal = koneksi["penyedia"] in ("lokal", "kustom")
+    if lokal:
+        pool = candidates[:LOKAL_KANDIDAT]
+        jumlah = min(max_clips, LOKAL_KLIP, len(pool))
+        prompt = (f"Judul video: {video_title}\n\n"
+                  f"=== KANDIDAT POTONGAN ===\n{_format_candidates(pool, sentences)}\n\n"
+                  f"Pilih {jumlah} potongan terbaik, urut dari yang paling kuat. "
+                  f"Batas durasi satu potongan: {max_seconds:.0f} detik.")
+        sistem = bahasa_ai.sistem(SYSTEM_LOKAL, bahasa_ai.kode())
+        maks = min(4096, 300 + jumlah * 260)
+    else:
+        pool = candidates[:shortlist]
+        jumlah = max_clips
+        prompt = _prompt_pilih(sentences=sentences, pool=pool, video_title=video_title,
+                               max_clips=max_clips, max_chars=max_chars,
+                               max_seconds=max_seconds)
+        sistem = bahasa_ai.sistem(SYSTEM_ID, bahasa_ai.kode())
+        maks = min(32768, 6144 + max_clips * 800)
+    data, model_name, _ = koneksi_ai.tanya_satu(
+        koneksi, [{"teks": prompt}], skema=_skema_polos(), sistem=sistem,
+        suhu=0.4, maks_keluaran=maks)
+    refined = _apply_selections(data, pool, sentences, jumlah, max_seconds=max_seconds)
+    if not refined:
+        raise RuntimeError(f"{koneksi['nama']} tidak mengembalikan satupun kandidat yang dikenal")
+    if lokal:
+        # Model kecil menulis hook satu kata ("AND THEN"); hook dari mesin
+        # lokal (kalimat pembuka yang sebenarnya diucapkan) lebih berguna.
+        for c in refined:
+            c.hook_text = make_hook_text(sentences, *c.sentence_span).upper()[:70]
+    log.info("%s memilih %d klip", model_name, len(refined))
     return refined, model_name
 
 

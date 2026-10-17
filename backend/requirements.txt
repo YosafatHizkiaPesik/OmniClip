@@ -69,6 +69,8 @@ fonttools>=4.40
 # --- AI (opsional) ---
 # Tanpa API key, pemilihan klip tetap berjalan memakai mesin heuristik lokal.
 google-genai>=0.1.1
+# Claude sebagai salah satu koneksi AI (services/penyedia_anthropic.py).
+anthropic>=1.15.0
 
 # --- Unggah ke YouTube dan Google Drive ---
 # Keduanya sempat dihapus dari berkas ini bersama lapisan Drive palsu yang lama,

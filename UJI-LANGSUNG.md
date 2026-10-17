@@ -61,6 +61,9 @@ jadi pekerjaan baru. Rincian tiap fitur ada di `JOB-2.md`.
   memang aturannya.
 
 - [ ] **Kunci Gemini tidak bisa dipakai (15 Oktober 2026, bukan bug kode).**
+  17 Oktober 2026: semua proyek di AI Studio pemilik berstatus "Restricted"
+  (akun Google Workspace organisasi). Solusi: akun Gmail pribadi, penyedia
+  lain di Koneksi AI, atau AI lokal (tes 34-35).
   Kunci 1 menjawab 429 (kuota gratis harian habis), kunci 2 menjawab 403
   "Your project has been denied access" (proyek Google-nya diblokir). Akibatnya
   semua video memakai mesin lokal. Perlu kunci baru dari aistudio.google.com
@@ -236,6 +239,26 @@ Urutannya sama dengan jalur pemakaian normal.
 - [ ] **33. Mode English menyeluruh.** Ulangi tes 19-20; kini termasuk nama
   tema subtitle, font, suara, alasan klip, temuan Analitik, pesan cookies dan
   pembaruan.
+
+### Tambahan 17 Oktober 2026: koneksi AI universal dan AI lokal
+
+- [ ] **34. Koneksi AI.** Pengaturan > Mesin AI > Koneksi AI. Tambah kunci
+  (Gemini dari akun Gmail pribadi, atau Groq/Mistral gratis, atau Claude),
+  tekan Uji, susun urutannya dengan panah, centang/hapus centang Aktif,
+  Jadikan utama, Hapus.
+  - Diharapkan: status per koneksi (Bekerja / Ditolak / Kuota habis), yang
+    paling atas dan aktif bertanda UTAMA.
+- [ ] **35. AI lokal.** Kartu AI lokal OmniClip > Qwen3 4B (sudah terpasang)
+  > **Pakai sebagai AI utama**. Tutup tab peramban yang tidak dipakai, lalu
+  potong satu video.
+  - Diharapkan: kabar "Menyalakan AI lokal dan menilai kandidat klip…",
+    lalu kartu Partitur bertuliskan "· AI lokal". Satu video ±5-10 menit
+    tambahan. Bila RAM kurang, kabarnya menyebut berapa yang bebas dan
+    klip tetap dipilih mesin lokal.
+- [ ] **36. Tautan non-YouTube di kotak cari.** Tempel tautan TikTok atau
+  Twitch di kotak cari Beranda, buka kartunya.
+  - Diharapkan: video diputar dengan pemutar situs itu; tombol "Buka di
+    TikTok" dan "Potong jadi klip".
 
 ### Jalur fitur unggulan (urutan disarankan, ±30 menit)
 

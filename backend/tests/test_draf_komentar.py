@@ -129,7 +129,9 @@ class KartuKonteks(unittest.TestCase):
 
 class TanpaAI(unittest.TestCase):
     def test_tanpa_kunci_tidak_mengarang(self):
-        with mock.patch("app.services.penyedia_ai.tanya") as t:
+        # Tanpa koneksi AI aktif sama sekali (bukan hanya tanpa argumen kunci).
+        with mock.patch("app.services.penyedia_ai.tanya") as t, \
+             mock.patch("app.services.koneksi_ai.rantai", return_value=[]):
             d = km.draf(klip(), api_key="", models=[])
         t.assert_not_called()
         self.assertEqual((d["pembuka"], d["sela"], d["penutup"]), ("", None, ""))
