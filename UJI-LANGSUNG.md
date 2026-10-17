@@ -260,6 +260,34 @@ Urutannya sama dengan jalur pemakaian normal.
   - Diharapkan: video diputar dengan pemutar situs itu; tombol "Buka di
     TikTok" dan "Potong jadi klip".
 
+### Tambahan 18 Oktober 2026: preset gaya, warna aksen, hasil AI lokal
+
+- [ ] **37. Ulangi auto-klip dengan AI lokal.** Hasil Qwen3 untuk wawancara
+  Ronaldo (Jk9uJRMvBIA) sebelumnya dibuang di 98,8% karena aturan database
+  lama. Tekan Cari ulang dengan koneksi AI lokal.
+  - Diharapkan: pekerjaan selesai, kartu Partitur bertuliskan "· AI lokal",
+    tidak ada galat "CHECK constraint failed".
+- [ ] **38. Bilah proses menyebut "AI".** Selama auto-klip berjalan.
+  - Diharapkan: tahap bertuliskan "AI", bukan "Gemini".
+- [ ] **39. Galeri Gaya berkategori.** Studio → Gaya → Gaya siap pakai.
+  - Diharapkan: 24 model dalam Populer, Menyala, Pelat, Gaya huruf, Gerak.
+    Klip lama tetap tampil seperti sebelumnya.
+- [ ] **40. Warna aksen subtitle.** Pilih model (mis. Kotak sorot, Pendar,
+  Label miring), lalu ganti warnanya dari baris Warna aksen atau pemilih
+  warna bebas.
+  - Diharapkan: modelnya tetap sama, hanya warnanya berganti; huruf di atas
+    kotak berwarna tetap terbaca.
+- [ ] **41. Kontrol baru di bagian huruf.** Warna garis, Pendar, Jarak huruf,
+  Kemiringan, Huruf miring.
+  - Diharapkan: pratinjau langsung berubah, dan hasil render sama dengan
+    pratinjau (render satu klip pendek).
+- [ ] **42. Warna aksen judul.** Studio → Judul → Judul di dalam video (atau
+  kartu judul) → pilih tema → klik warna. Tombol "Warna asli" mengembalikan.
+  - Diharapkan: pelat/huruf/garis tema berganti warna di pratinjau dan di
+    hasil render; huruf di pelat hijau atau kuning berwarna hitam.
+- [ ] **43. Studio tidak jatuh saat judul dinyalakan.** Sebelumnya
+  menyalakan judul bertema bisa memunculkan "Bagian ini gagal ditampilkan".
+
 ### Jalur fitur unggulan (urutan disarankan, ±30 menit)
 
 Satu video podcast pendek (10-20 menit) cukup untuk semuanya:
