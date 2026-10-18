@@ -1879,8 +1879,10 @@ export default function ClipPreview({
                   color: batasSeret != null ? 'var(--accent-cyan)' : '#e2e8f0',
                   whiteSpace: 'nowrap',
                 }}>
-                  wajah {Math.round(batasSeret ?? gamingWajah)}% · game{' '}
-                  {100 - Math.round(batasSeret ?? gamingWajah)}%
+                  {t('pratinjau.batas_game', {
+                    w: Math.round(batasSeret ?? gamingWajah),
+                    g: 100 - Math.round(batasSeret ?? gamingWajah),
+                  })}
                 </span>
               </div>
             )}

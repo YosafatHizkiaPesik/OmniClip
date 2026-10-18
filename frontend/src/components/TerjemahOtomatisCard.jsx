@@ -17,7 +17,9 @@ export default function TerjemahOtomatisCard({ card, sectionTitle, helpText }) {
   const [simpan, setSimpan] = useState(null);
 
   useEffect(() => {
-    apiGet('/settings/terjemah-otomatis').then((r) => setBahasa(r.bahasa ?? '')).catch(() => setBahasa(''));
+    apiGet('/settings/terjemah-otomatis')
+      .then((r) => setBahasa(r.pilihan === 'mati' ? '' : (r.pilihan ?? r.bahasa ?? '')))
+      .catch(() => setBahasa(''));
     apiGet('/settings/languages').then((r) => setDaftar(r.common ?? [])).catch(() => {});
   }, []);
 
@@ -47,6 +49,7 @@ export default function TerjemahOtomatisCard({ card, sectionTitle, helpText }) {
                 style={{ padding: '7px 10px', fontSize: '0.8rem', fontFamily: 'inherit',
                          borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)',
                          background: 'transparent', color: 'var(--ink)' }}>
+          <option value="ikut">{t('to.ikut')}</option>
           <option value="">{t('to.mati')}</option>
           {pilihan.map((b) => <option key={b.code} value={b.code}>{t('to.ke', { bahasa: b.label })}</option>)}
         </select>

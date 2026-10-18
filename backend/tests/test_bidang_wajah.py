@@ -288,3 +288,32 @@ class MutuPratinjauDiKanvas(unittest.TestCase):
         css = (AKAR / "frontend" / "src" / "index.css").read_text(encoding="utf-8")
         self.assertIn("@keyframes pratinjau-merayap", css)
         self.assertIn("prefers-reduced-motion", css)
+
+
+class FacecamHanyaKepalaDilonggarkan(unittest.TestCase):
+    """
+    18 Oktober 2026, MiawAug (facecam tanpa bingkai): kotak terdeteksi 15x29%
+    untuk wajah 7x15%, jadi bidang wajah hanya berisi kepala.
+    """
+
+    def test_kotak_sempit_dilonggarkan(self):
+        from app.services.render import kotak_reaksi
+        r = kotak_reaksi({"x": 77.24, "y": 69.27, "w": 15.32, "h": 28.56},
+                         [81.19, 70.34, 88.3, 84.88], 1080 / 768, 16 / 9)
+        # Sama persis dengan uji kembarannya di frames.test.js.
+        self.assertEqual(r, {"x": 69.79, "y": 62.2, "w": 29.9, "h": 37.8})
+
+    def test_panel_wajar_tidak_berubah(self):
+        from app.services.render import _longgarkan_wajah
+        k = {"x": 10, "y": 10, "w": 30, "h": 40}
+        self.assertIsNone(_longgarkan_wajah(dict(k), k, [18, 15, 28, 28], 1080 / 768, 16 / 9))
+
+    def test_konstanta_sama_dengan_frames_js(self):
+        import re
+        from app.services import render
+        js = (Path(__file__).resolve().parents[2] / "frontend" / "src" / "features"
+              / "studio" / "frames.js").read_text(encoding="utf-8")
+        for nama in ("LONGGAR_PICU", "LONGGAR_TINGGI", "LONGGAR_MAKS", "LONGGAR_LETAK"):
+            m = re.search(rf"const {nama} = ([0-9.]+);", js)
+            self.assertIsNotNone(m, nama)
+            self.assertAlmostEqual(float(m.group(1)), getattr(render, nama), msg=nama)

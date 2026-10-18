@@ -645,6 +645,50 @@ def _pakai_tinggi_panel(dasar: dict, panel: dict, rasio_px: float,
     return {"x": round(x, 2), "y": round(y, 2), "w": round(w, 2), "h": round(h, 2)}
 
 
+# Facecam yang kotaknya hampir hanya kepala.
+#
+# Facecam tanpa bingkai (orang yang di-chroma-key langsung di atas permainan,
+# seperti MiawAug) terdeteksi sebagai kotak kepala sampai bahu saja: terukur
+# 18 Oktober 2026, panel 15x29% untuk wajah 7x15%, jadi wajahnya mengisi
+# separuh tinggi potongan dan diperbesar ±5 kali. Dilaporkan pemiliknya:
+# "tracking wajahnya terlalu besar memotong bagian wajah saja tidak
+# menyertakan bagian badannya". Potongan seperti itu dilonggarkan sampai
+# LONGGAR_TINGGI kali tinggi wajah (paling banyak LONGGAR_MAKS kali tinggi
+# kotaknya). Panel berbingkai yang wajar (lebih dari LONGGAR_PICU kali tinggi
+# wajah) tidak tersentuh, jadi keluhan lama "melebihi facecam" tidak kembali.
+# Kembarannya `longgarkanWajah` di frames.js.
+LONGGAR_PICU = 2.2
+LONGGAR_TINGGI = 2.6
+LONGGAR_MAKS = 1.6
+LONGGAR_LETAK = 0.4      # pusat wajah pada 40% dari atas potongan
+
+
+def _longgarkan_wajah(dasar: dict, kotak: dict, muka, rasio_px: float,
+                      src_aspek: float) -> Optional[dict]:
+    """Potongan yang dilonggarkan, atau None bila kotaknya tidak sempit."""
+    if not muka or len(muka) != 4:
+        return None
+    x1, y1, x2, y2 = (float(v) for v in muka)
+    fh = y2 - y1
+    kh = float(kotak["h"])
+    # Wajah yang tidak muat di panelnya (petak gabungan seluruh gerak, lihat
+    # `_petak_wajah`) bukan tanda kotak sempit; aturan "tetap di dalam panel"
+    # yang berlaku untuknya.
+    if fh <= 0.1 or fh > 0.8 * kh or kh >= LONGGAR_PICU * fh:
+        return None
+    h0 = float(dasar["h"])
+    h = min(LONGGAR_TINGGI * fh, LONGGAR_MAKS * kh, 100.0)
+    w = h * rasio_px / src_aspek
+    if w > 100.0:
+        w = 100.0
+        h = w * src_aspek / rasio_px
+    if h <= h0 + 0.01:
+        return None
+    x = min(max(0.0, (x1 + x2) / 2 - w / 2), 100.0 - w)
+    y = min(max(0.0, (y1 + y2) / 2 - h * LONGGAR_LETAK), 100.0 - h)
+    return {"x": round(x, 2), "y": round(y, 2), "w": round(w, 2), "h": round(h, 2)}
+
+
 def kotak_reaksi(kotak: dict, muka, rasio_px: float, src_aspek: float) -> dict:
     """
     Potongan bidang reaksi: SEBESAR MUNGKIN di dalam kotak facecam, berasio
@@ -680,6 +724,9 @@ def kotak_reaksi(kotak: dict, muka, rasio_px: float, src_aspek: float) -> dict:
     """
     dasar = _pas_rasio(kotak, rasio_px, src_aspek, dalam=True)
     dasar = _pakai_tinggi_panel(dasar, kotak, rasio_px, src_aspek)
+    longgar = _longgarkan_wajah(dasar, kotak, muka, rasio_px, src_aspek)
+    if longgar is not None:
+        return longgar
     butuh = _ruang_wajah(muka, kotak)
     if butuh is None:
         return dasar

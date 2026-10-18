@@ -1468,9 +1468,11 @@ def run_retitle(ctx: JobContext) -> dict:
     video_id = ctx.payload["video_id"]
     only_weak = bool(ctx.payload.get("only_weak", True))
 
+    from .penyedia_ai import ada_ai
+
     key = ctx.payload.get("api_key") or get_api_key() or ""
-    if not key:
-        raise RuntimeError("Kunci Gemini belum diisi di Pengaturan.")
+    if not ada_ai(key):
+        raise RuntimeError("Belum ada koneksi AI yang aktif. Tambahkan di Pengaturan.")
 
     cached = analyses_repo.latest_for_video(video_id)
     if not cached:
@@ -1484,7 +1486,7 @@ def run_retitle(ctx: JobContext) -> dict:
         if not only_weak or c.get("source") != "gemini" or not (c.get("title") or "").strip()
     ]
     if not target:
-        ctx.progress(1.0, stage="done", message="Semua judul sudah ditulis Gemini.")
+        ctx.progress(1.0, stage="done", message="Semua judul sudah ditulis AI.")
         return {"changed": 0}
 
     ctx.progress(0.2, stage="gemini",
@@ -1492,7 +1494,8 @@ def run_retitle(ctx: JobContext) -> dict:
     fresh, model = rewrite_titles(
         clips=target, video_title=result.get("title") or "",
         api_key=key,
-        models=rantai(key, ctx.payload.get("gemini_model") or get_model_override() or None),
+        models=(rantai(key, ctx.payload.get("gemini_model") or get_model_override() or None)
+                if key else []),
     )
 
     for idx, row in fresh.items():

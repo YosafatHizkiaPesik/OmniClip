@@ -880,29 +880,28 @@ def rewrite_titles(
 
     Mengembalikan ({indeks_klip: {title, hashtags}}, nama_model).
     """
-    from google import genai
-    from google.genai import types
-
-    schema = types.Schema(
-        type=types.Type.OBJECT,
-        required=["clips"],
-        properties={
-            "clips": types.Schema(
-                type=types.Type.ARRAY,
-                items=types.Schema(
-                    type=types.Type.OBJECT,
-                    required=["index", "title", "hashtags"],
-                    properties={
-                        "index": types.Schema(type=types.Type.INTEGER),
-                        "title": types.Schema(type=types.Type.STRING),
-                        "hashtags": types.Schema(
-                            type=types.Type.ARRAY,
-                            items=types.Schema(type=types.Type.STRING)),
+    # Mengikuti rantai koneksi AI di Pengaturan (Gemini, Claude, OpenRouter,
+    # AI lokal, ...), bukan Gemini saja. Sampai 18 Oktober 2026 tombol ini
+    # hanya bisa memakai Gemini, padahal kunci Gemini pemiliknya sering
+    # ditolak Google dan ia memakai AI lokal.
+    schema = {
+        "type": "OBJECT",
+        "required": ["clips"],
+        "properties": {
+            "clips": {
+                "type": "ARRAY",
+                "items": {
+                    "type": "OBJECT",
+                    "required": ["index", "title", "hashtags"],
+                    "properties": {
+                        "index": {"type": "INTEGER"},
+                        "title": {"type": "STRING"},
+                        "hashtags": {"type": "ARRAY", "items": {"type": "STRING"}},
                     },
-                ),
-            )
+                },
+            },
         },
-    )
+    }
 
     bagian = []
     for c in clips:
@@ -930,54 +929,31 @@ def rewrite_titles(
         "=== POTONGAN ===\n" + "\n\n".join(bagian)
     )
 
-    config = types.GenerateContentConfig(
-        response_mime_type="application/json",
-        response_schema=schema,
-        temperature=0.75,      # judul butuh keberanian, bukan ketepatan
-        max_output_tokens=max(2048, 260 * len(clips)),
-        system_instruction=bahasa_ai.sistem(SYSTEM_ID, bahasa_ai.kode()),
-    )
+    from .penyedia_ai import pekerjaan, tanya
 
-    # Batas waktu WAJIB ada di sini.
-    #
-    # Tanpa itu satu panggilan yang tidak pernah dijawab menggantung selamanya:
-    # job-nya berhenti di 20% tanpa pesan galat, lajur `net` ikut tertahan, dan
-    # satu-satunya cara keluar adalah menghidupkan ulang server. Terlihat sendiri
-    # saat menulis fungsi ini — job pertama menggantung lebih dari lima menit.
-    client = genai.Client(
-        api_key=api_key,
-        http_options=types.HttpOptions(timeout=90_000),   # milidetik
-    )
     if model_override:
         models = [model_override] + [m for m in models if m != model_override]
+    # Batas waktu WAJIB ada: tanpa itu satu panggilan yang tidak pernah
+    # dijawab menggantung selamanya dan menahan lajur `net`.
+    with pekerjaan("judul"):
+        data, model, _pakai = tanya(
+            [{"teks": prompt}], schema=schema,
+            sistem=bahasa_ai.sistem(SYSTEM_ID, bahasa_ai.kode()),
+            api_key=api_key, models=models,
+            suhu=0.75,      # judul butuh keberanian, bukan ketepatan
+            maks_keluaran=max(2048, 260 * len(clips)),
+            batas_detik=600)
 
-    last: Optional[Exception] = None
-    for model in models:
-        if tanpa_kuota(model) and model != models[-1]:
-            continue
+    out: dict[int, dict] = {}
+    for row in (data.get("clips") or []):
         try:
-            resp = client.models.generate_content(
-                model=model, contents=prompt, config=config)
-            data = json.loads(resp.text)
-        except Exception as e:      # model penuh, dipensiunkan, atau JSON rusak
-            last = e
-            catat_gagal(model, e)
-            log.warning("Menulis ulang judul gagal di %s: %s", model, e)
+            idx = int(row["index"])
+        except (KeyError, TypeError, ValueError):
             continue
-
-        out: dict[int, dict] = {}
-        for row in (data.get("clips") or []):
-            try:
-                idx = int(row["index"])
-            except (KeyError, TypeError, ValueError):
-                continue
-            judul = tanpa_pisah(str(row.get("title") or "").strip().strip('"'))[:100]
-            tags = normalize_hashtags(row.get("hashtags") or [])
-            if judul:
-                out[idx] = {"title": judul, "hashtags": tags}
-        if out:
-            return out, model
-
-    if last:
-        raise last
-    raise RuntimeError("Gemini tidak mengembalikan judul apa pun.")
+        judul = tanpa_pisah(str(row.get("title") or "").strip().strip('"'))[:100]
+        tags = normalize_hashtags(row.get("hashtags") or [])
+        if judul:
+            out[idx] = {"title": judul, "hashtags": tags}
+    if not out:
+        raise RuntimeError("AI tidak mengembalikan judul apa pun.")
+    return out, model

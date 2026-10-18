@@ -288,6 +288,34 @@ Urutannya sama dengan jalur pemakaian normal.
 - [ ] **43. Studio tidak jatuh saat judul dinyalakan.** Sebelumnya
   menyalakan judul bertema bisa memunculkan "Bagian ini gagal ditampilkan".
 
+### Tambahan 18 Oktober 2026 (lanjutan): subtitle Inggris, susunan game, v1.3.8
+
+- [ ] **44. Preset menyalakan subtitle asli.** Di akun yang subtitle aslinya
+  mati (entertainyhp), pilih model di Gaya.
+  - Diharapkan: subtitle asli (Inggris) langsung muncul di pratinjau dengan
+    model itu; sakelar "Subtitle mati" berubah jadi menyala.
+- [ ] **45. Sembunyikan terjemahan di semua klip.** Studio Ronaldo → Subtitle →
+  panel Terjemahan → "Sembunyikan terjemahan di semua klip", lalu Simpan.
+  - Diharapkan: baris Indonesia hilang dari ke-25 klip; render hanya berisi
+    subtitle Inggris.
+- [ ] **46. Terjemahan otomatis ikut bahasa aplikasi.** Pengaturan →
+  Terjemahan otomatis bertuliskan "Ikuti bahasa aplikasi". Dengan aplikasi
+  English, analisis video Inggris baru.
+  - Diharapkan: tidak ada subtitle kedua. Dengan aplikasi Indonesia, video
+    Inggris tetap mendapat terjemahan Indonesia.
+- [ ] **47. Seret pembatas wajah/game.** Klip game (MiawAug klip 2), seret
+  garis "wajah 40% · game 60%" di pratinjau, lepas, Simpan, buka ulang.
+  - Diharapkan: angkanya bertahan, kedua bidang berubah ukuran, dan render
+    mengikuti.
+- [ ] **48. Facecam tanpa bingkai tidak hanya kepala.** Studio MiawAug →
+  Bingkai → tombol hitung ulang bingkai (kunci lama dibuat sebelum aturan
+  baru), lalu buka klip game.
+  - Diharapkan: bidang wajah memuat headset utuh dan bahu, bukan kepala saja.
+- [ ] **49. Tulis ulang judul dengan AI lokal.** Studio → Judul → "Tulis
+  ulang judul & tagar dengan AI" dengan Gemini mati dan AI lokal aktif.
+  - Diharapkan: judul baru ditulis oleh koneksi yang tersedia (kabar
+    menyebut modelnya), bukan galat "Kunci Gemini belum diisi".
+
 ### Jalur fitur unggulan (urutan disarankan, ±30 menit)
 
 Satu video podcast pendek (10-20 menit) cukup untuk semuanya:

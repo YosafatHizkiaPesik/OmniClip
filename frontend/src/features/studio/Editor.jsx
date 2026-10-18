@@ -610,15 +610,26 @@ export default function Editor({ project, onBack }) {
 
   /** Mengubah setelan Main game: tinggi wajah dan titik berangkat permainan. */
   const setelGaming = useCallback((ubah) => {
-    const lama = layoutGamingRef.current;
-    if (!lama?.frames?.length) return;
-    setLayoutGaming(susunGaming(lama, {
+    const susun = (lama) => susunGaming(lama, {
       wajah: ubah.wajah ?? lama.gaming?.wajah ?? GAMING_WAJAH_BAWAAN,
       permainan: ubah.permainan ?? lama.gaming?.permainan ?? 'isi',
       srcAspek: lama.gaming?.sumber ?? 16 / 9,
       outAspek: rasioKeluaran(aspectRatio),
-    }));
-  }, [aspectRatio, setLayoutGaming]);
+    });
+    // Pemanasan bingkai menulis susunan game ke KUNCI BINGKAI klip, dan
+    // pratinjau menampilkan susunan dari kunci itu. Dulu yang diubah di sini
+    // hanya `susunan_game`, jadi menyeret pembatas wajah/permainan tidak
+    // mengubah apa pun dan angkanya kembali saat dilepas. Dilaporkan
+    // pemiliknya 18 Oktober 2026. Ukuran wajah berlaku untuk SELURUH klip,
+    // jadi semua kunci game klip ini ikut diubah, bukan hanya yang aktif.
+    const kunciGame = (k) => k.mode === 'gaming' && (k.layout?.frames?.length ?? 0) >= 2;
+    if ((selected?.frame_keys ?? []).some(kunciGame)) {
+      setFrameKeys((ks) => ks.map((k) => (kunciGame(k)
+        ? { ...k, layout: susun(berIdLengkap(k.layout)) } : k)));
+    }
+    const lama = layoutGamingRef.current;
+    if (lama?.frames?.length) setLayoutGaming(susun(lama));
+  }, [aspectRatio, setLayoutGaming, setFrameKeys, selected]);
 
   /** Membuang setelan klip ini dan mencari letak facecam dari awal. */
   /**
@@ -1586,6 +1597,17 @@ export default function Editor({ project, onBack }) {
     }
   }, [clips, videoId, editor]);
 
+  // Menyalakan/mematikan terjemahan di SEMUA klip sekaligus. Terjemahan
+  // otomatis dipasang ke setiap klip saat analisis, jadi mematikannya satu per
+  // satu di 25 klip bukan pilihan yang masuk akal.
+  const tampilkanKeduaSemua = useCallback((aktif) => {
+    for (const c of clips) {
+      if (c.subtitle_kedua && (c.subtitle_kedua.aktif !== false) !== aktif) {
+        editor.updateClip(c.clip_id, { subtitle_kedua: { ...c.subtitle_kedua, aktif } });
+      }
+    }
+  }, [clips, editor]);
+
   const renderPayload = useCallback((clip) => renderPayloadMode(clip, modeKlip(clip)),   // eslint-disable-line react-hooks/exhaustive-deps
     [videoId, aspectRatio, frameMode, frameMotion, layout, cacheGaming, style, showHook,
      unggahSetelah, googleReady]);
@@ -2314,6 +2336,7 @@ export default function Editor({ project, onBack }) {
                 <TerjemahPanel clip={selected} videoId={videoId}
                                styleUtama={style} onStyleUtama={setStyle}
                                onSemua={terjemahSemua}
+                               onTampilSemua={tampilkanKeduaSemua}
                                onChange={(next) => selected
                                  && editor.updateClip(selected.clip_id, { subtitle_kedua: next })} />
               )}

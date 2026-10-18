@@ -1402,6 +1402,10 @@ export function StylePanel({
         {klipUntukTema && (
           <PilihTemaAI klip={klipUntukTema} presets={STYLE_PRESETS} set={set} />
         )}
+        {/* Memilih model atau warna MENYALAKAN subtitle asli. Pada akun yang
+            subtitle aslinya mati, yang terlihat di pratinjau hanya terjemahan
+            (gayanya sendiri), jadi memilih model tampak tidak berbuat apa-apa.
+            Dilaporkan pemiliknya 18 Oktober 2026. */}
         {/* Warna aksen: mewarnai model yang sedang dipilih. Satu model, warna
             bebas (diminta pemilik 17 Oktober 2026). Tanpa model (gaya lama atau
             ubahan sendiri) warnanya jatuh ke kata sorot. */}
@@ -1411,11 +1415,11 @@ export function StylePanel({
             {WARNA_AKSEN.map((c) => (
               <Swatch key={c} color={c} size={22}
                       selected={String(aksenKini(activePreset, style) || '').toUpperCase() === c}
-                      onClick={() => set(activePreset ? warnaiPreset(activePreset, c) : { highlight: c })} />
+                      onClick={() => set({ ...(activePreset ? warnaiPreset(activePreset, c) : { highlight: c }), aktif: true })} />
             ))}
             <input type="color" value={aksenKini(activePreset, style) || '#FFE500'}
                    title={t('gs.warna_bebas')}
-                   onChange={(e) => { const c = e.target.value.toUpperCase(); set(activePreset ? warnaiPreset(activePreset, c) : { highlight: c }); }}
+                   onChange={(e) => { const c = e.target.value.toUpperCase(); set({ ...(activePreset ? warnaiPreset(activePreset, c) : { highlight: c }), aktif: true }); }}
                    style={{ width: 26, height: 24, padding: 0, border: 0, background: 'none', cursor: 'pointer' }} />
           </div>
         </div>
@@ -1425,7 +1429,7 @@ export function StylePanel({
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '7px' }}>
               {STYLE_PRESETS.filter((p) => p.kategori === kat).map((p) => (
                 <PresetTile key={p.id} preset={p} active={activePreset?.id === p.id}
-                            onPick={() => set({ ...p.patch, tema: p.id })} />
+                            onPick={() => set({ ...p.patch, tema: p.id, aktif: true })} />
               ))}
             </div>
           </div>

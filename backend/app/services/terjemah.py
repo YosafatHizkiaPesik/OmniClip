@@ -227,7 +227,14 @@ def terjemahkan(teks: list[str], bahasa: str, *, api_key: str, models: list[str]
 # Anime berbahasa Jepang, video berbahasa Inggris: pemiliknya ingin subtitle
 # ASLINYA tetap tampil (terkesan lebih menarik) DENGAN terjemahan di bawahnya.
 # Dibuat saat analisis, bukan menunggu tombol per klip.
-BAWAAN_OTOMATIS = "id"
+#
+# Bawaannya "ikut": bahasa ANTARMUKA yang dipilih pemiliknya. Dulu bawaannya
+# tetap "id", jadi video Inggris selalu mendapat terjemahan Indonesia walau
+# aplikasinya sudah dipindah ke English. Dilaporkan 18 Oktober 2026 pada
+# wawancara Ronaldo: "setelah saya ganti ke setting bahasa inggris caption
+# tetap indonesia". Pekerjaan latar membawa bahasa antarmukanya sendiri
+# (`bahasa_ui` di payload), jadi `bahasa.kini()` benar juga di sana.
+BAWAAN_OTOMATIS = "ikut"
 
 # Terjemahan DI ATAS subtitle asli: asli tetap di 300 dari bawah (tumbuh ke
 # atas sampai ±2 baris), terjemahan kuning di 560. Bukan di bawahnya: anime
@@ -240,14 +247,23 @@ GAYA_KEDUA_OTOMATIS = {
 }
 
 
-def bahasa_otomatis() -> str:
-    """Bahasa tujuan terjemahan otomatis, atau "" bila dimatikan."""
+def pilihan_otomatis() -> str:
+    """Setelan apa adanya: "ikut", "mati", atau kode bahasa."""
     try:
         from ..repos import settings as settings_repo
         v = settings_repo.get("terjemah.otomatis", BAWAAN_OTOMATIS).strip()
     except Exception:
         v = BAWAAN_OTOMATIS
-    return "" if v in ("", "mati") else v
+    return v or "mati"
+
+
+def bahasa_otomatis() -> str:
+    """Bahasa tujuan terjemahan otomatis, atau "" bila dimatikan."""
+    v = pilihan_otomatis()
+    if v == "ikut":
+        from .. import bahasa
+        return bahasa.kini()
+    return "" if v == "mati" else v
 
 
 def sidik_utama(lines: list[dict]) -> str:

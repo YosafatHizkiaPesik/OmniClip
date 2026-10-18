@@ -717,3 +717,69 @@ class HasilAiApaPunTersimpan(unittest.TestCase):
         with self.assertRaises(sqlite3.IntegrityError):
             conn.execute("INSERT INTO analyses (video_id, engine, result_json, created_at)"
                          " VALUES ('v', '', '{}', 0)")
+
+
+class TerjemahanOtomatisIkutBahasaAplikasi(unittest.TestCase):
+    """
+    18 Oktober 2026: video Ronaldo (Inggris) selalu mendapat terjemahan
+    Indonesia walau aplikasinya sudah English, karena bawaannya tetap "id".
+    """
+
+    def _dengan(self, nilai):
+        return mock.patch("app.repos.settings.get",
+                          side_effect=lambda k, d="": d if nilai is None else nilai)
+
+    def test_bawaan_mengikuti_bahasa_antarmuka(self):
+        from app import bahasa
+        from app.services import terjemah
+        with self._dengan(None):
+            tok = bahasa.setel("en")
+            try:
+                self.assertEqual(terjemah.bahasa_otomatis(), "en")
+            finally:
+                bahasa.pulihkan(tok)
+            tok = bahasa.setel("id")
+            try:
+                self.assertEqual(terjemah.bahasa_otomatis(), "id")
+            finally:
+                bahasa.pulihkan(tok)
+
+    def test_video_inggris_di_aplikasi_inggris_tidak_diterjemahkan(self):
+        from app import bahasa
+        from app.services import terjemah
+        klip = [{"subtitles": [{"start": 0, "end": 1, "text": "hello"}]}]
+        with self._dengan(None), mock.patch.object(terjemah, "terjemahkan") as t:
+            tok = bahasa.setel("en")
+            try:
+                self.assertEqual(terjemah.kedua_untuk_klip(klip, "en", api_key="", models=[]), 0)
+            finally:
+                bahasa.pulihkan(tok)
+        t.assert_not_called()
+
+    def test_pilihan_tetap_dihormati(self):
+        from app.services import terjemah
+        with self._dengan("ja"):
+            self.assertEqual(terjemah.bahasa_otomatis(), "ja")
+        with self._dengan("mati"):
+            self.assertEqual(terjemah.bahasa_otomatis(), "")
+
+
+class TulisUlangJudulLewatKoneksiAi(unittest.TestCase):
+    """Tombol tulis ulang judul dulu hanya bisa memakai Gemini."""
+
+    def test_memakai_rantai_koneksi(self):
+        from app.services import gemini
+        hasil = {"clips": [{"index": 0, "title": "Ronaldo jujur soal United", "hashtags": ["#bola"]}]}
+        with mock.patch("app.services.penyedia_ai.tanya",
+                        return_value=(hasil, "qwen3-4b", {})) as t:
+            out, model = gemini.rewrite_titles(
+                clips=[{"index": 0, "subtitles": [{"text": "I think it was time"}]}],
+                video_title="Wawancara", api_key="", models=[])
+        t.assert_called_once()
+        self.assertEqual(model, "qwen3-4b")
+        self.assertEqual(out[0]["title"], "Ronaldo jujur soal United")
+
+    def test_tanpa_kunci_gemini_tidak_ditolak_bila_ada_koneksi(self):
+        sumber = (Path(__file__).resolve().parents[1] / "app" / "services"
+                  / "pipeline.py").read_text(encoding="utf-8")
+        self.assertNotIn('raise RuntimeError("Kunci Gemini belum diisi di Pengaturan.")', sumber)

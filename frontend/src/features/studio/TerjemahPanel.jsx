@@ -49,7 +49,7 @@ export function buatKedua(clip, bahasa, teks, gayaLama) {
 }
 
 export default function TerjemahPanel({ clip, videoId, styleUtama, onStyleUtama, onChange,
-                                        onSemua = null }) {
+                                        onSemua = null, onTampilSemua = null }) {
   const t = useT();
   const [bahasaList, setBahasaList] = useState([]);
   const [bahasa, setBahasa] = useState('id');
@@ -152,6 +152,18 @@ export default function TerjemahPanel({ clip, videoId, styleUtama, onStyleUtama,
               {t('terjemah.tampil_asli')}
             </label>
           </div>
+          {onTampilSemua && (
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+              <button className="btn-secondary" onClick={() => onTampilSemua(false)}
+                      style={{ fontSize: '0.72rem', padding: '4px 10px' }}>
+                {t('terjemah.sembunyi_semua')}
+              </button>
+              <button className="btn-secondary" onClick={() => onTampilSemua(true)}
+                      style={{ fontSize: '0.72rem', padding: '4px 10px' }}>
+                {t('terjemah.tampil_semua')}
+              </button>
+            </div>
+          )}
 
           <div>
             <div style={label}>{t('gaya.posisi')}</div>

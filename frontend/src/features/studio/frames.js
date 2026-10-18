@@ -788,8 +788,36 @@ function pilihDalam(lo, hi, plo, phi, ingin) {
  * bidangnya tetap harus dipangkas pada satu sisi, dan di mana memangkasnya
  * ditentukan di mana kepalanya.
  */
+// Cermin LONGGAR_* dan `_longgarkan_wajah` di render.py: facecam yang
+// kotaknya hampir hanya kepala (tanpa bingkai, di-chroma-key) dilonggarkan
+// supaya headset, bahu, dan sedikit ruang ikut terlihat.
+const LONGGAR_PICU = 2.2;
+const LONGGAR_TINGGI = 2.6;
+const LONGGAR_MAKS = 1.6;
+const LONGGAR_LETAK = 0.4;
+
+export function longgarkanWajah(dasar, kotak, muka, rasioPx, srcAspek) {
+  if (!Array.isArray(muka) || muka.length !== 4) return null;
+  const [x1, y1, x2, y2] = muka.map(Number);
+  const fh = y2 - y1;
+  if (fh <= 0.1 || fh > 0.8 * kotak.h || kotak.h >= LONGGAR_PICU * fh) return null;
+  let h = Math.min(LONGGAR_TINGGI * fh, LONGGAR_MAKS * kotak.h, 100);
+  let w = (h * rasioPx) / srcAspek;
+  if (w > 100) {
+    w = 100;
+    h = (w * srcAspek) / rasioPx;
+  }
+  if (h <= dasar.h + 0.01) return null;
+  const x = Math.min(Math.max(0, (x1 + x2) / 2 - w / 2), 100 - w);
+  const y = Math.min(Math.max(0, (y1 + y2) / 2 - h * LONGGAR_LETAK), 100 - h);
+  const bulat = (v) => Math.round(v * 100) / 100;
+  return { x: bulat(x), y: bulat(y), w: bulat(w), h: bulat(h) };
+}
+
 export function kotakReaksi(kotak, muka, rasioPx, srcAspek) {
   const dasar = pasRasio(kotak, rasioPx, srcAspek, { dalam: true });
+  const longgar = longgarkanWajah(dasar, kotak, muka, rasioPx, srcAspek);
+  if (longgar) return longgar;
   const butuh = ruangWajah(muka);
   if (!butuh) return dasar;
   const w = dasar.w;

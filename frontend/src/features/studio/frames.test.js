@@ -30,6 +30,7 @@ import {
   clipTimeFor,
   coverPercent,
   kotakReaksi,
+  longgarkanWajah,
   newFrameId,
   rasioKeluaran,
   sourceTimeFor,
@@ -222,5 +223,18 @@ describe('rasioKeluaran', () => {
 
   it('rasio asing jatuh ke 9:16, bukan NaN', () => {
     expect(rasioKeluaran('entah')).toBeCloseTo(1080 / 1920, 6);
+  });
+});
+
+describe('longgarkanWajah (facecam yang hanya kepala)', () => {
+  const rasio = 1080 / 768;
+  it('melonggarkan kotak yang hampir hanya kepala, sama dengan render.py', () => {
+    const k = { x: 77.24, y: 69.27, w: 15.32, h: 28.56 };
+    const r = kotakReaksi(k, [81.19, 70.34, 88.3, 84.88], rasio, 16 / 9);
+    expect(r).toEqual({ x: 69.79, y: 62.2, w: 29.9, h: 37.8 });
+  });
+  it('panel berbingkai yang wajar tidak disentuh', () => {
+    const k = { x: 10, y: 10, w: 30, h: 40 };
+    expect(longgarkanWajah({ x: 10, y: 10, w: 30, h: 40 }, k, [18, 15, 28, 28], rasio, 16 / 9)).toBeNull();
   });
 });

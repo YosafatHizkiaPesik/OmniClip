@@ -747,16 +747,21 @@ class TerjemahOtomatisRequest(BaseModel):
 
 @router.get("/terjemah-otomatis")
 async def lihat_terjemah_otomatis():
-    """Bahasa terjemahan otomatis untuk video berbahasa asing ("" = mati)."""
-    from ..services.terjemah import bahasa_otomatis
-    return {"bahasa": bahasa_otomatis()}
+    """
+    Bahasa terjemahan otomatis untuk video berbahasa asing.
+
+    `pilihan` adalah setelannya ("ikut" = bahasa aplikasi, "mati", atau kode
+    bahasa); `bahasa` adalah hasilnya saat ini ("" = mati).
+    """
+    from ..services.terjemah import bahasa_otomatis, pilihan_otomatis
+    return {"bahasa": bahasa_otomatis(), "pilihan": pilihan_otomatis()}
 
 
 @router.post("/terjemah-otomatis")
 async def atur_terjemah_otomatis(req: TerjemahOtomatisRequest):
     settings_repo.set_value("terjemah.otomatis", req.bahasa.strip() or "mati")
-    from ..services.terjemah import bahasa_otomatis
-    return {"bahasa": bahasa_otomatis()}
+    from ..services.terjemah import bahasa_otomatis, pilihan_otomatis
+    return {"bahasa": bahasa_otomatis(), "pilihan": pilihan_otomatis()}
 
 
 @router.get("/languages")
