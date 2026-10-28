@@ -648,44 +648,66 @@ def _pakai_tinggi_panel(dasar: dict, panel: dict, rasio_px: float,
 # Facecam yang kotaknya hampir hanya kepala.
 #
 # Facecam tanpa bingkai (orang yang di-chroma-key langsung di atas permainan,
-# seperti MiawAug) terdeteksi sebagai kotak kepala sampai bahu saja: terukur
-# 18 Oktober 2026, panel 15x29% untuk wajah 7x15%, jadi wajahnya mengisi
-# separuh tinggi potongan dan diperbesar ±5 kali. Dilaporkan pemiliknya:
-# "tracking wajahnya terlalu besar memotong bagian wajah saja tidak
-# menyertakan bagian badannya". Potongan seperti itu dilonggarkan sampai
-# LONGGAR_TINGGI kali tinggi wajah (paling banyak LONGGAR_MAKS kali tinggi
-# kotaknya). Panel berbingkai yang wajar (lebih dari LONGGAR_PICU kali tinggi
-# wajah) tidak tersentuh, jadi keluhan lama "melebihi facecam" tidak kembali.
-# Kembarannya `longgarkanWajah` di frames.js.
-LONGGAR_PICU = 2.2
-LONGGAR_TINGGI = 2.6
-LONGGAR_MAKS = 1.6
-LONGGAR_LETAK = 0.4      # pusat wajah pada 40% dari atas potongan
+# seperti MiawAug dan Windah) terdeteksi sebagai kotak kepala sampai bahu:
+# terukur 18 Oktober 2026, panel 15x29% untuk wajah 7x15%, jadi bidang wajah
+# hanya berisi kepala. Dilaporkan pemiliknya: "tracking wajahnya terlalu besar
+# memotong bagian wajah saja tidak menyertakan bagian badannya".
+#
+# Versi pertama aturan ini membesarkan TINGGI potongan ke 2,6 x tinggi wajah
+# dan membiarkan lebarnya mengikuti rasio bidang. Pada bidang wajah 30% (rasio
+# 1,88, lebar) lebarnya membengkak: terukur 28 Oktober 2026 pada klip Windah,
+# potongan 51 x 48% layar untuk kotak facecam 18 x 34%, jadi separuh gambar
+# permainan ikut masuk ke bidang wajah. Dilaporkan: "terlalu besar mengcrop
+# wajahnya ... agar facecam sampai tidak memotong video gamenya".
+#
+# Sekarang potongannya diukur dari ORANGNYA: dari sedikit di atas kepala
+# (LONGGAR_ATAS x tinggi wajah) sampai badan (LONGGAR_BADAN x tinggi wajah di
+# bawah dagu, atau tepi bawah kotak facecam), dipusatkan pada wajah. Lebarnya
+# dibatasi LONGGAR_LEBAR x lebar kotak facecam; bila bidangnya terlalu lebar
+# untuk memuat semuanya, yang dikorbankan bagian bawah badan, bukan kepala, dan
+# bukan permainan yang membanjir. `tinggi_wajah_otomatis` lalu memilih bidang
+# yang lebih tinggi bila itu yang memuat badannya. Kembarannya
+# `longgarkanWajah` di frames.js.
+LONGGAR_PICU = 2.2       # kotak < 2,2 x tinggi wajah = kotak "hanya kepala"
+LONGGAR_ATAS = 0.6       # ruang di atas kepala, pecahan tinggi wajah
+LONGGAR_BADAN = 1.3      # badan di bawah dagu, pecahan tinggi wajah
+LONGGAR_LEBAR = 1.6      # lebar potongan paling banyak, x lebar kotak facecam
 
 
 def _longgarkan_wajah(dasar: dict, kotak: dict, muka, rasio_px: float,
                       src_aspek: float) -> Optional[dict]:
-    """Potongan yang dilonggarkan, atau None bila kotaknya tidak sempit."""
+    """Potongan kepala sampai badan, atau None bila kotaknya tidak sempit."""
     if not muka or len(muka) != 4:
         return None
     x1, y1, x2, y2 = (float(v) for v in muka)
     fh = y2 - y1
-    kh = float(kotak["h"])
+    ky, kh, kw = float(kotak["y"]), float(kotak["h"]), float(kotak["w"])
     # Wajah yang tidak muat di panelnya (petak gabungan seluruh gerak, lihat
     # `_petak_wajah`) bukan tanda kotak sempit; aturan "tetap di dalam panel"
     # yang berlaku untuknya.
     if fh <= 0.1 or fh > 0.8 * kh or kh >= LONGGAR_PICU * fh:
         return None
-    h0 = float(dasar["h"])
-    h = min(LONGGAR_TINGGI * fh, LONGGAR_MAKS * kh, 100.0)
+    atas = max(0.0, y1 - LONGGAR_ATAS * fh)
+    bawah = min(100.0, max(ky + kh, y2 + LONGGAR_BADAN * fh))
+    h = bawah - atas
     w = h * rasio_px / src_aspek
-    if w > 100.0:
-        w = 100.0
+    w_maks = min(100.0, LONGGAR_LEBAR * kw)
+    if w > w_maks:
+        w = w_maks
         h = w * src_aspek / rasio_px
-    if h <= h0 + 0.01:
+    if h > 100.0:
+        h = 100.0
+        w = h * rasio_px / src_aspek
+    if h <= float(dasar["h"]) + 0.01 and w <= float(dasar["w"]) + 0.01:
         return None
     x = min(max(0.0, (x1 + x2) / 2 - w / 2), 100.0 - w)
-    y = min(max(0.0, (y1 + y2) / 2 - h * LONGGAR_LETAK), 100.0 - h)
+    # Bila potongannya menyusut karena lebarnya dibatasi, ruang di atas kepala
+    # yang dikurangi lebih dulu: dagu yang terpotong lebih buruk daripada
+    # kepala yang sedikit lebih dekat ke tepi atas.
+    y = atas
+    if y + h < y2 + 0.15 * fh:
+        y = y2 + 0.15 * fh - h
+    y = min(max(0.0, y), 100.0 - h)
     return {"x": round(x, 2), "y": round(y, 2), "w": round(w, 2), "h": round(h, 2)}
 
 
@@ -774,6 +796,29 @@ def _porsi_luar(r: dict, panel: dict) -> float:
     return 1.0 - (ix * iy) / luas
 
 
+# Seberapa mahal permainan yang ikut masuk ke bidang wajah, dibanding isi
+# facecam yang tertangkap. Lihat `_nilai_tutup`.
+HUKUMAN_LUAR = 0.6
+
+
+def _nilai_tutup(r: dict, f: dict) -> float:
+    """
+    Bagian kotak facecam yang tertangkap potongan `r`, dikurangi hukuman untuk
+    bagian potongan yang berada di LUAR kotak (gambar permainan).
+
+    Dulu yang diukur luas potongan dibagi luas kotak, tanpa batas atas, jadi
+    potongan yang membengkak keluar kotak terhitung "menutup lebih banyak" dan
+    selalu menang. Terukur 28 Oktober 2026: bidang wajah 30% dengan potongan
+    51 x 48% layar mengalahkan bidang 40% yang memuat orangnya dengan rapi.
+    """
+    ix = max(0.0, min(r["x"] + r["w"], f["x"] + f["w"]) - max(r["x"], f["x"]))
+    iy = max(0.0, min(r["y"] + r["h"], f["y"] + f["h"]) - max(r["y"], f["y"]))
+    potong = ix * iy
+    luas_f = max(1e-6, float(f["w"]) * float(f["h"]))
+    luas_r = max(1e-6, float(r["w"]) * float(r["h"]))
+    return potong / luas_f - HUKUMAN_LUAR * (luas_r - potong) / luas_r
+
+
 def tinggi_wajah_otomatis(posisi: list, src_aspek: float, out_w: int, out_h: int) -> float:
     """
     Tinggi bidang wajah (30-40%) yang membuat potongannya MENUTUP paling banyak
@@ -803,9 +848,8 @@ def tinggi_wajah_otomatis(posisi: list, src_aspek: float, out_w: int, out_h: int
         tutup = []
         for p in posisi:
             f = p["facecam"]
-            luas = max(1e-6, float(f["w"]) * float(f["h"]))
             r = kotak_reaksi(f, _petak_wajah(f), rasio, src_aspek)
-            tutup.append((float(r["w"]) * float(r["h"])) / luas)
+            tutup.append(_nilai_tutup(r, f))
         nilai = sum(tutup) / max(1, len(tutup))
         # 1% bedanya tidak terlihat; di bawah itu yang menang tinggi terendah.
         if nilai > nilai_terbaik + 0.01:
@@ -906,8 +950,12 @@ def susun_layout_gaming(facecam, *, src_w: int = 1920, src_h: int = 1080,
             ruang = _ruang_wajah(muka, p["facecam"]) or p["facecam"]
             r["main"] = _permainan_tanpa_wajah([p["facecam"]], rasio_main, src_aspek,
                                                wajah_saja=[ruang])
+            r["main"], r["src"] = _pisahkan_reaksi(r["main"], r["src"], rasio_wajah, src_aspek)
         reaksi.append(r)
     reaksi = _rapikan_reaksi(reaksi)
+    if permainan != "utuh" and reaksi:
+        main_src, reaksi[0]["src"] = _pisahkan_reaksi(main_src, reaksi[0]["src"],
+                                                      rasio_wajah, src_aspek)
     return {
         "background": "blur",
         # Setelan susunan, supaya editor bisa menampilkan dan mengubahnya.
@@ -934,6 +982,54 @@ def susun_layout_gaming(facecam, *, src_w: int = 1920, src_h: int = 1080,
              "dst": wajah_dst, "fit": "cover"},
         ],
     }
+
+
+def _pisahkan_reaksi(main: dict, src: dict, rasio_wajah: float,
+                     src_aspek: float) -> tuple[dict, dict]:
+    """
+    Potongan reaksi dan potongan permainan tidak boleh berbagi gambar.
+
+    Dilaporkan pemiliknya 28 Oktober 2026, dengan contoh susunan yang ia
+    seret sendiri: kotak Reaksi dimulai tepat di tempat kotak Permainan
+    berakhir. "Bingkai orangnya jangan sampai menyentuh game." Potongan yang
+    bertumpang berarti sepotong permainan yang sama tampil dua kali, sekali di
+    bidang wajah.
+
+    Yang digeser lebih dulu PERMAINAN, menjauh dari facecam, karena menggeser
+    potongan permainan beberapa persen tidak membuang apa pun yang penting.
+    Bila permainan sudah menempel tepi bingkai dan masih bertumpang, potongan
+    reaksi yang dipangkas dari sisi permainan; tingginya ikut menyusut supaya
+    rasionya tetap, dengan kepala sebagai acuan (atasnya tidak bergeser).
+    """
+    mx1, mw = float(main["x"]), float(main["w"])
+    sx1, sw = float(src["x"]), float(src["w"])
+    mx2, sx2 = mx1 + mw, sx1 + sw
+    if mx2 <= sx1 + 0.01 or sx2 <= mx1 + 0.01:
+        return main, src
+    if (float(main["y"]) + float(main["h"]) <= float(src["y"])
+            or float(src["y"]) + float(src["h"]) <= float(main["y"])):
+        return main, src
+    main, src = dict(main), dict(src)
+    if (sx1 + sx2) / 2 >= (mx1 + mx2) / 2:          # facecam di kanan
+        if sx1 - mw >= 0:
+            main["x"] = round(sx1 - mw, 2)
+            return main, src
+        main["x"] = 0.0
+        batas = mw
+        w = sx2 - batas
+        x = batas
+    else:                                            # facecam di kiri
+        if sx2 + mw <= 100:
+            main["x"] = round(sx2, 2)
+            return main, src
+        main["x"] = round(100.0 - mw, 2)
+        w = main["x"] - sx1
+        x = sx1
+    if w < 2.0:
+        return main, src
+    src["x"], src["w"] = round(x, 2), round(w, 2)
+    src["h"] = round(min(float(src["h"]), w * src_aspek / max(1e-6, rasio_wajah)), 2)
+    return main, src
 
 
 def _permainan_tanpa_wajah(facecams: list, rasio_px: float, src_aspek: float,

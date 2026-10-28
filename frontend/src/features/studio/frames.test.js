@@ -31,6 +31,7 @@ import {
   coverPercent,
   kotakReaksi,
   longgarkanWajah,
+  pisahkanReaksi,
   newFrameId,
   rasioKeluaran,
   sourceTimeFor,
@@ -227,14 +228,28 @@ describe('rasioKeluaran', () => {
 });
 
 describe('longgarkanWajah (facecam yang hanya kepala)', () => {
+  it('kasus Windah: lebar dibatasi, kepala sampai badan masuk', () => {
+    const k = { x: 78.78, y: 65.62, w: 18, h: 34.38 };
+    const r = kotakReaksi(k, [83.69, 75.12, 91.88, 93.71], 1080 / 768, 16 / 9);
+    expect(r).toEqual({ x: 71.5, y: 63.97, w: 28.5, h: 36.03 });
+  });
   const rasio = 1080 / 768;
   it('melonggarkan kotak yang hampir hanya kepala, sama dengan render.py', () => {
     const k = { x: 77.24, y: 69.27, w: 15.32, h: 28.56 };
     const r = kotakReaksi(k, [81.19, 70.34, 88.3, 84.88], rasio, 16 / 9);
-    expect(r).toEqual({ x: 69.79, y: 62.2, w: 29.9, h: 37.8 });
+    expect(r).toEqual({ x: 72.49, y: 61.62, w: 24.51, h: 30.99 });
   });
   it('panel berbingkai yang wajar tidak disentuh', () => {
     const k = { x: 10, y: 10, w: 30, h: 40 };
     expect(longgarkanWajah({ x: 10, y: 10, w: 30, h: 40 }, k, [18, 15, 28, 28], rasio, 16 / 9)).toBeNull();
+  });
+});
+
+describe('pisahkanReaksi', () => {
+  it('menggeser permainan supaya tidak berbagi gambar dengan reaksi', () => {
+    const [m, r] = pisahkanReaksi({ x: 23.63, y: 0, w: 52.73, h: 100 },
+      { x: 71.5, y: 63.97, w: 28.5, h: 36.03 }, 1080 / 768, 16 / 9);
+    expect(m.x).toBe(18.77);
+    expect(r.x).toBe(71.5);
   });
 });

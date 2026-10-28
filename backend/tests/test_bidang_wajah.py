@@ -301,7 +301,7 @@ class FacecamHanyaKepalaDilonggarkan(unittest.TestCase):
         r = kotak_reaksi({"x": 77.24, "y": 69.27, "w": 15.32, "h": 28.56},
                          [81.19, 70.34, 88.3, 84.88], 1080 / 768, 16 / 9)
         # Sama persis dengan uji kembarannya di frames.test.js.
-        self.assertEqual(r, {"x": 69.79, "y": 62.2, "w": 29.9, "h": 37.8})
+        self.assertEqual(r, {"x": 72.49, "y": 61.62, "w": 24.51, "h": 30.99})
 
     def test_panel_wajar_tidak_berubah(self):
         from app.services.render import _longgarkan_wajah
@@ -313,7 +313,51 @@ class FacecamHanyaKepalaDilonggarkan(unittest.TestCase):
         from app.services import render
         js = (Path(__file__).resolve().parents[2] / "frontend" / "src" / "features"
               / "studio" / "frames.js").read_text(encoding="utf-8")
-        for nama in ("LONGGAR_PICU", "LONGGAR_TINGGI", "LONGGAR_MAKS", "LONGGAR_LETAK"):
+        for nama in ("LONGGAR_PICU", "LONGGAR_ATAS", "LONGGAR_BADAN", "LONGGAR_LEBAR"):
             m = re.search(rf"const {nama} = ([0-9.]+);", js)
             self.assertIsNotNone(m, nama)
             self.assertAlmostEqual(float(m.group(1)), getattr(render, nama), msg=nama)
+
+
+class FacecamTidakMembanjirPermainan(unittest.TestCase):
+    """
+    28 Oktober 2026, klip Windah: potongan reaksi 51 x 48% layar untuk kotak
+    facecam 18 x 34%, separuh permainan masuk ke bidang wajah. Contoh yang
+    disusun pemiliknya sendiri: reaksi kira-kira x 74, y 64, 24 x 36%, bidang
+    wajah 37%.
+    """
+    F = {"x": 78.78, "y": 65.62, "w": 18.0, "h": 34.38,
+         "awan_kotak": [83.69, 75.12, 91.88, 93.71]}
+
+    def test_lebar_dibatasi_dan_badan_masuk(self):
+        from app.services.render import LONGGAR_LEBAR, kotak_reaksi
+        for wajah in (30, 35, 40):
+            r = kotak_reaksi(self.F, self.F["awan_kotak"], 1080 / (1920 * wajah / 100), 16 / 9)
+            self.assertLessEqual(r["w"], LONGGAR_LEBAR * self.F["w"] + 0.01, wajah)
+            self.assertLess(r["y"], 75.12, wajah)              # kepala utuh
+            self.assertGreater(r["y"] + r["h"], 93.71, wajah)  # sampai di bawah dagu
+
+    def test_bidang_wajah_otomatis_memilih_yang_memuat_badan(self):
+        from app.services.render import susun_layout_gaming
+        l = susun_layout_gaming(self.F)
+        self.assertEqual(l["gaming"]["wajah"], 40.0)
+        reaksi = l["frames"][1]["src"]
+        self.assertAlmostEqual(reaksi["y"], 64, delta=3)
+        self.assertAlmostEqual(reaksi["y"] + reaksi["h"], 100, delta=0.5)
+        # Bingkai orangnya tidak menyentuh permainan: kotak Reaksi dimulai
+        # tepat di tempat kotak Permainan berakhir, seperti contoh pemiliknya.
+        main = l["frames"][0]["src"]
+        self.assertLessEqual(main["x"] + main["w"], reaksi["x"] + 0.01)
+        for r in l["reaksi"]:
+            self.assertLessEqual(r["main"]["x"] + r["main"]["w"], r["src"]["x"] + 0.01)
+
+    def test_pisahkan_memangkas_reaksi_bila_permainan_sudah_di_tepi(self):
+        from app.services.render import _pisahkan_reaksi
+        main = {"x": 0, "y": 0, "w": 80, "h": 100}
+        src = {"x": 70, "y": 60, "w": 30, "h": 40}
+        m, r = _pisahkan_reaksi(main, src, 1.406, 16 / 9)
+        self.assertEqual(m["x"], 0)
+        self.assertEqual(r["x"], 80)
+        self.assertEqual(r["w"], 20)
+        self.assertAlmostEqual(r["h"], 20 * (16 / 9) / 1.406, places=1)
+        self.assertEqual(r["y"], 60)                      # kepala tetap acuan

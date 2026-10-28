@@ -789,27 +789,38 @@ function pilihDalam(lo, hi, plo, phi, ingin) {
  * ditentukan di mana kepalanya.
  */
 // Cermin LONGGAR_* dan `_longgarkan_wajah` di render.py: facecam yang
-// kotaknya hampir hanya kepala (tanpa bingkai, di-chroma-key) dilonggarkan
-// supaya headset, bahu, dan sedikit ruang ikut terlihat.
+// kotaknya hampir hanya kepala (tanpa bingkai, di-chroma-key) dipotong dari
+// atas kepala sampai badan, dipusatkan pada wajah, lebarnya dibatasi supaya
+// permainan tidak ikut membanjir. Alasannya ditulis di render.py.
 const LONGGAR_PICU = 2.2;
-const LONGGAR_TINGGI = 2.6;
-const LONGGAR_MAKS = 1.6;
-const LONGGAR_LETAK = 0.4;
+const LONGGAR_ATAS = 0.6;
+const LONGGAR_BADAN = 1.3;
+const LONGGAR_LEBAR = 1.6;
 
 export function longgarkanWajah(dasar, kotak, muka, rasioPx, srcAspek) {
   if (!Array.isArray(muka) || muka.length !== 4) return null;
   const [x1, y1, x2, y2] = muka.map(Number);
   const fh = y2 - y1;
   if (fh <= 0.1 || fh > 0.8 * kotak.h || kotak.h >= LONGGAR_PICU * fh) return null;
-  let h = Math.min(LONGGAR_TINGGI * fh, LONGGAR_MAKS * kotak.h, 100);
+  const atas = Math.max(0, y1 - LONGGAR_ATAS * fh);
+  const bawah = Math.min(100, Math.max(kotak.y + kotak.h, y2 + LONGGAR_BADAN * fh));
+  let h = bawah - atas;
   let w = (h * rasioPx) / srcAspek;
-  if (w > 100) {
-    w = 100;
+  const wMaks = Math.min(100, LONGGAR_LEBAR * kotak.w);
+  if (w > wMaks) {
+    w = wMaks;
     h = (w * srcAspek) / rasioPx;
   }
-  if (h <= dasar.h + 0.01) return null;
+  if (h > 100) {
+    h = 100;
+    w = (h * rasioPx) / srcAspek;
+  }
+  if (h <= dasar.h + 0.01 && w <= dasar.w + 0.01) return null;
   const x = Math.min(Math.max(0, (x1 + x2) / 2 - w / 2), 100 - w);
-  const y = Math.min(Math.max(0, (y1 + y2) / 2 - h * LONGGAR_LETAK), 100 - h);
+  // Potongan menyusut: ruang di atas kepala dikurangi dulu, dagu tetap utuh.
+  let y = atas;
+  if (y + h < y2 + 0.15 * fh) y = y2 + 0.15 * fh - h;
+  y = Math.min(Math.max(0, y), 100 - h);
   const bulat = (v) => Math.round(v * 100) / 100;
   return { x: bulat(x), y: bulat(y), w: bulat(w), h: bulat(h) };
 }
@@ -878,6 +889,32 @@ export function permainanTanpaWajah(facecams, rasioPx, srcAspek, wajahSaja = nul
  *          bagian yang tidak memuat facecam supaya wajah tidak tampil dua kali;
  *   'utuh' seluruh layar permainan selebar kanvas, sisanya latar kabur.
  */
+/**
+ * Cermin `render._pisahkan_reaksi`: potongan reaksi dan potongan permainan
+ * tidak boleh berbagi gambar. Permainan digeser menjauh lebih dulu; bila sudah
+ * menempel tepi, reaksi dipangkas dari sisi permainan.
+ */
+export function pisahkanReaksi(main, src, rasioWajah, srcAspek) {
+  const mx1 = main.x; const mw = main.w; const sx1 = src.x; const sw = src.w;
+  const mx2 = mx1 + mw; const sx2 = sx1 + sw;
+  if (mx2 <= sx1 + 0.01 || sx2 <= mx1 + 0.01) return [main, src];
+  if (main.y + main.h <= src.y || src.y + src.h <= main.y) return [main, src];
+  const m = { ...main }; const r = { ...src };
+  const bulat = (v) => Math.round(v * 100) / 100;
+  let x; let w;
+  if ((sx1 + sx2) / 2 >= (mx1 + mx2) / 2) {
+    if (sx1 - mw >= 0) { m.x = bulat(sx1 - mw); return [m, r]; }
+    m.x = 0; x = mw; w = sx2 - mw;
+  } else {
+    if (sx2 + mw <= 100) { m.x = bulat(sx2); return [m, r]; }
+    m.x = bulat(100 - mw); x = sx1; w = m.x - sx1;
+  }
+  if (w < 2) return [m, r];
+  r.x = bulat(x); r.w = bulat(w);
+  r.h = bulat(Math.min(r.h, (w * srcAspek) / Math.max(1e-6, rasioWajah)));
+  return [m, r];
+}
+
 export function susunGaming(lama, { wajah, permainan = 'isi', srcAspek, outAspek }) {
   const main = lama.frames[0];
   const muka = lama.frames[1];
@@ -910,7 +947,9 @@ export function susunGaming(lama, { wajah, permainan = 'isi', srcAspek, outAspek
     reaksi.forEach((r) => {
       r.main = permainanTanpaWajah([r.kotak], rasioMain, srcAspek,
         [ruangWajah(r.muka) ?? r.kotak]);
+      [r.main, r.src] = pisahkanReaksi(r.main, r.src, rasioMuka, srcAspek);
     });
+    [mainSrc, reaksi[0].src] = pisahkanReaksi(mainSrc, reaksi[0].src, rasioMuka, srcAspek);
   }
   return {
     ...lama,
