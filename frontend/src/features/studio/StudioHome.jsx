@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Sparkles, Loader2, AlertTriangle, CheckCircle2, Trash2, Clock, Film, RefreshCw, Search,
-  RotateCw,
+  RotateCw, ArrowRight,
 } from 'lucide-react';
 import { apiDelete, apiGet, apiPost } from '../../lib/api';
 import ImportBar from './ImportBar';
@@ -55,6 +55,7 @@ export default function StudioHome({ onOpen, onFindVideos }) {
   const [putaran, setPutaran] = useState(0);
   const [melanjutkan, setMelanjutkan] = useState(null);
   const [catatanLanjut, setCatatanLanjut] = useState({});
+  const [saring, setSaring] = useState('semua');
 
   const load = useCallback(async () => {
     try {
@@ -150,171 +151,171 @@ export default function StudioHome({ onOpen, onFindVideos }) {
 
   if (projects === null) {
     return (
-      <div style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--text-secondary)' }}>
-        <Loader2 size={26} className="animate-spin" style={{ color: 'var(--accent-cyan)' }} />
-        <p style={{ marginTop: '10px', fontSize: '0.85rem' }}>{t('partitur.memuat')}</p>
+      <div className="rak" aria-busy="true">
+        <header className="rak-kepala">
+          <div className="rak-kepala-teks">
+            <h1 className="work-title rak-judul">{t('partitur.judul')}</h1>
+            <p className="rak-angka"><span>{t('partitur.memuat')}</span></p>
+          </div>
+        </header>
+        <div className="rak-grid">
+          {[0, 1, 2, 3].map((n) => (
+            <div key={n} className="lembar lembar-kerangka">
+              <div className="pit-frame"><div className="pit-well" style={{ aspectRatio: '16/9' }} /></div>
+              <div className="lembar-badan">
+                <div className="kerangka" style={{ height: 14, width: '85%' }} />
+                <div className="kerangka" style={{ height: 11, width: '45%' }} />
+                <div className="kerangka" style={{ height: 32, marginTop: 14 }} />
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
 
+  const jumlah = {
+    semua: projects.length,
+    proses: projects.filter((p) => p.status === 'running' || p.status === 'queued').length,
+    siap: projects.filter((p) => p.status === 'done').length,
+    gagal: projects.filter((p) => p.status === 'failed' || p.status === 'empty').length,
+  };
+  const cocok = {
+    semua: () => true,
+    proses: (p) => p.status === 'running' || p.status === 'queued',
+    siap: (p) => p.status === 'done',
+    gagal: (p) => p.status === 'failed' || p.status === 'empty',
+  };
+  // Saring yang kosong kembali ke "Semua", supaya halaman tidak tampak kosong
+  // hanya karena pekerjaan yang tadi dipilih sudah selesai.
+  const saringKini = jumlah[saring] ? saring : 'semua';
+  const tampil = projects.filter(cocok[saringKini]);
+
   return (
-    <div style={{ paddingBottom: '40px' }}>
+    <div className="rak">
       {pesan && (
         <div className="plate studio-note" style={{ marginBottom: '12px', fontSize: '.82rem' }}>
           {pesan}
         </div>
       )}
-      <header style={{
-        display: 'flex', alignItems: 'center', gap: '12px',
-        flexWrap: 'wrap', marginBottom: '18px',
-      }}>
-        <div>
-          <h1 style={{ fontSize: '1.3rem', fontWeight: 800, marginBottom: '3px' }}>{t('partitur.judul')}</h1>
-          <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: 0 }}>
-            {projects.length
-              ? t('partitur.n_video', { n: projects.length })
-              : t('partitur.kosong_sub')}
+      <header className="rak-kepala">
+        <div className="rak-kepala-teks">
+          <h1 className="work-title rak-judul">{t('partitur.judul')}</h1>
+          <p className="rak-angka">
+            {projects.length ? (
+              <>
+                <span><b>{jumlah.semua}</b>{t('rak.video')}</span>
+                {jumlah.proses > 0 && <span className="is-reh"><b>{jumlah.proses}</b>{t('rak.diproses')}</span>}
+                <span className="is-entry"><b>{jumlah.siap}</b>{t('rak.siap')}</span>
+                {jumlah.gagal > 0 && <span><b>{jumlah.gagal}</b>{t('rak.gagal')}</span>}
+              </>
+            ) : <span>{t('partitur.kosong_sub')}</span>}
           </p>
         </div>
-        <div style={{ flex: 1 }} />
-        <ImportBar onDone={load} />
-        <button className="btn-secondary" onClick={load} style={{ fontSize: '0.8rem' }}>
-          <RefreshCw size={14} /> {t('umum.segarkan')}
-        </button>
-        <button className="btn-primary" onClick={onFindVideos} style={{ fontSize: '0.8rem' }}>
-          <Search size={14} /> {t('tonton.cari_video')}
-        </button>
+        <div className="rak-aksi">
+          <ImportBar onDone={load} />
+          <button className="btn-secondary" onClick={load} title={t('umum.segarkan')}>
+            <RefreshCw size={14} /> {t('umum.segarkan')}
+          </button>
+          <button className="btn-primary" onClick={onFindVideos}>
+            <Search size={14} /> {t('tonton.cari_video')}
+          </button>
+        </div>
       </header>
 
       {error && (
-        <div style={{
-          padding: '11px 13px', marginBottom: '14px', fontSize: '0.82rem',
-          borderRadius: 'var(--radius-md)', color: 'var(--accent-red, var(--danger))',
-          background: 'color-mix(in srgb, var(--danger) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--danger) 30%, transparent)',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ flex: 1 }}>
-              {error.name === 'TimeoutError'
-                ? t('partitur.timeout')
-                : error.message}
-            </span>
-            <button
-              type="button"
-              className="btn btn-sm"
-              onClick={() => setPutaran((n) => n + 1)}
-              style={{ flex: 'none' }}
-            >
-              <RotateCw size={13} /> {t('umum.coba_lagi')}
-            </button>
+        <div className="rak-galat" role="alert">
+          <AlertTriangle size={15} />
+          <span>{error.name === 'TimeoutError' ? t('partitur.timeout') : error.message}</span>
+          <button type="button" className="btn-secondary" onClick={() => setPutaran((n) => n + 1)}>
+            <RotateCw size={13} /> {t('umum.coba_lagi')}
+          </button>
+        </div>
+      )}
+
+      {projects.length > 0 && (
+        <div className="rak-alat">
+          <div className="seg" role="tablist" aria-label={t('rak.saring')}>
+            {[['semua', 'rak.s_semua'], ['proses', 'rak.s_proses'], ['siap', 'rak.s_siap'], ['gagal', 'rak.s_gagal']]
+              .filter(([k]) => k === 'semua' || jumlah[k] > 0)
+              .map(([k, kunci]) => (
+                <button key={k} role="tab" aria-selected={saringKini === k}
+                        className={saringKini === k ? 'is-on' : undefined} onClick={() => setSaring(k)}>
+                  {t(kunci)} <span className="seg-n">{jumlah[k]}</span>
+                </button>
+              ))}
           </div>
         </div>
       )}
 
       {!projects.length && !error && (
-        <div style={{
-          maxWidth: '520px', margin: '50px auto', padding: '32px 24px', textAlign: 'center',
-          background: 'var(--bg-card)', border: '1px dashed var(--border-color)',
-          borderRadius: 'var(--radius-lg)',
-        }}>
-          <Film size={38} style={{ color: 'var(--text-muted)', marginBottom: '14px' }} />
-          <h3 style={{ fontWeight: 700, marginBottom: '8px' }}>{t('partitur.kosong')}</h3>
-          <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.65 }}>
+        <div className="rak-kosong">
+          <Film size={36} />
+          <h3>{t('partitur.kosong')}</h3>
+          <p>
             {t('partitur.kosong_a')} <strong>{t('tonton.potong')}</strong>.{' '}
             {t('partitur.kosong_b')}
           </p>
-          <button className="btn-primary" onClick={onFindVideos}
-                  style={{ marginTop: '18px', fontSize: '0.84rem' }}>
+          <button className="btn-primary" onClick={onFindVideos} style={{ marginTop: '18px' }}>
             <Search size={15} /> {t('tonton.cari_video')}
           </button>
         </div>
       )}
 
-      <div style={{
-        display: 'grid', gap: '14px',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(268px, 1fr))',
-      }}>
-        {projects.map((p) => {
+      <div className="rak-grid">
+        {tampil.map((p) => {
           const meta = STATUS_META[p.status] ?? STATUS_META.unknown;
           const busy = p.status === 'running' || p.status === 'queued';
           const openable = p.status === 'done';
+          const gagal = p.status === 'failed' || p.status === 'empty';
+          const kelasTanda = openable ? 'tanda--siap' : gagal ? 'tanda--gagal' : 'tanda--antre';
 
           return (
-            <div
+            <article
               key={p.video_id}
+              className={`lembar${openable ? ' is-buka' : ''}${gagal ? ' is-redup' : ''}`}
               onClick={() => openable && onOpen(p)}
-              style={{
-                background: 'var(--bg-card)', border: '1px solid var(--border-color)',
-                borderRadius: 'var(--radius-lg)', overflow: 'hidden',
-                cursor: openable ? 'pointer' : 'default',
-                display: 'flex', flexDirection: 'column',
-                opacity: p.status === 'failed' ? 0.75 : 1,
-              }}
+              onKeyDown={(e) => { if (openable && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(p); } }}
+              tabIndex={openable ? 0 : undefined}
+              aria-label={p.title}
             >
               <div className="pit-frame"><div className="pit-well" style={{ aspectRatio: '16/9' }}>
                 {p.thumbnail && (
                   <img src={p.thumbnail} alt="" loading="lazy"
-                       style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                       style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                 )}
-                {p.duration ? (
-                  <span style={{
-                    position: 'absolute', right: '7px', bottom: '7px', padding: '2px 6px',
-                    background: 'rgba(0,0,0,0.8)', borderRadius: '4px',
-                    fontSize: '0.68rem', fontWeight: 700, color: '#fff',
-                    fontVariantNumeric: 'tabular-nums',
-                  }}>
-                    {formatTime(p.duration)}
-                  </span>
-                ) : null}
-                {p.status === 'done' && p.clip_count > 0 && (
-                  <span style={{
-                    position: 'absolute', left: '7px', top: '7px', padding: '3px 8px',
-                    background: 'var(--hl)', borderRadius: '99px',
-                    fontSize: '0.68rem', fontWeight: 800, color: '#1A1400',
-                  }}>
-                    {t('ulang.n_klip', { n: p.clip_count })}
-                  </span>
+                {p.duration ? <span className="lencana lencana--kb">{formatTime(p.duration)}</span> : null}
+                {openable && p.clip_count > 0 && (
+                  <span className="lencana lencana--kia lencana--hl">{t('ulang.n_klip', { n: p.clip_count })}</span>
                 )}
                 {busy && <LapisProses job={{ ...p.job, status: p.status }} />}
               </div></div>
 
-              <div style={{ padding: '11px 13px', display: 'flex', flexDirection: 'column', gap: '7px', flex: 1 }}>
-                <div style={{
-                  fontSize: '0.84rem', fontWeight: 700, lineHeight: 1.35,
-                  display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
-                  overflow: 'hidden',
-                }}>
-                  {p.title}
-                </div>
-                {p.channel && (
-                  <div style={{ fontSize: '0.73rem', color: 'var(--text-muted)' }}>{p.channel}</div>
-                )}
-
-                <div style={{ flex: 1 }} />
+              <div className="lembar-badan">
+                <h2 className="lembar-judul" title={p.title}>{p.title}</h2>
+                {p.channel && <div className="lembar-meta"><span>{p.channel}</span></div>}
 
                 {/* Saat diproses, stepper di bawah sudah menyebut keadaannya. */}
-                {!busy && <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.74rem', color: meta.color }}>
-                  <meta.Icon size={13} className={p.status === 'running' ? 'animate-spin' : undefined} />
-                  <span style={{ fontWeight: 700 }}>{t(meta.label)}</span>
-                  {p.engine && p.status === 'done' && (
-                    <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>
-                      · {namaMesin(p.engine)}
+                {!busy && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 2 }}>
+                    <span className={`tanda ${kelasTanda}`}>
+                      <meta.Icon size={13} />{t(meta.label)}
                     </span>
-                  )}
-                </div>}
+                    {p.engine && openable && (
+                      <span className="tanda-lain" style={{ fontSize: '.72rem', color: 'var(--ink-3)' }}>
+                        · {namaMesin(p.engine)}
+                      </span>
+                    )}
+                  </div>
+                )}
 
                 {/* Kenapa mesinnya lokal. "heuristik" saja terbaca seperti
                     pilihan yang disengaja, padahal biasanya ia akibat Gemini
                     yang sedang penuh, dan mencoba lagi nanti sering berhasil. */}
-                {p.sumber_rendah && p.status === 'done' && (
-                  <div style={{ fontSize: '0.71rem', color: 'var(--text-muted)',
-                                lineHeight: 1.45 }}>
-                    {p.sumber_rendah}
-                  </div>
-                )}
+                {p.sumber_rendah && openable && <div className="lembar-catatan">{p.sumber_rendah}</div>}
 
-                {p.mesin_gagal && p.status === 'done' && (
-                  <div style={{ fontSize: '0.71rem', color: 'var(--text-muted)',
-                                lineHeight: 1.45 }}>
+                {p.mesin_gagal && openable && (
+                  <div className="lembar-catatan">
                     {t('partitur.mesin_gagal', { alasan: p.mesin_gagal })}
                     {/* Saran "cari ulang sendiri" hanya berguna bila memang
                         tidak ada yang akan mencarikannya. */}
@@ -326,9 +327,8 @@ export default function StudioHome({ onOpen, onFindVideos }) {
                     keterangan, bukan sebagai keadaan video: klipnya sudah ada,
                     kartunya tetap bisa dibuka, dan yang akan terjadi nanti
                     hanya mengganti daftar klipnya dengan yang lebih baik. */}
-                {p.coba_lagi_pada && p.status === 'done' && (
-                  <div style={{ fontSize: '0.71rem', color: 'var(--text-muted)',
-                                lineHeight: 1.45 }}>
+                {p.coba_lagi_pada && openable && (
+                  <div className="lembar-catatan">
                     {t('partitur.dijadwalkan', { kapan: sebentarLagi(p.coba_lagi_pada, t) })}
                   </div>
                 )}
@@ -336,20 +336,17 @@ export default function StudioHome({ onOpen, onFindVideos }) {
                 {busy && <BilahProses job={{ ...p.job, status: p.status }} />}
 
                 {p.status === 'failed' && p.job?.error && (
-                  <div style={{ fontSize: '0.71rem', color: 'var(--text-muted)', lineHeight: 1.45 }}>
-                    {p.job.error}
-                  </div>
+                  <div className="lembar-catatan" style={{ color: 'var(--danger)' }}>{p.job.error}</div>
                 )}
                 {busy && catatanLanjut[p.video_id]?.length > 0 && (
-                  <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', lineHeight: 1.45 }}>
+                  <div className="lembar-catatan">
                     {t('partitur.dilewati', { daftar: catatanLanjut[p.video_id].join(', ') })}
                   </div>
                 )}
 
-                <div style={{ display: 'flex', gap: '7px', marginTop: '3px' }}>
+                <div className="lembar-kaki">
                   {p.status === 'failed' && (
-                    <button className="btn-primary" style={{ flex: 1, fontSize: '0.76rem', padding: '7px' }}
-                            disabled={melanjutkan === p.video_id}
+                    <button className="btn-garis" disabled={melanjutkan === p.video_id}
                             title={t('partitur.lanjut_judul')}
                             onClick={(e) => lanjutkan(p.video_id, e)}>
                       {melanjutkan === p.video_id
@@ -358,26 +355,20 @@ export default function StudioHome({ onOpen, onFindVideos }) {
                     </button>
                   )}
                   {openable && (
-                    <button className="btn-primary" style={{ flex: 1, fontSize: '0.76rem', padding: '7px' }}
+                    <button className="btn-garis" tabIndex={-1}
                             onClick={(e) => { e.stopPropagation(); onOpen(p); }}>
-                      <Sparkles size={13} /> {t('partitur.buka_editor')}
+                      <Sparkles size={13} /> {t('partitur.buka_editor')} <ArrowRight size={13} />
                     </button>
                   )}
-                  <button
-                    onClick={(e) => handleDelete(p.video_id, e)}
-                    title={t('partitur.hapus_judul')}
-                    style={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      width: '30px', height: '30px', borderRadius: 'var(--radius-sm)',
-                      border: '1px solid var(--border-color)', background: 'transparent',
-                      color: 'var(--text-muted)', cursor: 'pointer',
-                    }}
-                  >
-                    <Trash2 size={13} />
+                  {!openable && p.status !== 'failed' && <span style={{ flex: 1 }} />}
+                  <button className="ikon-btn is-bahaya"
+                          onClick={(e) => handleDelete(p.video_id, e)}
+                          title={t('partitur.hapus_judul')} aria-label={t('partitur.hapus_judul')}>
+                    <Trash2 size={14} />
                   </button>
                 </div>
               </div>
-            </div>
+            </article>
           );
         })}
       </div>

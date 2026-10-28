@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Download, Film, Music, Trash2, RefreshCw, Search, Play, X, CheckCircle, Loader2, AlertTriangle, Scissors, ArrowRight } from 'lucide-react';
+import { Download, Film, Music, Trash2, RefreshCw, Search, Play, X, Loader2, AlertTriangle, Scissors, ArrowRight, Sparkles } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { apiGet, apiDelete, apiPost, downloadToDisk } from '../lib/api';
 import { lokal, useT } from '../lib/i18n';
@@ -57,16 +57,9 @@ function Thumb({ item }) {
   const durasi = formatDuration(item.duration);
 
   return (
-    <div style={{
-      position: 'relative', width: '100%', aspectRatio: '16 / 9',
-      background: audio ? 'rgba(255,8,68,0.10)' : 'var(--plate-3, rgba(255,255,255,0.04))',
-      borderRadius: '10px', overflow: 'hidden', flexShrink: 0,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-    }}>
+    <div className="pit-well" style={{ aspectRatio: '16 / 9', display: 'grid', placeItems: 'center' }}>
       {state !== 'ok' && (
-        audio
-          ? <Music size={30} style={{ color: 'var(--accent-pink)' }} />
-          : <Film size={30} style={{ color: 'var(--text-muted)' }} />
+        audio ? <Music size={28} style={{ color: 'var(--reh)' }} /> : <Film size={28} style={{ color: '#5B6678' }} />
       )}
       {item.thumb_url && state !== 'error' && (
         <img
@@ -78,39 +71,14 @@ function Thumb({ item }) {
           style={{
             position: 'absolute', inset: 0, width: '100%', height: '100%',
             objectFit: 'cover', opacity: state === 'ok' ? 1 : 0,
-            transition: 'opacity 0.25s ease',
+            transition: 'opacity 0.25s ease, transform .5s cubic-bezier(.16,1,.3,1)',
           }}
         />
       )}
-
-      {/* Tombol putar muncul di atas gambar */}
-      <div className="thumb-play" style={{
-        position: 'absolute', inset: 0, display: 'flex',
-        alignItems: 'center', justifyContent: 'center',
-        background: 'rgba(0,0,0,0.28)', opacity: 0, transition: 'opacity 0.15s ease',
-      }}>
-        <div style={{
-          width: '42px', height: '42px', borderRadius: '50%', background: 'rgba(0,0,0,0.62)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          border: '1.5px solid rgba(255,255,255,0.85)',
-        }}><Play size={17} style={{ color: '#fff', marginLeft: '2px' }} /></div>
-      </div>
-
-      {durasi && (
-        <span style={{
-          position: 'absolute', right: '6px', bottom: '6px',
-          padding: '1px 6px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 700,
-          background: 'rgba(0,0,0,0.78)', color: '#fff', letterSpacing: '0.02em',
-        }}>{durasi}</span>
-      )}
-      {item.resolution && (
-        <span style={{
-          position: 'absolute', left: '6px', bottom: '6px',
-          padding: '1px 6px', borderRadius: '4px', fontSize: '0.68rem', fontWeight: 700,
-          background: 'rgba(0,0,0,0.68)', color: 'var(--accent-cyan)',
-        }}>{item.resolution}</span>
-      )}
-    </div>
+      <span className="lembar-putar" aria-hidden="true"><Play size={22} fill="currentColor" /></span>
+      {durasi && <span className="lencana lencana--kb">{durasi}</span>}
+      {item.resolution && <span className="lencana lencana--kib">{item.resolution}</span>}
+          </div>
   );
 }
 
@@ -275,229 +243,175 @@ export default function DownloadsTab() {
 
   const totalSize = downloads.reduce((acc, d) => acc + d.file_size, 0);
 
+  const jumlah = {
+    all: downloads.length,
+    video: downloads.filter((d) => d.type === 'video').length,
+    audio: downloads.filter((d) => d.type === 'audio').length,
+  };
+  const diPartitur = downloads.filter((d) => d.ada_partitur).length;
+
   return (
-    <div>
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
-        <div>
-          <h1 className="work-title" style={{ fontSize: '1.5rem' }}>{t('unduhan.judul')}</h1>
-          <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-            {t('unduhan.ringkas', { n: downloads.length, ukuran: formatBytes(totalSize) })}
+    <div className="rak">
+      <header className="rak-kepala">
+        <div className="rak-kepala-teks">
+          <h1 className="work-title rak-judul">{t('unduhan.judul')}</h1>
+          <p className="rak-angka">
+            {loading ? <span>{t('rak.memuat')}</span> : (
+              <>
+                <span><b>{downloads.length}</b>{t('rak.berkas')}</span>
+                <span><b>{formatBytes(totalSize)}</b>{t('rak.di_cakram')}</span>
+                {diPartitur > 0 && <span className="is-entry"><b>{diPartitur}</b>{t('rak.sudah_partitur')}</span>}
+              </>
+            )}
           </p>
         </div>
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-          {selectedItems.size > 0 && (
-            <button
-              onClick={handleBulkDelete}
-              disabled={bulkDeleting}
-              className="btn-secondary"
-              style={{ color: 'var(--danger)', borderColor: 'rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.08)', fontSize: '0.82rem' }}
-            >
-              {bulkDeleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-              {t('unduhan.hapus_n', { n: selectedItems.size })}
-            </button>
-          )}
-          <button className="btn-secondary" onClick={fetchDownloads} style={{ fontSize: '0.82rem' }}>
+        <div className="rak-aksi">
+          <button className="btn-secondary" onClick={fetchDownloads}>
             <RefreshCw size={14} /> {t('umum.muat_ulang')}
           </button>
         </div>
-      </div>
+      </header>
 
-      {/* Search + Filter Bar */}
-      <div style={{ display: 'flex', gap: '10px', marginBottom: '16px', flexWrap: 'wrap' }}>
-        {/* Search Input */}
-        <div style={{ flex: 1, minWidth: '200px', position: 'relative', display: 'flex', alignItems: 'center' }}>
-          <Search size={16} style={{ position: 'absolute', left: '12px', color: 'var(--text-muted)' }} />
-          <input
-            type="text"
-            placeholder={t('unduhan.cari')}
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            style={{
-              width: '100%', padding: '9px 12px 9px 36px',
-              background: 'var(--plate-3)', border: '1px solid var(--rule)',
-              borderRadius: 'var(--r-sm)', color: 'var(--ink)', outline: 'none', fontSize: '0.85rem',
-            }}
-          />
-          {searchQuery && (
-            <button onClick={() => setSearchQuery('')} style={{
-              position: 'absolute', right: '10px', background: 'none', border: 'none',
-              color: 'var(--text-muted)', cursor: 'pointer', padding: '2px',
-            }}><X size={14} /></button>
-          )}
+      {downloads.length > 0 && (
+        <div className="rak-alat">
+          <label className="rak-cari">
+            <Search size={15} />
+            <input className="field" type="search" placeholder={t('unduhan.cari')} aria-label={t('unduhan.cari')}
+                   value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+          </label>
+          <div className="seg" role="tablist" aria-label={t('rak.saring')}>
+            {[['all', t('umum.semua'), null], ['video', 'Video', Film], ['audio', 'Audio', Music]]
+              .filter(([val]) => val === 'all' || jumlah[val] > 0)
+              .map(([val, label, Ikon]) => (
+                <button key={val} role="tab" aria-selected={filter === val}
+                        className={filter === val ? 'is-on' : undefined} onClick={() => setFilter(val)}>
+                  {Ikon && <Ikon size={13} />}{label} <span className="seg-n">{jumlah[val]}</span>
+                </button>
+              ))}
+          </div>
         </div>
+      )}
 
-        {/* Filter Chips */}
-        <div style={{ display: 'flex', gap: '6px' }}>
-          {[['all', t('umum.semua')], ['video', '🎬 Video'], ['audio', '🎵 Audio']].map(([val, label]) => (
-            <button key={val} onClick={() => setFilter(val)} style={{
-              padding: '8px 14px', borderRadius: '20px', border: 'none', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer',
-              background: filter === val ? '#fff' : 'var(--rule-2)',
-              color: filter === val ? '#000' : 'var(--text-primary)',
-            }}>{label}</button>
-          ))}
+      {selectedItems.size > 0 && (
+        <div className="bilah-pilih">
+          <span><b>{selectedItems.size}</b> {t('rak.dipilih')}</span>
+          <span className="pengisi" />
+          <button onClick={handleBulkDelete} disabled={bulkDeleting} className="btn-secondary"
+                  style={{ color: 'var(--danger)' }}>
+            {bulkDeleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+            {t('unduhan.hapus_n', { n: selectedItems.size })}
+          </button>
+          <button className="ikon-btn" onClick={() => setSelectedItems(new Set())}
+                  title={t('rak.batal_pilih')} aria-label={t('rak.batal_pilih')}>
+            <X size={15} />
+          </button>
         </div>
-      </div>
+      )}
 
       {actionError && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap',
-          padding: '11px 14px', marginBottom: '14px', fontSize: '0.83rem',
-          borderRadius: 'var(--radius-md)', color: 'var(--accent-red, var(--danger))',
-          background: 'color-mix(in srgb, var(--danger) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--danger) 30%, transparent)',
-        }}>
-          <AlertTriangle size={15} style={{ flexShrink: 0 }} />
-          <span style={{ flex: 1, minWidth: '180px' }}>{actionError}</span>
-          <button className="btn-secondary" style={{ fontSize: '0.76rem', padding: '5px 11px' }}
-                  onClick={() => setActionError(null)}>{t('umum.tutup')}</button>
+        <div className="rak-galat" role="alert">
+          <AlertTriangle size={15} />
+          <span>{actionError}</span>
+          <button className="btn-secondary" onClick={() => setActionError(null)}>{t('umum.tutup')}</button>
         </div>
       )}
 
       {loading ? (
-        <div style={{ padding: '60px', textAlign: 'center' }}>
-          <Loader2 size={32} className="animate-spin" style={{ color: 'var(--accent-cyan)', margin: '0 auto' }} />
+        <div className="rak-grid" aria-busy="true">
+          {[0, 1, 2, 3].map((n) => (
+            <div key={n} className="lembar lembar-kerangka">
+              <div className="pit-frame"><div className="pit-well" style={{ aspectRatio: '16/9' }} /></div>
+              <div className="lembar-badan">
+                <div className="kerangka" style={{ height: 14, width: '85%' }} />
+                <div className="kerangka" style={{ height: 11, width: '55%' }} />
+                <div className="kerangka" style={{ height: 32, marginTop: 12 }} />
+              </div>
+            </div>
+          ))}
         </div>
       ) : loadError ? (
-        <div style={{ padding: '40px 20px', textAlign: 'center', background: 'var(--bg-card)', borderRadius: '16px', border: '1px solid var(--accent-red)' }}>
-          <AlertTriangle size={40} style={{ color: 'var(--accent-red)', marginBottom: '12px' }} />
-          <h3 style={{ fontWeight: 700 }}>{t('unduhan.gagal_muat')}</h3>
-          <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '4px' }}>{loadError.message}</p>
+        <div className="rak-kosong">
+          <AlertTriangle size={36} style={{ color: 'var(--danger)' }} />
+          <h3>{t('unduhan.gagal_muat')}</h3>
+          <p>{loadError.message}</p>
           <button className="btn-secondary" onClick={fetchDownloads} style={{ marginTop: '14px' }}>
             <RefreshCw size={14} /> {t('umum.coba_lagi')}
           </button>
         </div>
       ) : filtered.length === 0 ? (
-        <div style={{ padding: '60px 20px', textAlign: 'center', background: 'var(--bg-card)', borderRadius: '16px', border: '1px dashed var(--border-color)' }}>
-          <Download size={48} style={{ color: 'var(--text-muted)', marginBottom: '12px' }} />
-          <h3 style={{ fontWeight: 700 }}>
-            {downloads.length === 0 ? t('unduhan.kosong') : t('unduhan.tanpa_hasil')}
-          </h3>
-          <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
+        <div className="rak-kosong">
+          {downloads.length === 0 ? <Download size={38} /> : <Search size={32} />}
+          <h3>{downloads.length === 0 ? t('unduhan.kosong') : t('unduhan.tanpa_hasil')}</h3>
+          <p>
             {downloads.length === 0
               ? t('unduhan.kosong_saran')
               : t('unduhan.tidak_cocok', { q: searchQuery })}
           </p>
+          {downloads.length > 0 && (
+            <button className="btn-secondary" style={{ marginTop: 14 }}
+                    onClick={() => { setSearchQuery(''); setFilter('all'); }}>{t('rak.hapus_saring')}</button>
+          )}
         </div>
       ) : (
-        <div style={{
-          display: 'grid', gap: '14px',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))',
-        }}>
+        <div className="rak-grid">
           {filtered.map((item) => {
             const dipilih = selectedItems.has(item.file_name);
+            const judul = item.title || judulDariNama(item.file_name);
             return (
-              <div
-                key={item.file_name}
-                className="unduhan-kartu"
-                style={{
-                  display: 'flex', flexDirection: 'column', gap: '9px',
-                  background: dipilih ? 'var(--hl-wash)' : 'var(--bg-card)',
-                  border: `1px solid ${dipilih ? 'var(--accent-cyan)' : 'var(--border-color)'}`,
-                  borderRadius: '14px', padding: '9px',
-                  transition: 'border-color 0.15s ease, background 0.15s ease',
-                }}
-              >
-                <div style={{ position: 'relative', cursor: 'pointer' }}
-                     onClick={() => setPreviewItem(item)}>
+              <article key={item.file_name} className={`lembar${dipilih ? ' is-pilih' : ''}`}>
+                <div className="pit-frame lembar-sampul" onClick={() => setPreviewItem(item)}
+                     role="button" tabIndex={0} aria-label={t('unduhan.putar')}
+                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setPreviewItem(item); } }}>
                   <Thumb item={item} />
-                  {/* Kotak pilih di atas sampul: kartunya kini digerakkan oleh
+                  {/* Kotak pilih di atas sampul: kartunya digerakkan oleh
                       gambar, jadi kendali pilih ikut ke sana. */}
-                  <div
-                    onClick={(e) => { e.stopPropagation(); toggleSelect(item.file_name); }}
-                    title={dipilih ? t('unduhan.batal_pilih') : t('umum.pilih')}
-                    style={{
-                      position: 'absolute', top: '6px', left: '6px',
-                      width: '22px', height: '22px', borderRadius: '6px', cursor: 'pointer',
-                      border: `2px solid ${dipilih ? 'var(--accent-cyan)' : 'rgba(255,255,255,0.75)'}`,
-                      background: dipilih ? 'var(--accent-cyan)' : 'rgba(0,0,0,0.45)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    }}
-                  >
-                    {dipilih && <CheckCircle size={13} style={{ color: '#000' }} />}
-                  </div>
+                  <label className="pilih-gambar" onClick={(e) => e.stopPropagation()}
+                         title={dipilih ? t('unduhan.batal_pilih') : t('umum.pilih')}
+                         style={{ left: 12, top: 12 }}>
+                    <input type="checkbox" checked={dipilih} onChange={() => toggleSelect(item.file_name)}
+                           aria-label={t('umum.pilih')} />
+                  </label>
                 </div>
 
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div
-                    title={item.file_name}
-                    style={{
-                      fontWeight: 680, fontSize: '0.84rem', color: 'var(--ink)',
-                      lineHeight: 1.32, display: '-webkit-box', WebkitLineClamp: 2,
-                      WebkitBoxOrient: 'vertical', overflow: 'hidden',
-                      overflowWrap: 'anywhere',
-                    }}
-                  >{item.title || judulDariNama(item.file_name)}</div>
-                  {item.channel && (
-                    <div style={{
-                      fontSize: '0.74rem', color: 'var(--text-secondary)', marginTop: '3px',
-                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                    }}>{item.channel}</div>
-                  )}
-                  <div style={{
-                    fontSize: '0.71rem', color: 'var(--text-muted, var(--text-secondary))',
-                    marginTop: '4px', display: 'flex', gap: '6px', flexWrap: 'wrap',
-                  }}>
+                <div className="lembar-badan">
+                  <h2 className="lembar-judul" title={item.file_name} style={{ overflowWrap: 'anywhere' }}>{judul}</h2>
+                  <div className="lembar-meta">
+                    {item.channel && <span style={{ maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.channel}</span>}
+                  </div>
+                  <div className="lembar-meta">
                     <span>{formatBytes(item.file_size)}</span>
-                    <span>•</span>
-                    <span style={{
-                      textTransform: 'uppercase', fontWeight: 700,
-                      color: item.type === 'audio' ? 'var(--accent-pink)' : 'var(--accent-cyan)',
-                    }}>{item.type}</span>
-                    <span>•</span>
+                    {item.type === 'audio' && <span>Audio</span>}
                     <span>{formatDate(item.created_at)}</span>
                   </div>
-                </div>
 
-                {/* Dari unduhan langsung ke Partitur.
-                    Sebelumnya video yang sudah ada di komputer tetap harus
-                    dicari ulang lewat halaman Cari video, lalu dikenali sebagai
-                    "sudah terunduh" — sebuah jalan memutar untuk berkas yang
-                    sudah ada di depan mata. Diminta pemiliknya. */}
-                {item.video_id && item.type !== 'audio' && (
-                  <button
-                    onClick={() => kePartitur(item)}
-                    disabled={mengirim === item.video_id}
-                    className="btn-primary"
-                    style={{ width: '100%', marginBottom: '6px', padding: '7px',
-                             fontSize: '0.76rem', justifyContent: 'center', gap: '6px' }}
-                    title={item.ada_partitur
-                      ? t('unduhan.sudah_proyek')
-                      : t('unduhan.buat_klip')}>
-                    {mengirim === item.video_id
-                      ? <Loader2 size={13} className="animate-spin" />
-                      : item.ada_partitur ? <ArrowRight size={13} /> : <Scissors size={13} />}
-                    {item.ada_partitur ? t('unduhan.buka_partitur') : t('unduhan.ke_partitur')}
-                  </button>
-                )}
-
-                <div style={{ display: 'flex', gap: '6px' }}>
-                  <button
-                    onClick={() => setPreviewItem(item)}
-                    className="btn-secondary"
-                    style={{ flex: 1, padding: '6px', fontSize: '0.76rem', justifyContent: 'center' }}
-                    title={t('unduhan.putar')}
-                  ><Play size={13} /></button>
-                  <button
-                    onClick={() => handleProxyDownload(item.file_name)}
-                    className="btn-secondary"
-                    style={{ flex: 1, padding: '6px', fontSize: '0.76rem', justifyContent: 'center',
-                             color: 'var(--accent-cyan)', borderColor: 'var(--hl-wash)' }}
-                    title={t('unduhan.simpan')}
-                  ><Download size={13} /></button>
-                  <button
-                    onClick={() => handleDelete(item.file_name)}
-                    disabled={deleting === item.file_name}
-                    className="btn-secondary"
-                    style={{ flex: 1, padding: '6px', fontSize: '0.76rem', justifyContent: 'center',
-                             color: 'var(--danger)', borderColor: 'rgba(239,68,68,0.25)' }}
-                    title={t('umum.hapus')}
-                  >
-                    {deleting === item.file_name
-                      ? <Loader2 size={13} className="animate-spin" />
-                      : <Trash2 size={13} />}
-                  </button>
+                  <div className="lembar-kaki">
+                    {/* Dari unduhan langsung ke Partitur. Sebelumnya video yang
+                        sudah ada di komputer tetap harus dicari ulang lewat
+                        halaman Cari video. Diminta pemiliknya. */}
+                    {item.video_id && item.type !== 'audio' ? (
+                      <button className="btn-garis" onClick={() => kePartitur(item)}
+                              disabled={mengirim === item.video_id}
+                              title={item.ada_partitur ? t('unduhan.sudah_proyek') : t('unduhan.buat_klip')}>
+                        {mengirim === item.video_id
+                          ? <Loader2 size={13} className="animate-spin" />
+                          : item.ada_partitur ? <Sparkles size={13} /> : <Scissors size={13} />}
+                        {item.ada_partitur ? t('unduhan.buka_partitur') : t('unduhan.ke_partitur')}
+                        <ArrowRight size={13} />
+                      </button>
+                    ) : <span style={{ flex: 1 }} />}
+                    <button className="ikon-btn" onClick={() => handleProxyDownload(item.file_name)}
+                            title={t('unduhan.simpan')} aria-label={t('unduhan.simpan')}>
+                      <Download size={15} />
+                    </button>
+                    <button className="ikon-btn is-bahaya" onClick={() => handleDelete(item.file_name)}
+                            disabled={deleting === item.file_name}
+                            title={t('umum.hapus')} aria-label={t('umum.hapus')}>
+                      {deleting === item.file_name
+                        ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
+                    </button>
+                  </div>
                 </div>
-              </div>
+              </article>
             );
           })}
         </div>

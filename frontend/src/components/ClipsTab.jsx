@@ -1,13 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Film, Download, Trash2, RefreshCw, Loader2, AlertTriangle, Layers, X, UploadCloud,
-  Send, Check, Eye, FolderOpen,
+  Send, Check, Eye, FolderOpen, Search, Play, ExternalLink, MessageSquarePlus,
 } from 'lucide-react';
 import {
   apiGet, apiPost, apiDelete, dijalankanDiKomputerIni, downloadToDisk, mediaUrl, kategoriKlip,
 } from '../lib/api';
 import { formatTime } from '../utils/timeFormat';
-import { angka, useT } from '../lib/i18n';
+import { angka, lokal, useT } from '../lib/i18n';
 import UploadModal from './UploadModal';
 import SiapkanTerbit from './SiapkanTerbit';
 
@@ -16,6 +16,11 @@ import SiapkanTerbit from './SiapkanTerbit';
 const LABEL_PLATFORM = {
   tiktok: 'TikTok', instagram: 'Instagram', shorts: 'Shorts', facebook: 'Facebook',
 };
+
+/** "12 Okt" untuk waktu epoch detik, dalam bahasa antarmuka. */
+function tanggalPendek(detik) {
+  return new Date(detik * 1000).toLocaleDateString(lokal(), { day: 'numeric', month: 'short' });
+}
 
 function formatBytes(bytes) {
   if (!bytes) return '';
@@ -99,15 +104,12 @@ function PratinjauKlip({ src, onClick, children, lepas = false }) {
 
   const gaya = { width: '100%', height: '100%', objectFit: 'cover' };
   return (
-    <div ref={wadah} onClick={onClick} style={{
-      position: 'relative', aspectRatio: '9 / 16', background: 'var(--stage)',
-      cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-    }}>
+    <div ref={wadah} onClick={onClick} className="pratinjau-klip">
       {tampil ? (
         <video src={src} preload="metadata" muted style={gaya}
                onLoadedMetadata={_lepasGiliran} onError={_lepasGiliran} />
       ) : (
-        <Film size={26} style={{ color: 'var(--text-muted)' }} />
+        <Film size={26} style={{ color: '#5B6678' }} />
       )}
       {children}
     </div>
@@ -155,6 +157,8 @@ export default function ClipsTab() {
   const [siapkan, setSiapkan] = useState(null);
   // Klip mana yang sudah pernah naik ke mana, dibaca dari riwayat server.
   const [sent, setSent] = useState({});
+  const [cari, setCari] = useState('');
+  const [saring, setSaring] = useState('semua');
 
   // Menandai terbit tanpa membuka jendela apa pun. Sidecar klipnya yang jadi
   // sumber kebenaran, sama seperti di dalam "Siapkan terbit", jadi kedua tempat
@@ -303,277 +307,295 @@ export default function ClipsTab() {
     }
   };
 
+  // Ringkasan dan saring. "Terunggah" berarti pernah naik ke mana pun, lewat
+  // unggahan OmniClip maupun tanda terbit yang dipasang tangan.
+  const terunggah = (c) => (sent[c.file_name] || []).some((u) => u.status === 'done')
+    || (c.metadata?.terbit?.length > 0);
+  const judulKlip = (c) => {
+    const m = c.metadata || {};
+    return (m.title || m.hook_text || c.file_name.replace(/\.mp4$/i, '').replace(/[-_]+/g, ' ')).trim();
+  };
+  const jumlah = {
+    semua: clips.length,
+    belum: clips.filter((c) => !terunggah(c)).length,
+    terunggah: clips.filter(terunggah).length,
+  };
+  const ukuranTotal = clips.reduce((n, c) => n + (c.file_size || 0), 0);
+  const kata = cari.trim().toLowerCase();
+  const tampil = clips.filter((c) => (saring === 'semua' || (saring === 'terunggah') === terunggah(c))
+    && (!kata || judulKlip(c).toLowerCase().includes(kata) || c.file_name.toLowerCase().includes(kata)));
+
+  const hapusTerpilih = async () => {
+    const nama = [...selected];
+    if (!nama.length || !window.confirm(t('klip.yakin_hapus_n', { n: nama.length }))) return;
+    setWorking(true);
+    for (const n of nama) {
+      setSibukBaris({ nama: n, apa: 'hapus' });
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((lanjut) => { setTimeout(lanjut, 120); });
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        await apiDelete(`/clips/${encodeURIComponent(n)}`);
+      } catch (err) {
+        setActionError(t('klip.gagal_hapus', { nama: n, pesan: err.message }));
+      }
+    }
+    setSibukBaris(null);
+    setSelected(new Set());
+    setWorking(false);
+    load();
+  };
+
   return (
-    <div style={{ paddingBottom: '40px' }}>
+    <div className="rak">
       {actionError && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap',
-          padding: '11px 14px', marginBottom: '14px', fontSize: '0.83rem',
-          borderRadius: 'var(--radius-md)', color: 'var(--accent-red, var(--danger))',
-          background: 'color-mix(in srgb, var(--danger) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--danger) 30%, transparent)',
-        }}>
-          <span style={{ flex: 1, minWidth: '180px' }}>{actionError}</span>
-          <button className="btn-secondary" style={{ fontSize: '0.76rem', padding: '5px 11px' }}
-                  onClick={() => setActionError(null)}>{t('umum.tutup')}</button>
+        <div className="rak-galat" role="alert">
+          <AlertTriangle size={15} />
+          <span>{actionError}</span>
+          <button className="btn-secondary" onClick={() => setActionError(null)}>{t('umum.tutup')}</button>
         </div>
       )}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', marginBottom: '18px' }}>
-        <h1 style={{ fontSize: '1.2rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '9px' }}>
-          <Film size={20} style={{ color: 'var(--accent-cyan)' }} /> {t('klip.judul')}
-        </h1>
-        <div style={{ flex: 1 }} />
-        {selected.size > 0 && (
-          <button className="btn-primary" onClick={saveSelected} disabled={working} style={{ fontSize: '0.8rem' }}>
+      <header className="rak-kepala">
+        <div className="rak-kepala-teks">
+          <h1 className="work-title rak-judul">{t('klip.judul')}</h1>
+          <p className="rak-angka">
+            {loading ? <span>{t('rak.memuat')}</span> : (
+              <>
+                <span><b>{jumlah.semua}</b>{t('rak.klip')}</span>
+                <span><b>{formatBytes(ukuranTotal)}</b>{t('rak.di_cakram')}</span>
+                <span className="is-entry"><b>{jumlah.terunggah}</b>{t('rak.terunggah')}</span>
+                {jumlah.belum > 0 && <span className="is-reh"><b>{jumlah.belum}</b>{t('rak.belum_unggah')}</span>}
+              </>
+            )}
+          </p>
+        </div>
+        <div className="rak-aksi">
+          <button className="btn-secondary" onClick={() => { load(); loadUploads(); }}>
+            <RefreshCw size={14} /> {t('umum.muat_ulang')}
+          </button>
+        </div>
+      </header>
+
+      {clips.length > 0 && (
+        <div className="rak-alat">
+          <label className="rak-cari">
+            <Search size={15} />
+            <input className="field" type="search" value={cari} onChange={(e) => setCari(e.target.value)}
+                   placeholder={t('rak.cari_klip')} aria-label={t('rak.cari_klip')} />
+          </label>
+          <div className="seg" role="tablist" aria-label={t('rak.saring')}>
+            {[['semua', 'rak.s_semua'], ['belum', 'rak.s_belum'], ['terunggah', 'rak.s_terunggah']].map(([k, kunci]) => (
+              <button key={k} role="tab" aria-selected={saring === k}
+                      className={saring === k ? 'is-on' : undefined} onClick={() => setSaring(k)}>
+                {t(kunci)} <span className="seg-n">{jumlah[k]}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {selected.size > 0 && (
+        <div className="bilah-pilih">
+          <span><b>{selected.size}</b> {t('rak.dipilih')}</span>
+          <span className="pengisi" />
+          <button className="btn-secondary" onClick={saveSelected} disabled={working}>
             {working ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
             {t('klip.simpan_n', { n: selected.size })}
           </button>
-        )}
-        <button className="btn-secondary" onClick={load} style={{ fontSize: '0.8rem' }}>
-          <RefreshCw size={14} /> {t('umum.muat_ulang')}
-        </button>
-      </div>
+          <button className="btn-secondary" onClick={hapusTerpilih} disabled={working}
+                  style={{ color: 'var(--danger)' }}>
+            <Trash2 size={14} /> {t('rak.hapus_n', { n: selected.size })}
+          </button>
+          <button className="ikon-btn" onClick={() => setSelected(new Set())}
+                  title={t('rak.batal_pilih')} aria-label={t('rak.batal_pilih')}>
+            <X size={15} />
+          </button>
+        </div>
+      )}
 
       {loading ? (
-        <div style={{ padding: '60px', textAlign: 'center' }}>
-          <Loader2 size={30} className="animate-spin" style={{ color: 'var(--accent-cyan)' }} />
+        <div className="rak-grid rak-grid--tegak" aria-busy="true">
+          {[0, 1, 2, 3, 4].map((n) => (
+            <div key={n} className="lembar lembar-kerangka">
+              <div className="kerangka" style={{ aspectRatio: '9 / 16', borderRadius: '3px 3px 0 0' }} />
+              <div className="lembar-badan">
+                <div className="kerangka" style={{ height: 13, width: '80%' }} />
+                <div className="kerangka" style={{ height: 10, width: '50%' }} />
+              </div>
+            </div>
+          ))}
         </div>
       ) : error ? (
-        <div style={{
-          padding: '36px 20px', textAlign: 'center', background: 'var(--bg-card)',
-          border: '1px solid var(--accent-red)', borderRadius: 'var(--radius-lg)',
-        }}>
-          <AlertTriangle size={34} style={{ color: 'var(--accent-red)', marginBottom: '10px' }} />
-          <div style={{ fontWeight: 700 }}>{t('klip.gagal_muat')}</div>
-          <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)' }}>{error.message}</p>
+        <div className="rak-kosong">
+          <AlertTriangle size={34} style={{ color: 'var(--danger)' }} />
+          <h3>{t('klip.gagal_muat')}</h3>
+          <p>{error.message}</p>
+          <button className="btn-secondary" onClick={load} style={{ marginTop: 16 }}>
+            <RefreshCw size={14} /> {t('umum.coba_lagi')}
+          </button>
         </div>
       ) : clips.length === 0 ? (
-        <div style={{
-          padding: '54px 20px', textAlign: 'center', background: 'var(--bg-card)',
-          border: '1px dashed var(--border-color)', borderRadius: 'var(--radius-lg)',
-        }}>
-          <Film size={44} style={{ color: 'var(--text-muted)', marginBottom: '12px' }} />
-          <h3 style={{ fontWeight: 700 }}>{t('klip.kosong')}</h3>
-          <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-            {t('klip.kosong_saran')}
-          </p>
+        <div className="rak-kosong">
+          <Film size={38} />
+          <h3>{t('klip.kosong')}</h3>
+          <p>{t('klip.kosong_saran')}</p>
+        </div>
+      ) : tampil.length === 0 ? (
+        <div className="rak-kosong">
+          <Search size={32} />
+          <h3>{t('rak.tak_cocok')}</h3>
+          <button className="btn-secondary" style={{ marginTop: 12 }}
+                  onClick={() => { setCari(''); setSaring('semua'); }}>{t('rak.hapus_saring')}</button>
         </div>
       ) : (
-        <div style={{
-          display: 'grid', gap: '14px',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))',
-        }}>
-          {clips.map((clip) => {
+        <div className="rak-grid rak-grid--tegak">
+          {tampil.map((clip) => {
             const meta = clip.metadata || {};
             const segCount = meta.segments?.length ?? 1;
+            const dipilih = selected.has(clip.file_name);
+            const sibuk = sibukBaris?.nama === clip.file_name;
+            const judul = judulKlip(clip);
+            const unggahan = sent[clip.file_name] || [];
+            const stat = unggahan.map((u) => u.statistik).find((x) => x && x.tayangan != null);
+            const gagalTerbaru = unggahan.find((u) => u.status === 'failed')?.error;
             return (
-              <div key={clip.file_name} style={{
-                background: 'var(--bg-card)', border: selected.has(clip.file_name)
-                  ? '2px solid var(--accent-cyan)' : '1px solid var(--border-color)',
-                borderRadius: 'var(--radius-md)', overflow: 'hidden',
-                display: 'flex', flexDirection: 'column',
-              }}>
-                <PratinjauKlip
-                  src={mediaUrl(kategoriKlip(), clip.file_name)}
-                  lepas={sibukBaris?.nama === clip.file_name
-                         && sibukBaris.apa === 'hapus'}
-                  onClick={() => setPlaying(clip)}
-                >
-                  <div style={{
-                    position: 'absolute', bottom: '6px', right: '6px',
-                    background: 'rgba(0,0,0,0.8)', color: '#fff', fontSize: '0.7rem',
-                    fontWeight: 700, padding: '2px 6px', borderRadius: '4px',
-                  }}>
-                    {formatTime(meta.duration || 0)}
-                  </div>
-                  {segCount > 1 && (
-                    <div style={{
-                      position: 'absolute', top: '6px', left: '6px',
-                      background: 'var(--hl-wash)', color: '#000', fontSize: '0.66rem',
-                      fontWeight: 800, padding: '2px 6px', borderRadius: '4px',
-                      display: 'flex', alignItems: 'center', gap: '3px',
-                    }}>
-                      <Layers size={10} /> {segCount}
-                    </div>
-                  )}
-                  {/* Kotak pilih di pojok gambar, bukan di baris tombol: tujuh
-                      tombol dalam satu baris kartu selebar 190 px mendorong
-                      tombol hapus keluar kartu dan terpotong. Dilaporkan
-                      pemiliknya 28 Oktober 2026: "di klip jadi tidak ada
-                      button untuk menghapus klip". */}
-                  <label onClick={(e) => e.stopPropagation()} title={t('umum.pilih')}
-                         style={{
-                           position: 'absolute', top: '6px', right: '6px', display: 'flex',
-                           padding: '4px', borderRadius: '6px', cursor: 'pointer',
-                           background: 'rgba(0,0,0,0.65)',
-                         }}>
-                    <input type="checkbox" checked={selected.has(clip.file_name)}
-                           onChange={() => toggle(clip.file_name)} aria-label={t('umum.pilih')}
-                           style={{ accentColor: 'var(--accent-cyan)', margin: 0, cursor: 'pointer' }} />
-                  </label>
-                </PratinjauKlip>
+              <article key={clip.file_name} className={`lembar${dipilih ? ' is-pilih' : ''}`}>
+                <div className="lembar-gambar">
+                  <PratinjauKlip
+                    src={mediaUrl(kategoriKlip(), clip.file_name)}
+                    lepas={sibuk && sibukBaris.apa === 'hapus'}
+                    onClick={() => setPlaying(clip)}
+                  >
+                    <span className="lembar-putar" aria-hidden="true"><Play size={22} fill="currentColor" /></span>
+                    <span className="lencana lencana--kb">{formatTime(meta.duration || 0)}</span>
+                    {segCount > 1 && (
+                      <span className="lencana lencana--ka lencana--hl" title={t('rak.n_potongan', { n: segCount })}>
+                        <Layers size={10} /> {segCount}
+                      </span>
+                    )}
+                    {/* Kotak pilih di pojok gambar, bukan di baris tombol: tujuh
+                        tombol dalam satu baris kartu selebar 190 px mendorong
+                        tombol hapus keluar kartu dan terpotong. Dilaporkan
+                        pemiliknya 28 Oktober 2026: "di klip jadi tidak ada
+                        button untuk menghapus klip". */}
+                    <label className="pilih-gambar" onClick={(e) => e.stopPropagation()} title={t('umum.pilih')}>
+                      <input type="checkbox" checked={dipilih}
+                             onChange={() => toggle(clip.file_name)} aria-label={t('umum.pilih')} />
+                    </label>
+                  </PratinjauKlip>
+                </div>
 
-                <div style={{ padding: '10px', display: 'flex', flexDirection: 'column', gap: '7px', flex: 1 }}>
-                  <div style={{ fontSize: '0.76rem', fontWeight: 700, lineHeight: 1.3 }}>
-                    {meta.hook_text ? meta.hook_text.slice(0, 46) : clip.file_name.slice(0, 26)}
-                  </div>
-                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                    {meta.aspect_ratio || '9:16'} · {formatBytes(clip.file_size)}
+                <div className="lembar-badan">
+                  <h2 className="lembar-judul" title={judul}>{judul}</h2>
+                  <div className="lembar-meta">
+                    <span>{meta.aspect_ratio || '9:16'}</span>
+                    <span>{formatBytes(clip.file_size)}</span>
+                    {clip.created_at ? <span>{tanggalPendek(clip.created_at)}</span> : null}
                   </div>
                   {/* Nilai tambah (JOB-2 F3-1): berapa banyak klip ini berisi
                       komentar atau tambahan dari pemiliknya sendiri. Klip lama
-                      yang dirender sebelum skornya ada tidak diberi angka. */}
+                      yang dirender sebelum skornya ada tidak diberi angka.
+                      Kuning, bukan merah: ini saran, bukan galat. */}
                   {meta.nilai_tambah && (
-                    <div title={(meta.nilai_tambah.rincian || []).join(' · ')
-                                || t('klip.nilai_kosong')}
-                         style={{ fontSize: '0.7rem', fontWeight: 700,
-                                  color: meta.nilai_tambah.cukup ? 'var(--ok, var(--accent-cyan))' : 'var(--reh)' }}>
+                    <span className={`tanda ${meta.nilai_tambah.cukup ? 'tanda--siap' : 'tanda--warn'}`}
+                          title={(meta.nilai_tambah.rincian || []).join(' · ') || t('klip.nilai_kosong')}>
+                      {meta.nilai_tambah.cukup ? <Check size={12} /> : <MessageSquarePlus size={12} />}
                       {t('klip.nilai_tambah', { n: meta.nilai_tambah.persen })}
                       {meta.nilai_tambah.cukup ? '' : t('klip.belum_komentar')}
-                    </div>
+                    </span>
                   )}
                   {/* Tayangan, kalau kuncinya disetel dan videonya publik.
                       Tidak ditampilkan sebagai nol saat tidak terbaca: nol pada
                       klip yang sebenarnya ditonton ribuan orang adalah angka
                       yang langsung dipakai orang untuk mengambil keputusan. */}
-                  {(() => {
-                    const stat = (sent[clip.file_name] || [])
-                      .map((u) => u.statistik).find((x) => x && x.tayangan != null);
-                    if (!stat) return null;
-                    return (
-                      <div title={t('klip.tayangan_yt')}
-                           style={{ fontSize: '0.7rem', color: 'var(--ink-2)',
-                                    display: 'flex', alignItems: 'center', gap: '5px' }}>
-                        <Eye size={12} style={{ flex: 'none' }} />
-                        <b style={{ fontVariantNumeric: 'tabular-nums' }}>
-                          {angka(stat.tayangan)}
-                        </b>
-                        {stat.suka != null && (
-                          <span style={{ color: 'var(--text-muted)' }}>
-                            {t('klip.suka', { n: angka(stat.suka) })}
-                          </span>
-                        )}
-                      </div>
-                    );
-                  })()}
-                  {/* Sudah diterbitkan ke platform mana, ditandai tangan.
-                      Penandanya dulu hanya ada DI DALAM jendela "Siapkan
-                      terbit", jadi menjawab "yang mana yang sudah naik?" berarti
-                      membuka lima belas jendela satu per satu. Di sini ia
-                      terlihat sekaligus, dan bisa dicabut kalau salah tekan. */}
-                  {meta.terbit?.length > 0 && (
-                    <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
+                  {stat && (
+                    <span className="tanda" title={t('klip.tayangan_yt')}>
+                      <Eye size={12} />
+                      <b style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--ink)' }}>{angka(stat.tayangan)}</b>
+                      {stat.suka != null && (
+                        <span style={{ color: 'var(--ink-3)', fontWeight: 500 }}>{t('klip.suka', { n: angka(stat.suka) })}</span>
+                      )}
+                    </span>
+                  )}
+
+                  {/* Sudah diterbitkan ke mana: ditandai tangan (bisa dicabut
+                      kalau salah tekan) atau lewat unggahan OmniClip. Ini yang
+                      mencegah klip yang sama dikirim dua kali ke kanal yang sama. */}
+                  {(meta.terbit?.length > 0 || unggahan.length > 0) && (
+                    <div className="lembar-tujuan">
                       {(meta.terbit || []).map((nama) => (
-                        <button key={nama} className="chip is-on"
+                        <button key={nama} type="button" className="tujuan is-ok"
                                 title={t('klip.sudah_terbit')}
-                                onClick={() => tandaiTerbit(clip, nama, false)}
-                                style={{ fontSize: '.64rem', padding: '2px 7px',
-                                         cursor: 'pointer', display: 'inline-flex',
-                                         alignItems: 'center', gap: '4px' }}>
+                                onClick={() => tandaiTerbit(clip, nama, false)}>
                           <Check size={10} /> {LABEL_PLATFORM[nama] || nama}
                         </button>
                       ))}
+                      {unggahan.map((u) => {
+                        const target = u.target === 'youtube' ? 'YouTube' : 'Drive';
+                        if (u.job) {
+                          return (
+                            <span key={u.id} className="tujuan is-jalan" title={u.job.message || ''}>
+                              <Loader2 size={10} className="animate-spin" />
+                              {u.job.status === 'running'
+                                ? t('klip.mengunggah_ke', { target, n: Math.round((u.job.progress || 0) * 100) })
+                                : t('klip.antre_unggah', { target })}
+                            </span>
+                          );
+                        }
+                        if (u.status === 'done') {
+                          return (
+                            <a key={u.id} href={u.remote_url} target="_blank" rel="noreferrer" className="tujuan is-ok">
+                              <ExternalLink size={10} /> {target}
+                            </a>
+                          );
+                        }
+                        /* Alasannya ditulis lengkap di bawah, bukan cuma
+                           "gagal": yang menghalangi biasanya bisa dibereskan
+                           sendiri dalam semenit. */
+                        return (
+                          <span key={u.id} className="tujuan is-gagal" title={u.error || t('klip.unggah_gagal')}>
+                            <X size={10} /> {t('klip.target_gagal', { target })}
+                          </span>
+                        );
+                      })}
                     </div>
                   )}
+                  {gagalTerbaru && <div className="lembar-catatan" style={{ color: 'var(--ink-3)' }}>{gagalTerbaru}</div>}
 
-                  {/* Sudah pernah naik ke mana lewat unggahan otomatis. Ini
-                      yang mencegah klip yang sama dikirim dua kali ke kanal
-                      yang sama. */}
-                  {sent[clip.file_name]?.length > 0 && (
-                    <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
-                      {sent[clip.file_name].map((u) => (u.job ? (
-                        <span key={u.id} className="chip" title={u.job.message || ''}
-                              style={{ fontSize: '.64rem', padding: '2px 7px', color: 'var(--accent-cyan)',
-                                       display: 'inline-flex', gap: '4px', alignItems: 'center' }}>
-                          <Loader2 size={10} className="animate-spin" />
-                          {u.job.status === 'running'
-                            ? t('klip.mengunggah_ke', { target: u.target === 'youtube' ? 'YouTube' : 'Drive',
-                              n: Math.round((u.job.progress || 0) * 100) })
-                            : t('klip.antre_unggah', { target: u.target === 'youtube' ? 'YouTube' : 'Drive' })}
-                        </span>
-                      ) : u.status === 'done' ? (
-                        <a key={u.id} href={u.remote_url} target="_blank" rel="noreferrer"
-                           className="chip" style={{
-                             fontSize: '.64rem', padding: '2px 7px', textDecoration: 'none',
-                           }}>
-                          ↗ {u.target === 'youtube' ? 'YouTube' : 'Drive'}
-                        </a>
-                      ) : (
-                        /* Alasannya ditulis lengkap, bukan cuma "gagal": yang
-                           menghalangi biasanya bisa dibereskan sendiri dalam
-                           semenit, misalnya kanal YouTube yang belum dibuat. */
-                        <span key={u.id} className="chip" title={u.error || t('klip.unggah_gagal')}
-                              style={{
-                                fontSize: '.64rem', padding: '2px 7px',
-                                color: 'var(--danger)',
-                                borderColor: 'var(--danger)', cursor: 'help',
-                              }}>
-                          ✕ {t('klip.target_gagal', { target: u.target === 'youtube' ? 'YouTube' : 'Drive' })}
-                        </span>
-                      )))}
-                    </div>
-                  )}
-                  {/* Alasan gagal terbaru, ditulis apa adanya. Tanda "✕" di
-                      atas cuma memberi tahu ADA yang gagal; yang menentukan
-                      langkah berikutnya adalah kalimat ini. */}
-                  {sent[clip.file_name]?.find((u) => u.status === 'failed')?.error && (
-                    <div style={{ fontSize: '.66rem', color: 'var(--text-muted)',
-                                  lineHeight: 1.45 }}>
-                      {sent[clip.file_name].find((u) => u.status === 'failed').error}
-                    </div>
-                  )}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap',
-                                marginTop: 'auto' }}>
-                    <button onClick={() => setSiapkan(clip)} style={iconBtn}
-                            aria-label={t('klip.siapkan')}
-                            title={t('klip.siapkan_judul')}>
-                      <Send size={14} />
+                  <div className="lembar-kaki">
+                    <button className="btn-garis" onClick={() => setUploading(clip)} title={t('klip.unggah')}>
+                      <UploadCloud size={14} /> {t('rak.unggah')}
                     </button>
-                    <button onClick={() => setUploading(clip)} style={iconBtn}
-                            aria-label={t('klip.unggah')}
-                            title={t('klip.unggah')}>
-                      <UploadCloud size={14} />
+                    <button className="ikon-btn" onClick={() => setSiapkan(clip)}
+                            aria-label={t('klip.siapkan')} title={t('klip.siapkan_judul')}>
+                      <Send size={15} />
                     </button>
                     {diKomputerIni && (
-                      <button onClick={() => tunjukBerkas(clip.file_name)}
-                              disabled={sibukBaris?.nama === clip.file_name}
-                              aria-label={t('klip.tunjuk')}
-                              title={t('klip.tunjuk_judul')}
-                              style={iconBtn}>
-                        {sibukBaris?.nama === clip.file_name && sibukBaris.apa === 'tunjuk'
-                          ? <Loader2 size={14} className="animate-spin" />
-                          : <FolderOpen size={14} />}
+                      <button className="ikon-btn" onClick={() => tunjukBerkas(clip.file_name)} disabled={sibuk}
+                              aria-label={t('klip.tunjuk')} title={t('klip.tunjuk_judul')}>
+                        {sibuk && sibukBaris.apa === 'tunjuk'
+                          ? <Loader2 size={15} className="animate-spin" /> : <FolderOpen size={15} />}
                       </button>
                     )}
-                    <button onClick={() => simpanSatu(clip.file_name)}
-                            disabled={sibukBaris?.nama === clip.file_name}
-                            aria-label={t('klip.simpan_salinan')}
-                            title={t('klip.simpan_salinan_judul')}
-                            style={iconBtn}>
-                      {sibukBaris?.nama === clip.file_name && sibukBaris.apa === 'unduh'
-                        ? <Loader2 size={14} className="animate-spin" />
-                        : <Download size={14} />}
+                    <button className="ikon-btn" onClick={() => simpanSatu(clip.file_name)} disabled={sibuk}
+                            aria-label={t('klip.simpan_salinan')} title={t('klip.simpan_salinan_judul')}>
+                      {sibuk && sibukBaris.apa === 'unduh'
+                        ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
                     </button>
                     {clip.srt && (
-                      <button onClick={() => simpanSatu(clip.file_name.replace(/\.mp4$/, '.srt'))}
-                              disabled={sibukBaris?.nama === clip.file_name}
-                              aria-label={t('klip.srt')}
-                              title={t('klip.srt_judul')}
-                              style={{ ...iconBtn, fontSize: '0.62rem', fontWeight: 800,
-                                       letterSpacing: '0.03em' }}>
+                      <button className="ikon-btn" onClick={() => simpanSatu(clip.file_name.replace(/\.mp4$/, '.srt'))}
+                              disabled={sibuk} aria-label={t('klip.srt')} title={t('klip.srt_judul')}>
                         SRT
                       </button>
                     )}
-                    <button onClick={() => deleteClip(clip.file_name)} aria-label={t('umum.hapus')}
-                            title={t('umum.hapus')}
-                            disabled={sibukBaris?.nama === clip.file_name}
-                            style={{ ...iconBtn, color: 'var(--accent-red)', marginLeft: 'auto' }}>
-                      {sibukBaris?.nama === clip.file_name && sibukBaris.apa === 'hapus'
-                        ? <Loader2 size={14} className="animate-spin" />
-                        : <Trash2 size={14} />}
+                    <button className="ikon-btn is-bahaya" onClick={() => deleteClip(clip.file_name)} disabled={sibuk}
+                            aria-label={t('umum.hapus')} title={t('umum.hapus')}>
+                      {sibuk && sibukBaris.apa === 'hapus'
+                        ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
                     </button>
                   </div>
                 </div>
-              </div>
+              </article>
             );
           })}
         </div>
@@ -591,7 +613,3 @@ export default function ClipsTab() {
   );
 }
 
-const iconBtn = {
-  background: 'none', border: 'none', cursor: 'pointer',
-  color: 'var(--text-secondary)', display: 'flex', padding: '3px',
-};

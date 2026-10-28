@@ -82,9 +82,13 @@ export default function BilahProses({ job, ringkas = false }) {
   const k = keadaanProses(job);
   const kini = useDetik(k.jalan);
   if (!job) return null;
-  const { aktif, tahap, bagian, menunggu, antre } = k;
+  const { aktif, tahap, menunggu, antre } = k;
   const lama = job.started_at ? kini - job.started_at : null;
-  const persen = Math.round(bagian * 100);
+  // SATU angka: kemajuan total, sama dengan cincin di gambar mini. Dulu di
+  // sini persen langkahnya sendiri, jadi kartu yang sama menulis "5%" di
+  // gambar dan "11%" di bawahnya. Dilaporkan pemiliknya 28 Oktober 2026.
+  // Langkahnya sudah terbaca dari stepper dan baris detail.
+  const persen = Math.round(k.progress * 100);
   const detail = antre ? '' : detailPesan(job.message);
   const IkonAktif = antre ? Hourglass : tahap.Ikon;
 
@@ -112,7 +116,7 @@ export default function BilahProses({ job, ringkas = false }) {
         <IkonAktif size={14} className="proses-ikon" />
         <span className="proses-judul">{antre ? t('proses.menunggu') : t(tahap.judul)}</span>
         {!antre && (
-          <span className="proses-persen" title={menunggu ? t('proses.gemini_ket') : undefined}>
+          <span className="proses-persen" title={menunggu ? t('proses.gemini_ket') : t('proses.total')}>
             {menunggu ? t('proses.menanti') : `${persen}%`}
           </span>
         )}
