@@ -348,6 +348,22 @@ Urutannya sama dengan jalur pemakaian normal.
   - Diharapkan: ada `omniclip.log`. Bila ada galat aneh (mis. "Error -3 while
     decompressing data"), kirim berkas ini supaya penyebabnya bisa dilacak.
 
+### Tambahan 28 Oktober 2026 (sore): tampilan rak baru, bingkai game, v1.3.9
+
+- [ ] **57. Satu angka kemajuan.** Tempel tautan video baru, lihat kartunya di
+  Partitur.
+  - Diharapkan: persen di cincin gambar dan di bawahnya SAMA.
+- [ ] **58. Tampilan Partitur, Klip jadi, Analitik, Unduhan.** Buka keempatnya
+  (desktop dan, bila sempat, jendela sempit).
+  - Diharapkan: angka ringkas di kepala halaman, saring bersegmen, tombol
+    aksi bergaris (merah hanya saat disentuh), bilah pilihan saat ada yang
+    dipilih, tidak ada teks terpotong.
+- [ ] **59. Bingkai game facecam tanpa bingkai.** Proyek Windah (w9k9uDAZdec)
+  atau MiawAug: Bingkai → hitung ulang bingkai, lalu buka klip game.
+  - Diharapkan: bidang wajah ±40%, berisi kepala sampai badan; kotak Reaksi
+    tidak bertumpang dengan kotak Permainan (Reaksi mulai tepat di tepi kanan
+    Permainan); render mengikuti pratinjau.
+
 ### Jalur fitur unggulan (urutan disarankan, ±30 menit)
 
 Satu video podcast pendek (10-20 menit) cukup untuk semuanya:
