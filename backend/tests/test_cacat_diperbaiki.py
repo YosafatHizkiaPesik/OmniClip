@@ -783,3 +783,36 @@ class TulisUlangJudulLewatKoneksiAi(unittest.TestCase):
         sumber = (Path(__file__).resolve().parents[1] / "app" / "services"
                   / "pipeline.py").read_text(encoding="utf-8")
         self.assertNotIn('raise RuntimeError("Kunci Gemini belum diisi di Pengaturan.")', sumber)
+
+
+class UnggahanTerputusDicobaUlang(unittest.TestCase):
+    """28 Oktober 2026: "YouTube gagal: EOF occurred in violation of protocol"."""
+
+    def _permintaan(self, kejadian):
+        class P:
+            http = None
+            def __init__(s): s.n = 0
+            def next_chunk(s):
+                k = kejadian[s.n]; s.n += 1
+                if isinstance(k, Exception):
+                    raise k
+                return k
+        return P()
+
+    def test_eof_ssl_dicoba_ulang(self):
+        import ssl
+        from app.services import google_upload as g
+        p = self._permintaan([ssl.SSLEOFError(8, "EOF occurred in violation of protocol (_ssl.c:2427)"),
+                              (None, {"id": "abc"})])
+        with mock.patch("time.sleep"), mock.patch("time.monotonic", side_effect=[0, 100, 200, 300]):
+            self.assertEqual(g._resumable_upload(p, None, None), {"id": "abc"})
+        self.assertEqual(p.n, 2)
+
+    def test_galat_izin_tidak_dicoba_ulang(self):
+        from app.services import google_upload as g
+        from googleapiclient.errors import HttpError
+        resp = mock.Mock(status=403, reason="Forbidden")
+        p = self._permintaan([HttpError(resp, b"quotaExceeded")])
+        with self.assertRaises(HttpError):
+            g._resumable_upload(p, None, None)
+        self.assertEqual(p.n, 1)

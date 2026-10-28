@@ -7,6 +7,7 @@ import HalamanSetelan from './HalamanSetelan';
 import KesehatanCard from './KesehatanCard';
 import PemakaianAiCard from './PemakaianAiCard';
 import PemeliharaanCard from './PemeliharaanCard';
+import BersihOtomatisCard from './BersihOtomatisCard';
 import SampahCard from './SampahCard';
 import StorageCard from './StorageCard';
 import SecurityCard from './SecurityCard';
@@ -59,7 +60,7 @@ export default function MesinTab() {
         { id: 'penyimpanan', judul: t('mesin.b_simpan'), nota: t('mesin.b_simpan_nota'), Ikon: HardDrive,
           isi: <><StorageCard {...alat} /><SampahCard {...alat} /></> },
         { id: 'ruang', judul: t('mesin.b_ruang'), nota: t('mesin.b_ruang_nota'), Ikon: DatabaseBackup,
-          isi: <PemeliharaanCard {...alat} /> },
+          isi: <><BersihOtomatisCard {...alat} /><PemeliharaanCard {...alat} /></> },
         { id: 'kesehatan', judul: t('mesin.b_sehat'), nota: t('mesin.b_sehat_nota'), Ikon: Activity,
           isi: <KesehatanCard {...alat} /> },
         { id: 'ai', judul: t('mesin.b_ai'), nota: t('mesin.b_ai_nota'), Ikon: Gauge,

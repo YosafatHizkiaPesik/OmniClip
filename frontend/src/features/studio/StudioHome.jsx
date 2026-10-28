@@ -7,7 +7,7 @@ import { apiDelete, apiGet, apiPost } from '../../lib/api';
 import ImportBar from './ImportBar';
 import { namaMesin } from '../../lib/mesin';
 import { formatTime } from '../../utils/timeFormat';
-import BilahProses from '../../components/BilahProses';
+import BilahProses, { LapisProses } from '../../components/BilahProses';
 import { useT } from '../../lib/i18n';
 
 /**
@@ -274,6 +274,7 @@ export default function StudioHome({ onOpen, onFindVideos }) {
                     {t('ulang.n_klip', { n: p.clip_count })}
                   </span>
                 )}
+                {busy && <LapisProses job={{ ...p.job, status: p.status }} />}
               </div></div>
 
               <div style={{ padding: '11px 13px', display: 'flex', flexDirection: 'column', gap: '7px', flex: 1 }}>
@@ -290,7 +291,8 @@ export default function StudioHome({ onOpen, onFindVideos }) {
 
                 <div style={{ flex: 1 }} />
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.74rem', color: meta.color }}>
+                {/* Saat diproses, stepper di bawah sudah menyebut keadaannya. */}
+                {!busy && <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.74rem', color: meta.color }}>
                   <meta.Icon size={13} className={p.status === 'running' ? 'animate-spin' : undefined} />
                   <span style={{ fontWeight: 700 }}>{t(meta.label)}</span>
                   {p.engine && p.status === 'done' && (
@@ -298,7 +300,7 @@ export default function StudioHome({ onOpen, onFindVideos }) {
                       · {namaMesin(p.engine)}
                     </span>
                   )}
-                </div>
+                </div>}
 
                 {/* Kenapa mesinnya lokal. "heuristik" saja terbaca seperti
                     pilihan yang disengaja, padahal biasanya ia akibat Gemini

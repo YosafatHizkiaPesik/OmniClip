@@ -12,6 +12,10 @@ akan menghapus yang salah — melainkan daftar yang jujur: berkas apa, sebesar
 apa, klipnya sudah jadi berapa, dan terakhir dipakai kapan. Yang menghapus
 tetap orangnya.
 
+(28 Oktober 2026: atas permintaan pemiliknya sendiri, pembuangan otomatis kini
+ada di `bersih_otomatis.py`, dengan aturan yang bisa dimatikan dan baru
+berjalan sesudah disetujui sekali. Modul ini tetap hanya mendaftar.)
+
 **Cadangan.** Seluruh pekerjaan berbulan-bulan ada di satu berkas SQLite:
 analisis, klip, transkrip, setelan, profil. Menyalinnya saat aplikasi berjalan
 dengan `cp` bisa menghasilkan berkas yang rusak separuh, karena WAL-nya belum

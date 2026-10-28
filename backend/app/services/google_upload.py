@@ -659,14 +659,83 @@ def _resumable_upload(request, on_progress: Optional[Callable[[float], None]],
     gangguan jaringan di menit terakhir membatalkan semuanya, dan pengguna
     melihat bilah diam tanpa tahu apa yang sedang terjadi.
     """
+    import time
+
     response = None
+    gagal_beruntun = 0
     while response is None:
         if should_cancel and should_cancel():
             raise _fail("Unggahan dibatalkan.", code="CANCELLED", status=499)
-        chunk, response = request.next_chunk()
+        try:
+            chunk, response = request.next_chunk()
+        except Exception as e:                       # noqa: BLE001
+            # Gangguan jaringan sesaat DICOBA ULANG, dari potongan terakhir.
+            #
+            # Dilaporkan pemiliknya 28 Oktober 2026: klip #5 dari sembilan
+            # gagal dengan "EOF occurred in violation of protocol
+            # (_ssl.c:2427)" sementara klip sebelum dan sesudahnya terunggah.
+            # Pustaka Google hanya mencoba ulang galat ber-errno dan jawaban
+            # 5xx; putusnya sambungan TLS di tengah jalan tidak termasuk,
+            # jadi satu kedipan jaringan membuang seluruh unggahan.
+            if not _galat_sesaat(e) or gagal_beruntun >= UNGGAH_ULANG_MAKS:
+                raise
+            gagal_beruntun += 1
+            jeda = min(60.0, 2.0 * (2 ** (gagal_beruntun - 1)))
+            log.warning("Unggahan terputus (%s), coba lagi %d/%d dalam %.0f dtk",
+                        str(e)[:120], gagal_beruntun, UNGGAH_ULANG_MAKS, jeda)
+            _buang_sambungan(request)
+            akhir = time.monotonic() + jeda
+            while time.monotonic() < akhir:
+                if should_cancel and should_cancel():
+                    raise _fail("Unggahan dibatalkan.", code="CANCELLED", status=499)
+                time.sleep(0.5)
+            continue
+        gagal_beruntun = 0
         if chunk and on_progress:
             on_progress(chunk.progress())
     return response
+
+
+UNGGAH_ULANG_MAKS = 6
+
+
+def _galat_sesaat(e: Exception) -> bool:
+    """Galat jaringan yang layak dicoba ulang (bukan izin, kuota, atau berkas)."""
+    import socket
+    import ssl
+    try:
+        from googleapiclient.errors import HttpError
+        if isinstance(e, HttpError):
+            status = int(getattr(getattr(e, "resp", None), "status", 0) or 0)
+            return status >= 500 or status == 408
+    except ImportError:
+        pass
+    try:
+        import httplib2
+        if isinstance(e, (httplib2.ServerNotFoundError, httplib2.HttpLib2Error)):
+            return True
+    except ImportError:
+        pass
+    if isinstance(e, (ssl.SSLError, ConnectionError, socket.timeout, TimeoutError)):
+        return True
+    teks = str(e).lower()
+    return any(k in teks for k in ("eof occurred", "connection reset", "broken pipe",
+                                   "timed out", "temporarily unavailable",
+                                   "remote end closed", "connection aborted"))
+
+
+def _buang_sambungan(request) -> None:
+    """Menutup sambungan httplib2 yang mungkin rusak, supaya yang berikutnya baru."""
+    http = getattr(request, "http", None)
+    for obj in (http, getattr(http, "http", None)):
+        conns = getattr(obj, "connections", None)
+        if isinstance(conns, dict):
+            for c in list(conns.values()):
+                try:
+                    c.close()
+                except Exception:                    # noqa: BLE001
+                    pass
+            conns.clear()
 
 
 def _drive_folder_id(service) -> str:

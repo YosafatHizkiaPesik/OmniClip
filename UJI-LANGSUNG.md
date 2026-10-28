@@ -316,6 +316,38 @@ Urutannya sama dengan jalur pemakaian normal.
   - Diharapkan: judul baru ditulis oleh koneksi yang tersedia (kabar
     menyebut modelnya), bukan galat "Kunci Gemini belum diisi".
 
+### Tambahan 28 Oktober 2026: hapus klip, pembersihan otomatis, cookies, tampilan proses
+
+- [ ] **50. Tombol hapus di Klip jadi.** Buka Klip jadi.
+  - Diharapkan: setiap kartu (termasuk yang punya tombol SRT) punya ikon
+    tempat sampah merah di kanan bawah; kotak "pilih" ada di pojok gambar.
+- [ ] **51. Unggah tahan putus koneksi.** Unggah beberapa klip ke YouTube
+  sekaligus (sebaiknya Pribadi).
+  - Diharapkan: tidak ada lagi "EOF occurred in violation of protocol"; bila
+    koneksi terputus, unggahan mencoba lagi sendiri dan melanjutkan.
+- [ ] **52. Pembersihan otomatis.** Mesin → Ruang & cadangan → Pembersihan
+  otomatis. Buka daftarnya, periksa isinya, lalu "Bersihkan sekarang" atau
+  nyalakan sakelarnya.
+  - Diharapkan: daftar menyebut alasannya (diam N hari / proyek selesai);
+    sesudah dibersihkan, membuka proyeknya di Studio menawarkan "Unduh ulang
+    video"; analisis dan suntingan tetap ada. Putaran harian berikutnya
+    berjalan sendiri.
+- [ ] **53. Kartu cookies di pemasangan baru.** Pemasangan baru (terutama
+  Windows), buka Beranda.
+  - Diharapkan: kartu "Boleh OmniClip memakai sesi YouTube Anda" langsung
+    tampil, dengan "Memeriksa browser…" sampai pengujiannya selesai.
+- [ ] **54. Peringatan cookies saat YouTube menolak.** Bila unduhan gagal
+  dengan verifikasi bot dan cookies mati.
+  - Diharapkan: jendela "YouTube meminta bukti bahwa Anda bukan bot" dengan
+    tombol "Pakai cookies <browser>".
+- [ ] **55. Tampilan proses.** Tempel tautan video baru dan lihat kartunya di
+  Partitur.
+  - Diharapkan: cincin persen di gambar mini, stepper lima langkah, satu
+    baris nama langkah dan persennya, bilah bergaris saat menunggu AI.
+- [ ] **56. Log berkas.** Sesudah memakai aplikasi, cek folder data → logs.
+  - Diharapkan: ada `omniclip.log`. Bila ada galat aneh (mis. "Error -3 while
+    decompressing data"), kirim berkas ini supaya penyebabnya bisa dilacak.
+
 ### Jalur fitur unggulan (urutan disarankan, ±30 menit)
 
 Satu video podcast pendek (10-20 menit) cukup untuk semuanya:

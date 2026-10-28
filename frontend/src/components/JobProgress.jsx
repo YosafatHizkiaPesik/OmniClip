@@ -56,14 +56,11 @@ export default function JobProgress({ job, error, onCancel, compact = false }) {
       </div>
 
       {!compact && (
-        <div style={{ height: '5px', borderRadius: '99px', background: 'var(--border-color)', overflow: 'hidden' }}>
-          <div style={{
-            height: '100%', width: '100%',
-            transform: `scaleX(${(done ? 100 : pct) / 100})`,
-            transformOrigin: 'left',
-            background: color,
-            borderRadius: '99px',
-            transition: 'transform .3s cubic-bezier(.16,1,.3,1)',
+        // Bilah yang sama dengan kartu Partitur (components/BilahProses.jsx).
+        <div className="proses-bilah">
+          <span style={{
+            width: `${Math.max(2, done ? 100 : pct)}%`,
+            ...(running ? {} : { background: color }),
           }} />
         </div>
       )}

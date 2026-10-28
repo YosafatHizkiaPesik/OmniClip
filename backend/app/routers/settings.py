@@ -1029,6 +1029,37 @@ async def ruang_buang(req: BuangRequest):
     return await asyncio.to_thread(buang, req.folder, req.berkas)
 
 
+class BersihOtomatisRequest(BaseModel):
+    aktif: Optional[bool] = None
+    sumber: Optional[bool] = None
+    klip: Optional[bool] = None
+    hari: Optional[int] = Field(None, ge=7, le=365)
+    selesai_hari: Optional[int] = Field(None, ge=1, le=365)
+
+
+@router.get("/bersih-otomatis")
+async def bersih_otomatis_lihat():
+    """Setelan pembersihan otomatis dan daftar yang akan dibuang menurutnya."""
+    from ..services import bersih_otomatis as bo
+    r = await asyncio.to_thread(bo.rencana)
+    for k in r["klip"]:
+        k.pop("path", None)
+    return r
+
+
+@router.post("/bersih-otomatis")
+async def bersih_otomatis_atur(req: BersihOtomatisRequest):
+    from ..services import bersih_otomatis as bo
+    return await asyncio.to_thread(bo.atur, **req.model_dump())
+
+
+@router.post("/bersih-otomatis/jalankan")
+async def bersih_otomatis_jalankan():
+    """Membuang daftar `rencana` sekarang juga (tombol "Bersihkan sekarang")."""
+    from ..services import bersih_otomatis as bo
+    return await asyncio.to_thread(bo.jalankan, paksa=True)
+
+
 @router.get("/cadangan")
 async def cadangan_daftar():
     from ..services.pemeliharaan import daftar_cadangan

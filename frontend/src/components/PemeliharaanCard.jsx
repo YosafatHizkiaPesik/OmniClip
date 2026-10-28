@@ -16,10 +16,10 @@ const tanggal = (detik) => new Date(detik * 1000).toLocaleString(lokal(),
  * pada hari yang buruk: cakram yang penuh di tengah render, dan basis data
  * yang hilang bersama seluruh pekerjaan berbulan-bulan.
  *
- * Yang menghapus tetap orangnya. Video sumber tidak pernah dibuang sendiri,
- * karena mengklip ulang video yang sudah dihapus berarti mengunduhnya lagi —
- * daftar ini hanya menunjukkan mana yang besar dan mana yang klipnya sudah
- * jadi.
+ * Kartu ini tidak membuang apa pun sendiri: daftar ini hanya menunjukkan mana
+ * yang besar dan mana yang klipnya sudah jadi. Pembuangan otomatis (atas
+ * permintaan pemiliknya, 28 Oktober 2026) ada di BersihOtomatisCard.jsx dan
+ * baru berjalan sesudah disetujui di sana.
  */
 export default function PemeliharaanCard({ card, sectionTitle, helpText }) {
   const t = useT();

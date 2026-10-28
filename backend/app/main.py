@@ -53,6 +53,33 @@ logging.basicConfig(
 log = logging.getLogger("omniclip")
 
 
+def _log_ke_berkas() -> None:
+    """
+    Catatan juga ke `logs/omniclip.log` (bergilir, 3 x 2 MB).
+
+    Sampai 28 Oktober 2026 semua catatan hanya ke konsol, dan pada aplikasi
+    terpasang konsol itu hilang begitu aplikasi ditutup. Akibatnya galat
+    seperti "Error -3 while decompressing data: incorrect header check" (dua
+    pekerjaan pemiliknya, 19 Oktober 2026) tidak bisa ditelusuri sama sekali:
+    traceback-nya pernah ditulis, tapi tidak ke mana pun yang tersisa.
+    """
+    from logging.handlers import RotatingFileHandler
+    from .config import LOGS_DIR
+    try:
+        LOGS_DIR.mkdir(parents=True, exist_ok=True)
+        h = RotatingFileHandler(LOGS_DIR / "omniclip.log", maxBytes=2 * 1024 * 1024,
+                                backupCount=2, encoding="utf-8", delay=True)
+    except OSError:
+        return
+    h.setLevel(logging.INFO)
+    h.setFormatter(logging.Formatter("%(asctime)s %(levelname)-7s %(name)s: %(message)s",
+                                     datefmt="%Y-%m-%d %H:%M:%S"))
+    logging.getLogger().addHandler(h)
+
+
+_log_ke_berkas()
+
+
 def _demo_job(ctx):
     """Job sintetis untuk memverifikasi antrean, progress, SSE, dan pembatalan."""
     steps = int(ctx.payload.get("steps", 20))
@@ -191,6 +218,10 @@ async def lifespan(app: FastAPI):
     # dulu apa yang akan hilang adalah hak yang pantas diberikan.
     from .services import sampah as _sampah
     _sampah.bersihkan_di_latar()
+    # Video mentah dan klip jadi yang lama tidak disentuh (diminta pemiliknya
+    # 28 Oktober 2026). Ditunda 10 menit dan bisa dimatikan; lihat modulnya.
+    from .services import bersih_otomatis as _bersih
+    _bersih.jalankan_di_latar()
     # Encoder GPU diuji di latar, supaya render pertama tidak menunggunya.
     from .services import enkoder
     enkoder.siapkan_di_latar()

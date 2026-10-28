@@ -10,6 +10,7 @@ import ProfilPemilih from './components/ProfilPemilih';
 import KotakCari from './components/KotakCari';
 import { apiGet } from './lib/api';
 import useBuildWatch from './hooks/useBuildWatch';
+import CookiesPeringatan from './components/CookiesPeringatan';
 
 // Dikelompokkan seperti YouTube (JOB-3 J3-2): menonton dulu, lalu studio
 // tempat klip dibuat, lalu channel yang diikuti, lalu urusan akun dan mesin.
@@ -163,6 +164,7 @@ export default function App() {
       <main className="main-content">
         <ErrorBoundary key={location.pathname}><Outlet /></ErrorBoundary>
       </main>
+      <CookiesPeringatan />
     </div>
   );
 }

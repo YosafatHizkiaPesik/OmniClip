@@ -41,22 +41,37 @@ export default function CookiesAwal() {
   const [sibuk, setSibuk] = useState('');
   const [galat, setGalat] = useState('');
   const [tutup, setTutup] = useState(false);
+  const [memeriksa, setMemeriksa] = useState(true);
 
   useEffect(() => {
     let batal = false;
-    // `periksa=1`: menguji tiap browser, bukan mendaftar namanya.
-    apiGet('/settings/cookies?periksa=1')
-      .then((r) => { if (!batal) setInfo(r); })
-      // Pertanyaan yang gagal dimuat tidak boleh menahan halaman utama.
+    // Dua langkah. Daftar nama browser dulu (seketika), supaya kartunya
+    // langsung tampil; pengujian tiap browser (`periksa=1`) menyusul.
+    //
+    // Dulu hanya langkah kedua, dengan batas 30 detik, dan galatnya ditelan.
+    // Di Windows menguji Chrome dan Edge bisa jauh lebih lama dari itu, jadi
+    // pada pemasangan baru kartunya bisa TIDAK PERNAH muncul. Dilaporkan
+    // pemiliknya 28 Oktober 2026: "saat pertama kali menggunakan app mengapa
+    // tidak ada alert atau apapun yang meminta cookies".
+    apiGet('/settings/cookies')
+      .then((r) => { if (!batal) setInfo((lama) => lama ?? r); })
       .catch(() => {});
+    apiGet('/settings/cookies?periksa=1', { timeout: 180000 })
+      .then((r) => { if (!batal) setInfo(r); })
+      .catch(() => {})
+      .finally(() => { if (!batal) setMemeriksa(false); });
     return () => { batal = true; };
   }, []);
 
   if (!info || tutup || info.sudah_ditanya || info.mode !== 'mati') return null;
 
   const daftar = info.browser_tersedia || [];
-  const bisa = daftar.filter((b) => b.login);
-  const tidak = daftar.filter((b) => !b.login && b.terpasang);
+  // Sebelum hasil pengujian datang, browser yang terpasang ditawarkan apa
+  // adanya; pengujian sesungguhnya tetap terjadi saat tombolnya ditekan
+  // (`/cookies/siapkan` menolak browser yang tidak login).
+  const bisa = info.diperiksa ? daftar.filter((b) => b.login)
+    : daftar.filter((b) => b.terpasang !== false);
+  const tidak = info.diperiksa ? daftar.filter((b) => !b.login && b.terpasang) : [];
 
   const pakai = async (nama) => {
     setSibuk(nama); setGalat('');
@@ -92,6 +107,12 @@ export default function CookiesAwal() {
             {['ca.p1', 'ca.p2', 'ca.p3', 'ca.p4'].map((k) => <li key={k}>{tebal(t(k))}</li>)}
           </ul>
 
+          {memeriksa && (
+            <p style={{ fontSize: '.74rem', color: 'var(--ink-3)', margin: '0 0 8px',
+                        display: 'flex', gap: 6, alignItems: 'center' }}>
+              <Loader2 size={12} className="animate-spin" /> {t('ca.memeriksa')}
+            </p>
+          )}
           {bisa.length > 0 ? (
             <>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>

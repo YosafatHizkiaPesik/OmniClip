@@ -395,9 +395,24 @@ export default function ClipsTab() {
                       <Layers size={10} /> {segCount}
                     </div>
                   )}
+                  {/* Kotak pilih di pojok gambar, bukan di baris tombol: tujuh
+                      tombol dalam satu baris kartu selebar 190 px mendorong
+                      tombol hapus keluar kartu dan terpotong. Dilaporkan
+                      pemiliknya 28 Oktober 2026: "di klip jadi tidak ada
+                      button untuk menghapus klip". */}
+                  <label onClick={(e) => e.stopPropagation()} title={t('umum.pilih')}
+                         style={{
+                           position: 'absolute', top: '6px', right: '6px', display: 'flex',
+                           padding: '4px', borderRadius: '6px', cursor: 'pointer',
+                           background: 'rgba(0,0,0,0.65)',
+                         }}>
+                    <input type="checkbox" checked={selected.has(clip.file_name)}
+                           onChange={() => toggle(clip.file_name)} aria-label={t('umum.pilih')}
+                           style={{ accentColor: 'var(--accent-cyan)', margin: 0, cursor: 'pointer' }} />
+                  </label>
                 </PratinjauKlip>
 
-                <div style={{ padding: '10px', display: 'flex', flexDirection: 'column', gap: '7px' }}>
+                <div style={{ padding: '10px', display: 'flex', flexDirection: 'column', gap: '7px', flex: 1 }}>
                   <div style={{ fontSize: '0.76rem', fontWeight: 700, lineHeight: 1.3 }}>
                     {meta.hook_text ? meta.hook_text.slice(0, 46) : clip.file_name.slice(0, 26)}
                   </div>
@@ -506,13 +521,8 @@ export default function ClipsTab() {
                       {sent[clip.file_name].find((u) => u.status === 'failed').error}
                     </div>
                   )}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer', fontSize: '0.72rem', flex: 1 }}>
-                      <input type="checkbox" checked={selected.has(clip.file_name)}
-                             onChange={() => toggle(clip.file_name)}
-                             style={{ accentColor: 'var(--accent-cyan)' }} />
-                      {t('umum.pilih')}
-                    </label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap',
+                                marginTop: 'auto' }}>
                     <button onClick={() => setSiapkan(clip)} style={iconBtn}
                             aria-label={t('klip.siapkan')}
                             title={t('klip.siapkan_judul')}>
@@ -554,8 +564,9 @@ export default function ClipsTab() {
                       </button>
                     )}
                     <button onClick={() => deleteClip(clip.file_name)} aria-label={t('umum.hapus')}
+                            title={t('umum.hapus')}
                             disabled={sibukBaris?.nama === clip.file_name}
-                            style={{ ...iconBtn, color: 'var(--accent-red)' }}>
+                            style={{ ...iconBtn, color: 'var(--accent-red)', marginLeft: 'auto' }}>
                       {sibukBaris?.nama === clip.file_name && sibukBaris.apa === 'hapus'
                         ? <Loader2 size={14} className="animate-spin" />
                         : <Trash2 size={14} />}
