@@ -337,6 +337,70 @@ function PanelTransform({ item, garis, onUbahSifat, onTombol, onKurva, onKe, onT
   );
 }
 
+const PRESET_WARNA = ['normal', 'vibrant', 'cinematic', 'bw', 'vintage'];
+const JENIS_TRANSISI = ['potong', 'larut', 'geser', 'usap', 'perbesar', 'kilat', 'glitch'];
+
+/** Warna video/gambar (M3.6): preset seperti Studio Klip dan empat penggeser. */
+function PanelWarna({ item, onUbah }) {
+  const t = useT();
+  const w = item.warna ?? {};
+  const ubahWarna = (p) => onUbah({ warna: { ...w, ...p } });
+  return (
+    <Bagian
+      judul={t('montase.warna.judul')}
+      aksi={(
+        <button type="button" className="btn-secondary montase-ikon" onClick={() => onUbah({ warna: null })}
+                title={t('montase.warna.atur_ulang')} aria-label={t('montase.warna.atur_ulang')}
+        >
+          <RotateCcw size={12} />
+        </button>
+      )}
+    >
+      <div className="montase-baris-tombol">
+        {PRESET_WARNA.map((p) => (
+          <button key={p} type="button" className={`btn-secondary ${(w.preset ?? 'normal') === p ? 'aktif' : ''}`}
+                  aria-pressed={(w.preset ?? 'normal') === p} onClick={() => ubahWarna({ preset: p })}
+          >
+            {t(`montase.warna.preset_${p}`)}
+          </button>
+        ))}
+      </div>
+      {['kecerahan', 'kontras', 'saturasi', 'suhu'].map((k) => (
+        <label key={k} className="montase-kolom">
+          <span>{t(`montase.warna.${k}`)}</span>
+          <span className="montase-geser-angka">
+            <input type="range" min={-100} max={100} step={1} value={w[k] ?? 0}
+                   onChange={(e) => ubahWarna({ [k]: Number(e.target.value) })} />
+            <small>{w[k] ?? 0}</small>
+          </span>
+        </label>
+      ))}
+    </Bagian>
+  );
+}
+
+/** Transisi masuk dari item sebelumnya di lajur yang sama (M3.5). */
+function PanelTransisi({ item, fps, onUbah }) {
+  const t = useT();
+  const tr = item.transisi ?? { jenis: 'potong', durasi: Math.round(fps / 2) };
+  return (
+    <Bagian judul={t('montase.transisi.judul')}>
+      <p className="montase-petunjuk">{t('montase.transisi.ket')}</p>
+      <div className="montase-kolom-dua">
+        <label className="montase-kolom">
+          <span>{t('montase.transisi.jenis')}</span>
+          <select value={tr.jenis} onChange={(e) => onUbah({ transisi: { ...tr, jenis: e.target.value } })}>
+            {JENIS_TRANSISI.map((j) => <option key={j} value={j}>{t(`montase.transisi.${j}`)}</option>)}
+          </select>
+        </label>
+        <Angka label={t('montase.properti.durasi')} nilai={tr.durasi / fps} langkah={0.1} min={0.1} max={10}
+               akhiran={t('montase.satuan.detik')} desimal={2}
+               onUbah={(v) => onUbah({ transisi: { ...tr, durasi: Math.round(v * fps) } })} />
+      </div>
+    </Bagian>
+  );
+}
+
 /** Volume item dengan wajik (keyframe volume, juga hasil perendam musik M3.4). */
 function KolomVolume({ item, garis, onUbahSifat, onTombol }) {
   const t = useT();
@@ -483,6 +547,8 @@ export default function PanelProperti({
               <KolomProps props={item.props ?? {}} onUbah={(props) => ubah({ props })} />
             </>
           )}
+          {(item.jenis === 'video' || item.jenis === 'gambar') && <PanelWarna item={item} onUbah={ubah} />}
+          {item.jenis !== 'audio' && <PanelTransisi item={item} fps={fps} onUbah={ubah} />}
           {item.jenis !== 'audio' && (
             <PanelTransform item={item} garis={garis} onKe={onKe}
                             onTransform={(sebagian) => onTransform(item.id, sebagian)}

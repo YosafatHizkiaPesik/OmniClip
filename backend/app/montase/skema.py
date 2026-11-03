@@ -134,6 +134,21 @@ class Keyframe(_Dasar):
 SifatKeyframe = Literal["x", "y", "skala", "putar", "opasitas", "volume"]
 
 
+class Warna(_Dasar):
+    """Penyesuaian warna (komposisi/warna.js), preset sama dengan render.VIDEO_FILTERS."""
+    preset: Literal["normal", "vibrant", "cinematic", "bw", "vintage"] = "normal"
+    kecerahan: float = Field(0, ge=-100, le=100)
+    kontras: float = Field(0, ge=-100, le=100)
+    saturasi: float = Field(0, ge=-100, le=100)
+    suhu: float = Field(0, ge=-100, le=100)
+
+
+class Transisi(_Dasar):
+    """Transisi masuk dari item sebelumnya di lajur yang sama (komposisi/transisi.js)."""
+    jenis: Literal["potong", "larut", "geser", "usap", "perbesar", "kilat", "glitch"]
+    durasi: int = Field(15, ge=1, le=300)
+
+
 class Item(_Dasar):
     id: str
     jenis: Literal["video", "gambar", "teks", "motion", "audio"]
@@ -149,6 +164,8 @@ class Item(_Dasar):
     isi: Optional[Literal["contain", "cover"]] = None
     ubah: Optional[Ubah] = None
     keyframe: Optional[dict[SifatKeyframe, list[Keyframe]]] = None
+    warna: Optional[Warna] = None
+    transisi: Optional[Transisi] = None
     teks: Optional[str] = Field(None, max_length=500)
     komponen: Optional[str] = None
     versi: Optional[int] = Field(None, ge=1)

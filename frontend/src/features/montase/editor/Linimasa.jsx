@@ -164,6 +164,9 @@ const ItemLinimasa = memo(function ItemLinimasa({
         {item.asal === 'ai' && <b>AI</b>}
         <span>{label}</span>
       </span>
+      {item.transisi && item.transisi.jenis !== 'potong' && (
+        <span className="montase-item-transisi" title={t(`montase.transisi.${item.transisi.jenis}`)} aria-hidden />
+      )}
       {bingkaiKeyframe(item).filter((bk) => bk >= 0 && bk <= item.durasi).map((bk) => (
         <span key={bk} className="montase-item-wajik" style={{ left: (bk / fps) * pps }} aria-hidden />
       ))}

@@ -214,6 +214,28 @@ export function bersihkanUbah(ubah) {
   return hasil;
 }
 
+const PRESET = ['normal', 'vibrant', 'cinematic', 'bw', 'vintage'];
+const TRANSISI = ['potong', 'larut', 'geser', 'usap', 'perbesar', 'kilat', 'glitch'];
+
+/** Warna item (M3.6): preset dikenal, angka -100..100, kosong bila tidak berubah. */
+export function bersihkanWarna(warna) {
+  if (!warna || typeof warna !== 'object') return undefined;
+  const hasil = {};
+  if (PRESET.includes(warna.preset) && warna.preset !== 'normal') hasil.preset = warna.preset;
+  for (const k of ['kecerahan', 'kontras', 'saturasi', 'suhu']) {
+    const v = Math.round(Number(warna[k]));
+    if (Number.isFinite(v) && v) hasil[k] = Math.max(-100, Math.min(100, v));
+  }
+  return Object.keys(hasil).length ? hasil : undefined;
+}
+
+/** Transisi masuk (M3.5): jenis dikenal, durasi 1..300 bingkai; potong = tanpa transisi. */
+export function bersihkanTransisi(tr) {
+  if (!tr || !TRANSISI.includes(tr.jenis) || tr.jenis === 'potong') return undefined;
+  const durasi = Math.max(1, Math.min(300, Math.round(Number(tr.durasi) || 15)));
+  return { jenis: tr.jenis, durasi };
+}
+
 /** Mengubah kolom item; angka dijepit ke rentang yang sama dengan skema server. */
 export function ubahItem(dokumen, itemId, perubahan) {
   const hit = cariItem(dokumen, itemId);
@@ -228,6 +250,8 @@ export function ubahItem(dokumen, itemId, perubahan) {
     }
   }
   if ('ubah' in bersih) bersih.ubah = bersihkanUbah(bersih.ubah);
+  if ('warna' in bersih) bersih.warna = bersihkanWarna(bersih.warna);
+  if ('transisi' in bersih) bersih.transisi = bersihkanTransisi(bersih.transisi);
   if ('isi' in bersih && !['contain', 'cover'].includes(bersih.isi)) delete bersih.isi;
   const baru = salin(dokumen);
   baru.lajur = baru.lajur.map((l) => ({
