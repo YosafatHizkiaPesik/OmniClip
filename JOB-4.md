@@ -96,7 +96,7 @@ Tiga kemampuan besar, dibangun berurutan:
 | 1 | Kerangka: menu, daftar proyek, media, pratinjau, ekspor | ⬜ Belum mulai | 0/10 |
 | 2 | Penyuntingan dasar: linimasa sungguhan | ⬜ Belum mulai | 0/8 |
 | 3 | Teks, suara, efek, transisi, keyframe | ⬜ Belum mulai | 0/10 |
-| 4 | AI pembuat animasi | ⬜ Belum mulai | 0/9 |
+| 4 | AI pembuat animasi | ⬜ Belum mulai | 0/10 |
 | 5 | Asisten penyunting AI | ⬜ Belum mulai | 0/6 |
 | 6 | Rapikan dan rilis | ⬜ Belum mulai | 0/8 |
 | ✱ | Suara AI baru (ElevenLabs dan lainnya), kapan saja | ⬜ Menunggu pilihan pemilik | 0/3 |
@@ -120,6 +120,11 @@ Tanda status: ⬜ belum mulai · 🟨 sedang dikerjakan · ✅ selesai · ⛔ te
 | K-7 | 3 Nov 2026 | Animasi memakai **fungsi bawaan Remotion** (`interpolate`, `spring`), **bukan GSAP**. | Lisensi GSAP melarang pemakaian di alat pembuat animasi visual yang menyaingi Webflow. |
 | K-8 | 3 Nov 2026 | **AI mengusulkan, orang memutuskan.** Semua buatan AI tampil sebagai item biasa bertanda AI beserta alasannya, dan bisa diubah atau dihapus. | Prinsip yang sama dengan `sutradara.py` dan `sutradara_ai.py`. |
 | K-9 | 3 Nov 2026 | Mesin render (Node, Remotion, Chrome headless) **diunduh saat Montase pertama dipakai**, bukan dibundel. | Ukuran aplikasi tidak membengkak. Pola yang sama dengan Deno di `alat_yt.py`. |
+| K-10 | 3 Nov 2026 | Usaha OmniClip saat ini **perorangan / paling banyak 3 orang**, jadi Remotion dipakai dengan lisensi gratis. | Jawaban pemilik. Diperiksa ulang bila usaha bertambah orang (R-9). |
+| K-11 | 3 Nov 2026 | Tempat uji: **Linux mode pengembangan, Linux aplikasi build, Windows aplikasi build**. Tidak ada Windows mode pengembangan. | Jawaban pemilik. Uji Windows (M0.7) lewat build CI yang dipicu manual (`workflow_dispatch`). |
+| K-12 | 3 Nov 2026 | Urutan AI untuk Montase: **Claude → Gemini → OpenRouter → AI lokal**, dan pengguna bisa memilih sendiri mana yang dipakai. | Jawaban pemilik. `koneksi_ai.py` sudah punya daftar berurutan yang bisa diatur pengguna; Montase menambah pilihan "AI untuk Montase". |
+| K-13 | 3 Nov 2026 | Langganan Claude Pro **tidak bisa** disambungkan ke OmniClip sebagai pengganti API key. Claude di dalam aplikasi lewat **API key** (bayar per pemakaian, terpisah dari Pro), ditambah **mode salin-tempel** (M4.10) yang memakai Claude.ai biasa. | Pro dan API adalah produk terpisah. Untuk produk yang dibagikan ke orang lain, jalur yang aman menurut sumber yang ada adalah API key, bukan login langganan. |
+| K-14 | 3 Nov 2026 | Penggabungan: **PR dokumen sekarang**, lalu **satu PR per tahap** sesudah gerbangnya lolos. | Jawaban pemilik. Dokumen langsung terbaca dari branch utama. |
 
 ### Masih terbuka (pemilik yang memutuskan)
 
@@ -131,6 +136,7 @@ Tanda status: ⬜ belum mulai · 🟨 sedang dikerjakan · ✅ selesai · ⛔ te
 | T-4 | Layanan suara AI tambahan: ElevenLabs atau lainnya? | Menunggu pemilik | MS.1 |
 | T-5 | Ambang kecepatan render yang masih bisa diterima | Paling lama 4x durasi video (video 60 detik selesai ≤ 4 menit) | Gerbang Tahap 0 |
 | T-6 | Montase bisa dipakai di HP? | Tidak di rilis pertama. Di HP hanya daftar proyek dan ekspor. | M1.7 |
+| T-7 | Apakah pemilik membuat API key Claude (platform.claude.com, isi saldo, terpisah dari Pro)? | Ya, untuk uji M0.5 dan Tahap 4. Perkiraan biaya: ±$0,1–0,25 per animasi (lihat M4.3). Tanpa kunci, M0.5 memakai Gemini/OpenRouter atau mode salin-tempel. | M0.5 |
 
 **Catatan lisensi Remotion:** gratis, termasuk untuk komersial, bagi perorangan
 atau usaha dengan paling banyak 3 karyawan. Kalau usaha OmniClip melewati itu,
@@ -225,9 +231,11 @@ commit berikutnya.
    bernomor di `UJI-LANGSUNG.md` (bagian "Montase"), berisi langkah dan hasil
    yang diharapkan.
 6. **Keputusan baru masuk tabel [Keputusan](#3-keputusan)**, bukan hanya chat.
-7. **Perubahan rencana ditulis di sini juga.** Coret tugas yang dibatalkan
+7. **Satu PR ke `main` per tahap** (K-14). Kerja harian di branch kerja; PR
+   dibuka sesudah gerbang tahap lolos dan uji langsung pemilik selesai.
+8. **Perubahan rencana ditulis di sini juga.** Coret tugas yang dibatalkan
    (`~~M3.8~~`) beserta alasannya. Jangan dihapus diam-diam.
-8. **Gaya kode mengikuti repo:** nama Indonesia, docstring menjelaskan *kenapa*
+9. **Gaya kode mengikuti repo:** nama Indonesia, docstring menjelaskan *kenapa*
    (bukan hanya *apa*), dan angka hasil ukur ditulis di komentar.
 
 ---
@@ -267,8 +275,11 @@ bulan bekerja.
   `sandbox="allow-scripts"` (tanpa `allow-same-origin`), dikendalikan lewat
   `postMessage`, dan tetap bisa memutar video dari backend (perlu CORS dan
   token, lihat [bagian 20](#20-pratinjau-dan-kotak-pasir)).
-- [ ] **M0.7** Ulangi M0.2 sampai M0.6 di **Windows** (artefak build CI). Pemilik
-  yang menjalankan.
+- [ ] **M0.7** Ulangi M0.2 sampai M0.6 di **Windows** lewat aplikasi hasil build
+  (K-11: tidak ada Windows mode pengembangan). Karena itu `bangun-aplikasi.yml`
+  harus lebih dulu ikut membangun paket mesin dan bundel komposisi. Build
+  dipicu manual (`workflow_dispatch`) dari branch kerja, lalu pemilik
+  mengunduh artefaknya dan menjalankannya. Ulangi juga di Linux aplikasi build.
 - [ ] **M0.8** Tulis semua angka ke [bagian 24](#24-hasil-uji-teknis), lalu
   pemilik memutuskan T-5.
 
@@ -448,7 +459,8 @@ Yang disukai disimpan ke pustaka animasi, bisa dipakai di proyek lain
 - [ ] **M4.1** Kontrak komponen ditulis sebagai kode dan dokumentasi
   ([bagian 21](#21-kontrak-komponen-animasi-ai)).
 - [ ] **M4.2** Pustaka bawaan berisi 10 animasi yang ditulis tangan. Gunanya
-  dua: siap dipakai, dan menjadi contoh bagi AI.
+  dua: siap dipakai, dan menjadi contoh bagi AI. Ditulis saat pengembangan dan
+  ikut di dalam aplikasi, jadi memakainya tidak butuh koneksi AI sama sekali.
 
   | Animasi | Pemakaian |
   |---|---|
@@ -466,10 +478,23 @@ Yang disukai disimpan ke pustaka animasi, bisa dipakai di proyek lain
 - [ ] **M4.3** `montase/motion_ai.py`: prompt sistem = panduan resmi Remotion
   untuk LLM + kontrak kita + contoh dari pustaka bawaan + konteks proyek (ukuran
   kanvas, durasi, palet, font tersedia, zona aman). Keluarannya satu blok kode
-  dan satu blok JSON metadata. Model dipilih dari rantai `koneksi_ai`, dan
-  pemakaiannya dicatat di `pemakaian_ai`. Kalau koneksi yang tersedia hanya AI
-  lokal, tampilkan peringatan bahwa model kecil jarang menulis kode animasi
-  yang baik.
+  dan satu blok JSON metadata. Model dipilih dari rantai `koneksi_ai` dengan
+  urutan K-12 (Claude → Gemini → OpenRouter → lokal), dan pengguna bisa memilih
+  koneksi tertentu lewat setelan "AI untuk Montase". Pemakaiannya dicatat di
+  `pemakaian_ai`. Kalau koneksi yang tersedia hanya AI lokal, tampilkan
+  peringatan bahwa model kecil jarang menulis kode animasi yang baik.
+
+  Perkiraan biaya per animasi dengan API Claude (harga per 1 juta token,
+  Oktober 2026), untuk ±15 ribu token masukan dan ±8 ribu token keluaran:
+
+  | Model | Masukan / keluaran per 1 juta token | Kira-kira per animasi |
+  |---|---|---|
+  | Claude Opus 5.5 (`claude-opus-5-5`) | $4 / $20 | ±$0,22, turun ke ±$0,17 dengan prompt caching |
+  | Claude Sonnet 5.5 (`claude-sonnet-5-5`) | $2 / $10 | ±$0,11 |
+
+  Angka sebenarnya diukur di M4.9 dan ditulis di sana. Prompt sistem yang
+  panjang dan tetap (panduan Remotion, kontrak, contoh) diletakkan di depan
+  supaya bisa di-cache.
 - [ ] **M4.4** `montase/periksa.py` beserta perintah `periksa` di mesin:
   1. kompilasi (sucrase);
   2. pemeriksaan statis: hanya impor yang diizinkan, tidak ada yang dilarang
@@ -507,7 +532,19 @@ Yang disukai disimpan ke pustaka animasi, bisa dipakai di proyek lain
 - [ ] **M4.8** Pustaka animasi per profil: simpan, beri nama, cari, dan pakai di
   proyek lain. Animasi AI yang belum lolos pemeriksaan tidak bisa disimpan.
 - [ ] **M4.9** Uji 10 permintaan dari [bagian 25](#25-daftar-uji-permintaan-animasi),
-  hasilnya dicatat di sana.
+  hasilnya dicatat di sana, termasuk biaya API sebenarnya.
+- [ ] **M4.10** Mode salin-tempel, untuk memakai langganan Claude Pro (atau chat
+  AI lain) tanpa API key (K-13):
+  1. tombol "Salin permintaan" menyalin prompt lengkap (kontrak, contoh,
+     konteks proyek, permintaan) ke papan klip;
+  2. pengguna menempelkannya di Claude.ai, lalu menyalin balasannya;
+  3. tombol "Tempel hasil" menerima balasan itu. OmniClip mengambil blok kode
+     dan metadata, lalu memeriksanya dengan pemeriksa M4.4 yang sama;
+  4. kalau gagal, galatnya disusun jadi permintaan perbaikan yang bisa disalin
+     lagi.
+
+  Lebih lambat daripada lewat API, tapi tanpa biaya tambahan di luar
+  langganan.
 
 **Selesai bila:** paling sedikit 8 dari 10 permintaan uji lolos pemeriksaan
 tanpa campur tangan, dan semuanya bisa dikoreksi lewat panel properti.
