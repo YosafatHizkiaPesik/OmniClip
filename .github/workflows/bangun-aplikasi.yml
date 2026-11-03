@@ -162,30 +162,6 @@ jobs:
             ./dist/OmniClip/OmniClip --periksa
           fi
 
-      # Uji Montase sungguhan di aplikasi terbungkus (JOB-4 M0.7): unduh Node
-      # dan Chrome Headless Shell, lalu render video uji 10 detik berisi
-      # animasi bawaan dan komponen AI. Selama Montase masih beta, kegagalan di
-      # sini TIDAK menahan rilis (continue-on-error), tapi tandanya terlihat di
-      # ringkasan build. Wajib lulus mulai M6.8.
-      #
-      # Aplikasi Windows berjalan tanpa konsol, jadi keluarannya pergi ke berkas
-      # log; isinya dicetak sesudahnya supaya terbaca di sini.
-      - name: Uji Montase (unduh Node + Chrome, render 10 detik)
-        continue-on-error: true
-        working-directory: backend
-        shell: bash
-        env:
-          OMNICLIP_STORAGE: ${{ runner.temp }}/omniclip-montase
-        run: |
-          KODE=0
-          if [ "${{ matrix.nama }}" = "windows" ]; then
-            ./dist/OmniClip/OmniClip.exe --periksa-montase || KODE=$?
-          else
-            ./dist/OmniClip/OmniClip --periksa-montase || KODE=$?
-          fi
-          cat "$OMNICLIP_STORAGE/logs/omniclip.log" 2>/dev/null | tail -60 || true
-          exit $KODE
-
       # Ditandatangani SEBELUM dikemas, dan hanya bila sertifikatnya ada.
       #
       # Tanpa tanda tangan, Windows Defender dan SmartScreen memperlakukan
@@ -241,6 +217,33 @@ jobs:
             shasum -a 256 "${{ matrix.arsip }}" > "${{ matrix.arsip }}.sha256"
           fi
           cat "${{ matrix.arsip }}.sha256"
+
+      # Uji Montase sungguhan di aplikasi terbungkus (JOB-4 M0.7): unduh Node
+      # dan Chrome Headless Shell, lalu render video uji 10 detik berisi
+      # animasi bawaan dan komponen AI. Dijalankan SESUDAH dikemas: build
+      # pertama mengunduh Chrome ke folder aplikasi sebelum dikemas, dan arsip
+      # rilisnya membengkak 130-150 MB. Di sini apa pun yang diunduh tidak
+      # mungkin ikut ke arsip. Selama Montase masih beta, kegagalan di
+      # sini TIDAK menahan rilis (continue-on-error), tapi tandanya terlihat di
+      # ringkasan build. Wajib lulus mulai M6.8.
+      #
+      # Aplikasi Windows berjalan tanpa konsol, jadi keluarannya pergi ke berkas
+      # log; isinya dicetak sesudahnya supaya terbaca di sini.
+      - name: Uji Montase (unduh Node + Chrome, render 10 detik)
+        continue-on-error: true
+        working-directory: backend
+        shell: bash
+        env:
+          OMNICLIP_STORAGE: ${{ runner.temp }}/omniclip-montase
+        run: |
+          KODE=0
+          if [ "${{ matrix.nama }}" = "windows" ]; then
+            ./dist/OmniClip/OmniClip.exe --periksa-montase || KODE=$?
+          else
+            ./dist/OmniClip/OmniClip --periksa-montase || KODE=$?
+          fi
+          cat "$OMNICLIP_STORAGE/logs/omniclip.log" 2>/dev/null | tail -60 || true
+          exit $KODE
 
       - uses: actions/upload-artifact@v4
         with:
