@@ -95,7 +95,7 @@ Tiga kemampuan besar, dibangun berurutan:
 | 0 | Uji teknis: membuktikan Remotion jalan di dalam OmniClip | ✅ Selesai 3 Nov 2026 | 8/8 |
 | 1 | Kerangka: menu, daftar proyek, media, pratinjau, ekspor | ✅ Selesai 3 Nov 2026 | 10/10 |
 | 2 | Penyuntingan dasar: linimasa sungguhan | ✅ Selesai 3 Nov 2026 | 8/8 |
-| 3 | Teks, suara, efek, transisi, keyframe | 🟨 Sedang dikerjakan | 2/10 |
+| 3 | Teks, suara, efek, transisi, keyframe | 🟨 Sedang dikerjakan | 3/10 |
 | 4 | AI pembuat animasi | ⬜ Belum mulai | 0/10 |
 | 5 | Asisten penyunting AI | ⬜ Belum mulai | 0/6 |
 | 6 | Rapikan dan rilis | ⬜ Belum mulai | 0/8 |
@@ -103,7 +103,7 @@ Tiga kemampuan besar, dibangun berurutan:
 
 Tanda status: ⬜ belum mulai · 🟨 sedang dikerjakan · ✅ selesai · ⛔ tertahan (tulis alasannya).
 
-**Tugas berikutnya:** `M3.3`.
+**Tugas berikutnya:** `M3.4`.
 
 ## 3. Keputusan
 
@@ -492,9 +492,10 @@ Tes 69-75 di UJI-LANGSUNG.md untuk uji akhir.
   unduhan atau Klip jadi). Waktu per kata menjadi lajur subtitle yang bisa
   disunting, dengan gaya sorot kata seperti Studio Klip.
   (selesai 3 Nov 2026, commit 9496abb) Kata per bahan disimpan di `kata.json` (sekali per bahan, dipakai ulang di setiap potongan). Ucapan dua sumber yang bertumpuk tidak diselang-seling: lajur audio menang, lalu lajur video terbawah. Belum diuji dengan Whisper sungguhan (HuggingFace ditolak proxy container); diuji dengan simpanan kata, jadi tes 77 di UJI-LANGSUNG.md wajib dijalankan pemilik.
-- [ ] **M3.3** Narasi: ketik teks, pilih suara dari katalog `tts.py`, dan hasilnya
+- [x] **M3.3** Narasi: ketik teks, pilih suara dari katalog `tts.py`, dan hasilnya
   jadi item audio. Mengubah teksnya membuat ulang suaranya. Rekam suara sendiri
   lewat mikrofon (MediaRecorder) juga menjadi item audio.
+  (selesai 3 Nov 2026, commit ff852c8) Teks yang diubah TIDAK membuat ulang suara per ketukan: tombol "Buat ulang suara" menyala dan mengganti bahan item sekali (item tetap di tempatnya). Narasi dan rekaman masuk lajur audio yang kosong di rentang itu, atau lajur audio baru. Rekaman WebM diubah ke M4A di server. Belum diuji dengan suara sungguhan (container tanpa akses suara Microsoft/unduhan Piper): tes 78 di UJI-LANGSUNG.md.
 - [ ] **M3.4** Musik latar dengan perendam otomatis (*ducking*): volume musik
   turun saat ada narasi atau ucapan. Hasilnya berupa keyframe volume biasa,
   jadi terlihat dan bisa diubah.
@@ -925,6 +926,8 @@ Semua di bawah `/api/montase`, membawa profil aktif lewat header
 | GET | `/t/{token}/bahan/{id}/{sampul,strip,gelombang}` | Turunan bahan. Lewat token karena `<img>` tidak membawa header profil. |
 | GET, POST | `/setelan` | Sakelar "Montase (beta)" (`{aktif}`) |
 | POST | `/proyek/{id}/subtitle` | Subtitle otomatis (pekerjaan `montase_subtitle`), menjawab potongan untuk dipasang editor (M3.2) |
+| GET | `/suara` | Katalog suara narasi (`tts.py`) dan kesiapannya (M3.3) |
+| POST | `/rekam` | Rekaman mikrofon (WebM) -> M4A -> bahan `rekam` (M3.3) |
 | GET | `/gaya-teks` | Tema teks dari `tema_judul.py` dalam bentuk `item.gaya`, dan daftar font bawaan (M3.1) |
 | GET | `/t/{token}/font/{keluarga}` | Berkas font bawaan untuk iframe dan mesin render |
 | POST | `/narasi` | `{teks, suara}`: hasil TTS menjadi bahan audio |
