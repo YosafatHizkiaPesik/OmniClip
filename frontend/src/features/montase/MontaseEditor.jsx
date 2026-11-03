@@ -1,10 +1,15 @@
 /**
- * Editor satu proyek Montase (/montase/:proyekId, JOB-4 M1.7-M1.9).
+ * Editor satu proyek Montase (/montase/:proyekId, JOB-4 M1.7-M1.9, Tahap 2).
  *
  * Empat area yang ukurannya bisa diatur: Bahan (kiri), Pratinjau (tengah),
  * Properti (kanan), Linimasa (bawah). Semua perubahan lewat fungsi murni di
- * model/dokumen.js, lalu disimpan otomatis 1,5 detik sesudah perubahan
- * terakhir.
+ * model/ (dokumen.js, suntingan.js), dicatat di riwayat batal/ulang
+ * (riwayat.js, 100 langkah), lalu disimpan otomatis 1,5 detik sesudah
+ * perubahan terakhir.
+ *
+ * Riwayat dipegang di ref DAN state: ref adalah kebenaran (dibaca penangan
+ * tombol dan seretan tanpa menunggu React menggambar), state memicu gambar
+ * ulang. Dengan begitu dua operasi dalam satu peristiwa tidak saling menimpa.
  *
  * Penyimpanan BERURUTAN: simpan berikutnya menunggu yang sebelumnya selesai
  * dan memakai revisi yang baru dikembalikan. Tanpa itu, dua perubahan cepat
@@ -25,17 +30,55 @@ import {
   ambilProyek, ambilToken, simpanProyek, sumberPratinjau,
 } from './api.js';
 import {
-  cariItem, hapusItem, pindahUrutan, tambahBahan, tambahMotion, tambahTeks, ubahItem,
-  ubahProyek,
+  cariItem, tambahBahan, tambahMotion, tambahTeks, ubahItem, ubahProyek,
 } from './model/dokumen.js';
+import {
+  bekukan, belah, bisaHapusLajur, gandakan, hapusBanyak, hapusBeriak, hapusLajur, hapusPenanda,
+  rapatkan, salin, semuaItem, tambahLajur, tambahPenanda, tempel, ubahKecepatan, ubahLajur, ubahPenanda,
+  ubahTransform,
+} from './model/suntingan.js';
+import {
+  batal, bisaBatal, bisaUlang, buatRiwayat, catat, ulang,
+} from './model/riwayat.js';
 import PratinjauKotakPasir from './pratinjau/PratinjauKotakPasir.jsx';
 import PanelBahan from './editor/PanelBahan.jsx';
 import PanelProperti from './editor/PanelProperti.jsx';
 import Linimasa from './editor/Linimasa.jsx';
+import PeganganUbah from './editor/PeganganUbah.jsx';
+import { buatGaris } from './editor/garisPutar.js';
 
 const JEDA_SIMPAN = 1500;
+const ULANG_GAGAL = 5000;
 const KUNCI_TATA = 'omniclip.montase.tata';
-const TATA_BAWAAN = { kiri: 280, kanan: 300, bawah: 270 };
+const KUNCI_MAGNET = 'omniclip.montase.magnet';
+const TATA_BAWAAN = { kiri: 280, kanan: 300, bawah: 300 };
+const DETIK_BEKU = 3;
+
+// Papan klip di luar komponen: Ctrl+C di satu proyek, Ctrl+V di proyek lain.
+// Metadata bahannya ikut, jadi item tetap bisa dirender di proyek tujuan.
+let papanKlip = null;
+
+function bacaMagnet() {
+  try {
+    return localStorage.getItem(KUNCI_MAGNET) !== '0';
+  } catch {
+    return true;
+  }
+}
+
+/** Item di bawah garis putar pada lajur yang tidak terkunci dan terlihat. */
+function itemDiGaris(dokumen, f, jenis = null) {
+  return dokumen.lajur
+    .filter((l) => !l.kunci && !l.sembunyi)
+    .flatMap((l) => l.item)
+    .filter((i) => i.mulai < f && i.mulai + i.durasi > f && (!jenis || i.jenis === jenis))
+    .map((i) => i.id);
+}
+
+/** Elemen yang sedang menerima ketikan: pintasan tidak boleh mencurinya. */
+function sedangMengetik(el) {
+  return Boolean(el?.closest?.('input, textarea, select, [contenteditable="true"]'));
+}
 
 function bacaTata() {
   try {
@@ -76,7 +119,7 @@ function Pembatas({ arah, onGeser }) {
   );
 }
 
-function StatusSimpan({ status, onMuatUlang }) {
+function StatusSimpan({ status, onMuatUlang, onCobaLagi }) {
   const t = useT();
   if (status === 'menyimpan' || status === 'belum') {
     return <span className="montase-simpan"><Loader2 size={12} className="animate-spin" />{t('montase.editor.menyimpan')}</span>;
@@ -92,7 +135,14 @@ function StatusSimpan({ status, onMuatUlang }) {
     );
   }
   if (status === 'gagal') {
-    return <span className="montase-simpan montase-simpan-galat"><CloudOff size={12} />{t('montase.editor.gagal_simpan')}</span>;
+    return (
+      <span className="montase-simpan montase-simpan-galat" role="alert">
+        <CloudOff size={12} />{t('montase.editor.gagal_simpan')}
+        <button type="button" className="btn-secondary" onClick={onCobaLagi}>
+          <RefreshCw size={12} />{t('montase.editor.coba_lagi')}
+        </button>
+      </span>
+    );
   }
   return <span className="montase-simpan"><Check size={12} />{t('montase.editor.tersimpan')}</span>;
 }
@@ -102,27 +152,31 @@ export default function MontaseEditor() {
   const { proyekId } = useParams();
   const navigate = useNavigate();
   const sempit = useLayarSempit();
-  const [dokumen, setDokumen] = useState(null);
+  const [riwayat, setRiwayat] = useState(null);
   const [galat, setGalat] = useState(null);
   const [galatPratinjau, setGalatPratinjau] = useState(null);
   const [token, setToken] = useState(null);
-  const [dipilih, setDipilih] = useState(null);
-  const [bingkai, setBingkai] = useState(0);
+  const [pilihan, setPilihan] = useState([]);
+  const [lajurDipilih, setLajurDipilih] = useState(null);
+  const [magnet, setMagnet] = useState(bacaMagnet);
+  const [main, setMain] = useState(false);
   const [status, setStatus] = useState('tersimpan');
   const [tata, setTata] = useState(bacaTata);
   const [bahanSiap, setBahanSiap] = useState(() => new Set());
+  const [garis] = useState(() => buatGaris(0));
   const catatBahan = useCallback((daftar) => {
     setBahanSiap(new Set(daftar.filter((b) => b.siap).map((b) => b.id)));
   }, []);
   const tataSeret = useRef(tata);
   const pratinjau = useRef(null);
+  const linimasa = useRef(null);
   const ekspor = useJobRunner();
 
   const revisi = useRef(null);
   const kotor = useRef(false);
-  const dokRef = useRef(null);
+  const riwayatRef = useRef(null);
   const antrean = useRef(Promise.resolve());
-  dokRef.current = dokumen;
+  const dokumen = riwayat?.kini ?? null;
 
   const muat = useCallback(() => {
     setGalat(null);
@@ -130,7 +184,8 @@ export default function MontaseEditor() {
       .then((p) => {
         revisi.current = p.revisi;
         kotor.current = false;
-        setDokumen(p.dokumen);
+        riwayatRef.current = buatRiwayat(p.dokumen);
+        setRiwayat(riwayatRef.current);
         setStatus('tersimpan');
       })
       .catch((e) => setGalat(e.message));
@@ -140,14 +195,15 @@ export default function MontaseEditor() {
 
   const simpanSekarang = useCallback(() => {
     antrean.current = antrean.current.then(async () => {
-      if (!kotor.current || !dokRef.current) return;
-      const d = dokRef.current;
+      const d = riwayatRef.current?.kini;
+      if (!kotor.current || !d) return;
       kotor.current = false;
       setStatus('menyimpan');
       try {
         const r = await simpanProyek(proyekId, d, revisi.current);
         revisi.current = r.revisi;
         setStatus(kotor.current ? 'belum' : 'tersimpan');
+        setGalat(null);
       } catch (e) {
         kotor.current = true;
         setStatus(e.status === 409 ? 'bentrok' : 'gagal');
@@ -159,12 +215,20 @@ export default function MontaseEditor() {
 
   useEffect(() => {
     if (!kotor.current || status === 'bentrok') return undefined;
-    setStatus('belum');
+    if (status !== 'gagal') setStatus('belum');
     const id = setTimeout(simpanSekarang, JEDA_SIMPAN);
     return () => clearTimeout(id);
     // `status` sengaja tidak ikut: perubahannya bukan alasan menyimpan.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dokumen, simpanSekarang]);
+
+  // Gagal karena jaringan atau server sibuk: dicoba lagi sendiri, jadi
+  // pengguna yang tidak membaca pemberitahuannya pun tidak kehilangan kerja.
+  useEffect(() => {
+    if (status !== 'gagal') return undefined;
+    const id = setTimeout(simpanSekarang, ULANG_GAGAL);
+    return () => clearTimeout(id);
+  }, [status, simpanSekarang]);
 
   useEffect(() => {
     const tahan = (e) => { if (kotor.current) { e.preventDefault(); e.returnValue = ''; } };
@@ -172,12 +236,29 @@ export default function MontaseEditor() {
     return () => window.removeEventListener('beforeunload', tahan);
   }, []);
 
-  const ubah = useCallback((fn) => {
-    setDokumen((d) => {
-      const baru = fn(d);
-      if (baru !== d) kotor.current = true;
-      return baru;
-    });
+  /** Menerapkan dokumen baru dan mencatatnya di riwayat. */
+  const terapkan = useCallback((baru, opsi) => {
+    const r = riwayatRef.current;
+    if (!r || !baru || baru === r.kini) return false;
+    kotor.current = true;
+    riwayatRef.current = catat(r, baru, opsi);
+    setRiwayat(riwayatRef.current);
+    return true;
+  }, []);
+  const ubah = useCallback((fn, opsi) => {
+    const r = riwayatRef.current;
+    if (r) terapkan(fn(r.kini), opsi);
+  }, [terapkan]);
+  const dok = () => riwayatRef.current?.kini;
+
+  const lompat = useCallback((fn) => {
+    const r = riwayatRef.current;
+    if (!r) return;
+    const baru = fn(r);
+    if (baru === r) return;
+    kotor.current = true;
+    riwayatRef.current = baru;
+    setRiwayat(baru);
   }, []);
 
   const sumber = useMemo(
@@ -187,40 +268,188 @@ export default function MontaseEditor() {
     [dokumen && Object.keys(dokumen.bahan).join(','), token],
   );
 
-  const tambahKeLinimasa = (b) => {
-    let baru = null;
-    ubah((d) => {
-      const hasil = tambahBahan(d, b);
-      baru = hasil.itemId;
-      return hasil.dokumen;
-    });
-    setTimeout(() => baru && setDipilih(baru), 0);
+  const semuaId = useMemo(
+    () => new Set((dokumen?.lajur ?? []).flatMap((l) => l.item.map((i) => i.id))),
+    [dokumen?.lajur],
+  );
+  const pilihanSah = useMemo(() => pilihan.filter((id) => semuaId.has(id)), [pilihan, semuaId]);
+
+  const pilih = useCallback((ids) => {
+    setPilihan(ids);
+    if (ids.length) setLajurDipilih(null);
+  }, []);
+  const pilihLajur = useCallback((id) => {
+    setLajurDipilih(id);
+    setPilihan([]);
+  }, []);
+
+  const keBingkai = useCallback((b) => {
+    const d = riwayatRef.current?.kini;
+    const tepat = Math.max(0, Math.min((d?.durasi ?? 1) - 1, Math.round(b)));
+    garis.set(tepat);
+    pratinjau.current?.ke(tepat);
+  }, [garis]);
+  const keGaris = useCallback((b) => garis.set(b), [garis]);
+
+  // --- aksi ------------------------------------------------------------------
+
+  const fps = dokumen?.kanvas.fps ?? 30;
+  const tambahKeLinimasa = (b, posisi) => {
+    const hasil = tambahBahan(dok(), b, posisi);
+    if (terapkan(hasil.dokumen)) pilih([hasil.itemId]);
   };
   const tambahTeksDiGaris = () => {
-    let baru = null;
-    ubah((d) => {
-      const hasil = tambahTeks(d, { mulai: bingkai, teks: t('montase.editor.teks_baru') });
-      baru = hasil.itemId;
-      return hasil.dokumen;
-    });
-    setTimeout(() => baru && setDipilih(baru), 0);
+    const hasil = tambahTeks(dok(), { mulai: garis.get(), teks: t('montase.editor.teks_baru') });
+    if (terapkan(hasil.dokumen)) pilih([hasil.itemId]);
   };
   const tambahAnimasiDiGaris = () => {
-    let baru = null;
-    ubah((d) => {
-      const hasil = tambahMotion(d, {
-        komponen: 'ko_hitung_mundur', modul: BAWAAN.ko_hitung_mundur, mulai: bingkai,
-      });
-      baru = hasil.itemId;
-      return hasil.dokumen;
+    const hasil = tambahMotion(dok(), {
+      komponen: 'ko_hitung_mundur', modul: BAWAAN.ko_hitung_mundur, mulai: garis.get(),
     });
-    setTimeout(() => baru && setDipilih(baru), 0);
+    if (terapkan(hasil.dokumen)) pilih([hasil.itemId]);
   };
-  const hapusTerpilih = () => {
-    if (!dipilih) return;
-    ubah((d) => hapusItem(d, dipilih));
-    setDipilih(null);
+  const aksiHapus = () => {
+    if (pilihanSah.length) terapkan(hapusBanyak(dok(), pilihanSah));
   };
+  const aksiHapusBeriak = () => {
+    let d = dok();
+    const urut = pilihanSah.map((id) => cariItem(d, id)?.item).filter(Boolean)
+      .sort((a, b) => b.mulai - a.mulai);
+    for (const i of urut) d = hapusBeriak(d, i.id);
+    terapkan(d);
+  };
+  const aksiBelah = () => {
+    let d = dok();
+    const f = garis.get();
+    const sasaran = pilihanSah.length ? pilihanSah : itemDiGaris(d, f);
+    const kanan = [];
+    for (const id of sasaran) {
+      const hasil = belah(d, id, f);
+      if (hasil.itemBaru) { d = hasil.dokumen; kanan.push(hasil.itemBaru); }
+    }
+    if (terapkan(d)) pilih(kanan);
+  };
+  const aksiBekukan = () => {
+    const d = dok();
+    const f = garis.get();
+    const calon = (pilihanSah.length ? pilihanSah : itemDiGaris(d, f, 'video'))
+      .map((id) => cariItem(d, id)?.item)
+      .find((i) => i?.jenis === 'video' && !i.beku && i.mulai <= f && i.mulai + i.durasi > f);
+    if (!calon) return;
+    const hasil = bekukan(d, calon.id, f, DETIK_BEKU * fps);
+    if (hasil.itemBaru && terapkan(hasil.dokumen)) pilih([hasil.itemBaru]);
+  };
+  const aksiSalin = () => {
+    const papan = salin(dok(), pilihanSah);
+    if (papan) papanKlip = papan;
+  };
+  const aksiPotong = () => {
+    aksiSalin();
+    aksiHapus();
+  };
+  const aksiTempel = () => {
+    if (!papanKlip) return;
+    const hasil = tempel(dok(), papanKlip, garis.get());
+    if (terapkan(hasil.dokumen)) pilih(hasil.itemBaru);
+  };
+  const aksiGandakan = () => {
+    const hasil = gandakan(dok(), pilihanSah);
+    if (terapkan(hasil.dokumen)) pilih(hasil.itemBaru);
+  };
+  const aksiPenanda = () => terapkan(tambahPenanda(dok(), garis.get(), ''));
+  /** Rapatkan lajur item terpilih; tanpa pilihan, lajur video pertama. */
+  const aksiRapatkan = () => {
+    let d = dok();
+    const lajurIds = pilihanSah.length
+      ? [...new Set(pilihanSah.map((id) => cariItem(d, id)?.lajur.id).filter(Boolean))]
+      : [d.lajur.find((l) => l.jenis === 'video')?.id].filter(Boolean);
+    for (const id of lajurIds) d = rapatkan(d, id);
+    terapkan(d);
+  };
+  const aksiMagnet = () => {
+    setMagnet((m) => {
+      try { localStorage.setItem(KUNCI_MAGNET, m ? '0' : '1'); } catch { /* tidak apa */ }
+      return !m;
+    });
+  };
+  const aksiTambahLajur = (jenis) => {
+    const hasil = tambahLajur(dok(), jenis);
+    if (terapkan(hasil.dokumen)) pilihLajur(hasil.lajurId);
+  };
+  const aksiUbahLajur = useCallback((id, p) => {
+    ubah((d) => ubahLajur(d, id, p), { gabung: `lajur:${id}:${Object.keys(p).join(',')}` });
+  }, [ubah]);
+
+  const aksi = {
+    batal: () => lompat(batal),
+    ulang: () => lompat(ulang),
+    belah: aksiBelah,
+    hapus: aksiHapus,
+    rapatkan: aksiRapatkan,
+    gandakan: aksiGandakan,
+    bekukan: aksiBekukan,
+    penanda: aksiPenanda,
+    magnet: aksiMagnet,
+    tambahTeks: tambahTeksDiGaris,
+    tambahMotion: tambahAnimasiDiGaris,
+    tambahLajur: aksiTambahLajur,
+  };
+
+  // --- pintasan keyboard (JOB-4 M2.4) -------------------------------------------
+
+  const tombol = (e) => {
+    const ctrl = e.ctrl || e.meta;
+    const { key } = e;
+    const huruf = key.length === 1 ? key.toLowerCase() : key;
+    const jalankan = (fn) => { e.preventDefault?.(); fn(); };
+    if (key === ' ') return jalankan(() => pratinjau.current?.putarJeda());
+    if (key === 'ArrowLeft' || key === 'ArrowRight') {
+      const arah = key === 'ArrowLeft' ? -1 : 1;
+      return jalankan(() => keBingkai(garis.get() + arah * (e.shift ? fps : 1)));
+    }
+    if (key === 'Home') return jalankan(() => keBingkai(0));
+    if (key === 'End') return jalankan(() => keBingkai(dok().durasi - 1));
+    if (ctrl && huruf === 'z') return jalankan(() => lompat(e.shift ? ulang : batal));
+    if (ctrl && huruf === 'y') return jalankan(() => lompat(ulang));
+    if (ctrl && huruf === 'b') return jalankan(aksiBelah);
+    if (ctrl && huruf === 'c') return jalankan(aksiSalin);
+    if (ctrl && huruf === 'x') return jalankan(aksiPotong);
+    if (ctrl && huruf === 'v') return jalankan(aksiTempel);
+    if (ctrl && huruf === 'd') return jalankan(aksiGandakan);
+    if (ctrl && huruf === 'a') return jalankan(() => pilih(semuaItem(dok())));
+    if (key === 'Delete' || key === 'Backspace') return jalankan(e.shift ? aksiHapusBeriak : aksiHapus);
+    if (key === 'Escape') return jalankan(() => { setPilihan([]); setLajurDipilih(null); });
+    if (ctrl || e.alt) return undefined;
+    if (huruf === 'm') return jalankan(aksiPenanda);
+    if (huruf === 'n') return jalankan(aksiMagnet);
+    if (key === '+' || key === '=') return jalankan(() => linimasa.current?.perbesar());
+    if (key === '-' || key === '_') return jalankan(() => linimasa.current?.perkecil());
+    return undefined;
+  };
+  const tombolRef = useRef(tombol);
+  tombolRef.current = tombol;
+  useEffect(() => {
+    const tekan = (e) => {
+      if (e.defaultPrevented || e.isComposing) return;
+      if (sedangMengetik(e.target)) {
+        // Esc keluar dari kotak isian supaya pintasan kembali bekerja.
+        if (e.key === 'Escape') e.target.blur();
+        return;
+      }
+      if (!riwayatRef.current) return;
+      // Spasi di tombol yang sedang fokus akan "mengekliknya"; lepaskan fokusnya.
+      if (e.key === ' ' && e.target?.tagName === 'BUTTON') e.target.blur();
+      tombolRef.current({
+        key: e.key, shift: e.shiftKey, ctrl: e.ctrlKey, meta: e.metaKey, alt: e.altKey,
+        preventDefault: () => e.preventDefault(),
+      });
+    };
+    window.addEventListener('keydown', tekan);
+    return () => window.removeEventListener('keydown', tekan);
+  }, []);
+  const tombolPratinjau = useCallback((d) => {
+    if (riwayatRef.current) tombolRef.current(d);
+  }, []);
 
   const mulaiEkspor = async () => {
     await simpanSekarang();
@@ -256,7 +485,8 @@ export default function MontaseEditor() {
     );
   }
 
-  const terpilih = dipilih ? cariItem(dokumen, dipilih) : null;
+  const terpilih = pilihanSah.length === 1 ? cariItem(dokumen, pilihanSah[0]) : null;
+  const lajur = lajurDipilih ? dokumen.lajur.find((l) => l.id === lajurDipilih) ?? null : null;
   const hasil = ekspor.result;
   return (
     <div className="montase-editor"
@@ -269,7 +499,7 @@ export default function MontaseEditor() {
           <ArrowLeft size={14} />
         </button>
         <h1 title={dokumen.nama}>{dokumen.nama}</h1>
-        <StatusSimpan status={status} onMuatUlang={muat} />
+        <StatusSimpan status={status} onMuatUlang={muat} onCobaLagi={simpanSekarang} />
         <span className="montase-linimasa-spasi" />
         {(ekspor.job || ekspor.error) && (
           <div className="montase-ekspor-kabar">
@@ -293,34 +523,57 @@ export default function MontaseEditor() {
         <PanelBahan token={token} onTambahKeLinimasa={tambahKeLinimasa} onBahan={catatBahan} />
         <Pembatas arah="tegak" onGeser={geser('kiri', 1, [220, 520])} />
         <section className="montase-panel montase-panel-pratinjau" aria-label={t('montase.pratinjau.judul')}>
-          {galat && status !== 'bentrok' && <p className="montase-galat" role="alert">{galat}</p>}
+          {galat && status !== 'bentrok' && status !== 'gagal' && <p className="montase-galat" role="alert">{galat}</p>}
           {galatPratinjau && <p className="montase-galat" role="alert">{galatPratinjau}</p>}
           <PratinjauKotakPasir ref={pratinjau} dokumen={dokumen} sumber={sumber} lengkap
-                               onBingkai={setBingkai} onGalat={setGalatPratinjau} />
+                               onBingkai={keGaris} onGalat={setGalatPratinjau} onMain={setMain}
+                               onTombol={tombolPratinjau}
+          >
+            <PeganganUbah key={terpilih?.item.id ?? 'kosong'} dokumen={dokumen} terpilih={terpilih}
+                          garis={garis} onUbah={ubah} />
+          </PratinjauKotakPasir>
         </section>
         <Pembatas arah="tegak" onGeser={geser('kanan', -1, [240, 520])} />
         <PanelProperti
           dokumen={dokumen}
           terpilih={terpilih}
-          onUbahItem={(id, perubahan) => ubah((d) => ubahItem(d, id, perubahan))}
-          onHapus={hapusTerpilih}
-          onUbahProyek={(perubahan) => ubah((d) => ubahProyek(d, perubahan))}
+          jumlahPilihan={pilihanSah.length}
+          lajur={lajur}
+          onUbahItem={(id, p) => ubah((d) => ubahItem(d, id, p), { gabung: `properti:${id}:${Object.keys(p).join(',')}` })}
+          onKecepatan={(id, k) => ubah((d) => ubahKecepatan(d, id, k), { gabung: `kecepatan:${id}` })}
+          onTransform={(id, s) => ubah((d) => ubahTransform(d, id, s), { gabung: `ubah:${id}:${Object.keys(s).join(',')}` })}
+          onHapus={aksiHapus}
+          onGandakan={aksiGandakan}
+          onUbahProyek={(p) => ubah((d) => ubahProyek(d, p), { gabung: `proyek:${Object.keys(p).join(',')}` })}
+          onUbahLajur={aksiUbahLajur}
+          onHapusLajur={(id) => { if (terapkan(hapusLajur(dok(), id))) setLajurDipilih(null); }}
+          bisaHapusLajur={lajur ? bisaHapusLajur(dokumen, lajur.id) : false}
+          onKe={keBingkai}
+          onUbahPenanda={(tt, label) => ubah((d) => ubahPenanda(d, tt, label), { gabung: `penanda:${tt}` })}
+          onHapusPenanda={(tt) => terapkan(hapusPenanda(dok(), tt))}
         />
       </div>
 
-      <Pembatas arah="datar" onGeser={geser('bawah', -1, [150, 480])} />
+      <Pembatas arah="datar" onGeser={geser('bawah', -1, [150, 520])} />
       <Linimasa
+        ref={linimasa}
         dokumen={dokumen}
-        bingkai={bingkai}
         token={token}
-        dipilih={dipilih}
-        onPilih={setDipilih}
-        onKe={(b) => { setBingkai(b); pratinjau.current?.ke(b); }}
-        onTambahTeks={tambahTeksDiGaris}
-        onTambahMotion={tambahAnimasiDiGaris}
-        onHapus={hapusTerpilih}
-        onPindah={(arah) => dipilih && ubah((d) => pindahUrutan(d, dipilih, arah))}
         bahanSiap={bahanSiap}
+        pilihan={pilihanSah}
+        onPilih={pilih}
+        garis={garis}
+        main={main}
+        onKe={keBingkai}
+        onUbah={ubah}
+        onUbahLajur={aksiUbahLajur}
+        magnet={magnet}
+        lajurDipilih={lajurDipilih}
+        onPilihLajur={pilihLajur}
+        aksi={aksi}
+        bisaBatal={bisaBatal(riwayat)}
+        bisaUlang={bisaUlang(riwayat)}
+        onJatuhBahan={tambahKeLinimasa}
       />
     </div>
   );

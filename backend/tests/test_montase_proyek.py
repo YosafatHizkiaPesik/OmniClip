@@ -89,6 +89,28 @@ class Skema(unittest.TestCase):
         self.assertEqual(hasil["lajur"][0]["item"][0]["filter_baru"], "x")
         self.assertEqual(hasil["durasi"], 90)
 
+    def test_kolom_tahap_2_transformasi_fade_beku_penanda(self):
+        d = self.dok()
+        d["bahan"] = {"bh_1": {"jenis": "video", "durasi": 5}}
+        d["penanda"] = [{"t": 45, "label": "#5"}]
+        d["lajur"][0]["item"] = [{
+            "id": "i1", "jenis": "video", "mulai": 0, "durasi": 60, "bahan": "bh_1",
+            "fade_masuk": 15, "fade_keluar": 15, "beku": True, "isi": "cover",
+            "ubah": {"x": -40, "y": 12.5, "skala": 1.4, "putar": 15, "opasitas": 0.8,
+                     "potong": {"kiri": 10, "kanan": 5, "atas": 0, "bawah": 20}},
+        }]
+        item = skema.periksa(d)["lajur"][0]["item"][0]
+        self.assertEqual((item["fade_masuk"], item["beku"], item["isi"]), (15, True, "cover"))
+        self.assertEqual(item["ubah"]["potong"]["bawah"], 20)
+        for salah in ({"skala": 0}, {"opasitas": 1.5}, {"potong": {"kiri": 60, "kanan": 40}}):
+            d["lajur"][0]["item"][0]["ubah"] = salah
+            with self.assertRaises(skema.GagalSkema, msg=salah):
+                skema.periksa(d)
+        d["lajur"][0]["item"][0]["ubah"] = None
+        d["penanda"] = [{"t": -1}]
+        with self.assertRaises(skema.GagalSkema):
+            skema.periksa(d)
+
     def test_dokumen_raksasa_ditolak(self):
         with self.assertRaisesRegex(skema.GagalSkema, "MB"):
             skema.periksa(self.dok(sampah="x" * (skema.BATAS_BITA + 1)))

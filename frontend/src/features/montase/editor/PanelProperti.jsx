@@ -1,29 +1,51 @@
 /**
- * Panel Properti editor Montase (JOB-4 M1.7).
+ * Panel Properti editor Montase (JOB-4 M1.7, M2.2, M2.5-M2.7).
  *
- * Item dipilih: waktu (dalam detik di layar, bingkai di dokumen), dan kolom
- * sesuai jenisnya. Untuk animasi, kolomnya dibuat dari contohProps modulnya:
- * teks -> kotak teks, angka -> isian angka, warna "#rrggbb" -> pemilih warna.
- * Panel yang dibangun dari skema zod lengkap (penggeser, pilihan, titik di
- * pratinjau) datang di M4.5.
+ * Isinya mengikuti yang dipilih:
+ *   - satu item: waktu, kecepatan (atau tanda bingkai beku), suara (volume,
+ *     lembut masuk/keluar), isi bingkai, teks/props animasi, dan
+ *     transformasi (posisi, skala, putar, transparansi, potong). Angka di
+ *     layar dalam detik, persen, dan derajat; di dokumen dalam bingkai dan
+ *     piksel kanvas;
+ *   - beberapa item: jumlahnya, gandakan, hapus;
+ *   - satu lajur: nama, volume, kunci/bisu/sembunyi, hapus lajur kosong;
+ *   - tidak ada: pengaturan proyek, daftar penanda, dan daftar pintasan.
  *
- * Tidak ada item dipilih: pengaturan proyek.
+ * Kolom props animasi dibuat dari contohProps modulnya (teks, angka, warna);
+ * panel dari skema zod lengkap datang di M4.5.
  */
 import React from 'react';
-import { Trash2 } from 'lucide-react';
-import { useT } from '../../../lib/i18n';
+import { Bookmark, CopyPlus, Lock, RotateCcw, Trash2 } from 'lucide-react';
+import { useT, angka } from '../../../lib/i18n';
 import { formatTime } from '../../../utils/timeFormat';
 import { BAWAAN } from '../komposisi/index.js';
+import { kodeWaktu } from './garisPutar.js';
 
 const WARNA = /^#[0-9a-fA-F]{6}$/;
+const KECEPATAN = [0.5, 1, 1.5, 2];
+const PINTASAN = [
+  ['Spasi', 'montase.pintasan.putar'],
+  ['← / →', 'montase.pintasan.bingkai'],
+  ['Shift + ← / →', 'montase.pintasan.detik'],
+  ['Ctrl + B', 'montase.pintasan.belah'],
+  ['Delete', 'montase.pintasan.hapus'],
+  ['Shift + Delete', 'montase.pintasan.hapus_beriak'],
+  ['Ctrl + Z / Ctrl + Shift + Z', 'montase.pintasan.batal'],
+  ['Ctrl + C / V / D', 'montase.pintasan.salin'],
+  ['Ctrl + A', 'montase.pintasan.pilih_semua'],
+  ['M', 'montase.pintasan.penanda'],
+  ['N', 'montase.pintasan.magnet'],
+  ['+ / −', 'montase.pintasan.zoom'],
+  ['Home / End', 'montase.pintasan.ujung'],
+];
 
-function Angka({ label, nilai, onUbah, langkah = 0.1, min = 0, max, akhiran }) {
+function Angka({ label, nilai, onUbah, langkah = 0.1, min = 0, max, akhiran, desimal = 3 }) {
   return (
     <label className="montase-kolom">
       <span>{label}</span>
       <span className="montase-isian-akhiran">
         <input type="number" step={langkah} min={min} max={max}
-               value={Number.isFinite(nilai) ? Number(nilai.toFixed(3)) : ''}
+               value={Number.isFinite(nilai) ? Number(nilai.toFixed(desimal)) : ''}
                onChange={(e) => { if (e.target.value !== '') onUbah(Number(e.target.value)); }} />
         {akhiran && <small>{akhiran}</small>}
       </span>
@@ -57,108 +79,336 @@ function KolomProps({ props, onUbah }) {
   });
 }
 
-export default function PanelProperti({ dokumen, terpilih, onUbahItem, onHapus, onUbahProyek }) {
+function Bagian({ judul, children, aksi }) {
+  return (
+    <section className="montase-bagian">
+      <h3>{judul}{aksi}</h3>
+      {children}
+    </section>
+  );
+}
+
+function PanelProyek({ dokumen, onUbahProyek, onKe, onUbahPenanda, onHapusPenanda }) {
+  const t = useT();
+  const k = dokumen.kanvas;
+  const fps = k.fps;
+  const penanda = dokumen.penanda ?? [];
+  return (
+    <>
+      <div className="montase-panel-kepala"><h2>{t('montase.properti.proyek')}</h2></div>
+      <div className="montase-panel-isi">
+        <label className="montase-kolom">
+          <span>{t('montase.home.nama')}</span>
+          <input value={dokumen.nama} maxLength={120}
+                 onChange={(e) => onUbahProyek({ nama: e.target.value || dokumen.nama })} />
+        </label>
+        <dl className="montase-ringkas">
+          <dt>{t('montase.home.ukuran')}</dt><dd>{k.lebar}×{k.tinggi}</dd>
+          <dt>{t('montase.home.fps')}</dt><dd>{k.fps} fps</dd>
+          <dt>{t('montase.properti.durasi_proyek')}</dt><dd>{formatTime(dokumen.durasi / fps)}</dd>
+        </dl>
+        <label className="montase-kolom">
+          <span>{t('montase.properti.latar')}</span>
+          <input type="color" value={k.latar}
+                 onChange={(e) => onUbahProyek({ kanvas: { latar: e.target.value } })} />
+        </label>
+        <p className="montase-petunjuk">{t('montase.properti.petunjuk')}</p>
+
+        <Bagian judul={t('montase.properti.penanda')}>
+          {penanda.length === 0 && <p className="montase-petunjuk">{t('montase.properti.penanda_kosong')}</p>}
+          <ul className="montase-daftar-penanda">
+            {penanda.map((p) => (
+              <li key={p.t}>
+                <button type="button" className="btn-secondary montase-ikon" onClick={() => onKe(p.t)}
+                        title={t('montase.linimasa.ke_penanda', { nama: p.label || kodeWaktu(p.t, fps) })}
+                        aria-label={t('montase.linimasa.ke_penanda', { nama: p.label || kodeWaktu(p.t, fps) })}
+                >
+                  <Bookmark size={12} />
+                </button>
+                <small>{kodeWaktu(p.t, fps)}</small>
+                <input value={p.label} maxLength={40} placeholder={t('montase.properti.nama_penanda')}
+                       aria-label={t('montase.properti.nama_penanda')}
+                       onChange={(e) => onUbahPenanda(p.t, e.target.value)} />
+                <button type="button" className="btn-secondary montase-ikon" onClick={() => onHapusPenanda(p.t)}
+                        title={t('montase.properti.hapus_penanda')} aria-label={t('montase.properti.hapus_penanda')}
+                >
+                  <Trash2 size={12} />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </Bagian>
+
+        <details className="montase-pintasan">
+          <summary>{t('montase.pintasan.judul')}</summary>
+          <dl>
+            {PINTASAN.map(([tombol, kunci]) => (
+              <React.Fragment key={kunci}><dt><kbd>{tombol}</kbd></dt><dd>{t(kunci)}</dd></React.Fragment>
+            ))}
+          </dl>
+        </details>
+      </div>
+    </>
+  );
+}
+
+function PanelLajur({ lajur, onUbahLajur, onHapusLajur, bisaHapus }) {
+  const t = useT();
+  const ubah = (p) => onUbahLajur(lajur.id, p);
+  const bersuara = lajur.jenis === 'video' || lajur.jenis === 'audio';
+  return (
+    <>
+      <div className="montase-panel-kepala">
+        <h2>{t('montase.properti.lajur', { jenis: t(`montase.lajur.${lajur.jenis}`) })}</h2>
+        <button type="button" className="btn-secondary montase-ikon" disabled={!bisaHapus}
+                onClick={() => onHapusLajur(lajur.id)}
+                title={bisaHapus ? t('montase.properti.hapus_lajur') : t('montase.properti.hapus_lajur_tidak')}
+                aria-label={t('montase.properti.hapus_lajur')}
+        >
+          <Trash2 size={13} />
+        </button>
+      </div>
+      <div className="montase-panel-isi">
+        <label className="montase-kolom">
+          <span>{t('montase.linimasa.nama_lajur')}</span>
+          <input value={lajur.nama} maxLength={60} onChange={(e) => ubah({ nama: e.target.value })} />
+        </label>
+        {bersuara && (
+          <label className="montase-kolom">
+            <span>{t('montase.properti.volume_lajur')}</span>
+            <span className="montase-geser-angka">
+              <input type="range" min={0} max={200} step={5} value={Math.round((lajur.volume ?? 1) * 100)}
+                     onChange={(e) => ubah({ volume: Number(e.target.value) / 100 })} />
+              <small>{Math.round((lajur.volume ?? 1) * 100)}%</small>
+            </span>
+          </label>
+        )}
+        <label className="montase-centang">
+          <input type="checkbox" checked={Boolean(lajur.kunci)} onChange={(e) => ubah({ kunci: e.target.checked })} />
+          {t('montase.linimasa.kunci')}
+        </label>
+        {bersuara && (
+          <label className="montase-centang">
+            <input type="checkbox" checked={Boolean(lajur.bisu)} onChange={(e) => ubah({ bisu: e.target.checked })} />
+            {t('montase.linimasa.bisu')}
+          </label>
+        )}
+        {lajur.jenis !== 'audio' && (
+          <label className="montase-centang">
+            <input type="checkbox" checked={Boolean(lajur.sembunyi)} onChange={(e) => ubah({ sembunyi: e.target.checked })} />
+            {t('montase.linimasa.sembunyi')}
+          </label>
+        )}
+        {!bisaHapus && <p className="montase-petunjuk">{t('montase.properti.hapus_lajur_tidak')}</p>}
+      </div>
+    </>
+  );
+}
+
+function PanelTransform({ item, onTransform, onAturUlang }) {
+  const t = useT();
+  const u = item.ubah ?? {};
+  const p = u.potong ?? {};
+  const bisaPotong = item.jenis !== 'teks';
+  return (
+    <Bagian
+      judul={t('montase.properti.transformasi')}
+      aksi={(
+        <button type="button" className="btn-secondary montase-ikon" onClick={onAturUlang}
+                title={t('montase.pegangan.atur_ulang')} aria-label={t('montase.pegangan.atur_ulang')}
+        >
+          <RotateCcw size={12} />
+        </button>
+      )}
+    >
+      <div className="montase-kolom-dua">
+        <Angka label="X" nilai={u.x ?? 0} langkah={1} min={-20000} akhiran="px" desimal={0}
+               onUbah={(v) => onTransform({ x: v })} />
+        <Angka label="Y" nilai={u.y ?? 0} langkah={1} min={-20000} akhiran="px" desimal={0}
+               onUbah={(v) => onTransform({ y: v })} />
+        <Angka label={t('montase.properti.skala')} nilai={(u.skala ?? 1) * 100} langkah={5} min={1} max={2000}
+               akhiran="%" desimal={1} onUbah={(v) => onTransform({ skala: v / 100 })} />
+        <Angka label={t('montase.properti.putar')} nilai={u.putar ?? 0} langkah={1} min={-3600} max={3600}
+               akhiran="°" desimal={1} onUbah={(v) => onTransform({ putar: v })} />
+      </div>
+      <label className="montase-kolom">
+        <span>{t('montase.properti.opasitas')}</span>
+        <span className="montase-geser-angka">
+          <input type="range" min={0} max={100} value={Math.round((u.opasitas ?? 1) * 100)}
+                 onChange={(e) => onTransform({ opasitas: Number(e.target.value) / 100 })} />
+          <small>{Math.round((u.opasitas ?? 1) * 100)}%</small>
+        </span>
+      </label>
+      {bisaPotong && (
+        <>
+          <p className="montase-label-kecil">{t('montase.properti.potong')}</p>
+          <div className="montase-kolom-dua">
+            {['kiri', 'kanan', 'atas', 'bawah'].map((s) => (
+              <Angka key={s} label={t(`montase.properti.sisi_${s}`)} nilai={p[s] ?? 0} langkah={1} max={95}
+                     akhiran="%" desimal={1} onUbah={(v) => onTransform({ potong: { [s]: v } })} />
+            ))}
+          </div>
+        </>
+      )}
+    </Bagian>
+  );
+}
+
+export default function PanelProperti({
+  dokumen, terpilih, jumlahPilihan, lajur, onUbahItem, onKecepatan, onTransform, onHapus,
+  onGandakan, onUbahProyek, onUbahLajur, onHapusLajur, bisaHapusLajur, onKe, onUbahPenanda,
+  onHapusPenanda,
+}) {
   const t = useT();
   const fps = dokumen.kanvas.fps;
   const keDetik = (b) => b / fps;
   const keBingkai = (d) => Math.round(d * fps);
 
-  if (!terpilih) {
-    const k = dokumen.kanvas;
+  if (jumlahPilihan > 1) {
     return (
       <aside className="montase-panel montase-panel-properti" aria-label={t('montase.properti.judul')}>
-        <div className="montase-panel-kepala"><h2>{t('montase.properti.proyek')}</h2></div>
+        <div className="montase-panel-kepala"><h2>{t('montase.properti.banyak', { n: jumlahPilihan })}</h2></div>
         <div className="montase-panel-isi">
-          <label className="montase-kolom">
-            <span>{t('montase.home.nama')}</span>
-            <input value={dokumen.nama} maxLength={120}
-                   onChange={(e) => onUbahProyek({ nama: e.target.value || dokumen.nama })} />
-          </label>
-          <dl className="montase-ringkas">
-            <dt>{t('montase.home.ukuran')}</dt><dd>{k.lebar}×{k.tinggi}</dd>
-            <dt>{t('montase.home.fps')}</dt><dd>{k.fps} fps</dd>
-            <dt>{t('montase.properti.durasi_proyek')}</dt><dd>{formatTime(dokumen.durasi / fps)}</dd>
-          </dl>
-          <label className="montase-kolom">
-            <span>{t('montase.properti.latar')}</span>
-            <input type="color" value={k.latar}
-                   onChange={(e) => onUbahProyek({ kanvas: { latar: e.target.value } })} />
-          </label>
-          <p className="montase-petunjuk">{t('montase.properti.petunjuk')}</p>
+          <p className="montase-petunjuk">{t('montase.properti.banyak_ket')}</p>
+          <div className="montase-baris-tombol">
+            <button type="button" className="btn-secondary" onClick={onGandakan}>
+              <CopyPlus size={13} />{t('montase.linimasa.gandakan')}
+            </button>
+            <button type="button" className="btn-secondary" onClick={onHapus}>
+              <Trash2 size={13} />{t('montase.linimasa.hapus')}
+            </button>
+          </div>
         </div>
+      </aside>
+    );
+  }
+  if (!terpilih && lajur) {
+    return (
+      <aside className="montase-panel montase-panel-properti" aria-label={t('montase.properti.judul')}>
+        <PanelLajur lajur={lajur} onUbahLajur={onUbahLajur} onHapusLajur={onHapusLajur} bisaHapus={bisaHapusLajur} />
+      </aside>
+    );
+  }
+  if (!terpilih) {
+    return (
+      <aside className="montase-panel montase-panel-properti" aria-label={t('montase.properti.judul')}>
+        <PanelProyek dokumen={dokumen} onUbahProyek={onUbahProyek} onKe={onKe}
+                     onUbahPenanda={onUbahPenanda} onHapusPenanda={onHapusPenanda} />
       </aside>
     );
   }
 
   const { item } = terpilih;
+  const kunci = Boolean(terpilih.lajur.kunci);
   const ubah = (perubahan) => onUbahItem(item.id, perubahan);
   const gaya = item.gaya ?? {};
+  const media = item.jenis === 'video' || item.jenis === 'audio';
+  const bersuara = item.jenis === 'audio'
+    || (item.jenis === 'video' && dokumen.bahan[item.bahan]?.ada_suara && !item.beku);
   return (
     <aside className="montase-panel montase-panel-properti" aria-label={t('montase.properti.judul')}>
       <div className="montase-panel-kepala">
         <h2>{t(`montase.jenis.${item.jenis}`)}</h2>
-        <button type="button" className="btn-secondary montase-ikon" onClick={onHapus}
+        <button type="button" className="btn-secondary montase-ikon" onClick={onHapus} disabled={kunci}
                 title={t('montase.linimasa.hapus')} aria-label={t('montase.linimasa.hapus')}
         >
           <Trash2 size={13} />
         </button>
       </div>
       <div className="montase-panel-isi">
-        {item.asal === 'ai' && <p className="montase-label-ai">{t('montase.properti.ai', { alasan: item.alasan ?? '' })}</p>}
-        <Angka label={t('montase.properti.mulai')} nilai={keDetik(item.mulai)} akhiran={t('montase.satuan.detik')}
-               onUbah={(v) => ubah({ mulai: keBingkai(v) })} />
-        <Angka label={t('montase.properti.durasi')} nilai={keDetik(item.durasi)} akhiran={t('montase.satuan.detik')} min={0.05}
-               onUbah={(v) => ubah({ durasi: keBingkai(v) })} />
+        {kunci && <p className="montase-label-kunci"><Lock size={12} />{t('montase.properti.terkunci')}</p>}
+        <fieldset disabled={kunci} className="montase-kelompok">
+          {item.asal === 'ai' && <p className="montase-label-ai">{t('montase.properti.ai', { alasan: item.alasan ?? '' })}</p>}
+          <div className="montase-kolom-dua">
+            <Angka label={t('montase.properti.mulai')} nilai={keDetik(item.mulai)} akhiran={t('montase.satuan.detik')}
+                   onUbah={(v) => ubah({ mulai: keBingkai(v) })} />
+            <Angka label={t('montase.properti.durasi')} nilai={keDetik(item.durasi)} akhiran={t('montase.satuan.detik')} min={0.05}
+                   onUbah={(v) => ubah({ durasi: keBingkai(v) })} />
+          </div>
 
-        {(item.jenis === 'video' || item.jenis === 'audio') && (
-          <>
+          {media && (
             <Angka label={t('montase.properti.potong_awal')} nilai={keDetik(item.potong_awal || 0)}
                    akhiran={t('montase.satuan.detik')} onUbah={(v) => ubah({ potong_awal: keBingkai(v) })} />
-            <Angka label={t('montase.properti.volume')} nilai={(item.volume ?? 1) * 100} langkah={5}
-                   max={200} akhiran="%" onUbah={(v) => ubah({ volume: v / 100 })} />
-            <Angka label={t('montase.properti.kecepatan')} nilai={item.kecepatan ?? 1} langkah={0.25}
-                   min={0.25} max={4} akhiran="x" onUbah={(v) => ubah({ kecepatan: v })} />
-          </>
-        )}
-        {(item.jenis === 'video' || item.jenis === 'gambar') && (
-          <label className="montase-kolom">
-            <span>{t('montase.properti.isi')}</span>
-            <select value={item.isi ?? 'contain'} onChange={(e) => ubah({ isi: e.target.value })}>
-              <option value="contain">{t('montase.properti.isi_muat')}</option>
-              <option value="cover">{t('montase.properti.isi_penuh')}</option>
-            </select>
-          </label>
-        )}
-        {item.jenis === 'teks' && (
-          <>
+          )}
+          {media && item.beku && <p className="montase-petunjuk">{t('montase.properti.beku_ket')}</p>}
+          {media && !item.beku && (
+            <Bagian judul={t('montase.properti.kecepatan')}>
+              <div className="montase-baris-tombol">
+                {KECEPATAN.map((k) => (
+                  <button key={k} type="button"
+                          className={`btn-secondary ${(item.kecepatan ?? 1) === k ? 'aktif' : ''}`}
+                          aria-pressed={(item.kecepatan ?? 1) === k} onClick={() => onKecepatan(item.id, k)}
+                  >
+                    {angka(k)}x
+                  </button>
+                ))}
+              </div>
+              <Angka label={t('montase.properti.kecepatan_tepat')} nilai={item.kecepatan ?? 1} langkah={0.05}
+                     min={0.25} max={4} akhiran="x" desimal={2} onUbah={(v) => onKecepatan(item.id, v)} />
+            </Bagian>
+          )}
+          {bersuara && (
+            <Bagian judul={t('montase.properti.suara')}>
+              <label className="montase-kolom">
+                <span>{t('montase.properti.volume')}</span>
+                <span className="montase-geser-angka">
+                  <input type="range" min={0} max={200} step={5} value={Math.round((item.volume ?? 1) * 100)}
+                         onChange={(e) => ubah({ volume: Number(e.target.value) / 100 })} />
+                  <small>{Math.round((item.volume ?? 1) * 100)}%</small>
+                </span>
+              </label>
+              <div className="montase-kolom-dua">
+                <Angka label={t('montase.properti.fade_masuk')} nilai={keDetik(item.fade_masuk || 0)}
+                       akhiran={t('montase.satuan.detik')} onUbah={(v) => ubah({ fade_masuk: keBingkai(v) })} />
+                <Angka label={t('montase.properti.fade_keluar')} nilai={keDetik(item.fade_keluar || 0)}
+                       akhiran={t('montase.satuan.detik')} onUbah={(v) => ubah({ fade_keluar: keBingkai(v) })} />
+              </div>
+            </Bagian>
+          )}
+          {(item.jenis === 'video' || item.jenis === 'gambar') && (
             <label className="montase-kolom">
-              <span>{t('montase.properti.teks')}</span>
-              <textarea rows={3} maxLength={500} value={item.teks ?? ''}
-                        onChange={(e) => ubah({ teks: e.target.value })} />
-            </label>
-            <Angka label={t('montase.properti.ukuran_huruf')} nilai={gaya.ukuran ?? 96} langkah={4} min={12}
-                   onUbah={(v) => ubah({ gaya: { ...gaya, ukuran: v } })} />
-            <label className="montase-kolom">
-              <span>{t('montase.properti.warna')}</span>
-              <input type="color" value={gaya.warna ?? '#ffffff'}
-                     onChange={(e) => ubah({ gaya: { ...gaya, warna: e.target.value } })} />
-            </label>
-            <label className="montase-kolom">
-              <span>{t('montase.properti.letak')}</span>
-              <select value={gaya.letak ?? 'tengah'} onChange={(e) => ubah({ gaya: { ...gaya, letak: e.target.value } })}>
-                <option value="atas">{t('montase.properti.letak_atas')}</option>
-                <option value="tengah">{t('montase.properti.letak_tengah')}</option>
-                <option value="bawah">{t('montase.properti.letak_bawah')}</option>
+              <span>{t('montase.properti.isi')}</span>
+              <select value={item.isi ?? 'contain'} onChange={(e) => ubah({ isi: e.target.value })}>
+                <option value="contain">{t('montase.properti.isi_muat')}</option>
+                <option value="cover">{t('montase.properti.isi_penuh')}</option>
               </select>
             </label>
-          </>
-        )}
-        {item.jenis === 'motion' && (
-          <>
-            <p className="montase-petunjuk">{BAWAAN[item.komponen] ? t('montase.properti.bawaan') : item.komponen}</p>
-            <KolomProps props={item.props ?? {}} onUbah={(props) => ubah({ props })} />
-          </>
-        )}
+          )}
+          {item.jenis === 'teks' && (
+            <>
+              <label className="montase-kolom">
+                <span>{t('montase.properti.teks')}</span>
+                <textarea rows={3} maxLength={500} value={item.teks ?? ''}
+                          onChange={(e) => ubah({ teks: e.target.value })} />
+              </label>
+              <Angka label={t('montase.properti.ukuran_huruf')} nilai={gaya.ukuran ?? 96} langkah={4} min={12}
+                     onUbah={(v) => ubah({ gaya: { ...gaya, ukuran: v } })} />
+              <label className="montase-kolom">
+                <span>{t('montase.properti.warna')}</span>
+                <input type="color" value={gaya.warna ?? '#ffffff'}
+                       onChange={(e) => ubah({ gaya: { ...gaya, warna: e.target.value } })} />
+              </label>
+              <label className="montase-kolom">
+                <span>{t('montase.properti.letak')}</span>
+                <select value={gaya.letak ?? 'tengah'} onChange={(e) => ubah({ gaya: { ...gaya, letak: e.target.value } })}>
+                  <option value="atas">{t('montase.properti.letak_atas')}</option>
+                  <option value="tengah">{t('montase.properti.letak_tengah')}</option>
+                  <option value="bawah">{t('montase.properti.letak_bawah')}</option>
+                </select>
+              </label>
+            </>
+          )}
+          {item.jenis === 'motion' && (
+            <>
+              <p className="montase-petunjuk">{BAWAAN[item.komponen] ? t('montase.properti.bawaan') : item.komponen}</p>
+              <KolomProps props={item.props ?? {}} onUbah={(props) => ubah({ props })} />
+            </>
+          )}
+          {item.jenis !== 'audio' && (
+            <PanelTransform item={item} onTransform={(sebagian) => onTransform(item.id, sebagian)}
+                            onAturUlang={() => ubah({ ubah: {} })} />
+          )}
+        </fieldset>
       </div>
     </aside>
   );

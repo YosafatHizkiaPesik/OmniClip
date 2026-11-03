@@ -2161,11 +2161,16 @@ button.tujuan, a.tujuan { cursor: pointer; }
 .montase-uji-ket { margin: 8px 0; font-size: .85rem; color: var(--ink-2); }
 .montase-uji-ket[data-siap="tidak"], .montase-uji-ket[data-lolos="tidak"] { color: var(--reh); }
 .montase-uji-galat { color: var(--reh); font-size: .85rem; white-space: pre-wrap; }
+/* Layar pratinjau TIDAK memotong isinya: pegangan transformasi boleh keluar
+   dari kanvas (item yang diperbesar melewati tepi tetap bisa dipegang). Sudut
+   membulat dipasang di iframe, garis zona aman punya wadah terpotong sendiri. */
 .montase-uji-layar, .montase-pratinjau-layar {
   max-height: 560px; max-width: 100%; margin: 0 auto; background: #000;
-  border-radius: var(--r-md); overflow: hidden;
+  border-radius: var(--r-md);
 }
-.montase-pratinjau-layar iframe { width: 100%; height: 100%; border: 0; display: block; }
+.montase-uji-layar { overflow: hidden; }
+.montase-pratinjau-layar iframe { width: 100%; height: 100%; border: 0; display: block; border-radius: var(--r-md); }
+.montase-zona-wadah { position: absolute; inset: 0; overflow: hidden; border-radius: var(--r-md); pointer-events: none; }
 .montase-pratinjau-kendali { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
 .montase-pratinjau-kendali input[type="range"] { flex: 1; min-width: 0; }
 .montase-pratinjau-waktu { font-variant-numeric: tabular-nums; font-size: .8rem; color: var(--ink-2); white-space: nowrap; }
@@ -2234,8 +2239,8 @@ button.tujuan, a.tujuan { cursor: pointer; }
 .montase-editor {
   /* Mengisi seluruh area konten: padding .main-content dibatalkan, tinggi
      layar dikurangi kepala aplikasi (60px). */
-  display: grid; height: calc(100vh - 60px); min-height: 560px; margin: -20px -22px -34px;
-  background: var(--stage); overflow: hidden;
+  display: grid; grid-template-columns: minmax(0, 1fr); height: calc(100vh - 60px); min-height: 560px;
+  margin: -20px -22px -34px; background: var(--stage); overflow: hidden;
 }
 .montase-editor-kepala {
   display: flex; align-items: center; gap: 10px; padding: 8px 12px;
@@ -2298,51 +2303,187 @@ button.tujuan, a.tujuan { cursor: pointer; }
 .montase-petunjuk { margin: 0; font-size: .74rem; color: var(--ink-3); line-height: 1.5; }
 .montase-label-ai { margin: 0; font-size: .72rem; padding: 6px 8px; border-radius: var(--r-sm); background: var(--hl-wash); color: var(--ink); }
 
-/* Linimasa */
-.montase-linimasa { display: flex; flex-direction: column; min-height: 0; background: var(--plate); }
+/* Linimasa (Tahap 2) */
+/* min-width 0: lebar isi linimasa tidak boleh melebarkan kisi editor (lebar
+   wadah dipakai untuk menghitung skala "muat", jadi itu akan berputar). */
+.montase-linimasa { display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--plate); user-select: none; }
 .montase-linimasa-alat {
-  display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-bottom: 1px solid var(--rule-2);
+  display: flex; align-items: center; gap: 4px; padding: 6px 10px; border-bottom: 1px solid var(--rule-2);
+  flex-wrap: wrap;
 }
-.montase-linimasa-waktu { font-size: .75rem; font-variant-numeric: tabular-nums; color: var(--ink-2); min-width: 110px; }
+.montase-linimasa-alat .btn-secondary { padding: 5px 8px; }
+.montase-linimasa-alat .montase-ikon { padding: 5px 7px; }
+.montase-alat-pemisah { width: 1px; height: 18px; background: var(--rule-2); margin: 0 4px; }
+.montase-tambah-lajur {
+  font: inherit; font-size: .75rem; padding: 5px 6px; border-radius: var(--r-sm);
+  border: 1px solid var(--rule-2); background: var(--plate); color: var(--ink);
+}
+.montase-linimasa-waktu { font-size: .75rem; font-variant-numeric: tabular-nums; color: var(--ink-2); min-width: 130px; text-align: right; margin-right: 6px; }
 .montase-linimasa-spasi { flex: 1; }
-.montase-linimasa-gulir { flex: 1; overflow: auto; position: relative; }
+.montase-linimasa-gulir { flex: 1; overflow: auto; position: relative; min-height: 0; }
 .montase-linimasa-isi { position: relative; min-height: 100%; }
+.montase-penggaris-baris { display: flex; position: sticky; top: 0; z-index: 4; }
+.montase-penggaris-sudut {
+  position: sticky; left: 0; z-index: 5; flex: none; background: var(--plate-2);
+  border-right: 1px solid var(--rule-2); border-bottom: 1px solid var(--rule-2);
+}
 .montase-penggaris {
-  position: relative; height: 22px; border-bottom: 1px solid var(--rule-2); cursor: pointer;
+  position: relative; flex: none; height: 24px; border-bottom: 1px solid var(--rule-2); cursor: ew-resize;
   background: var(--plate-2);
 }
-.montase-penggaris span {
-  position: absolute; top: 4px; font-size: .62rem; color: var(--ink-3); padding-left: 3px;
-  border-left: 1px solid var(--rule-2); font-variant-numeric: tabular-nums; white-space: nowrap;
+.montase-penggaris > span {
+  position: absolute; top: 5px; font-size: .62rem; color: var(--ink-3); padding-left: 3px;
+  border-left: 1px solid var(--rule-2); font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: none;
+}
+.montase-penanda {
+  position: absolute; top: 0; height: 24px; transform: translateX(-5px); padding: 0; border: 0;
+  background: transparent; cursor: pointer; display: flex; align-items: flex-start; z-index: 1;
+}
+.montase-penanda::before {
+  content: ''; width: 10px; height: 12px; background: #2fbf71;
+  clip-path: polygon(0 0, 100% 0, 100% 70%, 50% 100%, 0 70%);
+}
+.montase-penanda span {
+  font-size: .6rem; font-weight: 700; color: #fff; background: #2fbf71; border-radius: 3px;
+  padding: 0 4px; margin-left: 2px; white-space: nowrap;
 }
 .montase-lajur { display: flex; height: 44px; border-bottom: 1px solid var(--rule); }
-.montase-lajur-video { height: 52px; }
+.montase-lajur-video { height: 56px; }
+.montase-lajur.terkunci .montase-lajur-isi {
+  background-image: repeating-linear-gradient(135deg, transparent 0 8px, rgba(127,127,127,.09) 8px 16px);
+}
+.montase-lajur.tersembunyi .montase-item, .montase-lajur.dibisukan.montase-lajur-audio .montase-item { opacity: .45; }
 .montase-lajur-label {
-  position: sticky; left: 0; z-index: 2; flex: none; display: flex; align-items: center; gap: 6px;
-  padding: 0 8px; font-size: .72rem; font-weight: 700; color: var(--ink-2); background: var(--plate);
-  border-right: 1px solid var(--rule-2); box-sizing: border-box;
+  position: sticky; left: 0; z-index: 3; flex: none; display: flex; align-items: center; gap: 6px;
+  padding: 0 4px 0 8px; font-size: .72rem; font-weight: 700; color: var(--ink-2); background: var(--plate);
+  border-right: 1px solid var(--rule-2); box-sizing: border-box; cursor: pointer;
 }
-.montase-lajur-label span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.montase-lajur-label.dipilih { background: var(--hl-wash); color: var(--ink); }
+.montase-lajur-nama { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.montase-lajur-label input { flex: 1; min-width: 0; font: inherit; padding: 2px 4px; }
+.montase-lajur-tombol { display: flex; gap: 1px; flex: none; }
+.montase-lajur-sakelar {
+  border: 0; background: transparent; color: var(--ink-3); padding: 3px; border-radius: 4px; cursor: pointer;
+  display: inline-flex;
+}
+.montase-lajur-sakelar:hover { background: var(--plate-2); color: var(--ink); }
+.montase-lajur-sakelar.aktif { color: var(--reh); }
 .montase-lajur-isi { position: relative; flex: none; }
+.montase-linimasa-sisa { min-height: 24px; }
 .montase-item {
-  position: absolute; top: 4px; bottom: 4px; display: flex; align-items: flex-end; gap: 4px;
+  position: absolute; top: 4px; bottom: 4px; display: flex; flex-direction: column; justify-content: flex-start;
   padding: 3px 6px; overflow: hidden; border-radius: 5px; border: 1px solid rgba(0,0,0,.25);
-  font: inherit; font-size: .68rem; font-weight: 700; color: #fff; cursor: pointer; text-align: left;
-  background-size: auto 100%; background-repeat: repeat-x; box-sizing: border-box;
+  font: inherit; font-size: .68rem; font-weight: 700; color: #fff; cursor: grab; text-align: left;
+  background-size: auto 100%; background-repeat: no-repeat; box-sizing: border-box; touch-action: none;
 }
+.montase-item:active { cursor: grabbing; }
+.montase-item.terkunci { cursor: not-allowed; }
 .montase-item-video, .montase-item-gambar { background-color: #2c4a7a; }
-.montase-item-teks { background-color: #7a4a2c; align-items: center; }
-.montase-item-motion { background-color: #6b2c7a; align-items: center; }
-.montase-item-audio { background-color: #1f6b52; }
-.montase-item.dipilih { outline: 2px solid var(--hl, #ffd400); outline-offset: 1px; z-index: 1; }
+.montase-item-teks { background-color: #7a4a2c; justify-content: center; }
+.montase-item-motion { background-color: #6b2c7a; justify-content: center; }
+.montase-item-audio { background-color: #1f6b52; justify-content: center; }
+.montase-item.dipilih { outline: 2px solid var(--hl, #ffd400); outline-offset: 1px; z-index: 2; }
 .montase-item-label {
-  position: relative; z-index: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  text-shadow: 0 1px 2px rgba(0,0,0,.8);
+  position: relative; z-index: 1; display: flex; gap: 4px; align-items: center; min-width: 0;
+  white-space: nowrap; text-shadow: 0 1px 2px rgba(0,0,0,.8);
 }
-.montase-gelombang { position: absolute; inset: 2px 0; width: 100%; height: calc(100% - 4px); fill: rgba(255,255,255,.55); }
+.montase-item-label > span { overflow: hidden; text-overflow: ellipsis; }
+.montase-item-label b { background: rgba(0,0,0,.45); border-radius: 3px; padding: 0 3px; font-size: .6rem; }
+.montase-gelombang { position: absolute; left: 0; right: 0; bottom: 1px; width: 100%; height: 55%; fill: rgba(255,255,255,.6); pointer-events: none; }
+.montase-item-audio .montase-gelombang { top: 2px; height: calc(100% - 4px); }
+.montase-item-fade { position: absolute; top: 0; bottom: 0; pointer-events: none; z-index: 1; }
+.montase-item-fade.kiri { left: 0; background: linear-gradient(to top right, rgba(0,0,0,.5) 50%, transparent 50%); }
+.montase-item-fade.kanan { right: 0; background: linear-gradient(to top left, rgba(0,0,0,.5) 50%, transparent 50%); }
+.montase-item-pangkas {
+  position: absolute; top: 0; bottom: 0; width: 7px; z-index: 2; cursor: ew-resize;
+  background: rgba(255,255,255,0); transition: background .1s;
+}
+.montase-item-pangkas.kiri { left: 0; border-radius: 5px 0 0 5px; }
+.montase-item-pangkas.kanan { right: 0; border-radius: 0 5px 5px 0; }
+.montase-item:hover .montase-item-pangkas, .montase-item.dipilih .montase-item-pangkas { background: rgba(255,255,255,.35); }
 .montase-garis-putar {
-  position: absolute; top: 0; bottom: 0; width: 2px; background: var(--reh); pointer-events: none; z-index: 3;
+  position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--reh); pointer-events: none; z-index: 6;
 }
+.montase-garis-putar::before {
+  content: ''; position: absolute; top: 0; left: -5px; width: 12px; height: 10px; background: var(--reh);
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+}
+.montase-garis-magnet {
+  position: absolute; top: 0; bottom: 0; width: 1px; background: #2fbf71; pointer-events: none; z-index: 5;
+  box-shadow: 0 0 0 1px rgba(47,191,113,.35);
+}
+.montase-kotak-pilih {
+  position: absolute; border: 1px solid var(--hl, #ffd400); background: rgba(255, 212, 0, .12);
+  pointer-events: none; z-index: 5;
+}
+.montase-bahan-baris.bisa-diseret { cursor: grab; }
+
+/* Pegangan transformasi di atas pratinjau */
+.montase-pegangan-wadah { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+.montase-pegangan, .montase-pegangan-penuh { position: absolute; box-sizing: border-box; transform-origin: center; }
+.montase-pegangan {
+  border: 1.5px solid #4da3ff; pointer-events: auto; cursor: move; touch-action: none;
+  box-shadow: 0 0 0 1px rgba(0,0,0,.35);
+}
+.montase-pegangan.terkunci { border-style: dashed; cursor: not-allowed; }
+.montase-pegangan.mode-potong { border-color: #ffd400; }
+.montase-pegangan-penuh { border: 1px dashed rgba(255,255,255,.6); }
+.montase-pegangan-sudut {
+  position: absolute; width: 11px; height: 11px; background: #fff; border: 1.5px solid #4da3ff; border-radius: 2px;
+}
+.montase-pegangan-sudut.ka { left: -6px; top: -6px; cursor: nwse-resize; }
+.montase-pegangan-sudut.kb { right: -6px; top: -6px; cursor: nesw-resize; }
+.montase-pegangan-sudut.kib { right: -6px; bottom: -6px; cursor: nwse-resize; }
+.montase-pegangan-sudut.kia { left: -6px; bottom: -6px; cursor: nesw-resize; }
+.montase-pegangan-putar {
+  position: absolute; left: 50%; top: -28px; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%;
+  background: #fff; border: 1.5px solid #4da3ff; cursor: grab;
+}
+.montase-pegangan-putar::after {
+  content: ''; position: absolute; left: 50%; top: 12px; width: 1.5px; height: 15px; margin-left: -.75px; background: #4da3ff;
+}
+.montase-pegangan-sisi { position: absolute; background: #ffd400; border-radius: 2px; }
+.montase-pegangan-sisi.kiri, .montase-pegangan-sisi.kanan { top: 50%; width: 6px; height: 26px; margin-top: -13px; cursor: ew-resize; }
+.montase-pegangan-sisi.kiri { left: -4px; }
+.montase-pegangan-sisi.kanan { right: -4px; }
+.montase-pegangan-sisi.atas, .montase-pegangan-sisi.bawah { left: 50%; height: 6px; width: 26px; margin-left: -13px; cursor: ns-resize; }
+.montase-pegangan-sisi.atas { top: -4px; }
+.montase-pegangan-sisi.bawah { bottom: -4px; }
+.montase-pegangan-alat {
+  position: absolute; transform: translateX(-50%); display: flex; gap: 2px; padding: 2px;
+  background: rgba(20,20,20,.85); border-radius: 6px; pointer-events: auto;
+}
+.montase-pegangan-alat button { border: 0; background: transparent; color: #fff; padding: 4px 6px; border-radius: 4px; cursor: pointer; display: inline-flex; }
+.montase-pegangan-alat button:hover, .montase-pegangan-alat button.aktif { background: rgba(255,255,255,.18); }
+.montase-pegangan-alat button.aktif { color: #ffd400; }
+.montase-bantu-tegak, .montase-bantu-datar { position: absolute; background: #ff4fd8; pointer-events: none; }
+.montase-bantu-tegak { left: 50%; top: 0; bottom: 0; width: 1px; }
+.montase-bantu-datar { top: 50%; left: 0; right: 0; height: 1px; }
+
+/* Panel properti Tahap 2 */
+.montase-bagian { display: flex; flex-direction: column; gap: 8px; padding-top: 10px; border-top: 1px solid var(--rule); }
+.montase-bagian h3 { margin: 0; font-size: .74rem; font-weight: 800; color: var(--ink); display: flex; align-items: center; justify-content: space-between; }
+.montase-kolom-dua { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.montase-kelompok { border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.montase-kelompok:disabled { opacity: .6; }
+.montase-baris-tombol { display: flex; flex-wrap: wrap; gap: 4px; }
+.montase-baris-tombol .btn-secondary { padding: 5px 9px; }
+.montase-baris-tombol .btn-secondary.aktif { border-color: var(--reh); color: var(--reh); }
+.montase-geser-angka { display: flex; align-items: center; gap: 8px; }
+.montase-geser-angka input[type="range"] { flex: 1; min-width: 0; padding: 0; }
+.montase-geser-angka small { min-width: 38px; text-align: right; font-variant-numeric: tabular-nums; color: var(--ink-2); }
+.montase-label-kecil { margin: 0; font-size: .72rem; font-weight: 700; color: var(--ink-2); }
+.montase-label-kunci { margin: 0; display: flex; gap: 6px; align-items: center; font-size: .72rem; padding: 6px 8px; border-radius: var(--r-sm); background: var(--plate-2); color: var(--ink-2); }
+.montase-centang { display: flex; align-items: center; gap: 8px; font-size: .8rem; color: var(--ink); }
+.montase-daftar-penanda { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.montase-daftar-penanda li { display: flex; align-items: center; gap: 6px; }
+.montase-daftar-penanda small { font-variant-numeric: tabular-nums; color: var(--ink-3); font-size: .7rem; }
+.montase-daftar-penanda input { flex: 1; min-width: 0; font: inherit; font-size: .78rem; padding: 4px 6px; }
+.montase-pintasan { font-size: .74rem; border-top: 1px solid var(--rule); padding-top: 10px; }
+.montase-pintasan summary { cursor: pointer; font-weight: 800; color: var(--ink); }
+.montase-pintasan dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; margin: 8px 0 0; }
+.montase-pintasan dd { margin: 0; color: var(--ink-2); }
+.montase-pintasan kbd { font: inherit; font-size: .68rem; padding: 1px 5px; border-radius: 4px; border: 1px solid var(--rule-2); background: var(--plate-2); white-space: nowrap; }
 .montase-sempit, .montase-memuat {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
   padding: 60px 20px; text-align: center; color: var(--ink-2);

@@ -1,6 +1,7 @@
 /** Item audio: narasi, musik, efek suara. Tidak menggambar apa pun. */
 import React from 'react';
 import { Audio } from '@remotion/media';
+import { volumeItem } from '../ubah.js';
 
 export default function ItemAudio({ item, lajur, sumber }) {
   const src = sumber?.bahan?.[item.bahan];
@@ -11,7 +12,7 @@ export default function ItemAudio({ item, lajur, sumber }) {
       trimBefore={item.potong_awal || undefined}
       playbackRate={item.kecepatan ?? 1}
       preservePitch
-      volume={(item.volume ?? 1) * (lajur?.volume ?? 1)}
+      volume={volumeItem(item, lajur)}
     />
   );
 }

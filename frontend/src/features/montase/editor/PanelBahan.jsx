@@ -3,7 +3,8 @@
  *
  * Dua bagian:
  *   - "Bahan saya": pustaka bahan profil ini. Tombol + menaruhnya di ujung
- *     lajurnya (video/gambar ke lajur gambar, suara ke lajur suara).
+ *     lajurnya (video/gambar ke lajur gambar, suara ke lajur suara); diseret,
+ *     bahan jatuh di lajur dan bingkai tempat ia dilepas.
  *   - "Ambil dari": Unduhan, Klip jadi, Aset, atau impor berkas dari komputer.
  *     Memilih satu mencatatnya sebagai bahan (berkasnya tidak disalin) dan
  *     langsung menaruhnya di linimasa.
@@ -20,6 +21,7 @@ import { formatTime } from '../../../utils/timeFormat';
 import {
   alamatBahan, daftarBahan, imporBahan, rujukBahan, sumberBahan,
 } from '../api.js';
+import { JENIS_SERET_BAHAN } from './garisPutar.js';
 
 const ASAL = [
   { id: 'unduhan', kunci: 'montase.bahan.unduhan' },
@@ -28,11 +30,20 @@ const ASAL = [
 ];
 const IKON = { video: Film, audio: Music, gambar: Gambar };
 
-function BarisBahan({ b, token, onTambah, sibuk }) {
+function BarisBahan({ b, token, onTambah, sibuk, bisaDiseret = false }) {
   const t = useT();
   const Ikon = IKON[b.jenis] ?? Film;
+  // Bahan di pustaka bisa diseret ke lajur dan bingkai tertentu di linimasa;
+  // tombol + tetap menaruhnya di ujung lajur.
+  const seret = bisaDiseret ? {
+    draggable: true,
+    onDragStart: (e) => {
+      e.dataTransfer.setData(JENIS_SERET_BAHAN, JSON.stringify(b));
+      e.dataTransfer.effectAllowed = 'copy';
+    },
+  } : {};
   return (
-    <li className="montase-bahan-baris">
+    <li className={`montase-bahan-baris ${bisaDiseret ? 'bisa-diseret' : ''}`} {...seret}>
       <span className="montase-bahan-sampul">
         {b.jenis !== 'audio' && token && b.siap !== false && b.id
           ? <img src={alamatBahan(token, b.id, { turunan: 'sampul' })} alt="" loading="lazy" />
@@ -151,7 +162,7 @@ export default function PanelBahan({ token, onTambahKeLinimasa, onBahan }) {
           <li className="montase-kosong-kecil">{t('montase.bahan.kosong')}</li>
         )}
         {asal === null && bahan.map((b) => (
-          <BarisBahan key={b.id} b={b} token={token} onTambah={() => onTambahKeLinimasa(b)} />
+          <BarisBahan key={b.id} b={b} token={token} onTambah={() => onTambahKeLinimasa(b)} bisaDiseret />
         ))}
         {asal !== null && sumber === null && <li><Loader2 size={16} className="animate-spin" /></li>}
         {asal !== null && sumber?.length === 0 && (

@@ -11,6 +11,7 @@ import React from 'react';
 import { AbsoluteFill } from 'remotion';
 import { BAWAAN } from '../motion/index.js';
 import { useKomponen } from '../muatKomponen.js';
+import { gayaUbah } from '../ubah.js';
 
 function KotakGalat({ pesan }) {
   return (
@@ -24,6 +25,12 @@ function KotakGalat({ pesan }) {
       </div>
     </AbsoluteFill>
   );
+}
+
+/** Animasi menempati seluruh kanvas; transformasinya berpusat di tengah kanvas. */
+function Lapisan({ item, children }) {
+  if (!item.ubah) return children;
+  return <AbsoluteFill style={gayaUbah(item.ubah)}>{children}</AbsoluteFill>;
 }
 
 export default function ItemMotion({ item, sumber }) {
@@ -46,7 +53,7 @@ export default function ItemMotion({ item, sumber }) {
       const pesan = hasil.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('\n');
       return <KotakGalat pesan={`${kunci}\n${pesan}`} />;
     }
-    return <Komponen {...hasil.data} />;
+    return <Lapisan item={item}><Komponen {...hasil.data} /></Lapisan>;
   }
-  return <Komponen {...props} />;
+  return <Lapisan item={item}><Komponen {...props} /></Lapisan>;
 }
