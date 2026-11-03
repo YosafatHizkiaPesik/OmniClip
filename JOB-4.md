@@ -1081,13 +1081,13 @@ detik). Kolom **Pemilik** = komputer pemilik (tes 60-63 di UJI-LANGSUNG.md).
 | Versi Remotion yang dipatok | 4.0.537 | sama | | Rilis 19 Okt 2026. Semua `@remotion/*` sama persis (dijaga tes). |
 | Player jalan di React 19 (M0.1) | Ya, 19.2.8, tanpa galat konsol | | | |
 | Render 30 dtk 1080x1920 30 fps: lama | 87-89 dtk (2,9x) | | | Lewat antrean backend dan langsung, hasilnya sama. |
-| Render 10 dtk (uji CI) | 28 dtk (2,8x) | menunggu | | |
+| Render 10 dtk (uji CI) | 28 dtk (2,8x) | Linux 23 dtk (2,3x) · Windows 28 dtk (2,84x) | | Run 41610381956, aplikasi terbungkus, Node dan Chrome hasil unduhan. |
 | Render 30 dtk: RAM puncak | ±2,4 GB di atas dasar | | | Total semua proses 2,9 GB. |
 | Render 30 dtk: ukuran berkas | 40 MB (crf 18, ±10,3 Mbps) | | | |
 | Perkiraan render 60 dtk (lawan ambang T-5) | ±175 dtk ≈ 2,9 menit | | | Di bawah ambang usulan 4 menit. |
-| Ukuran unduhan Node | 31 MB, 3-5 dtk; 126 MB terbongkar | Windows: 36 MB (dari header) | | npm dan header C dibuang. |
-| Paket mesin di dalam aplikasi (K-16) | 75 MB terbongkar, ±24 MB terkompresi | | | Ditambah bundel komposisi 16 MB. |
-| Ukuran unduhan Chrome Headless Shell | tidak bisa diuji (403 dari proxy) | menunggu | | Container memakai `OMNICLIP_MONTASE_BROWSER`. |
+| Ukuran unduhan Node | 31 MB, 3-5 dtk; 126 MB terbongkar | Linux 2,8 dtk · Windows 1,9 dtk (36 MB) | | npm dan header C dibuang. |
+| Paket mesin di dalam aplikasi (K-16) | 75 MB terbongkar, ±24 MB terkompresi | arsip v1.3.9: Linux 346 MB, Windows 270 MB | | Ditambah bundel komposisi 16 MB. Ukuran arsip sesudah perbaikan: lihat catatan M0.7. |
+| Unduhan Chrome Headless Shell | tidak bisa diuji (403 dari proxy) | Linux 1,9 dtk · Windows 4,1 dtk | | Container memakai `OMNICLIP_MONTASE_BROWSER`. Build pertama menemukan Chrome terunduh ke folder APLIKASI; diperbaiki di f65f820 (lihat M0.7). |
 | Animasi AI: pratinjau = render (M0.5) | Ya, kasat mata sama di 4 bingkai | | | SSIM 0,84 karena tangkapan pratinjau hanya 316x561 lalu diskalakan. |
 | Kotak pasir memutar video bertoken (M0.6) | Ya (Playwright) | | | Asal `null`; DOM, cookie, localStorage ditolak. |
 | Keputusan: lanjut / Rencana B | Lanjut, tanpa Rencana B | | | Menunggu angka CI dan pemilik sebelum gerbang ditutup. |
