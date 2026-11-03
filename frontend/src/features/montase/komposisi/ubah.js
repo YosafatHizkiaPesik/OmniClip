@@ -12,6 +12,8 @@
  * potongan ikut tergeser, terskala, dan terputar bersama itemnya, sama dengan
  * yang digambar pegangan di pratinjau (editor/PeganganUbah.jsx).
  */
+import { punyaKeyframe, volumePada } from './keyframe.js';
+
 export function gayaUbah(ubah) {
   if (!ubah) return undefined;
   const { x = 0, y = 0, skala = 1, putar = 0, opasitas = 1, potong } = ubah;
@@ -50,9 +52,13 @@ export function pengaliFade(f, durasi, masuk = 0, keluar = 0) {
   return Math.max(0, Math.min(1, v));
 }
 
-/** Prop `volume` Remotion: angka tetap bila tanpa fade, fungsi bila ada. */
+/**
+ * Prop `volume` Remotion: angka tetap bila tanpa fade dan tanpa keyframe
+ * volume, fungsi per bingkai bila ada salah satunya (M2.7, M3.7).
+ */
 export function volumeItem(item, lajur) {
-  const dasar = (item.volume ?? 1) * (lajur?.volume ?? 1);
-  if (!(item.fade_masuk > 0) && !(item.fade_keluar > 0)) return dasar;
-  return (f) => dasar * pengaliFade(f, item.durasi, item.fade_masuk, item.fade_keluar);
+  const lj = lajur?.volume ?? 1;
+  const adaFade = item.fade_masuk > 0 || item.fade_keluar > 0;
+  if (!adaFade && !punyaKeyframe(item, 'volume')) return (item.volume ?? 1) * lj;
+  return (f) => volumePada(item, f) * lj * pengaliFade(f, item.durasi, item.fade_masuk, item.fade_keluar);
 }

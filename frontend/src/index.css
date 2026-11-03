@@ -2505,3 +2505,21 @@ button.tujuan, a.tujuan { cursor: pointer; }
 .montase-suara textarea { font: inherit; font-size: .8rem; padding: 8px; border-radius: var(--r-sm); border: 1px solid var(--rule-2); background: var(--plate); color: var(--ink); resize: vertical; }
 .montase-rekam-aktif { animation: montase-denyut 1.2s ease-in-out infinite; }
 @keyframes montase-denyut { 50% { opacity: .65; } }
+
+/* Montase M3.7: keyframe */
+.montase-kolom-wajik { display: flex; align-items: flex-end; gap: 4px; min-width: 0; }
+.montase-kolom-wajik > .montase-kolom { flex: 1; }
+.montase-wajik {
+  flex: none; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 30px;
+  border: 0; background: transparent; color: var(--ink-3); cursor: pointer; border-radius: 4px; padding: 0;
+}
+.montase-wajik:hover { background: var(--plate-2); }
+.montase-wajik.ada { color: #e0a800; }
+.montase-wajik.di { color: #e0a800; }
+.montase-wajik.di svg { fill: #e0a800; }
+.montase-kendali-keyframe { display: flex; gap: 4px; align-items: center; }
+.montase-kendali-keyframe select { flex: 1; min-width: 0; font: inherit; font-size: .75rem; padding: 4px 6px; border-radius: var(--r-sm); border: 1px solid var(--rule-2); background: var(--plate); color: var(--ink); }
+.montase-item-wajik {
+  position: absolute; bottom: 3px; width: 8px; height: 8px; margin-left: -4px; background: #ffd400;
+  transform: rotate(45deg); border: 1px solid rgba(0,0,0,.5); z-index: 2; pointer-events: none;
+}

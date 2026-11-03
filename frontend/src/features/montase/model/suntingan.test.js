@@ -8,6 +8,11 @@ import {
   tempelKe, titikMagnet, titikSisip, ubahKecepatan, ubahLajur, ubahTransform,
 } from './suntingan.js';
 import { batal, buatRiwayat, catat, ulang, BATAS_LANGKAH } from './riwayat.js';
+import {
+  aturKeyframe, kurvaKeyframe, nilaiSifat, tombolKeyframe, ubahSifatDiBingkai,
+} from './suntingan.js';
+import { nilaiPada, ubahPada, bingkaiKeyframe } from '../komposisi/keyframe.js';
+import { rendamMusik } from './suntingan.js';
 
 function kosong() {
   return {
@@ -168,6 +173,57 @@ describe('narasi dan rekaman', () => {
     const d = gantiBahanItem(a.dokumen, a.itemId, narasiBahan('bh_n3', 3.5), { narasi: { teks: 'baru' } });
     expect(item(d, a.itemId)).toMatchObject({ mulai: 30, durasi: 105, bahan: 'bh_n3', narasi: { teks: 'baru' } });
     expect(d.bahan.bh_n1).toBeUndefined();
+  });
+});
+
+describe('keyframe', () => {
+  it('nilai antara linear dan kurva, sebelum/sesudah dijepit', () => {
+    const kf = [{ t: 0, v: 0 }, { t: 10, v: 100, kurva: 'linear' }, { t: 20, v: 0, kurva: 'masuk' }];
+    expect(nilaiPada(kf, -5, 9)).toBe(0);
+    expect(nilaiPada(kf, 5, 9)).toBe(50);
+    expect(nilaiPada(kf, 15, 9)).toBeGreaterThan(50);   // masuk: lambat di awal
+    expect(nilaiPada(kf, 99, 9)).toBe(0);
+    expect(nilaiPada([], 5, 9)).toBe(9);
+  });
+  it('wajik menambah keyframe tanpa mengubah rupa, lalu menulis di bingkai', () => {
+    let d = ubahTransform(dua(), 'i1', { skala: 1.2 });
+    d = tombolKeyframe(d, 'i1', 'skala', 0);
+    d = ubahSifatDiBingkai(d, 'i1', { skala: 2 }, 60);
+    expect(item(d, 'i1').keyframe.skala).toEqual([{ t: 0, v: 1.2, kurva: 'linear' }, { t: 60, v: 2, kurva: 'linear' }]);
+    expect(nilaiSifat(item(d, 'i1'), 'skala', 30)).toBeCloseTo(1.6);
+    expect(ubahPada(item(d, 'i1'), 30).skala).toBeCloseTo(1.6);
+    expect(bingkaiKeyframe(item(d, 'i1'))).toEqual([0, 60]);
+  });
+  it('menghapus keyframe terakhir meninggalkan nilainya sebagai nilai dasar', () => {
+    let d = aturKeyframe(dua(), 'i1', 'volume', 10, 0.3);
+    d = tombolKeyframe(d, 'i1', 'volume', 10);
+    expect(item(d, 'i1').keyframe).toBeUndefined();
+    expect(item(d, 'i1').volume).toBe(0.3);
+  });
+  it('kurva di bingkai, belah menjaga gerak tetap bersambung', () => {
+    let d = aturKeyframe(dua(), 'i1', 'x', 0, 0);
+    d = aturKeyframe(d, 'i1', 'x', 100, 200);
+    d = kurvaKeyframe(d, 'i1', 100, 'keluar');
+    expect(item(d, 'i1').keyframe.x[1].kurva).toBe('keluar');
+    const nilaiDi60 = nilaiSifat(item(d, 'i1'), 'x', 60);
+    const { dokumen, itemBaru } = belah(d, 'i1', 50);
+    expect(nilaiSifat(item(dokumen, itemBaru), 'x', 10)).toBeCloseTo(nilaiDi60);
+  });
+});
+
+describe('perendam musik', () => {
+  it('musik turun saat narasi, naik lagi sesudahnya, dan bisa dijalankan ulang', () => {
+    const musik = { id: 'bh_m', jenis: 'audio', nama: 'musik', durasi: 20, ada_suara: true };
+    let d = tambahBahan(kosong(), musik).dokumen;                         // i1 di L4, 0-600
+    d = tambahLajur(d, 'audio').dokumen;
+    const lajurNarasi = d.lajur.filter((l) => l.jenis === 'audio')[1].id;
+    d = tambahBahan(d, { id: 'bh_n', jenis: 'audio', durasi: 2, ada_suara: true }, { mulai: 90, lajurId: lajurNarasi }).dokumen;
+    d = rendamMusik(d, 'L4', { turun: 0.2, lembut: 0.3 });
+    const kf = item(d, 'i1').keyframe.volume;
+    expect(kf.map((k) => k.t)).toEqual([81, 90, 150, 159]);
+    expect(nilaiPada(kf, 120, 1)).toBeCloseTo(0.2);
+    expect(nilaiPada(kf, 300, 1)).toBe(1);
+    expect(rendamMusik(d, 'L4', { turun: 0.2, lembut: 0.3 })).toEqual(d);
   });
 });
 

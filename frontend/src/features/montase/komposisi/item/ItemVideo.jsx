@@ -9,17 +9,20 @@
  * membisukan suaranya sendiri, tapi `muted` tetap dipasang supaya jelas.
  */
 import React from 'react';
-import { AbsoluteFill, Freeze } from 'remotion';
+import { AbsoluteFill, Freeze, useCurrentFrame } from 'remotion';
 import { Video } from '@remotion/media';
 import { kotakDasar } from '../kotak.js';
+import { ubahPada } from '../keyframe.js';
 import { gayaUbah, volumeItem } from '../ubah.js';
 
 export function KotakItem({ dokumen, item, children }) {
+  const frame = useCurrentFrame();
   const k = kotakDasar(dokumen, item);
   return (
     <AbsoluteFill>
       <div style={{
-        position: 'absolute', left: k.x, top: k.y, width: k.w, height: k.h, ...gayaUbah(item.ubah),
+        position: 'absolute', left: k.x, top: k.y, width: k.w, height: k.h,
+        ...gayaUbah(ubahPada(item, frame)),
       }}
       >
         {children}

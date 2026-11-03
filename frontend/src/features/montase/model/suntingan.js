@@ -11,8 +11,10 @@
  *     gambar, teks ke teks, dan seterusnya).
  */
 import {
-  bersihkanUbah, cariItem, durasiIsi, GAYA_SUBTITLE, idBaru, JENIS_LAJUR_ITEM, tambahBahan,
+  BATAS_UBAH, bersihkanUbah, cariItem, durasiIsi, GAYA_SUBTITLE, idBaru, JENIS_LAJUR_ITEM,
+  tambahBahan, ubahItem,
 } from './dokumen.js';
+import { KURVA, nilaiPada, punyaKeyframe, SIFAT_KEYFRAME } from '../komposisi/keyframe.js';
 
 const MEDIA = new Set(['video', 'audio']);
 
@@ -54,6 +56,7 @@ export function belah(dokumen, itemId, di) {
     mulai: item.mulai + potong,
     durasi: item.durasi - potong,
   };
+  if (item.keyframe) kanan.keyframe = geserKeyframe(item.keyframe, potong);
   if (MEDIA.has(item.jenis)) {
     kanan.potong_awal = (item.potong_awal || 0) + Math.round(potong * (item.kecepatan || 1));
   }
@@ -87,6 +90,7 @@ export function pangkasKiri(dokumen, itemId, mulaiBaru) {
     ...i,
     mulai,
     durasi: ujung - mulai,
+    ...(i.keyframe ? { keyframe: geserKeyframe(i.keyframe, delta) } : {}),
     ...(MEDIA.has(i.jenis)
       ? { potong_awal: Math.max(0, (i.potong_awal || 0) + Math.round(delta * (i.kecepatan || 1))) }
       : {}),
@@ -544,4 +548,202 @@ export function gantiBahanItem(dokumen, itemId, bahan, tambahan = {}) {
     durasi: Math.max(1, Math.round(((bahan.durasi || 1) * fps) / (i.kecepatan || 1))),
   }));
   return buangBahanYatim(hasil);
+}
+
+
+// --- keyframe (M3.7) ----------------------------------------------------------
+
+const BAWAAN_SIFAT = { x: 0, y: 0, skala: 1, putar: 0, opasitas: 1, volume: 1 };
+const BATAS_SIFAT = { ...BATAS_UBAH, volume: [0, 2] };
+
+/**
+ * Keyframe relatif ke awal item, jadi saat awal item bergeser `delta`
+ * bingkai (belah, pangkas kiri), semua `t` dikurangi `delta`. Keyframe yang
+ * jatuh sebelum 0 TIDAK dibuang: nilai antara tetap dihitung dari pasangan
+ * yang mengapitnya, jadi gerakannya tidak meloncat di titik potong.
+ */
+export function geserKeyframe(keyframe, delta) {
+  const hasil = {};
+  for (const [s, daftar] of Object.entries(keyframe ?? {})) {
+    hasil[s] = (daftar ?? []).map((k) => ({ ...k, t: k.t - delta }));
+  }
+  return hasil;
+}
+
+function nilaiDasar(item, sifat) {
+  return sifat === 'volume' ? (item.volume ?? 1) : (item.ubah?.[sifat] ?? BAWAAN_SIFAT[sifat]);
+}
+
+/** Nilai sifat item pada bingkai relatif `f` (keyframe bila ada, selain itu nilai dasar). */
+export function nilaiSifat(item, sifat, f) {
+  return punyaKeyframe(item, sifat) ? nilaiPada(item.keyframe[sifat], f, nilaiDasar(item, sifat)) : nilaiDasar(item, sifat);
+}
+
+function jepitSifat(sifat, v) {
+  const [bawah, atas] = BATAS_SIFAT[sifat];
+  return Math.min(atas, Math.max(bawah, Number(v)));
+}
+
+function gantiKeyframe(dokumen, itemId, fn) {
+  const hit = cariItem(dokumen, itemId);
+  if (!hit || hit.lajur.kunci) return dokumen;
+  const keyframe = fn({ ...hit.item.keyframe }, hit.item);
+  if (!keyframe) return dokumen;
+  for (const s of Object.keys(keyframe)) if (!keyframe[s]?.length) delete keyframe[s];
+  return petaItem(dokumen, (i) => {
+    if (i.id !== itemId) return null;
+    const { keyframe: _lama, ...sisa } = i;
+    return Object.keys(keyframe).length ? { ...sisa, keyframe } : sisa;
+  });
+}
+
+/** Menaruh (atau mengganti) keyframe `sifat` di bingkai relatif `f`. */
+export function aturKeyframe(dokumen, itemId, sifat, f, nilai, kurva = null) {
+  if (!SIFAT_KEYFRAME.includes(sifat) || !Number.isFinite(Number(nilai))) return dokumen;
+  const t = Math.round(f);
+  return gantiKeyframe(dokumen, itemId, (kf) => {
+    const lama = kf[sifat] ?? [];
+    const ada = lama.find((k) => k.t === t);
+    const k = { t, v: jepitSifat(sifat, nilai), kurva: kurva ?? ada?.kurva ?? 'linear' };
+    kf[sifat] = [...lama.filter((x) => x.t !== t), k].sort((a, b) => a.t - b.t);
+    return kf;
+  });
+}
+
+/**
+ * Wajik di panel: ada keyframe di `f` -> dihapus; belum -> ditambah dengan
+ * nilai saat ini (jadi menambah keyframe tidak mengubah rupa). Keyframe
+ * terakhir yang dihapus meninggalkan nilainya sebagai nilai dasar.
+ */
+export function tombolKeyframe(dokumen, itemId, sifat, f) {
+  const hit = cariItem(dokumen, itemId);
+  if (!hit || hit.lajur.kunci) return dokumen;
+  const t = Math.round(f);
+  const daftar = hit.item.keyframe?.[sifat] ?? [];
+  const ada = daftar.find((k) => k.t === t);
+  if (!ada) return aturKeyframe(dokumen, itemId, sifat, t, nilaiSifat(hit.item, sifat, t));
+  let d = gantiKeyframe(dokumen, itemId, (kf) => ({ ...kf, [sifat]: daftar.filter((k) => k.t !== t) }));
+  if (daftar.length === 1) d = aturNilaiDasar(d, itemId, sifat, ada.v);
+  return d;
+}
+
+function aturNilaiDasar(dokumen, itemId, sifat, v) {
+  if (sifat === 'volume') return ubahItem(dokumen, itemId, { volume: v });
+  return ubahTransform(dokumen, itemId, { [sifat]: v });
+}
+
+/** Kurva semua keyframe yang ada tepat di bingkai relatif `f`. */
+export function kurvaKeyframe(dokumen, itemId, f, kurva) {
+  if (!KURVA.includes(kurva)) return dokumen;
+  const t = Math.round(f);
+  return gantiKeyframe(dokumen, itemId, (kf) => {
+    let ada = false;
+    for (const s of Object.keys(kf)) {
+      kf[s] = kf[s].map((k) => {
+        if (k.t !== t) return k;
+        ada = true;
+        return { ...k, kurva };
+      });
+    }
+    return ada ? kf : null;
+  });
+}
+
+/**
+ * Mengubah sifat dari panel atau pegangan di bingkai relatif `f`: sifat yang
+ * sudah punya keyframe ditulis sebagai keyframe di `f`, yang belum mengubah
+ * nilai dasarnya. Sama dengan CapCut, dan pegangan tidak perlu tahu bedanya.
+ */
+export function ubahSifatDiBingkai(dokumen, itemId, sebagian, f) {
+  const hit = cariItem(dokumen, itemId);
+  if (!hit || hit.lajur.kunci) return dokumen;
+  let d = dokumen;
+  const dasar = {};
+  for (const [s, v] of Object.entries(sebagian)) {
+    if (SIFAT_KEYFRAME.includes(s) && punyaKeyframe(hit.item, s)) d = aturKeyframe(d, itemId, s, f, v);
+    else dasar[s] = v;
+  }
+  const { volume, ...transform } = dasar;
+  if (volume !== undefined) d = ubahItem(d, itemId, { volume });
+  if (Object.keys(transform).length) d = ubahTransform(d, itemId, transform);
+  return d;
+}
+
+/** Kembalikan letak, ukuran, putar, transparansi, dan potong; keyframe volume tetap. */
+export function aturUlangTransform(dokumen, itemId) {
+  const hit = cariItem(dokumen, itemId);
+  if (!hit || hit.lajur.kunci) return dokumen;
+  return petaItem(dokumen, (i) => {
+    if (i.id !== itemId) return null;
+    const { ubah: _u, keyframe, ...sisa } = i;
+    const tetap = keyframe?.volume?.length ? { volume: keyframe.volume } : null;
+    return tetap ? { ...sisa, keyframe: tetap } : sisa;
+  });
+}
+
+// --- perendam musik (M3.4) ----------------------------------------------------
+
+/**
+ * Rentang ucapan di linimasa (bingkai mutlak): item lajur subtitle (kata yang
+ * benar-benar diucapkan) dan item audio di lajur audio LAIN yang tidak bisu
+ * (narasi, rekaman). Suara klip video tanpa subtitle tidak dihitung: tanpa
+ * tahu di mana orang berbicara, merendam musik sepanjang video bukan
+ * perendaman, hanya musik yang lebih pelan.
+ */
+export function rentangUcapan(dokumen, kecualiLajurId) {
+  const r = [];
+  for (const l of dokumen.lajur) {
+    if (l.id === kecualiLajurId || l.bisu) continue;
+    if (l.subtitle || l.jenis === 'audio') for (const i of l.item) r.push([i.mulai, i.mulai + i.durasi]);
+  }
+  return r.sort((a, b) => a[0] - b[0]);
+}
+
+function gabungRentang(rentang, jeda) {
+  const hasil = [];
+  for (const [a, b] of rentang) {
+    const akhir = hasil[hasil.length - 1];
+    if (akhir && a - akhir[1] <= jeda) akhir[1] = Math.max(akhir[1], b);
+    else hasil.push([a, b]);
+  }
+  return hasil;
+}
+
+/**
+ * Perendam otomatis: volume item di lajur musik turun ke `turun` x volumenya
+ * selama ada ucapan, dengan lembut `lembut` detik di kedua sisi. Hasilnya
+ * keyframe volume biasa (wajik di linimasa, bisa diubah satu per satu), dan
+ * menjalankannya lagi mengganti keyframe volume yang lama.
+ */
+export function rendamMusik(dokumen, lajurId, { turun = 0.25, lembut = 0.3 } = {}) {
+  const lajur = dokumen.lajur.find((l) => l.id === lajurId);
+  if (!lajur || lajur.kunci || lajur.jenis !== 'audio') return dokumen;
+  const fps = dokumen.kanvas.fps;
+  const l = Math.max(1, Math.round(lembut * fps));
+  const ucapan = gabungRentang(rentangUcapan(dokumen, lajurId), Math.round(0.5 * fps));
+  const rendah = Math.min(1, Math.max(0, turun));
+  return petaItem(dokumen, (i, lj) => {
+    if (lj.id !== lajurId) return null;
+    const v0 = i.volume ?? 1;
+    const kunci = [];
+    for (const [a, b] of ucapan) {
+      if (b <= i.mulai || a >= i.mulai + i.durasi) continue;
+      const ra = a - i.mulai;
+      const rb = b - i.mulai;
+      kunci.push({ t: ra - l, v: v0 }, { t: ra, v: v0 * rendah }, { t: rb, v: v0 * rendah }, { t: rb + l, v: v0 });
+    }
+    const { keyframe = {}, ...sisa } = i;
+    const { volume: _lama, ...lain } = keyframe;
+    if (!kunci.length) return Object.keys(lain).length ? { ...sisa, keyframe: lain } : sisa;
+    // Ucapan yang berdekatan: keyframe naik dan turun yang bertumpuk dirapikan,
+    // nilai yang lebih rendah menang supaya musik tidak naik sesaat di antaranya.
+    const per = new Map();
+    for (const k of kunci) {
+      const ada = per.get(k.t);
+      if (ada === undefined || k.v < ada) per.set(k.t, k.v);
+    }
+    const urut = [...per.entries()].sort((a, b) => a[0] - b[0])
+      .map(([t, v]) => ({ t, v: Math.round(v * 1000) / 1000, kurva: 'masuk-keluar' }));
+    return { ...sisa, keyframe: { ...lain, volume: urut } };
+  });
 }

@@ -46,6 +46,7 @@ import {
   pangkasKanan, pangkasKiri, pindahItem, sisipkan, tempelKe, titikMagnet, titikSisip,
 } from '../model/suntingan.js';
 import { JENIS_SERET_BAHAN, kodeWaktu, useGaris } from './garisPutar.js';
+import { bingkaiKeyframe } from '../komposisi/keyframe.js';
 
 const IKON_LAJUR = { video: Film, teks: Type, motion: Sparkles, audio: Music };
 export const LEBAR_LABEL = 150;
@@ -163,6 +164,9 @@ const ItemLinimasa = memo(function ItemLinimasa({
         {item.asal === 'ai' && <b>AI</b>}
         <span>{label}</span>
       </span>
+      {bingkaiKeyframe(item).filter((bk) => bk >= 0 && bk <= item.durasi).map((bk) => (
+        <span key={bk} className="montase-item-wajik" style={{ left: (bk / fps) * pps }} aria-hidden />
+      ))}
       {!kunci && (
         <>
           <span className="montase-item-pangkas kiri" data-pegangan="kiri" aria-hidden />

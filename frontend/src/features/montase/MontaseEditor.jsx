@@ -34,7 +34,9 @@ import {
 } from './model/dokumen.js';
 import {
   bekukan, belah, bisaHapusLajur, gandakan, hapusBanyak, hapusBeriak, hapusLajur, hapusPenanda,
-  gantiBahanItem, pasangSubtitle, rapatkan, salin, semuaItem, taruhSuara, tambahLajur, tambahPenanda, tempel, ubahKecepatan, ubahLajur, ubahPenanda,
+  aturUlangTransform, gantiBahanItem, kurvaKeyframe, pasangSubtitle, rapatkan, rendamMusik, salin,
+  semuaItem,
+  taruhSuara, tombolKeyframe, ubahSifatDiBingkai, tambahLajur, tambahPenanda, tempel, ubahKecepatan, ubahLajur, ubahPenanda,
   ubahTransform,
 } from './model/suntingan.js';
 import {
@@ -594,6 +596,21 @@ export default function MontaseEditor() {
           onUbahPenanda={(tt, label) => ubah((d) => ubahPenanda(d, tt, label), { gabung: `penanda:${tt}` })}
           onHapusPenanda={(tt) => terapkan(hapusPenanda(dok(), tt))}
           onBuatUlangNarasi={buatUlangNarasi}
+          garis={garis}
+          onUbahSifat={(id, s) => ubah((d) => {
+            const it = cariItem(d, id)?.item;
+            return it ? ubahSifatDiBingkai(d, id, s, garis.get() - it.mulai) : d;
+          }, { gabung: `sifat:${id}:${Object.keys(s).join(',')}` })}
+          onTombolKeyframe={(id, sifat) => ubah((d) => {
+            const it = cariItem(d, id)?.item;
+            return it ? tombolKeyframe(d, id, sifat, garis.get() - it.mulai) : d;
+          })}
+          onKurvaKeyframe={(id, k) => ubah((d) => {
+            const it = cariItem(d, id)?.item;
+            return it ? kurvaKeyframe(d, id, garis.get() - it.mulai, k) : d;
+          })}
+          onAturUlangTransform={(id) => terapkan(aturUlangTransform(dok(), id))}
+          onRendam={(id, turun) => terapkan(rendamMusik(dok(), id, { turun }))}
         />
       </div>
 

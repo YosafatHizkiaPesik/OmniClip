@@ -14,12 +14,16 @@
  * Kolom props animasi dibuat dari contohProps modulnya (teks, angka, warna);
  * panel dari skema zod lengkap datang di M4.5.
  */
-import React from 'react';
-import { Bookmark, CopyPlus, Lock, RotateCcw, Trash2 } from 'lucide-react';
+import React, { useState } from 'react';
+import {
+  AudioLines, Bookmark, ChevronLeft, ChevronRight, CopyPlus, Diamond, Lock, RotateCcw, Trash2,
+} from 'lucide-react';
 import { useT, angka } from '../../../lib/i18n';
 import { formatTime } from '../../../utils/timeFormat';
 import { BAWAAN } from '../komposisi/index.js';
-import { kodeWaktu } from './garisPutar.js';
+import { kodeWaktu, useGaris } from './garisPutar.js';
+import { bingkaiKeyframe, KURVA, SIFAT_KEYFRAME } from '../komposisi/keyframe.js';
+import { nilaiSifat } from '../model/suntingan.js';
 import PanelTeks from './PanelTeks.jsx';
 import { KolomNarasi } from './PanelSuara.jsx';
 
@@ -154,8 +158,9 @@ function PanelProyek({ dokumen, onUbahProyek, onKe, onUbahPenanda, onHapusPenand
   );
 }
 
-function PanelLajur({ lajur, onUbahLajur, onHapusLajur, bisaHapus }) {
+function PanelLajur({ lajur, onUbahLajur, onHapusLajur, bisaHapus, onRendam }) {
   const t = useT();
+  const [turun, setTurun] = useState(25);
   const ubah = (p) => onUbahLajur(lajur.id, p);
   const bersuara = lajur.jenis === 'video' || lajur.jenis === 'audio';
   return (
@@ -202,16 +207,99 @@ function PanelLajur({ lajur, onUbahLajur, onHapusLajur, bisaHapus }) {
           </label>
         )}
         {!bisaHapus && <p className="montase-petunjuk">{t('montase.properti.hapus_lajur_tidak')}</p>}
+        {lajur.jenis === 'audio' && (
+          <Bagian judul={t('montase.rendam.judul')}>
+            <p className="montase-petunjuk">{t('montase.rendam.ket')}</p>
+            <label className="montase-kolom">
+              <span>{t('montase.rendam.turun')}</span>
+              <span className="montase-geser-angka">
+                <input type="range" min={0} max={80} step={5} value={turun}
+                       onChange={(e) => setTurun(Number(e.target.value))} />
+                <small>{turun}%</small>
+              </span>
+            </label>
+            <button type="button" className="btn-secondary" onClick={() => onRendam(lajur.id, turun / 100)}>
+              <AudioLines size={13} />{t('montase.rendam.terapkan')}
+            </button>
+          </Bagian>
+        )}
       </div>
     </>
   );
 }
 
-function PanelTransform({ item, onTransform, onAturUlang }) {
+/**
+ * Tombol wajik keyframe (M3.7): penuh = ada keyframe di garis putar, garis
+ * tepi = sifat ini punya keyframe di tempat lain, pudar = belum ada.
+ */
+function Wajik({ status, onKlik, label }) {
+  return (
+    <button type="button" className={`montase-wajik ${status}`} onClick={onKlik}
+            aria-pressed={status === 'di'} title={label} aria-label={label}
+    >
+      <Diamond size={11} />
+    </button>
+  );
+}
+
+function statusWajik(item, sifat, f) {
+  const daftar = item.keyframe?.[sifat] ?? [];
+  if (daftar.some((k) => k.t === f)) return 'di';
+  return daftar.length ? 'ada' : 'tidak';
+}
+
+/** Sifat yang bisa diberi keyframe: angka + wajik, nilainya pada garis putar. */
+function KolomSifat({ item, sifat, f, label, kali = 1, akhiran, langkah, min, max, desimal, onUbahSifat, onTombol }) {
   const t = useT();
-  const u = item.ubah ?? {};
-  const p = u.potong ?? {};
+  return (
+    <div className="montase-kolom-wajik">
+      <Angka label={label} nilai={nilaiSifat(item, sifat, f) * kali} langkah={langkah} min={min} max={max}
+             akhiran={akhiran} desimal={desimal} onUbah={(v) => onUbahSifat({ [sifat]: v / kali })} />
+      <Wajik status={statusWajik(item, sifat, f)} onKlik={() => onTombol(sifat)}
+             label={t('montase.keyframe.wajik', { sifat: label })} />
+    </div>
+  );
+}
+
+/** Kurva dan lompat ke keyframe sebelum/sesudah, bila item punya keyframe. */
+function KendaliKeyframe({ item, f, onKurva, onKe }) {
+  const t = useT();
+  const semua = bingkaiKeyframe(item);
+  if (!semua.length) return null;
+  const sebelum = [...semua].reverse().find((x) => x < f);
+  const sesudah = semua.find((x) => x > f);
+  const kini = SIFAT_KEYFRAME.flatMap((s) => item.keyframe?.[s] ?? []).find((k) => k.t === f);
+  return (
+    <div className="montase-kendali-keyframe">
+      <button type="button" className="btn-secondary montase-ikon" disabled={sebelum === undefined}
+              onClick={() => onKe(item.mulai + sebelum)} title={t('montase.keyframe.sebelum')}
+              aria-label={t('montase.keyframe.sebelum')}
+      >
+        <ChevronLeft size={12} />
+      </button>
+      <button type="button" className="btn-secondary montase-ikon" disabled={sesudah === undefined}
+              onClick={() => onKe(item.mulai + sesudah)} title={t('montase.keyframe.sesudah')}
+              aria-label={t('montase.keyframe.sesudah')}
+      >
+        <ChevronRight size={12} />
+      </button>
+      {kini && (
+        <select value={kini.kurva ?? 'linear'} onChange={(e) => onKurva(e.target.value)}
+                aria-label={t('montase.keyframe.kurva')} title={t('montase.keyframe.kurva')}
+        >
+          {KURVA.map((k) => <option key={k} value={k}>{t(`montase.keyframe.kurva_${k}`)}</option>)}
+        </select>
+      )}
+    </div>
+  );
+}
+
+function PanelTransform({ item, garis, onUbahSifat, onTombol, onKurva, onKe, onTransform, onAturUlang }) {
+  const t = useT();
+  const f = useGaris(garis) - item.mulai;
+  const p = item.ubah?.potong ?? {};
   const bisaPotong = item.jenis !== 'teks';
+  const sifat = { item, f, onUbahSifat, onTombol };
   return (
     <Bagian
       judul={t('montase.properti.transformasi')}
@@ -223,24 +311,17 @@ function PanelTransform({ item, onTransform, onAturUlang }) {
         </button>
       )}
     >
+      <KendaliKeyframe item={item} f={f} onKurva={onKurva} onKe={onKe} />
       <div className="montase-kolom-dua">
-        <Angka label="X" nilai={u.x ?? 0} langkah={1} min={-20000} akhiran="px" desimal={0}
-               onUbah={(v) => onTransform({ x: v })} />
-        <Angka label="Y" nilai={u.y ?? 0} langkah={1} min={-20000} akhiran="px" desimal={0}
-               onUbah={(v) => onTransform({ y: v })} />
-        <Angka label={t('montase.properti.skala')} nilai={(u.skala ?? 1) * 100} langkah={5} min={1} max={2000}
-               akhiran="%" desimal={1} onUbah={(v) => onTransform({ skala: v / 100 })} />
-        <Angka label={t('montase.properti.putar')} nilai={u.putar ?? 0} langkah={1} min={-3600} max={3600}
-               akhiran="°" desimal={1} onUbah={(v) => onTransform({ putar: v })} />
+        <KolomSifat {...sifat} sifat="x" label="X" langkah={1} min={-20000} akhiran="px" desimal={0} />
+        <KolomSifat {...sifat} sifat="y" label="Y" langkah={1} min={-20000} akhiran="px" desimal={0} />
+        <KolomSifat {...sifat} sifat="skala" label={t('montase.properti.skala')} kali={100} langkah={5}
+                    min={1} max={2000} akhiran="%" desimal={1} />
+        <KolomSifat {...sifat} sifat="putar" label={t('montase.properti.putar')} langkah={1} min={-3600}
+                    max={3600} akhiran="°" desimal={1} />
       </div>
-      <label className="montase-kolom">
-        <span>{t('montase.properti.opasitas')}</span>
-        <span className="montase-geser-angka">
-          <input type="range" min={0} max={100} value={Math.round((u.opasitas ?? 1) * 100)}
-                 onChange={(e) => onTransform({ opasitas: Number(e.target.value) / 100 })} />
-          <small>{Math.round((u.opasitas ?? 1) * 100)}%</small>
-        </span>
-      </label>
+      <KolomSifat {...sifat} sifat="opasitas" label={t('montase.properti.opasitas')} kali={100} langkah={5}
+                  max={100} akhiran="%" desimal={0} />
       {bisaPotong && (
         <>
           <p className="montase-label-kecil">{t('montase.properti.potong')}</p>
@@ -256,10 +337,32 @@ function PanelTransform({ item, onTransform, onAturUlang }) {
   );
 }
 
+/** Volume item dengan wajik (keyframe volume, juga hasil perendam musik M3.4). */
+function KolomVolume({ item, garis, onUbahSifat, onTombol }) {
+  const t = useT();
+  const f = useGaris(garis) - item.mulai;
+  const v = Math.round(nilaiSifat(item, 'volume', f) * 100);
+  return (
+    <div className="montase-kolom-wajik">
+      <label className="montase-kolom">
+        <span>{t('montase.properti.volume')}</span>
+        <span className="montase-geser-angka">
+          <input type="range" min={0} max={200} step={5} value={v}
+                 onChange={(e) => onUbahSifat({ volume: Number(e.target.value) / 100 })} />
+          <small>{v}%</small>
+        </span>
+      </label>
+      <Wajik status={statusWajik(item, 'volume', f)} onKlik={() => onTombol('volume')}
+             label={t('montase.keyframe.wajik', { sifat: t('montase.properti.volume') })} />
+    </div>
+  );
+}
+
 export default function PanelProperti({
   dokumen, terpilih, jumlahPilihan, lajur, onUbahItem, onKecepatan, onTransform, onHapus,
   onGandakan, onUbahProyek, onUbahLajur, onHapusLajur, bisaHapusLajur, onKe, onUbahPenanda,
-  onHapusPenanda, onBuatUlangNarasi,
+  onHapusPenanda, onBuatUlangNarasi, garis, onUbahSifat, onTombolKeyframe, onKurvaKeyframe,
+  onAturUlangTransform, onRendam,
 }) {
   const t = useT();
   const fps = dokumen.kanvas.fps;
@@ -287,7 +390,8 @@ export default function PanelProperti({
   if (!terpilih && lajur) {
     return (
       <aside className="montase-panel montase-panel-properti" aria-label={t('montase.properti.judul')}>
-        <PanelLajur lajur={lajur} onUbahLajur={onUbahLajur} onHapusLajur={onHapusLajur} bisaHapus={bisaHapusLajur} />
+        <PanelLajur lajur={lajur} onUbahLajur={onUbahLajur} onHapusLajur={onHapusLajur} bisaHapus={bisaHapusLajur}
+                    onRendam={onRendam} />
       </aside>
     );
   }
@@ -353,14 +457,8 @@ export default function PanelProperti({
           )}
           {bersuara && (
             <Bagian judul={t('montase.properti.suara')}>
-              <label className="montase-kolom">
-                <span>{t('montase.properti.volume')}</span>
-                <span className="montase-geser-angka">
-                  <input type="range" min={0} max={200} step={5} value={Math.round((item.volume ?? 1) * 100)}
-                         onChange={(e) => ubah({ volume: Number(e.target.value) / 100 })} />
-                  <small>{Math.round((item.volume ?? 1) * 100)}%</small>
-                </span>
-              </label>
+              <KolomVolume item={item} garis={garis} onUbahSifat={(s) => onUbahSifat(item.id, s)}
+                           onTombol={(sifat) => onTombolKeyframe(item.id, sifat)} />
               <div className="montase-kolom-dua">
                 <Angka label={t('montase.properti.fade_masuk')} nilai={keDetik(item.fade_masuk || 0)}
                        akhiran={t('montase.satuan.detik')} onUbah={(v) => ubah({ fade_masuk: keBingkai(v) })} />
@@ -386,8 +484,12 @@ export default function PanelProperti({
             </>
           )}
           {item.jenis !== 'audio' && (
-            <PanelTransform item={item} onTransform={(sebagian) => onTransform(item.id, sebagian)}
-                            onAturUlang={() => ubah({ ubah: {} })} />
+            <PanelTransform item={item} garis={garis} onKe={onKe}
+                            onTransform={(sebagian) => onTransform(item.id, sebagian)}
+                            onUbahSifat={(s) => onUbahSifat(item.id, s)}
+                            onTombol={(sifat) => onTombolKeyframe(item.id, sifat)}
+                            onKurva={(k) => onKurvaKeyframe(item.id, k)}
+                            onAturUlang={() => onAturUlangTransform(item.id)} />
           )}
         </fieldset>
       </div>

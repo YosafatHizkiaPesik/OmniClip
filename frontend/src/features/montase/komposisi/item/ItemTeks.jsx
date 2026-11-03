@@ -23,6 +23,7 @@ import {
 } from 'remotion';
 import { useFont } from '../font.js';
 import { TEPI_TEKS, tinggiBaris } from '../kotak.js';
+import { ubahPada } from '../keyframe.js';
 import { gayaUbah } from '../ubah.js';
 
 const JEPIT = { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' };
@@ -99,7 +100,7 @@ export default function ItemTeks({ item, sumber }) {
   const radius = (g.radius ?? 0.22) * ukuran;
   const warnaLatar = rgba(g.warna_latar ?? '#000000', g.alfa_latar ?? 1);
   const gerak = gerakTeks(g.gerak ?? 'muncul', (frame / fps) * 1000, ((item.durasi - frame) / fps) * 1000, ukuran);
-  const { opacity: opasitasUbah, transform: transformUbah, clipPath } = gayaUbah(item.ubah) ?? {};
+  const { opacity: opasitasUbah, transform: transformUbah, clipPath } = gayaUbah(ubahPada(item, frame)) ?? {};
 
   const huruf = {
     fontFamily: font ? `"${font}", sans-serif` : 'sans-serif',

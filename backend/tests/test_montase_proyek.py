@@ -111,6 +111,18 @@ class Skema(unittest.TestCase):
         with self.assertRaises(skema.GagalSkema):
             skema.periksa(d)
 
+    def test_keyframe_diperiksa(self):
+        d = self.dok()
+        d["bahan"] = {"bh_1": {"jenis": "video", "durasi": 5}}
+        d["lajur"][0]["item"] = [{"id": "i1", "jenis": "video", "mulai": 0, "durasi": 60, "bahan": "bh_1",
+                                  "keyframe": {"skala": [{"t": 0, "v": 1}, {"t": 30, "v": 1.2, "kurva": "pegas"}]}}]
+        item = skema.periksa(d)["lajur"][0]["item"][0]
+        self.assertEqual(item["keyframe"]["skala"][0]["kurva"], "linear")
+        for salah in ({"miring": [{"t": 0, "v": 1}]}, {"x": [{"t": 0, "v": 1, "kurva": "aneh"}]}):
+            d["lajur"][0]["item"][0]["keyframe"] = salah
+            with self.assertRaises(skema.GagalSkema, msg=salah):
+                skema.periksa(d)
+
     def test_dokumen_raksasa_ditolak(self):
         with self.assertRaisesRegex(skema.GagalSkema, "MB"):
             skema.periksa(self.dok(sampah="x" * (skema.BATAS_BITA + 1)))
