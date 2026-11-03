@@ -92,7 +92,7 @@ Tiga kemampuan besar, dibangun berurutan:
 
 | Tahap | Isi singkat | Status | Tugas |
 |---|---|---|---|
-| 0 | Uji teknis: membuktikan Remotion jalan di dalam OmniClip | ⬜ Belum mulai | 0/8 |
+| 0 | Uji teknis: membuktikan Remotion jalan di dalam OmniClip | 🟨 Menunggu CI dan uji pemilik | 6/8 |
 | 1 | Kerangka: menu, daftar proyek, media, pratinjau, ekspor | ⬜ Belum mulai | 0/10 |
 | 2 | Penyuntingan dasar: linimasa sungguhan | ⬜ Belum mulai | 0/8 |
 | 3 | Teks, suara, efek, transisi, keyframe | ⬜ Belum mulai | 0/10 |
@@ -103,7 +103,8 @@ Tiga kemampuan besar, dibangun berurutan:
 
 Tanda status: ⬜ belum mulai · 🟨 sedang dikerjakan · ✅ selesai · ⛔ tertahan (tulis alasannya).
 
-**Tugas berikutnya:** `M0.1`.
+**Tugas berikutnya:** `M0.7` (hasil build CI Linux/Windows) lalu `M0.8` (tes 60-63
+oleh pemilik, keputusan T-5). Sesudah itu PR Tahap 0 ke `main`, lalu `M1.1`.
 
 ## 3. Keputusan
 
@@ -252,33 +253,57 @@ dalam OmniClip, dan Windows belum pernah diuji sungguhan (CATATAN.md 1.4).
 Kalau salah satunya gagal, lebih baik ketahuan di sini daripada sesudah dua
 bulan bekerja.
 
-- [ ] **M0.1** Pasang `remotion`, `@remotion/player`, dan `@remotion/media` di
+- [x] **M0.1** Pasang `remotion`, `@remotion/player`, dan `@remotion/media` di
   `frontend/` dengan **versi persis yang sama** untuk semua paket `@remotion/*`
   (aturan Remotion). Buat rute uji `/montase-uji` (dimuat lambat dengan
   `React.lazy`). Isinya satu komposisi berisi satu video, satu teks, dan satu
   animasi, diputar di Player. Periksa kecocokan dengan React 19 yang dipakai
   frontend.
-- [ ] **M0.2** Buat folder `montase-mesin/` (paket Node) berisi skrip `render.mjs`
+  (selesai 3 Nov 2026, commit 8ffab2c) Remotion 4.0.537 berjalan di React 19.2.8 tanpa galat
+  konsol. Bagian Remotion dipecah ke potongan terpisah (±330 KB gzip) yang hanya
+  dimuat di halaman Montase. Komposisi sudah memakai format dokumen bagian 16
+  (lajur video, teks, motion, audio).
+- [x] **M0.2** Buat folder `montase-mesin/` (paket Node) berisi skrip `render.mjs`
   yang merender komposisi M0.1 ke MP4 lewat `@remotion/bundler` dan
   `@remotion/renderer`. Ukur di mesin pemilik untuk 30 detik video 1080x1920
   30 fps: lama render, RAM puncak, dan ukuran berkas.
-- [ ] **M0.3** `backend/app/montase/mesin.py`: Python menjalankan mesin sebagai
+  (selesai 3 Nov 2026, commit 8ffab2c) Diukur di container pengembangan 4 inti (bukan mesin
+  pemilik, itu tes 62): 87-89 detik, RAM puncak ±2,4 GB, 40 MB. Bundel tanpa
+  source map 16 MB. Render memegang `giliran_cpu` seperti render klip.
+- [x] **M0.3** `backend/app/montase/mesin.py`: Python menjalankan mesin sebagai
   proses anak, membaca kemajuan (JSON per baris di stdout), dan bisa
   membatalkannya. Pakai pembantu `services/proses.py` supaya jendela konsol
   tidak muncul di Windows.
-- [ ] **M0.4** Unduh saat pertama dipakai: Node 22 LTS portabel, paket mesin, dan
+  (selesai 3 Nov 2026, commit 8ffab2c) Grup proses sendiri (Linux) / `taskkill /T` (Windows),
+  batas waktu, ekor stderr di pesan galat, izin eksekusi berkas biner Remotion
+  dipulihkan bila hilang. Tes `test_montase_mesin.py`.
+- [x] **M0.4** Unduh saat pertama dipakai: Node 22 LTS portabel, paket mesin, dan
   Chrome Headless Shell (`ensureBrowser()` Remotion) masuk ke
   `STORAGE_DIR/mesin_montase/`. Versi dan SHA-256 dipatok, polanya sama dengan
   `alat_yt.py`. Ukur total ukuran unduhannya.
-- [ ] **M0.5** Satu animasi buatan AI: komponen sesuai
+  (selesai 3 Nov 2026, commit 8ffab2c) Diubah oleh K-16: paket mesin ikut di aplikasi, yang
+  diunduh hanya Node (`montase/unduh.py`, terbukti: 31 MB, 3-5 detik, 126 MB
+  sesudah npm dibuang) dan Chrome (`siapkan.mjs`). Unduhan Chrome tidak bisa
+  dibuktikan di container (jaringan memblokir `remotion.media` dan
+  `storage.googleapis.com`); dibuktikan oleh langkah CI M0.7 dan tes 60.
+- [x] **M0.5** Satu animasi buatan AI: komponen sesuai
   [kontrak](#21-kontrak-komponen-animasi-ai) ditulis Claude (lewat Claude Code,
   karena belum ada API key, K-15), dikompilasi dengan `sucrase`, diperiksa,
   lalu diputar di Player **dan** dirender di mesin. Bingkainya harus sama. Jalur
   memanggil AI dari dalam aplikasi baru dibangun di Tahap 4.
-- [ ] **M0.6** Kotak pasir: Player berjalan di iframe
+  (selesai 3 Nov 2026, commit 8ffab2c) `montase-mesin/uji/komponen_ai.jsx` ("GILA!" lalu pecah)
+  lolos pemeriksaan; kode berisi `fetch`, `window`, `Date`, `constructor`,
+  `Math.random`, `import()` ditolak dengan alasan per baris. Pratinjau kotak
+  pasir dan render sama secara kasat mata di bingkai 15, 90, 240, 270, termasuk
+  letak serpihan acak (`random(seed)`).
+- [x] **M0.6** Kotak pasir: Player berjalan di iframe
   `sandbox="allow-scripts"` (tanpa `allow-same-origin`), dikendalikan lewat
   `postMessage`, dan tetap bisa memutar video dari backend (perlu CORS dan
   token, lihat [bagian 20](#20-pratinjau-dan-kotak-pasir)).
+  (selesai 3 Nov 2026, commit 8ffab2c) Diuji dengan Playwright: asal iframe `null`; membaca
+  DOM editor, cookie, dan localStorage dari dalamnya ditolak; video bertoken
+  dimuat dengan Range + CORS; putar, jeda, dan geser dari tombol di luar
+  iframe bekerja. Token palsu dan nama berkas di luar daftar menjawab 404.
 - [ ] **M0.7** Ulangi M0.2 sampai M0.6 di **Windows** lewat aplikasi hasil build
   (K-11: tidak ada Windows mode pengembangan). Karena itu `bangun-aplikasi.yml`
   harus lebih dulu ikut membangun paket mesin dan bundel komposisi. Build
@@ -1046,22 +1071,26 @@ sebagai tes.
 
 ## 24. Hasil uji teknis
 
-Diisi saat Tahap 0. Mesin uji: komputer pemilik (Linux, VAAPI) dan Windows.
+Diisi saat Tahap 0. Kolom **Container** = lingkungan pengembangan Claude (Linux,
+4 inti, 16 GB, tanpa GPU, Chromium headless 153 bawaan container). Kolom
+**CI** = aplikasi hasil build di GitHub Actions (`--periksa-montase`, render 10
+detik). Kolom **Pemilik** = komputer pemilik (tes 60-63 di UJI-LANGSUNG.md).
 
-| Ukuran | Linux | Windows | Catatan |
-|---|---|---|---|
-| Versi Remotion yang dipatok | | | |
-| Player jalan di React 19 (M0.1) | | | |
-| Render 30 dtk 1080x1920 30 fps: lama | | | |
-| Render 30 dtk: RAM puncak | | | |
-| Render 30 dtk: ukuran berkas | | | |
-| Perkiraan render 60 dtk (lawan ambang T-5) | | | |
-| Ukuran unduhan Node | | | |
-| Ukuran unduhan paket mesin | | | |
-| Ukuran unduhan Chrome Headless Shell | | | |
-| Animasi AI: pratinjau = render (M0.5) | | | |
-| Kotak pasir memutar video bertoken (M0.6) | | | |
-| Keputusan: lanjut / Rencana B | | | |
+| Ukuran | Container (3 Nov) | CI Linux / Windows | Pemilik | Catatan |
+|---|---|---|---|---|
+| Versi Remotion yang dipatok | 4.0.537 | sama | | Rilis 19 Okt 2026. Semua `@remotion/*` sama persis (dijaga tes). |
+| Player jalan di React 19 (M0.1) | Ya, 19.2.8, tanpa galat konsol | | | |
+| Render 30 dtk 1080x1920 30 fps: lama | 87-89 dtk (2,9x) | | | Lewat antrean backend dan langsung, hasilnya sama. |
+| Render 10 dtk (uji CI) | 28 dtk (2,8x) | menunggu | | |
+| Render 30 dtk: RAM puncak | ±2,4 GB di atas dasar | | | Total semua proses 2,9 GB. |
+| Render 30 dtk: ukuran berkas | 40 MB (crf 18, ±10,3 Mbps) | | | |
+| Perkiraan render 60 dtk (lawan ambang T-5) | ±175 dtk ≈ 2,9 menit | | | Di bawah ambang usulan 4 menit. |
+| Ukuran unduhan Node | 31 MB, 3-5 dtk; 126 MB terbongkar | Windows: 36 MB (dari header) | | npm dan header C dibuang. |
+| Paket mesin di dalam aplikasi (K-16) | 75 MB terbongkar, ±24 MB terkompresi | | | Ditambah bundel komposisi 16 MB. |
+| Ukuran unduhan Chrome Headless Shell | tidak bisa diuji (403 dari proxy) | menunggu | | Container memakai `OMNICLIP_MONTASE_BROWSER`. |
+| Animasi AI: pratinjau = render (M0.5) | Ya, kasat mata sama di 4 bingkai | | | SSIM 0,84 karena tangkapan pratinjau hanya 316x561 lalu diskalakan. |
+| Kotak pasir memutar video bertoken (M0.6) | Ya (Playwright) | | | Asal `null`; DOM, cookie, localStorage ditolak. |
+| Keputusan: lanjut / Rencana B | Lanjut, tanpa Rencana B | | | Menunggu angka CI dan pemilik sebelum gerbang ditutup. |
 
 ## 25. Daftar uji permintaan animasi
 
