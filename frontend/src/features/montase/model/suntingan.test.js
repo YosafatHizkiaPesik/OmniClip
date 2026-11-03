@@ -4,7 +4,7 @@ import {
 } from './dokumen.js';
 import {
   bekukan, belah, bisaHapusLajur, gandakan, hapusBanyak, hapusBeriak, hapusLajur, pangkasKanan,
-  pangkasKiri, pindahItem, rapatkan, salin, semuaItem, sisipkan, tambahLajur, tambahPenanda, tempel,
+  pangkasKiri, pasangSubtitle, pindahItem, rapatkan, salin, semuaItem, sisipkan, tambahLajur, tambahPenanda, tempel,
   tempelKe, titikMagnet, titikSisip, ubahKecepatan, ubahLajur, ubahTransform,
 } from './suntingan.js';
 import { batal, buatRiwayat, catat, ulang, BATAS_LANGKAH } from './riwayat.js';
@@ -129,6 +129,27 @@ describe('rapatkan', () => {
     expect(item(d, 'i2').mulai).toBe(60);
     expect(d.durasi).toBe(180);
     expect(rapatkan(d, 'L1')).toBe(d);
+  });
+});
+
+describe('subtitle', () => {
+  const potongan = [
+    { mulai: 0, durasi: 30, teks: 'halo semua', kata: [{ w: 'halo', t: 0, d: 10 }, { w: 'semua', t: 12, d: 10 }] },
+    { mulai: 30, durasi: 20, teks: 'apa kabar', kata: [] },
+  ];
+  it('lajur subtitle baru di atas lajur teks, item bertanda AI', () => {
+    const { dokumen, lajurId } = pasangSubtitle(dua(), potongan, { alasan: 'dari ucapan' });
+    const l = dokumen.lajur.find((x) => x.id === lajurId);
+    expect(l).toMatchObject({ jenis: 'teks', nama: 'Subtitle', subtitle: true });
+    expect(dokumen.lajur.map((x) => x.id).indexOf(lajurId)).toBe(dokumen.lajur.findIndex((x) => x.id === 'L3') + 1);
+    expect(l.item[0]).toMatchObject({ teks: 'halo semua', asal: 'ai', alasan: 'dari ucapan' });
+  });
+  it('dijalankan ulang mengganti isi, tidak menumpuk', () => {
+    const a = pasangSubtitle(dua(), potongan);
+    const b = pasangSubtitle(a.dokumen, potongan.slice(0, 1));
+    expect(b.lajurId).toBe(a.lajurId);
+    expect(b.dokumen.lajur.find((x) => x.id === b.lajurId).item).toHaveLength(1);
+    expect(b.dokumen.lajur).toHaveLength(a.dokumen.lajur.length);
   });
 });
 

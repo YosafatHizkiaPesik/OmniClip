@@ -11,7 +11,7 @@
  *     gambar, teks ke teks, dan seterusnya).
  */
 import {
-  bersihkanUbah, cariItem, durasiIsi, idBaru, JENIS_LAJUR_ITEM,
+  bersihkanUbah, cariItem, durasiIsi, GAYA_SUBTITLE, idBaru, JENIS_LAJUR_ITEM,
 } from './dokumen.js';
 
 const MEDIA = new Set(['video', 'audio']);
@@ -449,4 +449,42 @@ export function tempelKe(nilai, titik, ambang) {
     if (j <= ambang && j < jarak) { terbaik = t; jarak = j; }
   }
   return terbaik;
+}
+
+
+// --- subtitle otomatis (M3.2) ------------------------------------------------
+
+/**
+ * Menaruh potongan subtitle (hasil pekerjaan `montase_subtitle`) di lajur
+ * teks bertanda `subtitle`. Lajur subtitle yang sudah ada dan tidak terkunci
+ * DIGANTI isinya (menjalankan ulang tidak menumpuk); bila belum ada, lajur
+ * baru dibuat di atas lajur teks lain. Setiap item bertanda `asal: 'ai'`
+ * beserta alasannya dan bisa dihapus sendiri. Mengembalikan {dokumen, lajurId}.
+ */
+export function pasangSubtitle(dokumen, potongan, { nama = 'Subtitle', alasan = '' } = {}) {
+  let d = dokumen;
+  let lajur = d.lajur.find((l) => l.subtitle && !l.kunci);
+  if (!lajur) {
+    const hasil = tambahLajur(d, 'teks');
+    d = ubahLajur(hasil.dokumen, hasil.lajurId, { nama });
+    d = { ...d, lajur: d.lajur.map((l) => (l.id === hasil.lajurId ? { ...l, subtitle: true } : l)) };
+    lajur = d.lajur.find((l) => l.id === hasil.lajurId);
+  }
+  const dipakai = new Set(d.lajur.filter((l) => l.id !== lajur.id).flatMap((l) => l.item.map((i) => i.id)));
+  let n = 1;
+  const item = [];
+  for (const p of potongan) {
+    while (dipakai.has(`s${n}`)) n += 1;
+    const id = `s${n}`;
+    dipakai.add(id);
+    item.push({
+      id, jenis: 'teks', mulai: Math.max(0, Math.round(p.mulai)), durasi: Math.max(1, Math.round(p.durasi)),
+      teks: String(p.teks).slice(0, 500), kata: p.kata, gaya: { ...GAYA_SUBTITLE }, asal: 'ai', alasan,
+    });
+  }
+  const lajurId = lajur.id;
+  return {
+    dokumen: rapikan({ ...d, lajur: d.lajur.map((l) => (l.id === lajurId ? { ...l, item } : l)) }),
+    lajurId,
+  };
 }

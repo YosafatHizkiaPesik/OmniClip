@@ -184,6 +184,13 @@ export default function PanelTeks({ item, onUbah }) {
           <Angka label={t('montase.teks.cahaya')} nilai={gaya.kabur ?? 0} akhiran="px"
                  onUbah={(v) => ubahGaya({ kabur: v })} />
         </div>
+        {Array.isArray(item.kata) && item.kata.length > 0 && (
+          <label className="montase-kolom">
+            <span>{t('montase.teks.warna_sorot')}</span>
+            <input type="color" value={gaya.warna_sorot ?? '#FFE500'}
+                   onChange={(e) => ubahGaya({ warna_sorot: e.target.value })} />
+          </label>
+        )}
         <label className="montase-kolom">
           <span>{t('montase.teks.gerak')}</span>
           <select value={gaya.gerak ?? 'muncul'} onChange={(e) => ubahGaya({ gerak: e.target.value })}>

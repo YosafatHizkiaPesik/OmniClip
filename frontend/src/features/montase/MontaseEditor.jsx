@@ -34,7 +34,7 @@ import {
 } from './model/dokumen.js';
 import {
   bekukan, belah, bisaHapusLajur, gandakan, hapusBanyak, hapusBeriak, hapusLajur, hapusPenanda,
-  rapatkan, salin, semuaItem, tambahLajur, tambahPenanda, tempel, ubahKecepatan, ubahLajur, ubahPenanda,
+  pasangSubtitle, rapatkan, salin, semuaItem, tambahLajur, tambahPenanda, tempel, ubahKecepatan, ubahLajur, ubahPenanda,
   ubahTransform,
 } from './model/suntingan.js';
 import {
@@ -171,6 +171,8 @@ export default function MontaseEditor() {
   const pratinjau = useRef(null);
   const linimasa = useRef(null);
   const ekspor = useJobRunner();
+  const subtitleKerja = useJobRunner();
+  const subtitleDipasang = useRef(null);
 
   const revisi = useRef(null);
   const kotor = useRef(false);
@@ -380,7 +382,16 @@ export default function MontaseEditor() {
     ubah((d) => ubahLajur(d, id, p), { gabung: `lajur:${id}:${Object.keys(p).join(',')}` });
   }, [ubah]);
 
+  /** Subtitle otomatis (M3.2): simpan dulu, karena pekerjaannya membaca dokumen tersimpan. */
+  const aksiSubtitle = async () => {
+    await simpanSekarang();
+    if (kotor.current) return;
+    subtitleKerja.run(`/montase/proyek/${encodeURIComponent(proyekId)}/subtitle`).catch(() => {});
+  };
+
   const aksi = {
+    subtitle: aksiSubtitle,
+    subtitleSibuk: subtitleKerja.active,
     batal: () => lompat(batal),
     ulang: () => lompat(ulang),
     belah: aksiBelah,
@@ -394,6 +405,22 @@ export default function MontaseEditor() {
     tambahMotion: tambahAnimasiDiGaris,
     tambahLajur: aksiTambahLajur,
   };
+
+  // Hasil subtitle diterapkan sekali per pekerjaan, sebagai satu langkah batal.
+  const hasilSubtitle = subtitleKerja.result;
+  const idSubtitle = subtitleKerja.job?.job_id;
+  useEffect(() => {
+    if (!hasilSubtitle || !idSubtitle || subtitleDipasang.current === idSubtitle) return;
+    subtitleDipasang.current = idSubtitle;
+    if (!hasilSubtitle.potongan?.length) {
+      setGalat(t('montase.subtitle.kosong'));
+      return;
+    }
+    const hasil = pasangSubtitle(riwayatRef.current.kini, hasilSubtitle.potongan, {
+      nama: t('montase.subtitle.lajur'), alasan: t('montase.subtitle.alasan'),
+    });
+    if (terapkan(hasil.dokumen)) pilihLajur(hasil.lajurId);
+  }, [hasilSubtitle, idSubtitle, terapkan, pilihLajur, t]);
 
   // --- pintasan keyboard (JOB-4 M2.4) -------------------------------------------
 
@@ -501,6 +528,11 @@ export default function MontaseEditor() {
         <h1 title={dokumen.nama}>{dokumen.nama}</h1>
         <StatusSimpan status={status} onMuatUlang={muat} onCobaLagi={simpanSekarang} />
         <span className="montase-linimasa-spasi" />
+        {(subtitleKerja.active || subtitleKerja.error) && (
+          <div className="montase-ekspor-kabar">
+            <JobProgress job={subtitleKerja.job} error={subtitleKerja.error} onCancel={subtitleKerja.cancel} compact />
+          </div>
+        )}
         {(ekspor.job || ekspor.error) && (
           <div className="montase-ekspor-kabar">
             <JobProgress job={ekspor.job} error={ekspor.error} onCancel={ekspor.cancel} compact />

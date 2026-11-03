@@ -18,6 +18,12 @@ export const DETIK_TEKS = 3;
  * Gaya teks baru: huruf putih Montserrat bergaris hitam, terbaca di atas
  * gambar apa pun tanpa pelat. Tema lain dipilih di panel Properti (M3.1).
  */
+/** Gaya subtitle otomatis: huruf besar bergaris di bawah, kata yang diucapkan disorot kuning. */
+export const GAYA_SUBTITLE = {
+  font: 'Montserrat', ukuran: 76, warna: '#ffffff', kapital: true, letak: 'bawah',
+  perataan: 'tengah', latar: 'tanpa', warna_latar: '#000000', alfa_latar: 1,
+  garis: 7, warna_garis: '#000000', bayang: 0, kabur: 0, gerak: 'muncul', warna_sorot: '#FFE500',
+};
 export const GAYA_TEKS_BAWAAN = {
   font: 'Montserrat', ukuran: 96, warna: '#ffffff', kapital: false, letak: 'tengah',
   perataan: 'tengah', latar: 'tanpa', warna_latar: '#000000', alfa_latar: 1,

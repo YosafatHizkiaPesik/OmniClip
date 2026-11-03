@@ -191,6 +191,16 @@ def ekspor_proyek(proyek_id: str):
         raise NotFound("Proyek tidak ditemukan.") from e
 
 
+@router.post("/proyek/{proyek_id}/subtitle")
+def subtitle_proyek(proyek_id: str):
+    """Subtitle otomatis dari suara linimasa (pekerjaan `montase_subtitle`, M3.2)."""
+    from . import subtitle
+    try:
+        return {"job_id": subtitle.mulai(proyek_id)}
+    except KeyError as e:
+        raise NotFound("Proyek tidak ditemukan.") from e
+
+
 # --- bahan --------------------------------------------------------------------
 
 class Rujuk(BaseModel):

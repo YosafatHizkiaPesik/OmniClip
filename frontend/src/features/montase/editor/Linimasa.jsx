@@ -35,7 +35,7 @@ import React, {
   useRef, useState,
 } from 'react';
 import {
-  Bookmark, CopyPlus, Eye, EyeOff, Film, FoldHorizontal, Image as Gambar, Lock, LockOpen, Magnet, Music,
+  Bookmark, Captions, CopyPlus, Eye, EyeOff, Film, FoldHorizontal, Image as Gambar, Lock, LockOpen, Magnet, Music,
   Redo2, Scissors, Snowflake, Sparkles, Trash2, Type, Undo2, Volume2, VolumeX, ZoomIn,
   ZoomOut, Maximize2,
 } from 'lucide-react';
@@ -629,6 +629,11 @@ const Linimasa = forwardRef(function Linimasa({
         </button>
         <button type="button" className="btn-secondary" onClick={aksi.tambahMotion}>
           <Sparkles size={13} />{t('montase.linimasa.tambah_animasi')}
+        </button>
+        <button type="button" className="btn-secondary" onClick={aksi.subtitle} disabled={aksi.subtitleSibuk}
+                title={t('montase.subtitle.tombol_ket')}
+        >
+          <Captions size={13} />{t('montase.subtitle.tombol')}
         </button>
         <select className="montase-tambah-lajur" value="" aria-label={t('montase.linimasa.tambah_lajur')}
                 onChange={(e) => { if (e.target.value) aksi.tambahLajur(e.target.value); }}

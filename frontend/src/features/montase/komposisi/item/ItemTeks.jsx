@@ -139,6 +139,22 @@ export default function ItemTeks({ item, sumber }) {
   }
 
   let isi = item.teks;
+  // Subtitle otomatis (M3.2): kata yang sedang diucapkan disorot. Hanya bila
+  // jumlah kata teks masih sama dengan jumlah kata berwaktu; teks yang sudah
+  // disunting jauh tetap tampil, tanpa sorotan yang salah tempat.
+  const kataTeks = String(item.teks ?? '').split(/\s+/).filter(Boolean);
+  if (g.warna_sorot && Array.isArray(item.kata) && item.kata.length === kataTeks.length && kataTeks.length) {
+    isi = kataTeks.map((w, i) => {
+      const k = item.kata[i];
+      const aktif = frame >= k.t && frame < k.t + k.d;
+      return (
+        <React.Fragment key={i}>
+          {i > 0 ? ' ' : null}
+          <span style={aktif ? { color: g.warna_sorot } : undefined}>{w}</span>
+        </React.Fragment>
+      );
+    });
+  }
   if (latar === 'sorot') {
     isi = (
       <span style={{
@@ -146,7 +162,7 @@ export default function ItemTeks({ item, sumber }) {
         boxDecorationBreak: 'clone', WebkitBoxDecorationBreak: 'clone',
       }}
       >
-        {item.teks}
+        {isi}
       </span>
     );
   }
