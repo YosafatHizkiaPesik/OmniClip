@@ -454,6 +454,44 @@ di menu). Hasil angka tiap tes ditulis juga di JOB-4.md bagian 24.
     "Coba sekarang", lalu kembali "Tersimpan" sendiri tanpa kehilangan
     perubahan.
 
+### Tambahan 3 November 2026: Montase Tahap 3, teks, suara, efek (JOB-4)
+
+- [ ] **76. Tema teks.** Tambah Teks, pilih tiap tema di panel Properti (Kartu
+  putih, Pita hitam, Stabilo, Berita viral, Neon, ...), ganti font dan latar.
+  - Diharapkan: pratinjau langsung berubah, huruf tidak "meloncat" di awal
+    video hasil ekspor, dan hasil ekspor sama dengan pratinjau.
+- [ ] **77. Subtitle otomatis (Whisper sungguhan).** Proyek dengan klip yang
+  berbicara (dari Unduhan atau Impor), tekan **Subtitle**.
+  - Diharapkan: lajur "Subtitle" berisi potongan 3-4 kata bertanda AI, kata
+    yang diucapkan berwarna kuning; mengubah teks satu potongan tetap bisa;
+    Ctrl+Z sekali menghapus semuanya. Klip dari Unduhan memakai transkrip yang
+    sudah ada (cepat); klip impor ditranskrip Whisper (lebih lama).
+- [ ] **78. Narasi dan rekaman (suara sungguhan).** Tab **Suara** di Bahan:
+  ketik kalimat, pilih Ardi/Gadis, **Buat narasi**. Lalu **Mulai merekam**,
+  bicara 3 detik, **Berhenti**.
+  - Diharapkan: narasi terdengar di garis putar; ubah teksnya di Properti lalu
+    **Buat ulang suara** (item tetap di tempatnya). Rekaman masuk lajur suara
+    yang kosong. Tanpa internet, suara Microsoft memberi pesan jelas.
+- [ ] **79. Musik dan perendam.** Taruh musik di lajur suara sendiri, klik nama
+  lajurnya, **Rendam saat ada ucapan**.
+  - Diharapkan: wajik kuning muncul di item musik; musik mengecil saat narasi
+    atau subtitle dan naik lagi sesudahnya, di pratinjau dan ekspor.
+- [ ] **80. Keyframe.** Pilih klip, wajik di Skala dan X di awal, pindah 2
+  detik, ubah skala atau seret di pratinjau, pilih kurva "Pelan di akhir".
+  - Diharapkan: klip membesar/bergeser mulus di antara keyframe; tombol
+    sebelumnya/berikutnya melompat ke keyframe.
+- [ ] **81. Transisi dan warna.** Klip kedua: Transisi masuk "Larut", lalu
+  "Geser", "Kilat"; klip pertama: warna "Sinematik", suhu hangat.
+  - Diharapkan: transisi berpusat di sambungan tanpa menggeser item lain;
+    warna sama di pratinjau dan ekspor.
+- [ ] **82. Efek, stiker, bilah progres.** Punch-in di garis putar, guncang,
+  Ken Burns pada gambar, stiker 🔥, Animasi → Bilah progres.
+  - Diharapkan: punch-in sesaat, guncang terasa, gambar diam bergerak pelan,
+    bilah progres penuh tepat di akhir video.
+- [ ] **83. Kekerasan suara.** Ekspor video dengan klip yang pelan.
+  - Diharapkan: hasilnya sama keras dengan video YouTube lain (-14 LUFS);
+    gambarnya tidak berubah.
+
 ### Jalur fitur unggulan (urutan disarankan, ±30 menit)
 
 Satu video podcast pendek (10-20 menit) cukup untuk semuanya:

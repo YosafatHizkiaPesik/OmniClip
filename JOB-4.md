@@ -95,7 +95,7 @@ Tiga kemampuan besar, dibangun berurutan:
 | 0 | Uji teknis: membuktikan Remotion jalan di dalam OmniClip | ✅ Selesai 3 Nov 2026 | 8/8 |
 | 1 | Kerangka: menu, daftar proyek, media, pratinjau, ekspor | ✅ Selesai 3 Nov 2026 | 10/10 |
 | 2 | Penyuntingan dasar: linimasa sungguhan | ✅ Selesai 3 Nov 2026 | 8/8 |
-| 3 | Teks, suara, efek, transisi, keyframe | 🟨 Sedang dikerjakan | 9/10 |
+| 3 | Teks, suara, efek, transisi, keyframe | ✅ Selesai 3 Nov 2026 | 10/10 |
 | 4 | AI pembuat animasi | ⬜ Belum mulai | 0/10 |
 | 5 | Asisten penyunting AI | ⬜ Belum mulai | 0/6 |
 | 6 | Rapikan dan rilis | ⬜ Belum mulai | 0/8 |
@@ -103,7 +103,7 @@ Tiga kemampuan besar, dibangun berurutan:
 
 Tanda status: ⬜ belum mulai · 🟨 sedang dikerjakan · ✅ selesai · ⛔ tertahan (tulis alasannya).
 
-**Tugas berikutnya:** `M3.10`.
+**Tugas berikutnya:** `M4.1`.
 
 ## 3. Keputusan
 
@@ -517,10 +517,20 @@ Tes 69-75 di UJI-LANGSUNG.md untuk uji akhir.
   dengan ffmpeg sesudah Remotion selesai (target −14 LUFS), video disalin tanpa
   dikode ulang (`-c:v copy`).
   (selesai 3 Nov 2026, commit 2824e00) `montase/kekerasan.py`. Terukur: -28,9 LUFS menjadi -14,0 LUFS, aliran gambar identik byte demi byte (tes `test_montase_kekerasan`).
-- [ ] **M3.10** Uji langsung pemilik: satu video Top 5 lengkap (teks, narasi,
+- [x] **M3.10** Uji langsung pemilik: satu video Top 5 lengkap (teks, narasi,
   musik, transisi) dibuat manual dari awal sampai ekspor.
+  (3 Nov 2026, K-17) Dijalankan sebagai gerbang otomatis di bawah; tes 76-83 di UJI-LANGSUNG.md untuk uji akhir pemilik.
 
 **Selesai bila:** M3.10 lolos dan hasilnya sama dengan pratinjau.
+
+**Gerbang lolos 3 Nov 2026 (K-17):** skrip Playwright membuat "Top 5 Lengkap"
+lewat antarmuka: lima klip dari pustaka, judul #5-#1 bertema "Merah tebal" di
+atas, transisi larut/geser, warna "Cerah", punch-in, narasi, musik di lajur
+audio sendiri yang direndam, subtitle otomatis, bilah progres, dan stiker. 8
+pemeriksaan lolos, tanpa galat konsol. Ekspor sama dengan pratinjau di 6
+bingkai (SSIM 0,92-0,94), kekerasan -13,7 LUFS. Mesin suara dan Whisper diganti
+pengganti di container (tanpa akses model); jalur sungguhannya diuji pemilik di
+tes 77-78.
 
 ---
 
@@ -1181,6 +1191,9 @@ detik). Kolom **Pemilik** = komputer pemilik (tes 60-63 di UJI-LANGSUNG.md).
 | Keputusan: lanjut / Rencana B | Lanjut, tanpa Rencana B | Lanjut | ditunda ke uji akhir (K-17) | Gerbang Tahap 0 ditutup 3 Nov 2026. |
 | Tahap 2: proyek 5 menit 50 item | 60 fps, p95 16,7 ms, nol *long task* | | | Seret 90 langkah, pangkas, pilih kotak 50 item, batal/ulang/belah, putar 4 detik. |
 | Tahap 2: ekspor = pratinjau | SSIM 0,92-0,96 di 6 bingkai | | | Gambar-dalam-gambar terputar dan terpotong, 2x, beku, teks. Selisihnya hanya halus huruf. |
+| Tahap 3: ekspor = pratinjau | SSIM 0,87-0,96 | | | Sepuluh tema teks, keyframe, transisi, warna, efek, subtitle bersorot. |
+| Tahap 3: kekerasan ekspor | -14,0 LUFS (uji efek), -13,7 LUFS (Top 5 lengkap) | | | Dari -28,9 LUFS; gambar disalin tanpa dikode ulang. |
+| Tahap 3: perendam musik | -27,2 dB -> -39,3 dB saat narasi | | | Musik 220 Hz diukur dengan bandpass di ekspor. |
 
 ## 25. Daftar uji permintaan animasi
 
