@@ -930,7 +930,7 @@ Semua di bawah `/api/montase`, membawa profil aktif lewat header
 | POST | `/rekam` | Rekaman mikrofon (WebM) -> M4A -> bahan `rekam` (M3.3) |
 | GET | `/gaya-teks` | Tema teks dari `tema_judul.py` dalam bentuk `item.gaya`, dan daftar font bawaan (M3.1) |
 | GET | `/t/{token}/font/{keluarga}` | Berkas font bawaan untuk iframe dan mesin render |
-| POST | `/narasi` | `{teks, suara}`: hasil TTS menjadi bahan audio |
+| POST | `/narasi` | `{teks, suara, kecepatan}`: hasil TTS menjadi bahan audio `tts`, narasi yang sama dipakai ulang |
 | GET | `/komponen` | Pustaka animasi (bawaan + tersimpan) |
 | GET | `/komponen/{id}/{versi}.js` | Hasil kompilasi, untuk iframe dan mesin. Menerima token. |
 | POST | `/motion/buat` | `{permintaan, proyek_id, rentang?}`: pekerjaan AI, menjawab `job_id` |
@@ -943,8 +943,9 @@ Semua di bawah `/api/montase`, membawa profil aktif lewat header
 Kemajuan pekerjaan (render, AI, unduh mesin) memakai saluran peristiwa yang
 sudah ada (`events.py`, `JobProgress`), bukan saluran baru.
 
-Status 3 Nov 2026: semua baris di atas sudah ada **kecuali** `/narasi` (M3.3),
-`/komponen*` dan `/motion/*` (Tahap 4), dan `/asisten` (Tahap 5).
+Status 3 Nov 2026: semua baris di atas sudah ada **kecuali** `/komponen*` dan
+`/motion/*` (Tahap 4), dan `/asisten` (Tahap 5). `/narasi` menerima juga
+`kecepatan` (tempo 0,6-1,6).
 
 ## 19. Mesin Montase
 
