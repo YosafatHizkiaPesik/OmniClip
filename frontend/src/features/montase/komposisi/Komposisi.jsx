@@ -21,12 +21,13 @@
  *            dokumennya sama persis.
  */
 import React from 'react';
-import { AbsoluteFill, Sequence } from 'remotion';
+import { AbsoluteFill, Freeze, Sequence, useCurrentFrame } from 'remotion';
 import ItemAudio from './item/ItemAudio.jsx';
 import ItemGambar from './item/ItemGambar.jsx';
 import ItemMotion from './item/ItemMotion.jsx';
 import ItemTeks from './item/ItemTeks.jsx';
 import ItemVideo from './item/ItemVideo.jsx';
+import { gayaTransisi, rencanaTransisi } from './transisi.js';
 
 export const ID_KOMPOSISI = 'Montase';
 
@@ -49,28 +50,61 @@ export function ukuranDokumen(dokumen) {
   };
 }
 
+/** Gaya transisi di sekeliling item, plus lapisan putih untuk transisi kilat. */
+function LapisTransisi({ rencana, children }) {
+  const frame = useCurrentFrame();
+  const { gaya, kilat } = gayaTransisi(rencana, frame);
+  return (
+    <AbsoluteFill>
+      <AbsoluteFill style={gaya}>{children}</AbsoluteFill>
+      {kilat > 0 && <AbsoluteFill style={{ backgroundColor: '#ffffff', opacity: kilat }} />}
+    </AbsoluteFill>
+  );
+}
+
 function Lajur({ lajur, sumber, fps, dokumen }) {
   // Lajur audio tidak digambar tapi tetap dipasang: suaranya berasal dari
   // komponennya. Lajur gambar yang disembunyikan tidak dipasang sama sekali,
   // jadi suaranya ikut hilang (sama dengan CapCut).
   if (lajur.sembunyi && lajur.jenis !== 'audio') return null;
+  // Urut waktu: item yang masuk lewat transisi tergambar di atas yang keluar.
+  const urut = (lajur.item ?? [])
+    .filter((item) => PENGGAMBAR[item.jenis] && item.durasi > 0)
+    .slice()
+    .sort((a, b) => (a.mulai ?? 0) - (b.mulai ?? 0));
+  const rencana = lajur.jenis === 'audio' ? new Map() : rencanaTransisi(urut);
   return (
     <AbsoluteFill>
-      {(lajur.item ?? []).map((item) => {
+      {urut.map((item) => {
         const Gambar = PENGGAMBAR[item.jenis];
-        if (!Gambar || !(item.durasi > 0)) return null;
+        const r = rencana.get(item.id);
+        // Video dipasang satu detik lebih awal supaya dekodernya sudah
+        // siap saat gilirannya tiba. Tanpa ini pratinjau tersendat di
+        // setiap sambungan potongan.
+        const premount = item.jenis === 'video' || item.jenis === 'audio' ? fps : 0;
+        const isi = <Gambar item={item} lajur={lajur} sumber={sumber} dokumen={dokumen} />;
+        if (!r || (!r.masuk && !r.keluar)) {
+          return (
+            <Sequence key={item.id} name={item.id} from={item.mulai ?? 0} durationInFrames={item.durasi}
+                      premountFor={premount}
+            >
+              {isi}
+            </Sequence>
+          );
+        }
+        // Diperpanjang `pra` bingkai sebelum dan `pasca` sesudah untuk jendela
+        // transisi; di perpanjangan itu item menahan bingkai pertama/terakhirnya.
         return (
-          <Sequence
-            key={item.id}
-            name={item.id}
-            from={item.mulai ?? 0}
-            durationInFrames={item.durasi}
-            // Video dipasang satu detik lebih awal supaya dekodernya sudah
-            // siap saat gilirannya tiba. Tanpa ini pratinjau tersendat di
-            // setiap sambungan potongan.
-            premountFor={item.jenis === 'video' || item.jenis === 'audio' ? fps : 0}
+          <Sequence key={item.id} name={item.id} from={(item.mulai ?? 0) - r.pra}
+                    durationInFrames={item.durasi + r.pra + r.pasca} premountFor={premount}
           >
-            <Gambar item={item} lajur={lajur} sumber={sumber} dokumen={dokumen} />
+            <LapisTransisi rencana={r}>
+              <Freeze frame={r.pra} active={(f) => f < r.pra}>
+                <Freeze frame={r.pra + item.durasi - 1} active={(f) => f >= r.pra + item.durasi}>
+                  <Sequence from={r.pra} durationInFrames={item.durasi}>{isi}</Sequence>
+                </Freeze>
+              </Freeze>
+            </LapisTransisi>
           </Sequence>
         );
       })}

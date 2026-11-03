@@ -24,7 +24,8 @@ import { cariItem, ubahItem } from '../model/dokumen.js';
 import {
   bingkaiItem, geser, potongDariSisi, putarDari, skalaDariSudut, sudutBingkai,
 } from '../model/geometri.js';
-import { ubahTransform } from '../model/suntingan.js';
+import { ubahSifatDiBingkai, ubahTransform } from '../model/suntingan.js';
+import { ubahPada } from '../komposisi/keyframe.js';
 import { useGaris } from './garisPutar.js';
 
 const AMBANG_TENGAH = 8;
@@ -66,7 +67,10 @@ export default function PeganganUbah({ dokumen, terpilih, garis, onUbah }) {
 
   const W = dokumen.kanvas.lebar;
   const k = lebar / W;
-  const b = bingkaiItem(dokumen, item);
+  // Letak yang terlihat di garis putar: keyframe sudah diterapkan (M3.7).
+  const fRel = f - item.mulai;
+  const tampakItem = (it) => ({ ...it, ubah: ubahPada(it, fRel) });
+  const b = bingkaiItem(dokumen, tampakItem(item));
   const bisaPotong = item.jenis !== 'teks';
   const modePotong = potong && bisaPotong;
   const kunci = Boolean(lajur.kunci);
@@ -80,8 +84,9 @@ export default function PeganganUbah({ dokumen, terpilih, garis, onUbah }) {
     // dan seretan berhenti di tengah jalan.
     try { e.currentTarget.setPointerCapture?.(e.pointerId); } catch { /* tidak apa */ }
     const dasar = kini.current.dokumen;
-    const it = cariItem(dasar, item.id)?.item;
-    if (!it) return;
+    const asli = cariItem(dasar, item.id)?.item;
+    if (!asli) return;
+    const it = tampakItem(asli);
     const rect = wadah.current.getBoundingClientRect();
     const skalaLayar = rect.width / W;
     const keKanvas = (ev) => ({ x: (ev.clientX - rect.left) / skalaLayar, y: (ev.clientY - rect.top) / skalaLayar });
@@ -113,7 +118,11 @@ export default function PeganganUbah({ dokumen, terpilih, garis, onUbah }) {
           }),
         };
       }
-      kini.current.onUbah(() => ubahTransform(dasar, it.id, sebagian), opsi);
+      // Sifat yang punya keyframe ditulis sebagai keyframe di garis putar;
+      // potong selalu nilai dasar.
+      kini.current.onUbah(() => (sebagian.potong
+        ? ubahTransform(dasar, it.id, sebagian)
+        : ubahSifatDiBingkai(dasar, it.id, sebagian, fRel)), opsi);
     };
     const gerak = (ev) => {
       posisi = keKanvas(ev);

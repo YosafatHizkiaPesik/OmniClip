@@ -9,20 +9,38 @@
  * membisukan suaranya sendiri, tapi `muted` tetap dipasang supaya jelas.
  */
 import React from 'react';
-import { AbsoluteFill, Freeze } from 'remotion';
+import { AbsoluteFill, Freeze, useCurrentFrame } from 'remotion';
 import { Video } from '@remotion/media';
 import { kotakDasar } from '../kotak.js';
+import { ubahPada } from '../keyframe.js';
 import { gayaUbah, volumeItem } from '../ubah.js';
+import { filterWarna, matriksSuhu } from '../warna.js';
+import { transformEfek } from '../efek.js';
 
 export function KotakItem({ dokumen, item, children }) {
+  const frame = useCurrentFrame();
   const k = kotakDasar(dokumen, item);
+  const idSuhu = `suhu-${item.id}`;
+  const suhu = matriksSuhu(item.warna?.suhu);
+  const filter = filterWarna(item.warna, idSuhu);
+  const efekAktif = transformEfek(item.efek, frame, item.durasi);
   return (
     <AbsoluteFill>
+      {suhu && (
+        <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden>
+          <filter id={idSuhu} colorInterpolationFilters="sRGB">
+            <feColorMatrix type="matrix" values={suhu} />
+          </filter>
+        </svg>
+      )}
       <div style={{
-        position: 'absolute', left: k.x, top: k.y, width: k.w, height: k.h, ...gayaUbah(item.ubah),
+        position: 'absolute', left: k.x, top: k.y, width: k.w, height: k.h,
+        ...gayaUbah(ubahPada(item, frame)),
       }}
       >
-        {children}
+        <div style={{ width: '100%', height: '100%', filter, overflow: efekAktif ? 'hidden' : undefined }}>
+          {efekAktif ? <div style={{ width: '100%', height: '100%', transform: efekAktif }}>{children}</div> : children}
+        </div>
       </div>
     </AbsoluteFill>
   );

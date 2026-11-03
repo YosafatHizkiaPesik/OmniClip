@@ -95,7 +95,7 @@ Tiga kemampuan besar, dibangun berurutan:
 | 0 | Uji teknis: membuktikan Remotion jalan di dalam OmniClip | ✅ Selesai 3 Nov 2026 | 8/8 |
 | 1 | Kerangka: menu, daftar proyek, media, pratinjau, ekspor | ✅ Selesai 3 Nov 2026 | 10/10 |
 | 2 | Penyuntingan dasar: linimasa sungguhan | ✅ Selesai 3 Nov 2026 | 8/8 |
-| 3 | Teks, suara, efek, transisi, keyframe | ⬜ Belum mulai | 0/10 |
+| 3 | Teks, suara, efek, transisi, keyframe | ✅ Selesai 3 Nov 2026 | 10/10 |
 | 4 | AI pembuat animasi | ⬜ Belum mulai | 0/10 |
 | 5 | Asisten penyunting AI | ⬜ Belum mulai | 0/6 |
 | 6 | Rapikan dan rilis | ⬜ Belum mulai | 0/8 |
@@ -103,7 +103,7 @@ Tiga kemampuan besar, dibangun berurutan:
 
 Tanda status: ⬜ belum mulai · 🟨 sedang dikerjakan · ✅ selesai · ⛔ tertahan (tulis alasannya).
 
-**Tugas berikutnya:** `M3.1`.
+**Tugas berikutnya:** `M4.1`.
 
 ## 3. Keputusan
 
@@ -482,36 +482,55 @@ Tes 69-75 di UJI-LANGSUNG.md untuk uji akhir.
 
 **Tujuan:** semua bahan sebuah video jadi bisa dibuat di Montase.
 
-- [ ] **M3.1** Item teks: font bawaan (`app/assets/fonts`, semuanya OFL), warna,
+- [x] **M3.1** Item teks: font bawaan (`app/assets/fonts`, semuanya OFL), warna,
   garis tepi, bayangan, pelat latar, perataan. Gaya siap pakai diambil dari
   `tema_judul.py` (diterjemahkan ke komponen komposisi). Font dimuat dengan
   `delayRender` supaya bingkai pertama tidak memakai font cadangan.
-- [ ] **M3.2** Subtitle otomatis: suara di linimasa ditranskrip dengan
+  (selesai 3 Nov 2026, commit 35f5daf) Tema TIDAK disalin ke komposisi: `GET /api/montase/gaya-teks` menerjemahkan `tema_judul.TEMA` ke `item.gaya`, dan memilih tema menulis nilainya ke dokumen. Font didaftarkan dengan FontFace tanpa ketebalan dan teks memintanya 400, karena meminta 800 membuat peramban memalsukan tebal. CSP bundel mesin perlu `font-src` OmniClip (sebelumnya hanya 'self'). Diuji: sepuluh tema, pratinjau = ekspor di 10 bingkai (SSIM 0,87-0,93 pada tangkapan 232 px).
+- [x] **M3.2** Subtitle otomatis: suara di linimasa ditranskrip dengan
   `whisper.py` (atau memakai transkrip yang sudah ada kalau bahannya dari
   unduhan atau Klip jadi). Waktu per kata menjadi lajur subtitle yang bisa
   disunting, dengan gaya sorot kata seperti Studio Klip.
-- [ ] **M3.3** Narasi: ketik teks, pilih suara dari katalog `tts.py`, dan hasilnya
+  (selesai 3 Nov 2026, commit 9496abb) Kata per bahan disimpan di `kata.json` (sekali per bahan, dipakai ulang di setiap potongan). Ucapan dua sumber yang bertumpuk tidak diselang-seling: lajur audio menang, lalu lajur video terbawah. Belum diuji dengan Whisper sungguhan (HuggingFace ditolak proxy container); diuji dengan simpanan kata, jadi tes 77 di UJI-LANGSUNG.md wajib dijalankan pemilik.
+- [x] **M3.3** Narasi: ketik teks, pilih suara dari katalog `tts.py`, dan hasilnya
   jadi item audio. Mengubah teksnya membuat ulang suaranya. Rekam suara sendiri
   lewat mikrofon (MediaRecorder) juga menjadi item audio.
-- [ ] **M3.4** Musik latar dengan perendam otomatis (*ducking*): volume musik
+  (selesai 3 Nov 2026, commit ff852c8) Teks yang diubah TIDAK membuat ulang suara per ketukan: tombol "Buat ulang suara" menyala dan mengganti bahan item sekali (item tetap di tempatnya). Narasi dan rekaman masuk lajur audio yang kosong di rentang itu, atau lajur audio baru. Rekaman WebM diubah ke M4A di server. Belum diuji dengan suara sungguhan (container tanpa akses suara Microsoft/unduhan Piper): tes 78 di UJI-LANGSUNG.md.
+- [x] **M3.4** Musik latar dengan perendam otomatis (*ducking*): volume musik
   turun saat ada narasi atau ucapan. Hasilnya berupa keyframe volume biasa,
   jadi terlihat dan bisa diubah.
-- [ ] **M3.5** Transisi antar item di lajur yang sama: potong, larut, geser,
+  (selesai 3 Nov 2026, commit d7db00b) Ucapan = item lajur subtitle dan item audio di lajur audio lain (narasi, rekaman); suara klip tanpa subtitle tidak dihitung, karena tanpa tahu di mana orang berbicara perendaman jadi musik yang pelan sepanjang video. Terukur di ekspor: musik -27,2 dB, -39,3 dB saat narasi (turun ke 20%), -27,1 dB sesudahnya.
+- [x] **M3.5** Transisi antar item di lajur yang sama: potong, larut, geser,
   usap, perbesar, kilat, glitch (pakai `@remotion/transitions`).
-- [ ] **M3.6** Penyesuaian warna: kecerahan, kontras, saturasi, suhu, plus
+  (selesai 3 Nov 2026, commit 3fa8071) BEDA DARI RENCANA: tidak memakai `@remotion/transitions`. `TransitionSeries` menumpukkan dua potongan sehingga video lebih pendek sepanjang transisi, sedangkan letak item Montase mutlak dan item lajur lain sudah ditaruh di waktunya. Di sini jendela transisi berpusat di sambungan dan kedua item menahan bingkai ujungnya dengan `<Freeze active>`; suara tetap terpotong di sambungan. Transisi disimpan di item yang MASUK (`item.transisi`). Pratinjau = ekspor di tengah transisi.
+- [x] **M3.6** Penyesuaian warna: kecerahan, kontras, saturasi, suhu, plus
   preset bernama sama dengan `VIDEO_FILTERS` di `render.py`.
-- [ ] **M3.7** Keyframe untuk posisi, ukuran, putar, transparansi, dan volume,
+  (selesai 3 Nov 2026, commit 3fa8071) Preset meniru rantai ffmpeg `VIDEO_FILTERS` dengan filter CSS (bukan identik piksel dengan Studio Klip, tapi berkarakter sama); suhu lewat matriks warna SVG karena filter CSS tidak punya suhu.
+- [x] **M3.7** Keyframe untuk posisi, ukuran, putar, transparansi, dan volume,
   dengan kurva (linear, masuk, keluar, masuk-keluar, pegas). Penanda keyframe
   berbentuk wajik di item linimasa.
-- [ ] **M3.8** Efek bawaan: punch-in (zoom sekejap), guncang, Ken Burns untuk
+  (selesai 3 Nov 2026, commit d7db00b) `t` keyframe relatif ke awal item; `kurva` adalah cara menuju keyframe itu. Sifat berkeyframe mengabaikan nilai dasarnya, dan mengubah nilainya (panel atau pegangan) menulis keyframe di garis putar. Keyframe sebelum 0 sesudah belah/pangkas tidak dibuang supaya gerak bersambung. Pratinjau = ekspor (SSIM 0,92-0,94).
+- [x] **M3.8** Efek bawaan: punch-in (zoom sekejap), guncang, Ken Burns untuk
   gambar diam, stiker/emoji, bilah progres.
-- [ ] **M3.9** Penyamaan kekerasan suara saat ekspor: `loudnorm` dua lintasan
+  (selesai 3 Nov 2026, commit 2824e00) Bilah progres adalah animasi bawaan kedua (`ko_bilah_progres`), menghitung ke M4.2. Stiker emoji memakai font emoji SISTEM: pratinjau dan ekspor di komputer yang sama selalu sama, tapi rupa emojinya bisa berbeda antara Windows (Segoe UI Emoji) dan Linux (Noto Color Emoji).
+- [x] **M3.9** Penyamaan kekerasan suara saat ekspor: `loudnorm` dua lintasan
   dengan ffmpeg sesudah Remotion selesai (target −14 LUFS), video disalin tanpa
   dikode ulang (`-c:v copy`).
-- [ ] **M3.10** Uji langsung pemilik: satu video Top 5 lengkap (teks, narasi,
+  (selesai 3 Nov 2026, commit 2824e00) `montase/kekerasan.py`. Terukur: -28,9 LUFS menjadi -14,0 LUFS, aliran gambar identik byte demi byte (tes `test_montase_kekerasan`).
+- [x] **M3.10** Uji langsung pemilik: satu video Top 5 lengkap (teks, narasi,
   musik, transisi) dibuat manual dari awal sampai ekspor.
+  (3 Nov 2026, K-17) Dijalankan sebagai gerbang otomatis di bawah; tes 76-83 di UJI-LANGSUNG.md untuk uji akhir pemilik.
 
 **Selesai bila:** M3.10 lolos dan hasilnya sama dengan pratinjau.
+
+**Gerbang lolos 3 Nov 2026 (K-17):** skrip Playwright membuat "Top 5 Lengkap"
+lewat antarmuka: lima klip dari pustaka, judul #5-#1 bertema "Merah tebal" di
+atas, transisi larut/geser, warna "Cerah", punch-in, narasi, musik di lajur
+audio sendiri yang direndam, subtitle otomatis, bilah progres, dan stiker. 8
+pemeriksaan lolos, tanpa galat konsol. Ekspor sama dengan pratinjau di 6
+bingkai (SSIM 0,92-0,94), kekerasan -13,7 LUFS. Mesin suara dan Whisper diganti
+pengganti di container (tanpa akses model); jalur sungguhannya diuji pemilik di
+tes 77-78.
 
 ---
 
@@ -771,7 +790,7 @@ di `test_cacat_diperbaiki.py`).
 
 | Boleh dipakai Montase | Dilarang |
 |---|---|
-| `services/`: `media` (ffprobe), `paths` (`safe_media_path`), `koneksi_ai`, `penyedia_ai`, `kunci_ai`, `pemakaian_ai`, `bahasa_ai`, `tts`, `aset`, `stok`, `soundboard`, `whisper`, `transcript`, `momen`, `peristiwa_suara`, `reframe` (hanya fungsi publik jejak wajah), `proses`, `paths`, `jobs`, `events`, `profil`, `fonts`, `enkoder`, `unggah`, `google_upload`, `gerbang`, `keterangan`, `nilai_tambah`, `sampah` | `services/pipeline.py`, `services/render.py` (render klip), `services/sutradara*.py`, `routers/clips.py`, `routers/projects.py` |
+| `services/`: `media` (ffprobe), `paths` (`safe_media_path`), `tema_judul` (tema teks), `subtitles` (hanya `BUNDLED_FONTS`), `koneksi_ai`, `penyedia_ai`, `kunci_ai`, `pemakaian_ai`, `bahasa_ai`, `tts`, `aset`, `stok`, `soundboard`, `whisper`, `transcript`, `momen`, `peristiwa_suara`, `reframe` (hanya fungsi publik jejak wajah), `proses`, `paths`, `jobs`, `events`, `profil`, `fonts`, `enkoder`, `unggah`, `google_upload`, `gerbang`, `keterangan`, `nilai_tambah`, `sampah` | `services/pipeline.py`, `services/render.py` (render klip), `services/sutradara*.py`, `routers/clips.py`, `routers/projects.py` |
 | `app/config.py`, `app/db.py`, `app/bahasa.py`, `app/errors.py`, `repos/media.py` (unduhan, kredit sumber), `repos/settings.py` | Tabel `projects` dan `clips` (Montase punya tabelnya sendiri) |
 | Frontend: `lib/*`, `components/*`, `hooks/*`, `utils/*` | `features/studio/*` |
 
@@ -922,7 +941,12 @@ Semua di bawah `/api/montase`, membawa profil aktif lewat header
 | GET | `/t/{token}/bahan/{id}` | Berkas asli (render) atau salinan sunting (`?sunting=1`). Tanpa sesi. |
 | GET | `/t/{token}/bahan/{id}/{sampul,strip,gelombang}` | Turunan bahan. Lewat token karena `<img>` tidak membawa header profil. |
 | GET, POST | `/setelan` | Sakelar "Montase (beta)" (`{aktif}`) |
-| POST | `/narasi` | `{teks, suara}`: hasil TTS menjadi bahan audio |
+| POST | `/proyek/{id}/subtitle` | Subtitle otomatis (pekerjaan `montase_subtitle`), menjawab potongan untuk dipasang editor (M3.2) |
+| GET | `/suara` | Katalog suara narasi (`tts.py`) dan kesiapannya (M3.3) |
+| POST | `/rekam` | Rekaman mikrofon (WebM) -> M4A -> bahan `rekam` (M3.3) |
+| GET | `/gaya-teks` | Tema teks dari `tema_judul.py` dalam bentuk `item.gaya`, dan daftar font bawaan (M3.1) |
+| GET | `/t/{token}/font/{keluarga}` | Berkas font bawaan untuk iframe dan mesin render |
+| POST | `/narasi` | `{teks, suara, kecepatan}`: hasil TTS menjadi bahan audio `tts`, narasi yang sama dipakai ulang |
 | GET | `/komponen` | Pustaka animasi (bawaan + tersimpan) |
 | GET | `/komponen/{id}/{versi}.js` | Hasil kompilasi, untuk iframe dan mesin. Menerima token. |
 | POST | `/motion/buat` | `{permintaan, proyek_id, rentang?}`: pekerjaan AI, menjawab `job_id` |
@@ -935,8 +959,9 @@ Semua di bawah `/api/montase`, membawa profil aktif lewat header
 Kemajuan pekerjaan (render, AI, unduh mesin) memakai saluran peristiwa yang
 sudah ada (`events.py`, `JobProgress`), bukan saluran baru.
 
-Status 3 Nov 2026: semua baris di atas sudah ada **kecuali** `/narasi` (M3.3),
-`/komponen*` dan `/motion/*` (Tahap 4), dan `/asisten` (Tahap 5).
+Status 3 Nov 2026: semua baris di atas sudah ada **kecuali** `/komponen*` dan
+`/motion/*` (Tahap 4), dan `/asisten` (Tahap 5). `/narasi` menerima juga
+`kecepatan` (tempo 0,6-1,6).
 
 ## 19. Mesin Montase
 
@@ -1166,6 +1191,9 @@ detik). Kolom **Pemilik** = komputer pemilik (tes 60-63 di UJI-LANGSUNG.md).
 | Keputusan: lanjut / Rencana B | Lanjut, tanpa Rencana B | Lanjut | ditunda ke uji akhir (K-17) | Gerbang Tahap 0 ditutup 3 Nov 2026. |
 | Tahap 2: proyek 5 menit 50 item | 60 fps, p95 16,7 ms, nol *long task* | | | Seret 90 langkah, pangkas, pilih kotak 50 item, batal/ulang/belah, putar 4 detik. |
 | Tahap 2: ekspor = pratinjau | SSIM 0,92-0,96 di 6 bingkai | | | Gambar-dalam-gambar terputar dan terpotong, 2x, beku, teks. Selisihnya hanya halus huruf. |
+| Tahap 3: ekspor = pratinjau | SSIM 0,87-0,96 | | | Sepuluh tema teks, keyframe, transisi, warna, efek, subtitle bersorot. |
+| Tahap 3: kekerasan ekspor | -14,0 LUFS (uji efek), -13,7 LUFS (Top 5 lengkap) | | | Dari -28,9 LUFS; gambar disalin tanpa dikode ulang. |
+| Tahap 3: perendam musik | -27,2 dB -> -39,3 dB saat narasi | | | Musik 220 Hz diukur dengan bandpass di ekspor. |
 
 ## 25. Daftar uji permintaan animasi
 

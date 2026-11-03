@@ -124,6 +124,44 @@ class Ubah(_Dasar):
     potong: Optional[Potong] = None
 
 
+class Keyframe(_Dasar):
+    """Satu keyframe (komposisi/keyframe.js): `t` bingkai relatif ke awal item."""
+    t: int = Field(..., ge=-1_000_000, le=1_000_000)
+    v: float = Field(..., ge=-20000, le=20000)
+    kurva: Literal["linear", "masuk", "keluar", "masuk-keluar", "pegas"] = "linear"
+
+
+SifatKeyframe = Literal["x", "y", "skala", "putar", "opasitas", "volume"]
+
+
+class Warna(_Dasar):
+    """Penyesuaian warna (komposisi/warna.js), preset sama dengan render.VIDEO_FILTERS."""
+    preset: Literal["normal", "vibrant", "cinematic", "bw", "vintage"] = "normal"
+    kecerahan: float = Field(0, ge=-100, le=100)
+    kontras: float = Field(0, ge=-100, le=100)
+    saturasi: float = Field(0, ge=-100, le=100)
+    suhu: float = Field(0, ge=-100, le=100)
+
+
+class Punch(_Dasar):
+    t: int = Field(..., ge=0)
+    d: int = Field(..., ge=1)
+    kuat: float = Field(0.15, ge=0, le=1)
+
+
+class Efek(_Dasar):
+    """Efek item video/gambar (komposisi/efek.js)."""
+    kenburns: Optional[Literal["masuk", "keluar", "kiri", "kanan"]] = None
+    guncang: float = Field(0, ge=0, le=100)
+    punch: list[Punch] = Field(default_factory=list, max_length=200)
+
+
+class Transisi(_Dasar):
+    """Transisi masuk dari item sebelumnya di lajur yang sama (komposisi/transisi.js)."""
+    jenis: Literal["potong", "larut", "geser", "usap", "perbesar", "kilat", "glitch"]
+    durasi: int = Field(15, ge=1, le=300)
+
+
 class Item(_Dasar):
     id: str
     jenis: Literal["video", "gambar", "teks", "motion", "audio"]
@@ -138,6 +176,10 @@ class Item(_Dasar):
     beku: bool = False
     isi: Optional[Literal["contain", "cover"]] = None
     ubah: Optional[Ubah] = None
+    keyframe: Optional[dict[SifatKeyframe, list[Keyframe]]] = None
+    warna: Optional[Warna] = None
+    transisi: Optional[Transisi] = None
+    efek: Optional[Efek] = None
     teks: Optional[str] = Field(None, max_length=500)
     komponen: Optional[str] = None
     versi: Optional[int] = Field(None, ge=1)
@@ -150,6 +192,14 @@ class Item(_Dasar):
     def _id(cls, v: str) -> str:
         if not _ID.match(v):
             raise ValueError("id hanya huruf, angka, _ dan -, paling panjang 40")
+        return v
+
+    @field_validator("keyframe")
+    @classmethod
+    def _keyframe(cls, v):
+        for sifat, daftar in (v or {}).items():
+            if len(daftar) > 500:
+                raise ValueError(f"keyframe {sifat} lebih dari 500")
         return v
 
 

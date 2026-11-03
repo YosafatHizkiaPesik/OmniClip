@@ -27,15 +27,16 @@ import { useJobRunner } from '../../hooks/useJob';
 import JobProgress from '../../components/JobProgress';
 import { BAWAAN } from './komposisi/index.js';
 import {
-  ambilProyek, ambilToken, simpanProyek, sumberPratinjau,
+  ambilProyek, ambilToken, buatNarasi, fontDipakai, simpanProyek, sumberPratinjau,
 } from './api.js';
 import {
   cariItem, tambahBahan, tambahMotion, tambahTeks, ubahItem, ubahProyek,
 } from './model/dokumen.js';
 import {
-  bekukan, belah, bisaHapusLajur, gandakan, hapusBanyak, hapusBeriak, hapusLajur, hapusPenanda,
-  rapatkan, salin, semuaItem, tambahLajur, tambahPenanda, tempel, ubahKecepatan, ubahLajur, ubahPenanda,
-  ubahTransform,
+  aturUlangTransform, bekukan, belah, bisaHapusLajur, gandakan, gantiBahanItem, hapusBanyak,
+  hapusBeriak, hapusLajur, hapusPenanda, hapusPunch, kurvaKeyframe, pasangSubtitle, rapatkan,
+  rendamMusik, salin, semuaItem, tambahLajur, tambahPenanda, tambahPunch, tambahStiker, taruhSuara,
+  tempel, tombolKeyframe, ubahKecepatan, ubahLajur, ubahPenanda, ubahSifatDiBingkai, ubahTransform,
 } from './model/suntingan.js';
 import {
   batal, bisaBatal, bisaUlang, buatRiwayat, catat, ulang,
@@ -171,6 +172,8 @@ export default function MontaseEditor() {
   const pratinjau = useRef(null);
   const linimasa = useRef(null);
   const ekspor = useJobRunner();
+  const subtitleKerja = useJobRunner();
+  const subtitleDipasang = useRef(null);
 
   const revisi = useRef(null);
   const kotor = useRef(false);
@@ -263,9 +266,9 @@ export default function MontaseEditor() {
 
   const sumber = useMemo(
     () => (dokumen ? sumberPratinjau(dokumen, token) : null),
-    // Hanya daftar bahan yang menentukan alamat; perubahan item tidak.
+    // Hanya daftar bahan dan font yang menentukan alamat; perubahan item tidak.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [dokumen && Object.keys(dokumen.bahan).join(','), token],
+    [dokumen && Object.keys(dokumen.bahan).join(','), dokumen && fontDipakai(dokumen).join(','), token],
   );
 
   const semuaId = useMemo(
@@ -298,15 +301,31 @@ export default function MontaseEditor() {
     const hasil = tambahBahan(dok(), b, posisi);
     if (terapkan(hasil.dokumen)) pilih([hasil.itemId]);
   };
+  /** Narasi atau rekaman baru di garis putar (M3.3). */
+  const tambahSuara = (b, narasi) => {
+    const hasil = taruhSuara(dok(), b, { mulai: garis.get(), narasi });
+    if (terapkan(hasil.dokumen)) pilih([hasil.itemId]);
+  };
+  const buatUlangNarasi = async (itemId, narasi) => {
+    const bahan = await buatNarasi(narasi.teks, narasi.suara, narasi.kecepatan);
+    terapkan(gantiBahanItem(dok(), itemId, bahan, { narasi }));
+  };
   const tambahTeksDiGaris = () => {
     const hasil = tambahTeks(dok(), { mulai: garis.get(), teks: t('montase.editor.teks_baru') });
     if (terapkan(hasil.dokumen)) pilih([hasil.itemId]);
   };
-  const tambahAnimasiDiGaris = () => {
-    const hasil = tambahMotion(dok(), {
-      komponen: 'ko_hitung_mundur', modul: BAWAAN.ko_hitung_mundur, mulai: garis.get(),
-    });
+  const tambahAnimasiDiGaris = (komponen = 'ko_hitung_mundur') => {
+    const modul = BAWAAN[komponen];
+    if (!modul) return;
+    // Bilah progres dibentang sepanjang video, mulai dari awal.
+    const panjang = komponen === 'ko_bilah_progres';
+    let hasil = tambahMotion(dok(), { komponen, modul, mulai: panjang ? 0 : garis.get() });
+    if (panjang) hasil = { ...hasil, dokumen: ubahItem(hasil.dokumen, hasil.itemId, { durasi: Math.max(dok().durasi, 1) }) };
     if (terapkan(hasil.dokumen)) pilih([hasil.itemId]);
+  };
+  const tambahStikerDiGaris = (emoji) => {
+    const hasil = tambahStiker(dok(), { mulai: garis.get(), emoji });
+    if (hasil.itemId && terapkan(hasil.dokumen)) pilih([hasil.itemId]);
   };
   const aksiHapus = () => {
     if (pilihanSah.length) terapkan(hapusBanyak(dok(), pilihanSah));
@@ -380,7 +399,16 @@ export default function MontaseEditor() {
     ubah((d) => ubahLajur(d, id, p), { gabung: `lajur:${id}:${Object.keys(p).join(',')}` });
   }, [ubah]);
 
+  /** Subtitle otomatis (M3.2): simpan dulu, karena pekerjaannya membaca dokumen tersimpan. */
+  const aksiSubtitle = async () => {
+    await simpanSekarang();
+    if (kotor.current) return;
+    subtitleKerja.run(`/montase/proyek/${encodeURIComponent(proyekId)}/subtitle`).catch(() => {});
+  };
+
   const aksi = {
+    subtitle: aksiSubtitle,
+    subtitleSibuk: subtitleKerja.active,
     batal: () => lompat(batal),
     ulang: () => lompat(ulang),
     belah: aksiBelah,
@@ -392,8 +420,25 @@ export default function MontaseEditor() {
     magnet: aksiMagnet,
     tambahTeks: tambahTeksDiGaris,
     tambahMotion: tambahAnimasiDiGaris,
+    tambahStiker: tambahStikerDiGaris,
     tambahLajur: aksiTambahLajur,
   };
+
+  // Hasil subtitle diterapkan sekali per pekerjaan, sebagai satu langkah batal.
+  const hasilSubtitle = subtitleKerja.result;
+  const idSubtitle = subtitleKerja.job?.job_id;
+  useEffect(() => {
+    if (!hasilSubtitle || !idSubtitle || subtitleDipasang.current === idSubtitle) return;
+    subtitleDipasang.current = idSubtitle;
+    if (!hasilSubtitle.potongan?.length) {
+      setGalat(t('montase.subtitle.kosong'));
+      return;
+    }
+    const hasil = pasangSubtitle(riwayatRef.current.kini, hasilSubtitle.potongan, {
+      nama: t('montase.subtitle.lajur'), alasan: t('montase.subtitle.alasan'),
+    });
+    if (terapkan(hasil.dokumen)) pilihLajur(hasil.lajurId);
+  }, [hasilSubtitle, idSubtitle, terapkan, pilihLajur, t]);
 
   // --- pintasan keyboard (JOB-4 M2.4) -------------------------------------------
 
@@ -501,6 +546,11 @@ export default function MontaseEditor() {
         <h1 title={dokumen.nama}>{dokumen.nama}</h1>
         <StatusSimpan status={status} onMuatUlang={muat} onCobaLagi={simpanSekarang} />
         <span className="montase-linimasa-spasi" />
+        {(subtitleKerja.active || subtitleKerja.error) && (
+          <div className="montase-ekspor-kabar">
+            <JobProgress job={subtitleKerja.job} error={subtitleKerja.error} onCancel={subtitleKerja.cancel} compact />
+          </div>
+        )}
         {(ekspor.job || ekspor.error) && (
           <div className="montase-ekspor-kabar">
             <JobProgress job={ekspor.job} error={ekspor.error} onCancel={ekspor.cancel} compact />
@@ -520,7 +570,8 @@ export default function MontaseEditor() {
       <div className="montase-editor-tengah"
            style={{ gridTemplateColumns: `${tata.kiri}px 6px minmax(0, 1fr) 6px ${tata.kanan}px` }}
       >
-        <PanelBahan token={token} onTambahKeLinimasa={tambahKeLinimasa} onBahan={catatBahan} />
+        <PanelBahan token={token} onTambahKeLinimasa={tambahKeLinimasa} onTambahSuara={tambahSuara}
+                    onBahan={catatBahan} />
         <Pembatas arah="tegak" onGeser={geser('kiri', 1, [220, 520])} />
         <section className="montase-panel montase-panel-pratinjau" aria-label={t('montase.pratinjau.judul')}>
           {galat && status !== 'bentrok' && status !== 'gagal' && <p className="montase-galat" role="alert">{galat}</p>}
@@ -551,6 +602,27 @@ export default function MontaseEditor() {
           onKe={keBingkai}
           onUbahPenanda={(tt, label) => ubah((d) => ubahPenanda(d, tt, label), { gabung: `penanda:${tt}` })}
           onHapusPenanda={(tt) => terapkan(hapusPenanda(dok(), tt))}
+          onBuatUlangNarasi={buatUlangNarasi}
+          garis={garis}
+          onUbahSifat={(id, s) => ubah((d) => {
+            const it = cariItem(d, id)?.item;
+            return it ? ubahSifatDiBingkai(d, id, s, garis.get() - it.mulai) : d;
+          }, { gabung: `sifat:${id}:${Object.keys(s).join(',')}` })}
+          onTombolKeyframe={(id, sifat) => ubah((d) => {
+            const it = cariItem(d, id)?.item;
+            return it ? tombolKeyframe(d, id, sifat, garis.get() - it.mulai) : d;
+          })}
+          onKurvaKeyframe={(id, k) => ubah((d) => {
+            const it = cariItem(d, id)?.item;
+            return it ? kurvaKeyframe(d, id, garis.get() - it.mulai, k) : d;
+          })}
+          onAturUlangTransform={(id) => terapkan(aturUlangTransform(dok(), id))}
+          onRendam={(id, turun) => terapkan(rendamMusik(dok(), id, { turun }))}
+          onPunch={(id) => {
+            const it = cariItem(dok(), id)?.item;
+            if (it) terapkan(tambahPunch(dok(), id, garis.get() - it.mulai, Math.round(fps * 0.8)));
+          }}
+          onHapusPunch={(id, tt) => terapkan(hapusPunch(dok(), id, tt))}
         />
       </div>
 

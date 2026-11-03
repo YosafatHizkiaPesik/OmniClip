@@ -2276,7 +2276,7 @@ button.tujuan, a.tujuan { cursor: pointer; }
 .montase-pembatas:hover { background: var(--reh); }
 .montase-pembatas-tegak { cursor: col-resize; }
 .montase-pembatas-datar { cursor: row-resize; }
-.montase-tab { display: flex; gap: 4px; padding: 8px 10px; border-bottom: 1px solid var(--rule-2); overflow-x: auto; }
+.montase-tab { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 10px; border-bottom: 1px solid var(--rule-2); }
 .montase-tab button {
   font: inherit; font-size: .72rem; font-weight: 700; padding: 5px 9px; border-radius: 99px;
   border: 1px solid var(--rule-2); background: transparent; color: var(--ink-2); cursor: pointer; white-space: nowrap;
@@ -2490,3 +2490,43 @@ button.tujuan, a.tujuan { cursor: pointer; }
 }
 .montase-sempit h1 { font-size: 1.1rem; margin: 0; color: var(--ink); }
 .montase-sempit p { margin: 0 0 8px; max-width: 420px; font-size: .88rem; }
+
+/* Montase M3.1: tema teks */
+.montase-tema-kisi { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 6px; }
+.montase-tema {
+  display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px 4px;
+  border: 1px solid var(--rule-2); border-radius: var(--r-sm); background: #20232b; cursor: pointer;
+}
+.montase-tema.aktif { border-color: var(--reh); box-shadow: 0 0 0 1px var(--reh); }
+.montase-tema small { color: #e7e9ee; font-size: .62rem; text-align: center; line-height: 1.2; }
+.montase-tema-contoh { font-size: 1.15rem; line-height: 1; padding: 3px 7px; border-radius: 4px; paint-order: stroke fill; }
+.montase-bagian > select { font: inherit; font-size: .8rem; padding: 6px; border-radius: var(--r-sm); border: 1px solid var(--rule-2); background: var(--plate); color: var(--ink); }
+.montase-suara { padding: 0 12px 12px; overflow: auto; display: flex; flex-direction: column; gap: 4px; }
+.montase-suara textarea { font: inherit; font-size: .8rem; padding: 8px; border-radius: var(--r-sm); border: 1px solid var(--rule-2); background: var(--plate); color: var(--ink); resize: vertical; }
+.montase-rekam-aktif { animation: montase-denyut 1.2s ease-in-out infinite; }
+@keyframes montase-denyut { 50% { opacity: .65; } }
+
+/* Montase M3.7: keyframe */
+.montase-kolom-wajik { display: flex; align-items: flex-end; gap: 4px; min-width: 0; }
+.montase-kolom-wajik > .montase-kolom { flex: 1; }
+.montase-wajik {
+  flex: none; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 30px;
+  border: 0; background: transparent; color: var(--ink-3); cursor: pointer; border-radius: 4px; padding: 0;
+}
+.montase-wajik:hover { background: var(--plate-2); }
+.montase-wajik.ada { color: #e0a800; }
+.montase-wajik.di { color: #e0a800; }
+.montase-wajik.di svg { fill: #e0a800; }
+.montase-kendali-keyframe { display: flex; gap: 4px; align-items: center; }
+.montase-kendali-keyframe select { flex: 1; min-width: 0; font: inherit; font-size: .75rem; padding: 4px 6px; border-radius: var(--r-sm); border: 1px solid var(--rule-2); background: var(--plate); color: var(--ink); }
+.montase-item-wajik {
+  position: absolute; bottom: 3px; width: 8px; height: 8px; margin-left: -4px; background: #ffd400;
+  transform: rotate(45deg); border: 1px solid rgba(0,0,0,.5); z-index: 2; pointer-events: none;
+}
+.montase-item-transisi {
+  position: absolute; left: 0; top: 0; bottom: 0; width: 10px; z-index: 2; pointer-events: none;
+  background: linear-gradient(135deg, rgba(255,255,255,.85) 0 50%, transparent 50%);
+  clip-path: polygon(0 0, 100% 50%, 0 100%);
+}
+.montase-item-punch { position: absolute; top: 2px; height: 4px; background: #ff7a00; border-radius: 2px; z-index: 2; pointer-events: none; }
+.montase-stiker { width: 92px; }

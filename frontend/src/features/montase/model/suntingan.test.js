@@ -4,10 +4,15 @@ import {
 } from './dokumen.js';
 import {
   bekukan, belah, bisaHapusLajur, gandakan, hapusBanyak, hapusBeriak, hapusLajur, pangkasKanan,
-  pangkasKiri, pindahItem, rapatkan, salin, semuaItem, sisipkan, tambahLajur, tambahPenanda, tempel,
+  gantiBahanItem, pangkasKiri, pasangSubtitle, pindahItem, taruhSuara, rapatkan, salin, semuaItem, sisipkan, tambahLajur, tambahPenanda, tempel,
   tempelKe, titikMagnet, titikSisip, ubahKecepatan, ubahLajur, ubahTransform,
 } from './suntingan.js';
 import { batal, buatRiwayat, catat, ulang, BATAS_LANGKAH } from './riwayat.js';
+import {
+  aturKeyframe, kurvaKeyframe, nilaiSifat, tombolKeyframe, ubahSifatDiBingkai,
+} from './suntingan.js';
+import { nilaiPada, ubahPada, bingkaiKeyframe } from '../komposisi/keyframe.js';
+import { rendamMusik } from './suntingan.js';
 
 function kosong() {
   return {
@@ -129,6 +134,96 @@ describe('rapatkan', () => {
     expect(item(d, 'i2').mulai).toBe(60);
     expect(d.durasi).toBe(180);
     expect(rapatkan(d, 'L1')).toBe(d);
+  });
+});
+
+describe('subtitle', () => {
+  const potongan = [
+    { mulai: 0, durasi: 30, teks: 'halo semua', kata: [{ w: 'halo', t: 0, d: 10 }, { w: 'semua', t: 12, d: 10 }] },
+    { mulai: 30, durasi: 20, teks: 'apa kabar', kata: [] },
+  ];
+  it('lajur subtitle baru di atas lajur teks, item bertanda AI', () => {
+    const { dokumen, lajurId } = pasangSubtitle(dua(), potongan, { alasan: 'dari ucapan' });
+    const l = dokumen.lajur.find((x) => x.id === lajurId);
+    expect(l).toMatchObject({ jenis: 'teks', nama: 'Subtitle', subtitle: true });
+    expect(dokumen.lajur.map((x) => x.id).indexOf(lajurId)).toBe(dokumen.lajur.findIndex((x) => x.id === 'L3') + 1);
+    expect(l.item[0]).toMatchObject({ teks: 'halo semua', asal: 'ai', alasan: 'dari ucapan' });
+  });
+  it('dijalankan ulang mengganti isi, tidak menumpuk', () => {
+    const a = pasangSubtitle(dua(), potongan);
+    const b = pasangSubtitle(a.dokumen, potongan.slice(0, 1));
+    expect(b.lajurId).toBe(a.lajurId);
+    expect(b.dokumen.lajur.find((x) => x.id === b.lajurId).item).toHaveLength(1);
+    expect(b.dokumen.lajur).toHaveLength(a.dokumen.lajur.length);
+  });
+});
+
+describe('narasi dan rekaman', () => {
+  const narasiBahan = (id, durasi) => ({ id, jenis: 'audio', nama: id, durasi, ada_suara: true });
+  it('suara baru di lajur audio kosong; bila terisi, lajur audio baru', () => {
+    let { dokumen, itemId } = taruhSuara(dua(), narasiBahan('bh_n1', 2), { mulai: 30, narasi: { teks: 'halo', suara: 'edge-ardi' } });
+    expect(cariItem(dokumen, itemId)).toMatchObject({ lajur: { id: 'L4' }, item: { mulai: 30, durasi: 60, narasi: { teks: 'halo' } } });
+    const kedua = taruhSuara(dokumen, narasiBahan('bh_n2', 1), { mulai: 45 });
+    expect(cariItem(kedua.dokumen, kedua.itemId).lajur.id).not.toBe('L4');
+    expect(kedua.dokumen.lajur.filter((l) => l.jenis === 'audio')).toHaveLength(2);
+    ({ dokumen } = kedua);
+  });
+  it('ganti bahan: item tetap di tempat, panjang ikut suara baru, bahan lama dibuang', () => {
+    const a = taruhSuara(dua(), narasiBahan('bh_n1', 2), { mulai: 30 });
+    const d = gantiBahanItem(a.dokumen, a.itemId, narasiBahan('bh_n3', 3.5), { narasi: { teks: 'baru' } });
+    expect(item(d, a.itemId)).toMatchObject({ mulai: 30, durasi: 105, bahan: 'bh_n3', narasi: { teks: 'baru' } });
+    expect(d.bahan.bh_n1).toBeUndefined();
+  });
+});
+
+describe('keyframe', () => {
+  it('nilai antara linear dan kurva, sebelum/sesudah dijepit', () => {
+    const kf = [{ t: 0, v: 0 }, { t: 10, v: 100, kurva: 'linear' }, { t: 20, v: 0, kurva: 'masuk' }];
+    expect(nilaiPada(kf, -5, 9)).toBe(0);
+    expect(nilaiPada(kf, 5, 9)).toBe(50);
+    expect(nilaiPada(kf, 15, 9)).toBeGreaterThan(50);   // masuk: lambat di awal
+    expect(nilaiPada(kf, 99, 9)).toBe(0);
+    expect(nilaiPada([], 5, 9)).toBe(9);
+  });
+  it('wajik menambah keyframe tanpa mengubah rupa, lalu menulis di bingkai', () => {
+    let d = ubahTransform(dua(), 'i1', { skala: 1.2 });
+    d = tombolKeyframe(d, 'i1', 'skala', 0);
+    d = ubahSifatDiBingkai(d, 'i1', { skala: 2 }, 60);
+    expect(item(d, 'i1').keyframe.skala).toEqual([{ t: 0, v: 1.2, kurva: 'linear' }, { t: 60, v: 2, kurva: 'linear' }]);
+    expect(nilaiSifat(item(d, 'i1'), 'skala', 30)).toBeCloseTo(1.6);
+    expect(ubahPada(item(d, 'i1'), 30).skala).toBeCloseTo(1.6);
+    expect(bingkaiKeyframe(item(d, 'i1'))).toEqual([0, 60]);
+  });
+  it('menghapus keyframe terakhir meninggalkan nilainya sebagai nilai dasar', () => {
+    let d = aturKeyframe(dua(), 'i1', 'volume', 10, 0.3);
+    d = tombolKeyframe(d, 'i1', 'volume', 10);
+    expect(item(d, 'i1').keyframe).toBeUndefined();
+    expect(item(d, 'i1').volume).toBe(0.3);
+  });
+  it('kurva di bingkai, belah menjaga gerak tetap bersambung', () => {
+    let d = aturKeyframe(dua(), 'i1', 'x', 0, 0);
+    d = aturKeyframe(d, 'i1', 'x', 100, 200);
+    d = kurvaKeyframe(d, 'i1', 100, 'keluar');
+    expect(item(d, 'i1').keyframe.x[1].kurva).toBe('keluar');
+    const nilaiDi60 = nilaiSifat(item(d, 'i1'), 'x', 60);
+    const { dokumen, itemBaru } = belah(d, 'i1', 50);
+    expect(nilaiSifat(item(dokumen, itemBaru), 'x', 10)).toBeCloseTo(nilaiDi60);
+  });
+});
+
+describe('perendam musik', () => {
+  it('musik turun saat narasi, naik lagi sesudahnya, dan bisa dijalankan ulang', () => {
+    const musik = { id: 'bh_m', jenis: 'audio', nama: 'musik', durasi: 20, ada_suara: true };
+    let d = tambahBahan(kosong(), musik).dokumen;                         // i1 di L4, 0-600
+    d = tambahLajur(d, 'audio').dokumen;
+    const lajurNarasi = d.lajur.filter((l) => l.jenis === 'audio')[1].id;
+    d = tambahBahan(d, { id: 'bh_n', jenis: 'audio', durasi: 2, ada_suara: true }, { mulai: 90, lajurId: lajurNarasi }).dokumen;
+    d = rendamMusik(d, 'L4', { turun: 0.2, lembut: 0.3 });
+    const kf = item(d, 'i1').keyframe.volume;
+    expect(kf.map((k) => k.t)).toEqual([81, 90, 150, 159]);
+    expect(nilaiPada(kf, 120, 1)).toBeCloseTo(0.2);
+    expect(nilaiPada(kf, 300, 1)).toBe(1);
+    expect(rendamMusik(d, 'L4', { turun: 0.2, lembut: 0.3 })).toEqual(d);
   });
 });
 

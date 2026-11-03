@@ -8,9 +8,10 @@
  * daripada yang jelas-jelas rusak (prinsip P-3).
  */
 import React from 'react';
-import { AbsoluteFill } from 'remotion';
+import { AbsoluteFill, useCurrentFrame } from 'remotion';
 import { BAWAAN } from '../motion/index.js';
 import { useKomponen } from '../muatKomponen.js';
+import { ubahPada } from '../keyframe.js';
 import { gayaUbah } from '../ubah.js';
 
 function KotakGalat({ pesan }) {
@@ -29,8 +30,10 @@ function KotakGalat({ pesan }) {
 
 /** Animasi menempati seluruh kanvas; transformasinya berpusat di tengah kanvas. */
 function Lapisan({ item, children }) {
-  if (!item.ubah) return children;
-  return <AbsoluteFill style={gayaUbah(item.ubah)}>{children}</AbsoluteFill>;
+  const frame = useCurrentFrame();
+  const ubah = ubahPada(item, frame);
+  if (!ubah) return children;
+  return <AbsoluteFill style={gayaUbah(ubah)}>{children}</AbsoluteFill>;
 }
 
 export default function ItemMotion({ item, sumber }) {

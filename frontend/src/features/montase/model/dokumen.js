@@ -14,6 +14,21 @@ export const JENIS_LAJUR_ITEM = {
 };
 export const DETIK_GAMBAR = 5;
 export const DETIK_TEKS = 3;
+/**
+ * Gaya teks baru: huruf putih Montserrat bergaris hitam, terbaca di atas
+ * gambar apa pun tanpa pelat. Tema lain dipilih di panel Properti (M3.1).
+ */
+/** Gaya subtitle otomatis: huruf besar bergaris di bawah, kata yang diucapkan disorot kuning. */
+export const GAYA_SUBTITLE = {
+  font: 'Montserrat', ukuran: 76, warna: '#ffffff', kapital: true, letak: 'bawah',
+  perataan: 'tengah', latar: 'tanpa', warna_latar: '#000000', alfa_latar: 1,
+  garis: 7, warna_garis: '#000000', bayang: 0, kabur: 0, gerak: 'muncul', warna_sorot: '#FFE500',
+};
+export const GAYA_TEKS_BAWAAN = {
+  font: 'Montserrat', ukuran: 96, warna: '#ffffff', kapital: false, letak: 'tengah',
+  perataan: 'tengah', latar: 'tanpa', warna_latar: '#000000', alfa_latar: 1,
+  garis: 5, warna_garis: '#000000', bayang: 0, kabur: 0, gerak: 'pop',
+};
 
 function salin(dokumen) {
   return {
@@ -125,7 +140,7 @@ export function tambahTeks(dokumen, { mulai = 0, teks = 'Teks', lajurId = null }
   const item = {
     id, jenis: 'teks', mulai: Math.max(0, Math.round(mulai)),
     durasi: Math.round(DETIK_TEKS * dokumen.kanvas.fps), teks,
-    gaya: { letak: 'tengah', ukuran: 96, warna: '#ffffff' }, asal: 'tangan',
+    gaya: { ...GAYA_TEKS_BAWAAN }, asal: 'tangan',
   };
   return { dokumen: sisipkan(dokumen, 'teks', item, lajurId), itemId: id };
 }
@@ -199,6 +214,49 @@ export function bersihkanUbah(ubah) {
   return hasil;
 }
 
+const PRESET = ['normal', 'vibrant', 'cinematic', 'bw', 'vintage'];
+const TRANSISI = ['potong', 'larut', 'geser', 'usap', 'perbesar', 'kilat', 'glitch'];
+
+/** Warna item (M3.6): preset dikenal, angka -100..100, kosong bila tidak berubah. */
+export function bersihkanWarna(warna) {
+  if (!warna || typeof warna !== 'object') return undefined;
+  const hasil = {};
+  if (PRESET.includes(warna.preset) && warna.preset !== 'normal') hasil.preset = warna.preset;
+  for (const k of ['kecerahan', 'kontras', 'saturasi', 'suhu']) {
+    const v = Math.round(Number(warna[k]));
+    if (Number.isFinite(v) && v) hasil[k] = Math.max(-100, Math.min(100, v));
+  }
+  return Object.keys(hasil).length ? hasil : undefined;
+}
+
+/** Transisi masuk (M3.5): jenis dikenal, durasi 1..300 bingkai; potong = tanpa transisi. */
+export function bersihkanTransisi(tr) {
+  if (!tr || !TRANSISI.includes(tr.jenis) || tr.jenis === 'potong') return undefined;
+  const durasi = Math.max(1, Math.min(300, Math.round(Number(tr.durasi) || 15)));
+  return { jenis: tr.jenis, durasi };
+}
+
+const KENBURNS = ['masuk', 'keluar', 'kiri', 'kanan'];
+
+/** Efek item (M3.8): Ken Burns, guncang 0..100, punch-in [{t, d, kuat}]. */
+export function bersihkanEfek(efek) {
+  if (!efek || typeof efek !== 'object') return undefined;
+  const hasil = {};
+  if (KENBURNS.includes(efek.kenburns)) hasil.kenburns = efek.kenburns;
+  const g = Math.round(Number(efek.guncang));
+  if (Number.isFinite(g) && g > 0) hasil.guncang = Math.min(100, g);
+  const punch = (Array.isArray(efek.punch) ? efek.punch : [])
+    .map((p) => ({
+      t: Math.max(0, Math.round(Number(p.t) || 0)),
+      d: Math.max(1, Math.round(Number(p.d) || 1)),
+      kuat: Math.min(1, Math.max(0.02, Number(p.kuat) || 0.15)),
+    }))
+    .sort((a, b) => a.t - b.t)
+    .slice(0, 200);
+  if (punch.length) hasil.punch = punch;
+  return Object.keys(hasil).length ? hasil : undefined;
+}
+
 /** Mengubah kolom item; angka dijepit ke rentang yang sama dengan skema server. */
 export function ubahItem(dokumen, itemId, perubahan) {
   const hit = cariItem(dokumen, itemId);
@@ -213,6 +271,9 @@ export function ubahItem(dokumen, itemId, perubahan) {
     }
   }
   if ('ubah' in bersih) bersih.ubah = bersihkanUbah(bersih.ubah);
+  if ('warna' in bersih) bersih.warna = bersihkanWarna(bersih.warna);
+  if ('transisi' in bersih) bersih.transisi = bersihkanTransisi(bersih.transisi);
+  if ('efek' in bersih) bersih.efek = bersihkanEfek(bersih.efek);
   if ('isi' in bersih && !['contain', 'cover'].includes(bersih.isi)) delete bersih.isi;
   const baru = salin(dokumen);
   baru.lajur = baru.lajur.map((l) => ({

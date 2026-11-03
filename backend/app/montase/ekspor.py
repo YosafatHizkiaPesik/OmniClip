@@ -22,13 +22,14 @@ import re
 import time
 from pathlib import Path
 from typing import Optional
+from urllib.parse import quote
 
 from ..config import PORT, STORAGE_DIR
 from ..repos import media as media_repo
 from ..repos import montase as repo
 from ..services import profil
 from . import bahan as bahan_svc
-from . import mesin, skema
+from . import kekerasan, mesin, skema, teks
 from . import token as token_svc
 
 log = logging.getLogger("omniclip.montase.ekspor")
@@ -120,10 +121,15 @@ def ekspor(pid: int, proyek_id: str, *, kabar=None, batal=None, dasar_url: Optio
     tkn = token_svc.buat(f"bahan:{pid}", berlaku_detik=12 * 3600)
     dasar = (dasar_url or f"http://127.0.0.1:{PORT}").rstrip("/")
     sumber = {"bahan": {b: f"{dasar}/api/montase/t/{tkn}/bahan/{b}" for b in dokumen["bahan"]},
+              "font": {f: f"{dasar}/api/montase/t/{tkn}/font/{quote(f)}"
+                       for f in teks.font_dipakai(dokumen)},
               "komponen": {}}
     sementara = STORAGE_DIR / "montase" / "render" / f"{proyek_id}.mp4"
     mulai_t = time.monotonic()
     hasil = mesin.render(dokumen, sumber, sementara, kabar=kabar, batal=batal)
+    if kabar:
+        kabar({"tahap": "suara"})
+    suara = kekerasan.ratakan(sementara)
 
     folder = profil.folder_klip(pid, buat=True)
     berkas = nama_berkas(dokumen["nama"])
@@ -139,6 +145,7 @@ def ekspor(pid: int, proyek_id: str, *, kabar=None, batal=None, dasar_url: Optio
         "detik_render": round(time.monotonic() - mulai_t, 1),
         "ukuran_mb": round(tujuan.stat().st_size / 1e6, 1),
         "bingkai": hasil.get("bingkai"),
+        "suara": suara,
     }
 
 
@@ -151,6 +158,8 @@ def run_ekspor(ctx):
         if "kemajuan" in baris:
             ctx.progress(float(baris["kemajuan"]), stage="render",
                          message=f"Bingkai {baris.get('bingkai', 0)} dari {baris.get('total', '?')}")
+        elif baris.get("tahap") == "suara":
+            ctx.progress(0.99, stage="suara", message="Menyamakan kekerasan suara")
         elif baris.get("tahap"):
             ctx.progress(0.0, stage="render", message="Menyiapkan render")
 
