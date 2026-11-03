@@ -92,7 +92,7 @@ Tiga kemampuan besar, dibangun berurutan:
 
 | Tahap | Isi singkat | Status | Tugas |
 |---|---|---|---|
-| 0 | Uji teknis: membuktikan Remotion jalan di dalam OmniClip | 🟨 Menunggu CI dan uji pemilik | 6/8 |
+| 0 | Uji teknis: membuktikan Remotion jalan di dalam OmniClip | ✅ Selesai 3 Nov 2026 | 8/8 |
 | 1 | Kerangka: menu, daftar proyek, media, pratinjau, ekspor | ⬜ Belum mulai | 0/10 |
 | 2 | Penyuntingan dasar: linimasa sungguhan | ⬜ Belum mulai | 0/8 |
 | 3 | Teks, suara, efek, transisi, keyframe | ⬜ Belum mulai | 0/10 |
@@ -103,8 +103,7 @@ Tiga kemampuan besar, dibangun berurutan:
 
 Tanda status: ⬜ belum mulai · 🟨 sedang dikerjakan · ✅ selesai · ⛔ tertahan (tulis alasannya).
 
-**Tugas berikutnya:** `M0.7` (hasil build CI Linux/Windows) lalu `M0.8` (tes 60-63
-oleh pemilik, keputusan T-5). Sesudah itu PR Tahap 0 ke `main`, lalu `M1.1`.
+**Tugas berikutnya:** `M1.1`.
 
 ## 3. Keputusan
 
@@ -128,6 +127,7 @@ oleh pemilik, keputusan T-5). Sesudah itu PR Tahap 0 ke `main`, lalu `M1.1`.
 | K-14 | 3 Nov 2026 | Penggabungan: **PR dokumen sekarang**, lalu **satu PR per tahap** sesudah gerbangnya lolos. | Jawaban pemilik. Dokumen langsung terbaca dari branch utama. |
 | K-15 | 3 Nov 2026 | Pemilik **tidak punya API key Anthropic**, hanya Claude Pro. Jalur Claude utama di aplikasi = **mode salin-tempel lewat Project Claude.ai** (M4.10). Jalur API (M4.3) tetap dibangun untuk pengguna yang punya kunci. Animasi bawaan (M4.2) ditulis saat pengembangan lewat Claude Code. | Jawaban pemilik atas T-7. |
 | K-16 | 3 Nov 2026 | Mengubah K-9: **paket mesin dan bundel komposisi ikut di dalam aplikasi**; yang diunduh saat pertama dipakai hanya **Node** dan **Chrome Headless Shell**. | Build uji dari `workflow_dispatch` tidak punya rilis untuk diunduhi, dan dengan begitu versi mesin selalu sama dengan versi komposisinya. Biayanya ±24 MB terkompresi di unduhan aplikasi. |
+| K-17 | 3 Nov 2026 | Pemilik **tidak bisa menguji sekarang** dan akan menguji semuanya sekaligus di akhir. Gerbang tiap tahap diganti: (1) tes otomatis + uji CI di Windows dan Linux sungguhan, (2) tangkapan layar dan cuplikan video dari Claude, dikirim ke pemilik di setiap tahap. Tes UJI-LANGSUNG.md tetap ditulis per tahap untuk uji akhir. **T-5 memakai angka usulan:** render paling lama 4x durasi. | Jawaban pemilik: "lanjutkan saja pengerjaannya, nanti saya tes semua sekaligus". |
 
 ### Masih terbuka (pemilik yang memutuskan)
 
@@ -137,7 +137,7 @@ oleh pemilik, keputusan T-5). Sesudah itu PR Tahap 0 ke `main`, lalu `M1.1`.
 | T-2 | Ekspor 60 fps tersedia? | Ya, sebagai pilihan. Bawaan 30 fps. | M1.9 |
 | T-3 | Apakah video Montase yang memakai video orang lain wajib bernarasi sebelum boleh diunggah publik? | Ya, ikut gerbang tinjau (`gerbang.py`) dan nilai tambah. Narasi dihitung seperti komentar. | M6.1 |
 | T-4 | Layanan suara AI tambahan: ElevenLabs atau lainnya? | Menunggu pemilik | MS.1 |
-| T-5 | Ambang kecepatan render yang masih bisa diterima | Paling lama 4x durasi video (video 60 detik selesai ≤ 4 menit) | Gerbang Tahap 0 |
+| ~~T-5~~ | ~~Ambang kecepatan render~~ Dipakai angka usulan: paling lama 4x durasi (K-17). Terukur 2,3-2,9x. | | |
 | T-6 | Montase bisa dipakai di HP? | Tidak di rilis pertama. Di HP hanya daftar proyek dan ekspor. | M1.7 |
 | ~~T-7~~ | ~~Apakah pemilik membuat API key Claude?~~ Dijawab 3 Nov 2026: tidak, hanya Claude Pro. Lihat K-15. | | |
 
@@ -230,12 +230,13 @@ commit berikutnya.
    ```bash
    cd frontend && npm test && npm run lint && npm run build
    ```
-5. **Setiap tahap ditutup dengan uji langsung oleh pemilik.** Tambahkan tes
-   bernomor di `UJI-LANGSUNG.md` (bagian "Montase"), berisi langkah dan hasil
-   yang diharapkan.
+5. **Setiap tahap ditutup dengan bukti, bukan janji** (K-17): tes otomatis
+   lolos, uji CI Windows/Linux lolos bila mesin atau build tersentuh, dan
+   tangkapan layar/cuplikan video dikirim ke pemilik. Tes bernomor untuk uji
+   akhir pemilik tetap ditambahkan di `UJI-LANGSUNG.md` (bagian "Montase").
 6. **Keputusan baru masuk tabel [Keputusan](#3-keputusan)**, bukan hanya chat.
 7. **Satu PR ke `main` per tahap** (K-14). Kerja harian di branch kerja; PR
-   dibuka sesudah gerbang tahap lolos dan uji langsung pemilik selesai.
+   dibuka dan digabung sesudah gerbang tahap lolos (aturan 5).
 8. **Perubahan rencana ditulis di sini juga.** Coret tugas yang dibatalkan
    (`~~M3.8~~`) beserta alasannya. Jangan dihapus diam-diam.
 9. **Gaya kode mengikuti repo:** nama Indonesia, docstring menjelaskan *kenapa*
@@ -304,13 +305,26 @@ bulan bekerja.
   DOM editor, cookie, dan localStorage dari dalamnya ditolak; video bertoken
   dimuat dengan Range + CORS; putar, jeda, dan geser dari tombol di luar
   iframe bekerja. Token palsu dan nama berkas di luar daftar menjawab 404.
-- [ ] **M0.7** Ulangi M0.2 sampai M0.6 di **Windows** lewat aplikasi hasil build
+- [x] **M0.7** Ulangi M0.2 sampai M0.6 di **Windows** lewat aplikasi hasil build
   (K-11: tidak ada Windows mode pengembangan). Karena itu `bangun-aplikasi.yml`
   harus lebih dulu ikut membangun paket mesin dan bundel komposisi. Build
   dipicu manual (`workflow_dispatch`) dari branch kerja, lalu pemilik
   mengunduh artefaknya dan menjalankannya. Ulangi juga di Linux aplikasi build.
-- [ ] **M0.8** Tulis semua angka ke [bagian 24](#24-hasil-uji-teknis), lalu
+  (selesai 3 Nov 2026, commit 8ffab2c, f65f820, 1ab124a) Langkah CI
+  `OmniClip --periksa-montase` mengunduh Node dan Chrome lalu merender 10 detik
+  di aplikasi terbungkus. Build pertama (run 41610381956) menemukan bug: Chrome
+  terunduh ke FOLDER APLIKASI (`_internal/montase_mesin/node_modules/.remotion`)
+  dan ikut terkemas, arsip naik 130-151 MB. Diperbaiki: CWD mesin =
+  `<data>/mesin_montase/kerja` (`mesin.folder_kerja`), `uji_lengkap` gagal bila
+  Chrome di luar folder data, dan langkah uji dipindah sesudah "Kemas". Run
+  41612685962: Linux dan Windows lolos, Chrome di folder data, arsip Linux 371 MB
+  (+25 MB dari v1.3.9), Windows 298 MB (+28 MB). Bagian "pemilik menjalankan
+  artefaknya" dipindah ke uji akhir (K-17).
+- [x] **M0.8** Tulis semua angka ke [bagian 24](#24-hasil-uji-teknis), lalu
   pemilik memutuskan T-5.
+  (selesai 3 Nov 2026) Angka container dan CI ada di bagian 24. Pemilik tidak
+  bisa menguji sekarang dan meminta pengerjaan dilanjutkan (K-17); T-5 memakai
+  angka usulan (paling lama 4x durasi), dan semua render terukur 2,3-2,9x.
 
 **Selesai bila:** M0.1 sampai M0.7 berhasil di Linux dan Windows, dan render 60
 detik video lolos ambang T-5.
@@ -1081,16 +1095,16 @@ detik). Kolom **Pemilik** = komputer pemilik (tes 60-63 di UJI-LANGSUNG.md).
 | Versi Remotion yang dipatok | 4.0.537 | sama | | Rilis 19 Okt 2026. Semua `@remotion/*` sama persis (dijaga tes). |
 | Player jalan di React 19 (M0.1) | Ya, 19.2.8, tanpa galat konsol | | | |
 | Render 30 dtk 1080x1920 30 fps: lama | 87-89 dtk (2,9x) | | | Lewat antrean backend dan langsung, hasilnya sama. |
-| Render 10 dtk (uji CI) | 28 dtk (2,8x) | Linux 23 dtk (2,3x) · Windows 28 dtk (2,84x) | | Run 41610381956, aplikasi terbungkus, Node dan Chrome hasil unduhan. |
+| Render 10 dtk (uji CI) | 28 dtk (2,8x) | Linux 23-25 dtk (2,3-2,5x) · Windows 25-28 dtk (2,5-2,8x) | | Run 41610381956 dan 41612685962, aplikasi terbungkus, Node dan Chrome hasil unduhan. |
 | Render 30 dtk: RAM puncak | ±2,4 GB di atas dasar | | | Total semua proses 2,9 GB. |
 | Render 30 dtk: ukuran berkas | 40 MB (crf 18, ±10,3 Mbps) | | | |
 | Perkiraan render 60 dtk (lawan ambang T-5) | ±175 dtk ≈ 2,9 menit | | | Di bawah ambang usulan 4 menit. |
 | Ukuran unduhan Node | 31 MB, 3-5 dtk; 126 MB terbongkar | Linux 2,8 dtk · Windows 1,9 dtk (36 MB) | | npm dan header C dibuang. |
-| Paket mesin di dalam aplikasi (K-16) | 75 MB terbongkar, ±24 MB terkompresi | arsip v1.3.9: Linux 346 MB, Windows 270 MB | | Ditambah bundel komposisi 16 MB. Ukuran arsip sesudah perbaikan: lihat catatan M0.7. |
+| Paket mesin di dalam aplikasi (K-16) | 75 MB terbongkar, ±24 MB terkompresi | arsip Linux 371 MB (+25), Windows 298 MB (+28) | | Dibanding v1.3.9 (346 / 270 MB). Termasuk bundel komposisi 16 MB. |
 | Unduhan Chrome Headless Shell | tidak bisa diuji (403 dari proxy) | Linux 1,9 dtk · Windows 4,1 dtk | | Container memakai `OMNICLIP_MONTASE_BROWSER`. Build pertama menemukan Chrome terunduh ke folder APLIKASI; diperbaiki di f65f820 (lihat M0.7). |
 | Animasi AI: pratinjau = render (M0.5) | Ya, kasat mata sama di 4 bingkai | | | SSIM 0,84 karena tangkapan pratinjau hanya 316x561 lalu diskalakan. |
 | Kotak pasir memutar video bertoken (M0.6) | Ya (Playwright) | | | Asal `null`; DOM, cookie, localStorage ditolak. |
-| Keputusan: lanjut / Rencana B | Lanjut, tanpa Rencana B | | | Menunggu angka CI dan pemilik sebelum gerbang ditutup. |
+| Keputusan: lanjut / Rencana B | Lanjut, tanpa Rencana B | Lanjut | ditunda ke uji akhir (K-17) | Gerbang Tahap 0 ditutup 3 Nov 2026. |
 
 ## 25. Daftar uji permintaan animasi
 
