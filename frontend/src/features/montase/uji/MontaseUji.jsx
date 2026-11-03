@@ -15,7 +15,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Player } from '@remotion/player';
 import { Clapperboard, Download, Loader2, PlayCircle, RefreshCw } from 'lucide-react';
 import { apiGet } from '../../../lib/api';
-import { useT } from '../../../lib/i18n';
+import { angka, useT } from '../../../lib/i18n';
 import { useJobRunner } from '../../../hooks/useJob';
 import JobProgress from '../../../components/JobProgress';
 import { Komposisi, ukuranDokumen } from '../komposisi/index.js';
@@ -157,10 +157,11 @@ export default function MontaseUji() {
           {hasil && (
             <div className="montase-uji-hasil">
               <BarisStatus label={t('montase.uji.hasil_waktu')} nilai={t('montase.uji.hasil_waktu_isi', {
-                detik: hasil.detik_dinding, video: hasil.detik_video, kali: hasil.kali_durasi,
+                detik: angka(hasil.detik_dinding), video: angka(hasil.detik_video),
+                kali: angka(hasil.kali_durasi),
               })}
               />
-              <BarisStatus label={t('montase.uji.hasil_ukuran')} nilai={`${hasil.ukuran_mb} MB · ${hasil.bingkai}`} />
+              <BarisStatus label={t('montase.uji.hasil_ukuran')} nilai={`${angka(hasil.ukuran_mb)} MB · ${angka(hasil.bingkai)}`} />
               <a className="btn-secondary" href={alamatHasil} target="_blank" rel="noreferrer">
                 <PlayCircle size={14} />
                 {t('montase.uji.hasil_tonton')}
