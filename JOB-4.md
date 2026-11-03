@@ -95,7 +95,7 @@ Tiga kemampuan besar, dibangun berurutan:
 | 0 | Uji teknis: membuktikan Remotion jalan di dalam OmniClip | ✅ Selesai 3 Nov 2026 | 8/8 |
 | 1 | Kerangka: menu, daftar proyek, media, pratinjau, ekspor | ✅ Selesai 3 Nov 2026 | 10/10 |
 | 2 | Penyuntingan dasar: linimasa sungguhan | ✅ Selesai 3 Nov 2026 | 8/8 |
-| 3 | Teks, suara, efek, transisi, keyframe | ⬜ Belum mulai | 0/10 |
+| 3 | Teks, suara, efek, transisi, keyframe | 🟨 Sedang dikerjakan | 1/10 |
 | 4 | AI pembuat animasi | ⬜ Belum mulai | 0/10 |
 | 5 | Asisten penyunting AI | ⬜ Belum mulai | 0/6 |
 | 6 | Rapikan dan rilis | ⬜ Belum mulai | 0/8 |
@@ -103,7 +103,7 @@ Tiga kemampuan besar, dibangun berurutan:
 
 Tanda status: ⬜ belum mulai · 🟨 sedang dikerjakan · ✅ selesai · ⛔ tertahan (tulis alasannya).
 
-**Tugas berikutnya:** `M3.1`.
+**Tugas berikutnya:** `M3.2`.
 
 ## 3. Keputusan
 
@@ -482,10 +482,11 @@ Tes 69-75 di UJI-LANGSUNG.md untuk uji akhir.
 
 **Tujuan:** semua bahan sebuah video jadi bisa dibuat di Montase.
 
-- [ ] **M3.1** Item teks: font bawaan (`app/assets/fonts`, semuanya OFL), warna,
+- [x] **M3.1** Item teks: font bawaan (`app/assets/fonts`, semuanya OFL), warna,
   garis tepi, bayangan, pelat latar, perataan. Gaya siap pakai diambil dari
   `tema_judul.py` (diterjemahkan ke komponen komposisi). Font dimuat dengan
   `delayRender` supaya bingkai pertama tidak memakai font cadangan.
+  (selesai 3 Nov 2026, commit 35f5daf) Tema TIDAK disalin ke komposisi: `GET /api/montase/gaya-teks` menerjemahkan `tema_judul.TEMA` ke `item.gaya`, dan memilih tema menulis nilainya ke dokumen. Font didaftarkan dengan FontFace tanpa ketebalan dan teks memintanya 400, karena meminta 800 membuat peramban memalsukan tebal. CSP bundel mesin perlu `font-src` OmniClip (sebelumnya hanya 'self'). Diuji: sepuluh tema, pratinjau = ekspor di 10 bingkai (SSIM 0,87-0,93 pada tangkapan 232 px).
 - [ ] **M3.2** Subtitle otomatis: suara di linimasa ditranskrip dengan
   `whisper.py` (atau memakai transkrip yang sudah ada kalau bahannya dari
   unduhan atau Klip jadi). Waktu per kata menjadi lajur subtitle yang bisa
@@ -771,7 +772,7 @@ di `test_cacat_diperbaiki.py`).
 
 | Boleh dipakai Montase | Dilarang |
 |---|---|
-| `services/`: `media` (ffprobe), `paths` (`safe_media_path`), `koneksi_ai`, `penyedia_ai`, `kunci_ai`, `pemakaian_ai`, `bahasa_ai`, `tts`, `aset`, `stok`, `soundboard`, `whisper`, `transcript`, `momen`, `peristiwa_suara`, `reframe` (hanya fungsi publik jejak wajah), `proses`, `paths`, `jobs`, `events`, `profil`, `fonts`, `enkoder`, `unggah`, `google_upload`, `gerbang`, `keterangan`, `nilai_tambah`, `sampah` | `services/pipeline.py`, `services/render.py` (render klip), `services/sutradara*.py`, `routers/clips.py`, `routers/projects.py` |
+| `services/`: `media` (ffprobe), `paths` (`safe_media_path`), `tema_judul` (tema teks), `subtitles` (hanya `BUNDLED_FONTS`), `koneksi_ai`, `penyedia_ai`, `kunci_ai`, `pemakaian_ai`, `bahasa_ai`, `tts`, `aset`, `stok`, `soundboard`, `whisper`, `transcript`, `momen`, `peristiwa_suara`, `reframe` (hanya fungsi publik jejak wajah), `proses`, `paths`, `jobs`, `events`, `profil`, `fonts`, `enkoder`, `unggah`, `google_upload`, `gerbang`, `keterangan`, `nilai_tambah`, `sampah` | `services/pipeline.py`, `services/render.py` (render klip), `services/sutradara*.py`, `routers/clips.py`, `routers/projects.py` |
 | `app/config.py`, `app/db.py`, `app/bahasa.py`, `app/errors.py`, `repos/media.py` (unduhan, kredit sumber), `repos/settings.py` | Tabel `projects` dan `clips` (Montase punya tabelnya sendiri) |
 | Frontend: `lib/*`, `components/*`, `hooks/*`, `utils/*` | `features/studio/*` |
 
@@ -922,6 +923,8 @@ Semua di bawah `/api/montase`, membawa profil aktif lewat header
 | GET | `/t/{token}/bahan/{id}` | Berkas asli (render) atau salinan sunting (`?sunting=1`). Tanpa sesi. |
 | GET | `/t/{token}/bahan/{id}/{sampul,strip,gelombang}` | Turunan bahan. Lewat token karena `<img>` tidak membawa header profil. |
 | GET, POST | `/setelan` | Sakelar "Montase (beta)" (`{aktif}`) |
+| GET | `/gaya-teks` | Tema teks dari `tema_judul.py` dalam bentuk `item.gaya`, dan daftar font bawaan (M3.1) |
+| GET | `/t/{token}/font/{keluarga}` | Berkas font bawaan untuk iframe dan mesin render |
 | POST | `/narasi` | `{teks, suara}`: hasil TTS menjadi bahan audio |
 | GET | `/komponen` | Pustaka animasi (bawaan + tersimpan) |
 | GET | `/komponen/{id}/{versi}.js` | Hasil kompilasi, untuk iframe dan mesin. Menerima token. |
