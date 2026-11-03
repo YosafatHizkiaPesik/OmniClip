@@ -16,7 +16,7 @@
  */
 import React, { useState } from 'react';
 import {
-  AudioLines, Bookmark, ChevronLeft, ChevronRight, CopyPlus, Diamond, Lock, RotateCcw, Trash2,
+  AudioLines, Bookmark, ChevronLeft, ChevronRight, CopyPlus, Diamond, Lock, RotateCcw, Trash2, Zap,
 } from 'lucide-react';
 import { useT, angka } from '../../../lib/i18n';
 import { formatTime } from '../../../utils/timeFormat';
@@ -379,6 +379,54 @@ function PanelWarna({ item, onUbah }) {
   );
 }
 
+/** Efek video/gambar (M3.8): Ken Burns, guncang, punch-in di garis putar. */
+function PanelEfek({ item, fps, onUbah, onPunch, onHapusPunch, onKe }) {
+  const t = useT();
+  const e = item.efek ?? {};
+  const ubahEfek = (p) => onUbah({ efek: { ...e, ...p } });
+  return (
+    <Bagian judul={t('montase.efek.judul')}>
+      <label className="montase-kolom">
+        <span>{t('montase.efek.kenburns')}</span>
+        <select value={e.kenburns ?? ''} onChange={(ev) => ubahEfek({ kenburns: ev.target.value || undefined })}>
+          <option value="">{t('montase.efek.tanpa')}</option>
+          {['masuk', 'keluar', 'kiri', 'kanan'].map((a) => <option key={a} value={a}>{t(`montase.efek.kb_${a}`)}</option>)}
+        </select>
+      </label>
+      <label className="montase-kolom">
+        <span>{t('montase.efek.guncang')}</span>
+        <span className="montase-geser-angka">
+          <input type="range" min={0} max={100} step={5} value={e.guncang ?? 0}
+                 onChange={(ev) => ubahEfek({ guncang: Number(ev.target.value) })} />
+          <small>{e.guncang ?? 0}</small>
+        </span>
+      </label>
+      <button type="button" className="btn-secondary" onClick={onPunch}>
+        <Zap size={13} />{t('montase.efek.punch')}
+      </button>
+      {(e.punch ?? []).length > 0 && (
+        <ul className="montase-daftar-penanda">
+          {e.punch.map((p) => (
+            <li key={p.t}>
+              <button type="button" className="btn-secondary montase-ikon" onClick={() => onKe(item.mulai + p.t)}
+                      title={t('montase.efek.ke_punch')} aria-label={t('montase.efek.ke_punch')}
+              >
+                <Zap size={12} />
+              </button>
+              <small>{kodeWaktu(item.mulai + p.t, fps)} · {angka(p.d / fps)} {t('montase.satuan.detik')}</small>
+              <button type="button" className="btn-secondary montase-ikon" onClick={() => onHapusPunch(p.t)}
+                      title={t('montase.efek.hapus_punch')} aria-label={t('montase.efek.hapus_punch')}
+              >
+                <Trash2 size={12} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Bagian>
+  );
+}
+
 /** Transisi masuk dari item sebelumnya di lajur yang sama (M3.5). */
 function PanelTransisi({ item, fps, onUbah }) {
   const t = useT();
@@ -426,7 +474,7 @@ export default function PanelProperti({
   dokumen, terpilih, jumlahPilihan, lajur, onUbahItem, onKecepatan, onTransform, onHapus,
   onGandakan, onUbahProyek, onUbahLajur, onHapusLajur, bisaHapusLajur, onKe, onUbahPenanda,
   onHapusPenanda, onBuatUlangNarasi, garis, onUbahSifat, onTombolKeyframe, onKurvaKeyframe,
-  onAturUlangTransform, onRendam,
+  onAturUlangTransform, onRendam, onPunch, onHapusPunch,
 }) {
   const t = useT();
   const fps = dokumen.kanvas.fps;
@@ -548,6 +596,10 @@ export default function PanelProperti({
             </>
           )}
           {(item.jenis === 'video' || item.jenis === 'gambar') && <PanelWarna item={item} onUbah={ubah} />}
+          {(item.jenis === 'video' || item.jenis === 'gambar') && (
+            <PanelEfek item={item} fps={fps} onUbah={ubah} onPunch={() => onPunch(item.id)}
+                       onHapusPunch={(tt) => onHapusPunch(item.id, tt)} onKe={onKe} />
+          )}
           {item.jenis !== 'audio' && <PanelTransisi item={item} fps={fps} onUbah={ubah} />}
           {item.jenis !== 'audio' && (
             <PanelTransform item={item} garis={garis} onKe={onKe}

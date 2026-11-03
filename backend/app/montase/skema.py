@@ -143,6 +143,19 @@ class Warna(_Dasar):
     suhu: float = Field(0, ge=-100, le=100)
 
 
+class Punch(_Dasar):
+    t: int = Field(..., ge=0)
+    d: int = Field(..., ge=1)
+    kuat: float = Field(0.15, ge=0, le=1)
+
+
+class Efek(_Dasar):
+    """Efek item video/gambar (komposisi/efek.js)."""
+    kenburns: Optional[Literal["masuk", "keluar", "kiri", "kanan"]] = None
+    guncang: float = Field(0, ge=0, le=100)
+    punch: list[Punch] = Field(default_factory=list, max_length=200)
+
+
 class Transisi(_Dasar):
     """Transisi masuk dari item sebelumnya di lajur yang sama (komposisi/transisi.js)."""
     jenis: Literal["potong", "larut", "geser", "usap", "perbesar", "kilat", "glitch"]
@@ -166,6 +179,7 @@ class Item(_Dasar):
     keyframe: Optional[dict[SifatKeyframe, list[Keyframe]]] = None
     warna: Optional[Warna] = None
     transisi: Optional[Transisi] = None
+    efek: Optional[Efek] = None
     teks: Optional[str] = Field(None, max_length=500)
     komponen: Optional[str] = None
     versi: Optional[int] = Field(None, ge=1)

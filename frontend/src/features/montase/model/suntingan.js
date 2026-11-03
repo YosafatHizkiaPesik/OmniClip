@@ -747,3 +747,41 @@ export function rendamMusik(dokumen, lajurId, { turun = 0.25, lembut = 0.3 } = {
     return { ...sisa, keyframe: { ...lain, volume: urut } };
   });
 }
+
+// --- efek dan stiker (M3.8) ---------------------------------------------------
+
+/** Punch-in di bingkai relatif `f` selama `d` bingkai; punch di bingkai yang sama diganti. */
+export function tambahPunch(dokumen, itemId, f, d) {
+  const hit = cariItem(dokumen, itemId);
+  if (!hit || hit.lajur.kunci || !['video', 'gambar'].includes(hit.item.jenis)) return dokumen;
+  const t = Math.max(0, Math.min(hit.item.durasi - 1, Math.round(f)));
+  const lama = (hit.item.efek?.punch ?? []).filter((p) => p.t !== t);
+  const punch = [...lama, { t, d: Math.max(1, Math.min(Math.round(d), hit.item.durasi - t)), kuat: 0.15 }]
+    .sort((a, b) => a.t - b.t);
+  return ubahItem(dokumen, itemId, { efek: { ...hit.item.efek, punch } });
+}
+
+export function hapusPunch(dokumen, itemId, t) {
+  const hit = cariItem(dokumen, itemId);
+  if (!hit) return dokumen;
+  const punch = (hit.item.efek?.punch ?? []).filter((p) => p.t !== t);
+  return ubahItem(dokumen, itemId, { efek: { ...hit.item.efek, punch } });
+}
+
+/** Stiker emoji: item teks besar tanpa garis, muncul dengan "pop". */
+export function tambahStiker(dokumen, { mulai = 0, emoji = '🔥' } = {}) {
+  const fps = dokumen.kanvas.fps;
+  const lajur = dokumen.lajur.find((l) => l.jenis === 'teks' && !l.kunci && !l.subtitle)
+    ?? dokumen.lajur.find((l) => l.jenis === 'teks' && !l.kunci);
+  if (!lajur) return { dokumen, itemId: null };
+  const id = idBaru(dokumen);
+  const item = {
+    id, jenis: 'teks', mulai: Math.max(0, Math.round(mulai)), durasi: Math.round(2 * fps), teks: emoji,
+    stiker: true, asal: 'tangan',
+    gaya: { ukuran: 240, warna: '#ffffff', letak: 'tengah', perataan: 'tengah', latar: 'tanpa', garis: 0, bayang: 0, kabur: 0, gerak: 'pop' },
+  };
+  return {
+    dokumen: rapikan({ ...dokumen, lajur: dokumen.lajur.map((l) => (l.id === lajur.id ? { ...l, item: [...l.item, item] } : l)) }),
+    itemId: id,
+  };
+}

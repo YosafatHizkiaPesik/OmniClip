@@ -236,6 +236,27 @@ export function bersihkanTransisi(tr) {
   return { jenis: tr.jenis, durasi };
 }
 
+const KENBURNS = ['masuk', 'keluar', 'kiri', 'kanan'];
+
+/** Efek item (M3.8): Ken Burns, guncang 0..100, punch-in [{t, d, kuat}]. */
+export function bersihkanEfek(efek) {
+  if (!efek || typeof efek !== 'object') return undefined;
+  const hasil = {};
+  if (KENBURNS.includes(efek.kenburns)) hasil.kenburns = efek.kenburns;
+  const g = Math.round(Number(efek.guncang));
+  if (Number.isFinite(g) && g > 0) hasil.guncang = Math.min(100, g);
+  const punch = (Array.isArray(efek.punch) ? efek.punch : [])
+    .map((p) => ({
+      t: Math.max(0, Math.round(Number(p.t) || 0)),
+      d: Math.max(1, Math.round(Number(p.d) || 1)),
+      kuat: Math.min(1, Math.max(0.02, Number(p.kuat) || 0.15)),
+    }))
+    .sort((a, b) => a.t - b.t)
+    .slice(0, 200);
+  if (punch.length) hasil.punch = punch;
+  return Object.keys(hasil).length ? hasil : undefined;
+}
+
 /** Mengubah kolom item; angka dijepit ke rentang yang sama dengan skema server. */
 export function ubahItem(dokumen, itemId, perubahan) {
   const hit = cariItem(dokumen, itemId);
@@ -252,6 +273,7 @@ export function ubahItem(dokumen, itemId, perubahan) {
   if ('ubah' in bersih) bersih.ubah = bersihkanUbah(bersih.ubah);
   if ('warna' in bersih) bersih.warna = bersihkanWarna(bersih.warna);
   if ('transisi' in bersih) bersih.transisi = bersihkanTransisi(bersih.transisi);
+  if ('efek' in bersih) bersih.efek = bersihkanEfek(bersih.efek);
   if ('isi' in bersih && !['contain', 'cover'].includes(bersih.isi)) delete bersih.isi;
   const baru = salin(dokumen);
   baru.lajur = baru.lajur.map((l) => ({

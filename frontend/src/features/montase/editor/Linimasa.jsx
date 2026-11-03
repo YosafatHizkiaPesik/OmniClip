@@ -47,8 +47,11 @@ import {
 } from '../model/suntingan.js';
 import { JENIS_SERET_BAHAN, kodeWaktu, useGaris } from './garisPutar.js';
 import { bingkaiKeyframe } from '../komposisi/keyframe.js';
+import { BAWAAN } from '../komposisi/index.js';
 
 const IKON_LAJUR = { video: Film, teks: Type, motion: Sparkles, audio: Music };
+const STIKER = ['🔥', '😂', '🤣', '😱', '🤯', '😍', '👀', '💯', '⭐', '❤️', '👍', '🙏', '🎉', '💥', '⚡',
+  '✅', '❌', '🏆', '🥇', '🥈', '🥉', '🎯', '⬇️', '➡️'];
 export const LEBAR_LABEL = 150;
 const AMBANG_MAGNET = 8;
 const AMBANG_SERET = 3;
@@ -167,6 +170,10 @@ const ItemLinimasa = memo(function ItemLinimasa({
       {item.transisi && item.transisi.jenis !== 'potong' && (
         <span className="montase-item-transisi" title={t(`montase.transisi.${item.transisi.jenis}`)} aria-hidden />
       )}
+      {(item.efek?.punch ?? []).map((pc) => (
+        <span key={`p${pc.t}`} className="montase-item-punch" aria-hidden
+              style={{ left: (pc.t / fps) * pps, width: Math.max(3, (pc.d / fps) * pps) }} />
+      ))}
       {bingkaiKeyframe(item).filter((bk) => bk >= 0 && bk <= item.durasi).map((bk) => (
         <span key={bk} className="montase-item-wajik" style={{ left: (bk / fps) * pps }} aria-hidden />
       ))}
@@ -634,9 +641,18 @@ const Linimasa = forwardRef(function Linimasa({
         <button type="button" className="btn-secondary" onClick={aksi.tambahTeks}>
           <Type size={13} />{t('montase.linimasa.tambah_teks')}
         </button>
-        <button type="button" className="btn-secondary" onClick={aksi.tambahMotion}>
-          <Sparkles size={13} />{t('montase.linimasa.tambah_animasi')}
-        </button>
+        <select className="montase-tambah-lajur" value="" aria-label={t('montase.linimasa.tambah_animasi')}
+                onChange={(e) => { if (e.target.value) aksi.tambahMotion(e.target.value); }}
+        >
+          <option value="">✦ {t('montase.linimasa.tambah_animasi')}</option>
+          {Object.keys(BAWAAN).map((k) => <option key={k} value={k}>{t(`montase.animasi.${k}`)}</option>)}
+        </select>
+        <select className="montase-tambah-lajur montase-stiker" value="" aria-label={t('montase.stiker.judul')}
+                onChange={(e) => { if (e.target.value) aksi.tambahStiker(e.target.value); }}
+        >
+          <option value="">☺ {t('montase.stiker.judul')}</option>
+          {STIKER.map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
         <button type="button" className="btn-secondary" onClick={aksi.subtitle} disabled={aksi.subtitleSibuk}
                 title={t('montase.subtitle.tombol_ket')}
         >

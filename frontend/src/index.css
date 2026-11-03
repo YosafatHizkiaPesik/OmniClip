@@ -2528,3 +2528,5 @@ button.tujuan, a.tujuan { cursor: pointer; }
   background: linear-gradient(135deg, rgba(255,255,255,.85) 0 50%, transparent 50%);
   clip-path: polygon(0 0, 100% 50%, 0 100%);
 }
+.montase-item-punch { position: absolute; top: 2px; height: 4px; background: #ff7a00; border-radius: 2px; z-index: 2; pointer-events: none; }
+.montase-stiker { width: 92px; }

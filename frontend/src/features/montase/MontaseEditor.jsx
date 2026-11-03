@@ -33,11 +33,10 @@ import {
   cariItem, tambahBahan, tambahMotion, tambahTeks, ubahItem, ubahProyek,
 } from './model/dokumen.js';
 import {
-  bekukan, belah, bisaHapusLajur, gandakan, hapusBanyak, hapusBeriak, hapusLajur, hapusPenanda,
-  aturUlangTransform, gantiBahanItem, kurvaKeyframe, pasangSubtitle, rapatkan, rendamMusik, salin,
-  semuaItem,
-  taruhSuara, tombolKeyframe, ubahSifatDiBingkai, tambahLajur, tambahPenanda, tempel, ubahKecepatan, ubahLajur, ubahPenanda,
-  ubahTransform,
+  aturUlangTransform, bekukan, belah, bisaHapusLajur, gandakan, gantiBahanItem, hapusBanyak,
+  hapusBeriak, hapusLajur, hapusPenanda, hapusPunch, kurvaKeyframe, pasangSubtitle, rapatkan,
+  rendamMusik, salin, semuaItem, tambahLajur, tambahPenanda, tambahPunch, tambahStiker, taruhSuara,
+  tempel, tombolKeyframe, ubahKecepatan, ubahLajur, ubahPenanda, ubahSifatDiBingkai, ubahTransform,
 } from './model/suntingan.js';
 import {
   batal, bisaBatal, bisaUlang, buatRiwayat, catat, ulang,
@@ -315,11 +314,18 @@ export default function MontaseEditor() {
     const hasil = tambahTeks(dok(), { mulai: garis.get(), teks: t('montase.editor.teks_baru') });
     if (terapkan(hasil.dokumen)) pilih([hasil.itemId]);
   };
-  const tambahAnimasiDiGaris = () => {
-    const hasil = tambahMotion(dok(), {
-      komponen: 'ko_hitung_mundur', modul: BAWAAN.ko_hitung_mundur, mulai: garis.get(),
-    });
+  const tambahAnimasiDiGaris = (komponen = 'ko_hitung_mundur') => {
+    const modul = BAWAAN[komponen];
+    if (!modul) return;
+    // Bilah progres dibentang sepanjang video, mulai dari awal.
+    const panjang = komponen === 'ko_bilah_progres';
+    let hasil = tambahMotion(dok(), { komponen, modul, mulai: panjang ? 0 : garis.get() });
+    if (panjang) hasil = { ...hasil, dokumen: ubahItem(hasil.dokumen, hasil.itemId, { durasi: Math.max(dok().durasi, 1) }) };
     if (terapkan(hasil.dokumen)) pilih([hasil.itemId]);
+  };
+  const tambahStikerDiGaris = (emoji) => {
+    const hasil = tambahStiker(dok(), { mulai: garis.get(), emoji });
+    if (hasil.itemId && terapkan(hasil.dokumen)) pilih([hasil.itemId]);
   };
   const aksiHapus = () => {
     if (pilihanSah.length) terapkan(hapusBanyak(dok(), pilihanSah));
@@ -414,6 +420,7 @@ export default function MontaseEditor() {
     magnet: aksiMagnet,
     tambahTeks: tambahTeksDiGaris,
     tambahMotion: tambahAnimasiDiGaris,
+    tambahStiker: tambahStikerDiGaris,
     tambahLajur: aksiTambahLajur,
   };
 
@@ -611,6 +618,11 @@ export default function MontaseEditor() {
           })}
           onAturUlangTransform={(id) => terapkan(aturUlangTransform(dok(), id))}
           onRendam={(id, turun) => terapkan(rendamMusik(dok(), id, { turun }))}
+          onPunch={(id) => {
+            const it = cariItem(dok(), id)?.item;
+            if (it) terapkan(tambahPunch(dok(), id, garis.get() - it.mulai, Math.round(fps * 0.8)));
+          }}
+          onHapusPunch={(id, tt) => terapkan(hapusPunch(dok(), id, tt))}
         />
       </div>
 
