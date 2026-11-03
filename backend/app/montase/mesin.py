@@ -41,7 +41,7 @@ import time
 from pathlib import Path
 from typing import Callable, Optional
 
-from ..config import BUNDLE_DIR, FROZEN, PROJECT_DIR
+from ..config import BUNDLE_DIR, FROZEN, PROJECT_DIR, STORAGE_DIR
 from ..services.proses import lepas, popen
 
 log = logging.getLogger("omniclip.montase.mesin")
@@ -65,6 +65,41 @@ def folder_paket() -> Optional[Path]:
     if (folder / "src" / "render.mjs").is_file() and \
             (folder / "node_modules" / "@remotion" / "renderer").is_dir():
         return folder
+    return None
+
+
+def folder_kerja() -> Path:
+    """
+    Folder kerja (cwd) setiap perintah mesin, di folder data OmniClip.
+
+    Remotion menaruh Chrome Headless Shell di `node_modules/.remotion` milik
+    `package.json` terdekat DARI CWD (getDownloadsCacheDir). Tanpa folder ini,
+    cwd-nya folder paket mesin, dan di aplikasi terbungkus itu berarti Chrome
+    terunduh ke DALAM folder aplikasi: gagal bila folder itu tidak bisa
+    ditulis, dan hilang setiap kali pembaruan mengganti aplikasinya. Terlihat
+    di build CI pertama (3 Nov 2026): `_internal/montase_mesin/node_modules/.remotion`.
+
+    `package.json` kecil di sini menghentikan pencarian ke atas, jadi Chrome
+    selalu ke `<data>/mesin_montase/kerja/node_modules/.remotion`, dan perintah
+    render menemukannya di tempat yang sama.
+    """
+    folder = STORAGE_DIR / "mesin_montase" / "kerja"
+    penanda = folder / "package.json"
+    if not penanda.is_file():
+        folder.mkdir(parents=True, exist_ok=True)
+        penanda.write_text('{"name": "omniclip-montase-kerja", "private": true}\n',
+                           encoding="utf-8")
+    return folder
+
+
+def _browser_terunduh() -> Optional[str]:
+    akar = STORAGE_DIR / "mesin_montase" / "kerja" / "node_modules" / ".remotion"
+    if not akar.is_dir():
+        return None
+    for nama in ("chrome-headless-shell.exe", "chrome-headless-shell"):
+        for jalur in akar.rglob(nama):
+            if jalur.is_file():
+                return str(jalur)
     return None
 
 
@@ -118,7 +153,9 @@ def status() -> dict:
         "versi_node": _versi_node(node) if node else None,
         "paket": str(paket) if paket else None,
         "bundel": str(bundel) if bundel else None,
-        "browser": jalur_browser(),
+        # Pilihan lingkungan, atau Chrome yang sudah diunduh ke folder kerja.
+        # None berarti render pertama akan mengunduhnya sendiri.
+        "browser": jalur_browser() or _browser_terunduh(),
         "siap": bool(node and paket and bundel),
     }
 
@@ -192,7 +229,7 @@ def jalankan(perintah: str, masukan: dict, *,
         env["NODE_USE_ENV_PROXY"] = "1"
     env.setdefault("NODE_NO_WARNINGS", "1")
 
-    kw: dict = {"cwd": str(paket), "env": env, "stdin": subprocess.PIPE,
+    kw: dict = {"cwd": str(folder_kerja()), "env": env, "stdin": subprocess.PIPE,
                 "stdout": subprocess.PIPE, "stderr": subprocess.PIPE,
                 "text": True, "encoding": "utf-8", "errors": "replace", "bufsize": 1}
     if sys.platform == "win32":

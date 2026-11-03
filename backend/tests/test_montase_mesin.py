@@ -30,7 +30,7 @@ if (m.mode === 'mati') { process.stderr.write('jejak tumpukan palsu\n'); process
 if (m.mode === 'lama') { tulis({ tahap: 'menunggu' }); await new Promise((r) => setTimeout(r, 60000)); }
 for (let i = 1; i <= 3; i++) tulis({ kemajuan: i / 3, bingkai: i });
 process.stdout.write('baris bukan json\n');
-tulis({ selesai: true, gema: m.isi ?? null });
+tulis({ selesai: true, gema: m.isi ?? null, cwd: process.cwd() });
 """
 
 
@@ -41,8 +41,10 @@ class Jalankan(unittest.TestCase):
         paket = Path(self._tmp.name)
         (paket / "src").mkdir()
         (paket / "src" / "gema.mjs").write_text(SKRIP_GEMA, encoding="utf-8")
+        self.data = paket / "data"
         self._p = [mock.patch.object(mesin, "folder_paket", return_value=paket),
-                   mock.patch.object(mesin, "jalur_node", return_value=NODE)]
+                   mock.patch.object(mesin, "jalur_node", return_value=NODE),
+                   mock.patch.object(mesin, "STORAGE_DIR", self.data)]
         for p in self._p:
             p.start()
 
@@ -54,8 +56,19 @@ class Jalankan(unittest.TestCase):
     def test_kemajuan_dan_hasil(self):
         kabar = []
         hasil = mesin.jalankan("gema", {"isi": "halo é"}, kabar=kabar.append)
-        self.assertEqual(hasil, {"selesai": True, "gema": "halo é"})
+        self.assertEqual((hasil["selesai"], hasil["gema"]), (True, "halo é"))
         self.assertEqual([k["bingkai"] for k in kabar], [1, 2, 3])
+
+    def test_berjalan_di_folder_kerja_data(self):
+        """
+        Chrome diunduh Remotion ke node_modules/.remotion milik package.json
+        terdekat dari CWD. CWD harus folder kerja di folder data, bukan folder
+        paket (yang di aplikasi terbungkus ada di dalam folder aplikasi).
+        """
+        hasil = mesin.jalankan("gema", {})
+        kerja = self.data / "mesin_montase" / "kerja"
+        self.assertEqual(Path(hasil["cwd"]).resolve(), kerja.resolve())
+        self.assertTrue((kerja / "package.json").is_file())
 
     def test_baris_galat_jadi_gagal_mesin(self):
         with self.assertRaisesRegex(mesin.GagalMesin, "sengaja gagal"):

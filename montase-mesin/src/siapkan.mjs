@@ -3,9 +3,10 @@
  *
  * Keluaran: { "siap": true, "browser": jalur atau null, "detik": ... }
  *
- * Remotion menyimpannya di dalam node_modules mesin ini (folder `.remotion`),
- * dan karena mesinnya sendiri dipasang di folder data OmniClip, browsernya
- * ikut tinggal di sana, bukan di folder aplikasi yang tidak bisa ditulis.
+ * Remotion menyimpannya di `node_modules/.remotion` milik package.json
+ * terdekat dari CWD. OmniClip menjalankan setiap perintah mesin dengan CWD di
+ * folder data (`mesin.folder_kerja()`), jadi Chrome tinggal di sana, bukan di
+ * folder aplikasi yang bisa tidak bisa ditulis dan diganti setiap pembaruan.
  */
 import { ensureBrowser } from '@remotion/renderer';
 import { jalankan, tulis } from './alat.mjs';

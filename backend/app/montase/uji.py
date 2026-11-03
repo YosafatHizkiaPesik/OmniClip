@@ -220,6 +220,13 @@ def uji_lengkap(durasi_detik: int = DURASI_DETIK, *, siapkan: bool = True,
         t = time.monotonic()
         angka["browser"] = mesin.siapkan_browser()
         angka["detik_siapkan_browser"] = round(time.monotonic() - t, 1)
+        # Chrome yang diunduh Remotion harus berada di folder data, bukan di
+        # folder aplikasi (lihat mesin.folder_kerja). Dijaga di sini supaya
+        # langkah CI yang menangkapnya, bukan pengguna sesudah pembaruan.
+        terunduh = angka["browser"].get("browser")
+        if (terunduh and angka["browser"].get("jenis") == "local-puppeteer-browser"
+                and not Path(terunduh).resolve().is_relative_to(mesin.folder_kerja().resolve())):
+            raise mesin.GagalMesin(f"Chrome terunduh di luar folder data: {terunduh}")
     status = mesin.status()
     angka["mesin"] = status
     if not status["siap"]:
