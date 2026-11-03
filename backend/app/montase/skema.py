@@ -26,7 +26,9 @@ import json
 import re
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+from pydantic import (
+    BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator,
+)
 
 VERSI_DOKUMEN = 1
 BATAS_BITA = 2_000_000
@@ -96,6 +98,32 @@ class BahanMeta(_Dasar):
     ada_suara: bool = False
 
 
+class Potong(_Dasar):
+    """Potongan (crop) per sisi dalam persen kotak item; sama dengan model/dokumen.js."""
+    kiri: float = Field(0, ge=0, le=95)
+    kanan: float = Field(0, ge=0, le=95)
+    atas: float = Field(0, ge=0, le=95)
+    bawah: float = Field(0, ge=0, le=95)
+
+    @model_validator(mode="after")
+    def _sisa(self) -> "Potong":
+        # Potongan yang menghabiskan gambar membuat item tak terlihat dan
+        # tak bisa dipegang lagi di pratinjau.
+        if self.kiri + self.kanan > 95 or self.atas + self.bawah > 95:
+            raise ValueError("potongan berhadapan harus menyisakan paling sedikit 5%")
+        return self
+
+
+class Ubah(_Dasar):
+    """Transformasi item dalam piksel kanvas (komposisi/ubah.js)."""
+    x: float = Field(0, ge=-20000, le=20000)
+    y: float = Field(0, ge=-20000, le=20000)
+    skala: float = Field(1, ge=0.01, le=20)
+    putar: float = Field(0, ge=-3600, le=3600)
+    opasitas: float = Field(1, ge=0, le=1)
+    potong: Optional[Potong] = None
+
+
 class Item(_Dasar):
     id: str
     jenis: Literal["video", "gambar", "teks", "motion", "audio"]
@@ -105,6 +133,11 @@ class Item(_Dasar):
     potong_awal: int = Field(0, ge=0)
     kecepatan: float = Field(1.0, ge=0.25, le=4.0)
     volume: float = Field(1.0, ge=0.0, le=2.0)
+    fade_masuk: int = Field(0, ge=0)
+    fade_keluar: int = Field(0, ge=0)
+    beku: bool = False
+    isi: Optional[Literal["contain", "cover"]] = None
+    ubah: Optional[Ubah] = None
     teks: Optional[str] = Field(None, max_length=500)
     komponen: Optional[str] = None
     versi: Optional[int] = Field(None, ge=1)
@@ -138,6 +171,11 @@ class Lajur(_Dasar):
         return v
 
 
+class Penanda(_Dasar):
+    t: int = Field(..., ge=0)
+    label: str = Field("", max_length=40)
+
+
 class Dokumen(_Dasar):
     versi: int = VERSI_DOKUMEN
     id: str
@@ -146,7 +184,7 @@ class Dokumen(_Dasar):
     durasi: int = Field(1, ge=1)
     bahan: dict[str, BahanMeta] = Field(default_factory=dict)
     lajur: list[Lajur] = Field(default_factory=list)
-    penanda: list[dict[str, Any]] = Field(default_factory=list)
+    penanda: list[Penanda] = Field(default_factory=list, max_length=500)
     ekspor: dict[str, Any] = Field(default_factory=dict)
 
 

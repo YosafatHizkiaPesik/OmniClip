@@ -4,6 +4,7 @@
  *
  * Induk -> iframe:  muat {dokumen, sumber} · putar · jeda · ke {bingkai}
  * Iframe -> induk:  siap · bingkai {bingkai} · main {main} · galat {pesan}
+ *                   tombol {key, shift, ctrl, meta, alt}  (pintasan keyboard)
  *
  * Iframe beralamat `null`, jadi `targetOrigin` harus '*'. Yang menjamin pesan
  * berasal dari pihak yang benar adalah pemeriksaan `event.source` di kedua

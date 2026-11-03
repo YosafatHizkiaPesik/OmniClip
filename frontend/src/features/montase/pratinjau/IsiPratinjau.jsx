@@ -32,11 +32,21 @@ export default function IsiPratinjau() {
       else if (d.jenis === 'ke' && Number.isFinite(d.bingkai)) pemutar.current?.seekTo(d.bingkai);
     };
     const galat = (e) => kirim('galat', { pesan: String(e?.message ?? e?.reason?.message ?? e?.reason ?? e) });
+    // Fokus di dalam iframe menelan tombol keyboard; diteruskan ke induk
+    // supaya pintasan editor (Spasi, panah, Ctrl+Z, ...) tetap bekerja.
+    const tombol = (e) => {
+      if (e.key === ' ' || e.key.startsWith('Arrow')) e.preventDefault();
+      kirim('tombol', {
+        key: e.key, shift: e.shiftKey, ctrl: e.ctrlKey, meta: e.metaKey, alt: e.altKey,
+      });
+    };
+    window.addEventListener('keydown', tombol);
     window.addEventListener('message', dengar);
     window.addEventListener('error', galat);
     window.addEventListener('unhandledrejection', galat);
     kirim('siap');
     return () => {
+      window.removeEventListener('keydown', tombol);
       window.removeEventListener('message', dengar);
       window.removeEventListener('error', galat);
       window.removeEventListener('unhandledrejection', galat);

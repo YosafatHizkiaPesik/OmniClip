@@ -23,6 +23,7 @@
 import React from 'react';
 import { AbsoluteFill, Sequence } from 'remotion';
 import ItemAudio from './item/ItemAudio.jsx';
+import ItemGambar from './item/ItemGambar.jsx';
 import ItemMotion from './item/ItemMotion.jsx';
 import ItemTeks from './item/ItemTeks.jsx';
 import ItemVideo from './item/ItemVideo.jsx';
@@ -31,6 +32,7 @@ export const ID_KOMPOSISI = 'Montase';
 
 const PENGGAMBAR = {
   video: ItemVideo,
+  gambar: ItemGambar,
   teks: ItemTeks,
   motion: ItemMotion,
   audio: ItemAudio,
@@ -47,7 +49,7 @@ export function ukuranDokumen(dokumen) {
   };
 }
 
-function Lajur({ lajur, sumber, fps }) {
+function Lajur({ lajur, sumber, fps, dokumen }) {
   // Lajur audio tidak digambar tapi tetap dipasang: suaranya berasal dari
   // komponennya. Lajur gambar yang disembunyikan tidak dipasang sama sekali,
   // jadi suaranya ikut hilang (sama dengan CapCut).
@@ -68,7 +70,7 @@ function Lajur({ lajur, sumber, fps }) {
             // setiap sambungan potongan.
             premountFor={item.jenis === 'video' || item.jenis === 'audio' ? fps : 0}
           >
-            <Gambar item={item} lajur={lajur} sumber={sumber} />
+            <Gambar item={item} lajur={lajur} sumber={sumber} dokumen={dokumen} />
           </Sequence>
         );
       })}
@@ -82,7 +84,7 @@ export function Komposisi({ dokumen, sumber }) {
   return (
     <AbsoluteFill style={{ backgroundColor: latar }}>
       {(dokumen?.lajur ?? []).map((lajur) => (
-        <Lajur key={lajur.id} lajur={lajur} sumber={sumber ?? {}} fps={fps} />
+        <Lajur key={lajur.id} lajur={lajur} sumber={sumber ?? {}} fps={fps} dokumen={dokumen} />
       ))}
     </AbsoluteFill>
   );

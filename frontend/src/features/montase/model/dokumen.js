@@ -61,8 +61,20 @@ export function ujungLajur(lajur) {
   return lajur.item.reduce((m, i) => Math.max(m, i.mulai + i.durasi), 0);
 }
 
-function sisipkan(dokumen, jenisItem, item) {
-  const target = lajurUntuk(dokumen, jenisItem);
+/**
+ * Lajur tujuan: `lajurId` bila diberikan, cocok jenisnya, dan tidak terkunci;
+ * selain itu lajur pertama yang cocok dan tidak terkunci, lalu lajur pertama
+ * yang cocok (lajur terkunci tetap lebih baik daripada galat).
+ */
+function lajurTujuan(dokumen, jenisItem, lajurId) {
+  const jenisLajur = JENIS_LAJUR_ITEM[jenisItem];
+  const cocok = dokumen.lajur.filter((l) => l.jenis === jenisLajur);
+  return cocok.find((l) => l.id === lajurId && !l.kunci)
+    ?? cocok.find((l) => !l.kunci) ?? cocok[0] ?? null;
+}
+
+function sisipkan(dokumen, jenisItem, item, lajurId = null) {
+  const target = lajurTujuan(dokumen, jenisItem, lajurId);
   if (!target) throw new Error(`Tidak ada lajur untuk item ${jenisItem}`);
   const baru = salin(dokumen);
   baru.lajur = baru.lajur.map((l) => (l.id === target.id ? { ...l, item: [...l.item, item] } : l));
@@ -74,9 +86,9 @@ function sisipkan(dokumen, jenisItem, item) {
  * suara), berurutan seperti CapCut. Metadata bahannya ikut dicatat di
  * `dokumen.bahan` supaya dokumen bisa dibaca tanpa basis data.
  */
-export function tambahBahan(dokumen, bahan) {
+export function tambahBahan(dokumen, bahan, { mulai = null, lajurId = null } = {}) {
   const fps = dokumen.kanvas.fps;
-  const lajur = lajurUntuk(dokumen, bahan.jenis);
+  const lajur = lajurTujuan(dokumen, bahan.jenis, lajurId);
   if (!lajur) throw new Error(`Tidak ada lajur untuk bahan ${bahan.jenis}`);
   const detik = bahan.jenis === 'gambar' ? DETIK_GAMBAR : Math.max(1 / fps, bahan.durasi || 1);
   const id = idBaru(dokumen);
@@ -84,7 +96,7 @@ export function tambahBahan(dokumen, bahan) {
     id,
     jenis: bahan.jenis,
     bahan: bahan.id,
-    mulai: ujungLajur(lajur),
+    mulai: mulai === null ? ujungLajur(lajur) : Math.max(0, Math.round(mulai)),
     durasi: Math.max(1, Math.round(detik * fps)),
     potong_awal: 0,
     kecepatan: 1,
@@ -92,7 +104,7 @@ export function tambahBahan(dokumen, bahan) {
     asal: 'tangan',
   };
   if (bahan.jenis !== 'audio') item.isi = 'contain';
-  const hasil = sisipkan(dokumen, bahan.jenis, item);
+  const hasil = sisipkan(dokumen, bahan.jenis, item, lajur.id);
   hasil.bahan = {
     ...hasil.bahan,
     [bahan.id]: {
@@ -108,24 +120,24 @@ export function tambahBahan(dokumen, bahan) {
   return { dokumen: hasil, itemId: id };
 }
 
-export function tambahTeks(dokumen, { mulai = 0, teks = 'Teks' } = {}) {
+export function tambahTeks(dokumen, { mulai = 0, teks = 'Teks', lajurId = null } = {}) {
   const id = idBaru(dokumen);
   const item = {
     id, jenis: 'teks', mulai: Math.max(0, Math.round(mulai)),
     durasi: Math.round(DETIK_TEKS * dokumen.kanvas.fps), teks,
     gaya: { letak: 'tengah', ukuran: 96, warna: '#ffffff' }, asal: 'tangan',
   };
-  return { dokumen: sisipkan(dokumen, 'teks', item), itemId: id };
+  return { dokumen: sisipkan(dokumen, 'teks', item, lajurId), itemId: id };
 }
 
-export function tambahMotion(dokumen, { komponen, modul, mulai = 0 }) {
+export function tambahMotion(dokumen, { komponen, modul, mulai = 0, lajurId = null }) {
   const id = idBaru(dokumen);
   const item = {
     id, jenis: 'motion', komponen, versi: 1, mulai: Math.max(0, Math.round(mulai)),
     durasi: modul?.durasiBawaan ?? Math.round(2 * dokumen.kanvas.fps),
     props: { ...modul?.contohProps }, asal: 'tangan',
   };
-  return { dokumen: sisipkan(dokumen, 'motion', item), itemId: id };
+  return { dokumen: sisipkan(dokumen, 'motion', item, lajurId), itemId: id };
 }
 
 /** Bahan yang tidak dipakai item mana pun dibuang dari `dokumen.bahan`. */
@@ -136,20 +148,61 @@ function buangBahanYatim(dokumen) {
 }
 
 export function hapusItem(dokumen, itemId) {
+  const hit = cariItem(dokumen, itemId);
+  if (!hit || hit.lajur.kunci) return dokumen;
   const baru = salin(dokumen);
   baru.lajur = baru.lajur.map((l) => ({ ...l, item: l.item.filter((i) => i.id !== itemId) }));
   return rapikan(buangBahanYatim(baru));
 }
 
+// Rentang yang sama dengan skema server (backend/app/montase/skema.py).
 const BATAS = {
   mulai: [0, Infinity], durasi: [1, Infinity], potong_awal: [0, Infinity],
-  kecepatan: [0.25, 4], volume: [0, 2],
+  kecepatan: [0.25, 4], volume: [0, 2], fade_masuk: [0, Infinity], fade_keluar: [0, Infinity],
 };
-const BULAT = new Set(['mulai', 'durasi', 'potong_awal']);
+const BULAT = new Set(['mulai', 'durasi', 'potong_awal', 'fade_masuk', 'fade_keluar']);
+
+export const BATAS_UBAH = {
+  x: [-20000, 20000], y: [-20000, 20000], skala: [0.01, 20], putar: [-3600, 3600],
+  opasitas: [0, 1],
+};
+/** Potongan (crop) dalam persen per sisi; dua sisi berhadapan menyisakan >= 5%. */
+export const SISA_POTONG = 5;
+
+function jepit(v, [bawah, atas]) {
+  return Math.min(atas, Math.max(bawah, v));
+}
+
+/**
+ * Transformasi item yang sudah dibersihkan: angka di luar rentang dijepit,
+ * kolom tak dikenal dibuang, dan potongan yang menghabiskan gambar dikecilkan.
+ */
+export function bersihkanUbah(ubah) {
+  const hasil = {};
+  for (const [k, batas] of Object.entries(BATAS_UBAH)) {
+    const v = Number(ubah?.[k]);
+    if (ubah && k in ubah && Number.isFinite(v)) hasil[k] = jepit(v, batas);
+  }
+  const p = ubah?.potong;
+  if (p && typeof p === 'object') {
+    const sisi = {};
+    for (const k of ['kiri', 'kanan', 'atas', 'bawah']) {
+      const v = Number(p[k]);
+      sisi[k] = Number.isFinite(v) ? jepit(v, [0, 100 - SISA_POTONG]) : 0;
+    }
+    for (const [a, b] of [['kiri', 'kanan'], ['atas', 'bawah']]) {
+      const lebih = sisi[a] + sisi[b] - (100 - SISA_POTONG);
+      if (lebih > 0) sisi[b] = Math.max(0, sisi[b] - lebih);
+    }
+    if (Object.values(sisi).some((v) => v > 0)) hasil.potong = sisi;
+  }
+  return hasil;
+}
 
 /** Mengubah kolom item; angka dijepit ke rentang yang sama dengan skema server. */
 export function ubahItem(dokumen, itemId, perubahan) {
-  if (!cariItem(dokumen, itemId)) return dokumen;
+  const hit = cariItem(dokumen, itemId);
+  if (!hit || hit.lajur.kunci) return dokumen;
   const bersih = { ...perubahan };
   for (const [k, [bawah, atas]] of Object.entries(BATAS)) {
     if (k in bersih) {
@@ -159,6 +212,8 @@ export function ubahItem(dokumen, itemId, perubahan) {
       bersih[k] = Math.min(atas, Math.max(bawah, v));
     }
   }
+  if ('ubah' in bersih) bersih.ubah = bersihkanUbah(bersih.ubah);
+  if ('isi' in bersih && !['contain', 'cover'].includes(bersih.isi)) delete bersih.isi;
   const baru = salin(dokumen);
   baru.lajur = baru.lajur.map((l) => ({
     ...l, item: l.item.map((i) => (i.id === itemId ? { ...i, ...bersih } : i)),
