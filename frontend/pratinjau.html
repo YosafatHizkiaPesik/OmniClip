@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <!--
+      Isi iframe kotak pasir pratinjau Montase (JOB-4.md bagian 20).
+      'unsafe-eval' dibutuhkan muatKomponen.js (komponen animasi AI);
+      'unsafe-inline' dibutuhkan pembuka React Refresh milik Vite saat
+      pengembangan. Jaringan hanya ke server ini sendiri.
+    -->
+    <meta http-equiv="Content-Security-Policy"
+          content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self' data: blob: ws://localhost:* ws://127.0.0.1:*; font-src 'self' data:; worker-src 'self' blob:" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pratinjau Montase</title>
+    <style>
+      html, body, #pratinjau { margin: 0; height: 100%; background: #000; overflow: hidden; }
+    </style>
+  </head>
+  <body>
+    <div id="pratinjau"></div>
+    <script type="module" src="/src/montase-pratinjau.jsx"></script>
+  </body>
+</html>

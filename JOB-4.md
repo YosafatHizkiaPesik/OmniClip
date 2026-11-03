@@ -92,7 +92,7 @@ Tiga kemampuan besar, dibangun berurutan:
 
 | Tahap | Isi singkat | Status | Tugas |
 |---|---|---|---|
-| 0 | Uji teknis: membuktikan Remotion jalan di dalam OmniClip | ⬜ Belum mulai | 0/8 |
+| 0 | Uji teknis: membuktikan Remotion jalan di dalam OmniClip | ✅ Selesai 3 Nov 2026 | 8/8 |
 | 1 | Kerangka: menu, daftar proyek, media, pratinjau, ekspor | ⬜ Belum mulai | 0/10 |
 | 2 | Penyuntingan dasar: linimasa sungguhan | ⬜ Belum mulai | 0/8 |
 | 3 | Teks, suara, efek, transisi, keyframe | ⬜ Belum mulai | 0/10 |
@@ -103,7 +103,7 @@ Tiga kemampuan besar, dibangun berurutan:
 
 Tanda status: ⬜ belum mulai · 🟨 sedang dikerjakan · ✅ selesai · ⛔ tertahan (tulis alasannya).
 
-**Tugas berikutnya:** `M0.1`.
+**Tugas berikutnya:** `M1.1`.
 
 ## 3. Keputusan
 
@@ -125,6 +125,9 @@ Tanda status: ⬜ belum mulai · 🟨 sedang dikerjakan · ✅ selesai · ⛔ te
 | K-12 | 3 Nov 2026 | Urutan AI untuk Montase: **Claude → Gemini → OpenRouter → AI lokal**, dan pengguna bisa memilih sendiri mana yang dipakai. | Jawaban pemilik. `koneksi_ai.py` sudah punya daftar berurutan yang bisa diatur pengguna; Montase menambah pilihan "AI untuk Montase". |
 | K-13 | 3 Nov 2026 | Langganan Claude Pro **tidak bisa** disambungkan ke OmniClip sebagai pengganti API key. Claude di dalam aplikasi lewat **API key** (bayar per pemakaian, terpisah dari Pro), ditambah **mode salin-tempel** (M4.10) yang memakai Claude.ai biasa. | Pro dan API adalah produk terpisah. Untuk produk yang dibagikan ke orang lain, jalur yang aman menurut sumber yang ada adalah API key, bukan login langganan. |
 | K-14 | 3 Nov 2026 | Penggabungan: **PR dokumen sekarang**, lalu **satu PR per tahap** sesudah gerbangnya lolos. | Jawaban pemilik. Dokumen langsung terbaca dari branch utama. |
+| K-15 | 3 Nov 2026 | Pemilik **tidak punya API key Anthropic**, hanya Claude Pro. Jalur Claude utama di aplikasi = **mode salin-tempel lewat Project Claude.ai** (M4.10). Jalur API (M4.3) tetap dibangun untuk pengguna yang punya kunci. Animasi bawaan (M4.2) ditulis saat pengembangan lewat Claude Code. | Jawaban pemilik atas T-7. |
+| K-16 | 3 Nov 2026 | Mengubah K-9: **paket mesin dan bundel komposisi ikut di dalam aplikasi**; yang diunduh saat pertama dipakai hanya **Node** dan **Chrome Headless Shell**. | Build uji dari `workflow_dispatch` tidak punya rilis untuk diunduhi, dan dengan begitu versi mesin selalu sama dengan versi komposisinya. Biayanya ±24 MB terkompresi di unduhan aplikasi. |
+| K-17 | 3 Nov 2026 | Pemilik **tidak bisa menguji sekarang** dan akan menguji semuanya sekaligus di akhir. Gerbang tiap tahap diganti: (1) tes otomatis + uji CI di Windows dan Linux sungguhan, (2) tangkapan layar dan cuplikan video dari Claude, dikirim ke pemilik di setiap tahap. Tes UJI-LANGSUNG.md tetap ditulis per tahap untuk uji akhir. **T-5 memakai angka usulan:** render paling lama 4x durasi. | Jawaban pemilik: "lanjutkan saja pengerjaannya, nanti saya tes semua sekaligus". |
 
 ### Masih terbuka (pemilik yang memutuskan)
 
@@ -134,9 +137,9 @@ Tanda status: ⬜ belum mulai · 🟨 sedang dikerjakan · ✅ selesai · ⛔ te
 | T-2 | Ekspor 60 fps tersedia? | Ya, sebagai pilihan. Bawaan 30 fps. | M1.9 |
 | T-3 | Apakah video Montase yang memakai video orang lain wajib bernarasi sebelum boleh diunggah publik? | Ya, ikut gerbang tinjau (`gerbang.py`) dan nilai tambah. Narasi dihitung seperti komentar. | M6.1 |
 | T-4 | Layanan suara AI tambahan: ElevenLabs atau lainnya? | Menunggu pemilik | MS.1 |
-| T-5 | Ambang kecepatan render yang masih bisa diterima | Paling lama 4x durasi video (video 60 detik selesai ≤ 4 menit) | Gerbang Tahap 0 |
+| ~~T-5~~ | ~~Ambang kecepatan render~~ Dipakai angka usulan: paling lama 4x durasi (K-17). Terukur 2,3-2,9x. | | |
 | T-6 | Montase bisa dipakai di HP? | Tidak di rilis pertama. Di HP hanya daftar proyek dan ekspor. | M1.7 |
-| T-7 | Apakah pemilik membuat API key Claude (platform.claude.com, isi saldo, terpisah dari Pro)? | Ya, untuk uji M0.5 dan Tahap 4. Perkiraan biaya: ±$0,1–0,25 per animasi (lihat M4.3). Tanpa kunci, M0.5 memakai Gemini/OpenRouter atau mode salin-tempel. | M0.5 |
+| ~~T-7~~ | ~~Apakah pemilik membuat API key Claude?~~ Dijawab 3 Nov 2026: tidak, hanya Claude Pro. Lihat K-15. | | |
 
 **Catatan lisensi Remotion:** gratis, termasuk untuk komersial, bagi perorangan
 atau usaha dengan paling banyak 3 karyawan. Kalau usaha OmniClip melewati itu,
@@ -227,12 +230,13 @@ commit berikutnya.
    ```bash
    cd frontend && npm test && npm run lint && npm run build
    ```
-5. **Setiap tahap ditutup dengan uji langsung oleh pemilik.** Tambahkan tes
-   bernomor di `UJI-LANGSUNG.md` (bagian "Montase"), berisi langkah dan hasil
-   yang diharapkan.
+5. **Setiap tahap ditutup dengan bukti, bukan janji** (K-17): tes otomatis
+   lolos, uji CI Windows/Linux lolos bila mesin atau build tersentuh, dan
+   tangkapan layar/cuplikan video dikirim ke pemilik. Tes bernomor untuk uji
+   akhir pemilik tetap ditambahkan di `UJI-LANGSUNG.md` (bagian "Montase").
 6. **Keputusan baru masuk tabel [Keputusan](#3-keputusan)**, bukan hanya chat.
 7. **Satu PR ke `main` per tahap** (K-14). Kerja harian di branch kerja; PR
-   dibuka sesudah gerbang tahap lolos dan uji langsung pemilik selesai.
+   dibuka dan digabung sesudah gerbang tahap lolos (aturan 5).
 8. **Perubahan rencana ditulis di sini juga.** Coret tugas yang dibatalkan
    (`~~M3.8~~`) beserta alasannya. Jangan dihapus diam-diam.
 9. **Gaya kode mengikuti repo:** nama Indonesia, docstring menjelaskan *kenapa*
@@ -250,38 +254,77 @@ dalam OmniClip, dan Windows belum pernah diuji sungguhan (CATATAN.md 1.4).
 Kalau salah satunya gagal, lebih baik ketahuan di sini daripada sesudah dua
 bulan bekerja.
 
-- [ ] **M0.1** Pasang `remotion`, `@remotion/player`, dan `@remotion/media` di
+- [x] **M0.1** Pasang `remotion`, `@remotion/player`, dan `@remotion/media` di
   `frontend/` dengan **versi persis yang sama** untuk semua paket `@remotion/*`
   (aturan Remotion). Buat rute uji `/montase-uji` (dimuat lambat dengan
   `React.lazy`). Isinya satu komposisi berisi satu video, satu teks, dan satu
   animasi, diputar di Player. Periksa kecocokan dengan React 19 yang dipakai
   frontend.
-- [ ] **M0.2** Buat folder `montase-mesin/` (paket Node) berisi skrip `render.mjs`
+  (selesai 3 Nov 2026, commit 8ffab2c) Remotion 4.0.537 berjalan di React 19.2.8 tanpa galat
+  konsol. Bagian Remotion dipecah ke potongan terpisah (±330 KB gzip) yang hanya
+  dimuat di halaman Montase. Komposisi sudah memakai format dokumen bagian 16
+  (lajur video, teks, motion, audio).
+- [x] **M0.2** Buat folder `montase-mesin/` (paket Node) berisi skrip `render.mjs`
   yang merender komposisi M0.1 ke MP4 lewat `@remotion/bundler` dan
   `@remotion/renderer`. Ukur di mesin pemilik untuk 30 detik video 1080x1920
   30 fps: lama render, RAM puncak, dan ukuran berkas.
-- [ ] **M0.3** `backend/app/montase/mesin.py`: Python menjalankan mesin sebagai
+  (selesai 3 Nov 2026, commit 8ffab2c) Diukur di container pengembangan 4 inti (bukan mesin
+  pemilik, itu tes 62): 87-89 detik, RAM puncak ±2,4 GB, 40 MB. Bundel tanpa
+  source map 16 MB. Render memegang `giliran_cpu` seperti render klip.
+- [x] **M0.3** `backend/app/montase/mesin.py`: Python menjalankan mesin sebagai
   proses anak, membaca kemajuan (JSON per baris di stdout), dan bisa
   membatalkannya. Pakai pembantu `services/proses.py` supaya jendela konsol
   tidak muncul di Windows.
-- [ ] **M0.4** Unduh saat pertama dipakai: Node 22 LTS portabel, paket mesin, dan
+  (selesai 3 Nov 2026, commit 8ffab2c) Grup proses sendiri (Linux) / `taskkill /T` (Windows),
+  batas waktu, ekor stderr di pesan galat, izin eksekusi berkas biner Remotion
+  dipulihkan bila hilang. Tes `test_montase_mesin.py`.
+- [x] **M0.4** Unduh saat pertama dipakai: Node 22 LTS portabel, paket mesin, dan
   Chrome Headless Shell (`ensureBrowser()` Remotion) masuk ke
   `STORAGE_DIR/mesin_montase/`. Versi dan SHA-256 dipatok, polanya sama dengan
   `alat_yt.py`. Ukur total ukuran unduhannya.
-- [ ] **M0.5** Satu animasi buatan AI: minta koneksi AI yang ada menulis satu
-  komponen sesuai [kontrak](#21-kontrak-komponen-animasi-ai), kompilasi dengan
-  `sucrase`, lalu putar di Player **dan** render di mesin. Bingkainya harus sama.
-- [ ] **M0.6** Kotak pasir: Player berjalan di iframe
+  (selesai 3 Nov 2026, commit 8ffab2c) Diubah oleh K-16: paket mesin ikut di aplikasi, yang
+  diunduh hanya Node (`montase/unduh.py`, terbukti: 31 MB, 3-5 detik, 126 MB
+  sesudah npm dibuang) dan Chrome (`siapkan.mjs`). Unduhan Chrome tidak bisa
+  dibuktikan di container (jaringan memblokir `remotion.media` dan
+  `storage.googleapis.com`); dibuktikan oleh langkah CI M0.7 dan tes 60.
+- [x] **M0.5** Satu animasi buatan AI: komponen sesuai
+  [kontrak](#21-kontrak-komponen-animasi-ai) ditulis Claude (lewat Claude Code,
+  karena belum ada API key, K-15), dikompilasi dengan `sucrase`, diperiksa,
+  lalu diputar di Player **dan** dirender di mesin. Bingkainya harus sama. Jalur
+  memanggil AI dari dalam aplikasi baru dibangun di Tahap 4.
+  (selesai 3 Nov 2026, commit 8ffab2c) `montase-mesin/uji/komponen_ai.jsx` ("GILA!" lalu pecah)
+  lolos pemeriksaan; kode berisi `fetch`, `window`, `Date`, `constructor`,
+  `Math.random`, `import()` ditolak dengan alasan per baris. Pratinjau kotak
+  pasir dan render sama secara kasat mata di bingkai 15, 90, 240, 270, termasuk
+  letak serpihan acak (`random(seed)`).
+- [x] **M0.6** Kotak pasir: Player berjalan di iframe
   `sandbox="allow-scripts"` (tanpa `allow-same-origin`), dikendalikan lewat
   `postMessage`, dan tetap bisa memutar video dari backend (perlu CORS dan
   token, lihat [bagian 20](#20-pratinjau-dan-kotak-pasir)).
-- [ ] **M0.7** Ulangi M0.2 sampai M0.6 di **Windows** lewat aplikasi hasil build
+  (selesai 3 Nov 2026, commit 8ffab2c) Diuji dengan Playwright: asal iframe `null`; membaca
+  DOM editor, cookie, dan localStorage dari dalamnya ditolak; video bertoken
+  dimuat dengan Range + CORS; putar, jeda, dan geser dari tombol di luar
+  iframe bekerja. Token palsu dan nama berkas di luar daftar menjawab 404.
+- [x] **M0.7** Ulangi M0.2 sampai M0.6 di **Windows** lewat aplikasi hasil build
   (K-11: tidak ada Windows mode pengembangan). Karena itu `bangun-aplikasi.yml`
   harus lebih dulu ikut membangun paket mesin dan bundel komposisi. Build
   dipicu manual (`workflow_dispatch`) dari branch kerja, lalu pemilik
   mengunduh artefaknya dan menjalankannya. Ulangi juga di Linux aplikasi build.
-- [ ] **M0.8** Tulis semua angka ke [bagian 24](#24-hasil-uji-teknis), lalu
+  (selesai 3 Nov 2026, commit 8ffab2c, f65f820, 1ab124a) Langkah CI
+  `OmniClip --periksa-montase` mengunduh Node dan Chrome lalu merender 10 detik
+  di aplikasi terbungkus. Build pertama (run 41610381956) menemukan bug: Chrome
+  terunduh ke FOLDER APLIKASI (`_internal/montase_mesin/node_modules/.remotion`)
+  dan ikut terkemas, arsip naik 130-151 MB. Diperbaiki: CWD mesin =
+  `<data>/mesin_montase/kerja` (`mesin.folder_kerja`), `uji_lengkap` gagal bila
+  Chrome di luar folder data, dan langkah uji dipindah sesudah "Kemas". Run
+  41612685962: Linux dan Windows lolos, Chrome di folder data, arsip Linux 371 MB
+  (+25 MB dari v1.3.9), Windows 298 MB (+28 MB). Bagian "pemilik menjalankan
+  artefaknya" dipindah ke uji akhir (K-17).
+- [x] **M0.8** Tulis semua angka ke [bagian 24](#24-hasil-uji-teknis), lalu
   pemilik memutuskan T-5.
+  (selesai 3 Nov 2026) Angka container dan CI ada di bagian 24. Pemilik tidak
+  bisa menguji sekarang dan meminta pengerjaan dilanjutkan (K-17); T-5 memakai
+  angka usulan (paling lama 4x durasi), dan semua render terukur 2,3-2,9x.
 
 **Selesai bila:** M0.1 sampai M0.7 berhasil di Linux dan Windows, dan render 60
 detik video lolos ambang T-5.
@@ -533,18 +576,35 @@ Yang disukai disimpan ke pustaka animasi, bisa dipakai di proyek lain
   proyek lain. Animasi AI yang belum lolos pemeriksaan tidak bisa disimpan.
 - [ ] **M4.9** Uji 10 permintaan dari [bagian 25](#25-daftar-uji-permintaan-animasi),
   hasilnya dicatat di sana, termasuk biaya API sebenarnya.
-- [ ] **M4.10** Mode salin-tempel, untuk memakai langganan Claude Pro (atau chat
-  AI lain) tanpa API key (K-13):
-  1. tombol "Salin permintaan" menyalin prompt lengkap (kontrak, contoh,
-     konteks proyek, permintaan) ke papan klip;
-  2. pengguna menempelkannya di Claude.ai, lalu menyalin balasannya;
-  3. tombol "Tempel hasil" menerima balasan itu. OmniClip mengambil blok kode
-     dan metadata, lalu memeriksanya dengan pemeriksa M4.4 yang sama;
-  4. kalau gagal, galatnya disusun jadi permintaan perbaikan yang bisa disalin
-     lagi.
+- [ ] **M4.10** Mode salin-tempel lewat **Project Claude.ai**, untuk memakai
+  langganan Claude Pro (atau chat AI lain) tanpa API key (K-13, K-15).
+
+  **Persiapan sekali saja:**
+  1. Tombol "Unduh paket Project Claude" memberi satu berkas `.md` berisi
+     instruksi proyek, kontrak komponen ([bagian 21](#21-kontrak-komponen-animasi-ai)),
+     daftar font dan zona aman, serta contoh dari pustaka bawaan.
+  2. Pengguna membuat Project baru di Claude.ai (misalnya "OmniClip Montase"),
+     menempel bagian instruksinya ke *Project instructions*, dan mengunggah
+     berkasnya ke *Project knowledge*. Langkah ini tampil di layar bergambar.
+  3. Paket punya nomor versi. Kalau kontrak berubah di versi OmniClip
+     berikutnya, aplikasi memberi tahu bahwa paketnya perlu diunggah ulang.
+
+  **Setiap permintaan:**
+  1. Tombol "Salin permintaan" menyalin pesan pendek: permintaan pengguna,
+     konteks rentang video (kata yang diucapkan, momen tawa/kaget, letak
+     wajah), ukuran kanvas, durasi, dan nomor versi paket.
+  2. Tombol "Buka Claude.ai" membuka tab baru. Prefill alamat (`?q=`) tidak
+     resmi dan pernah berhenti bekerja, jadi papan klip tetap jalan utamanya.
+  3. Pengguna menempel di chat baru dalam Project itu, lalu menyalin seluruh
+     balasan Claude.
+  4. Tombol "Tempel hasil" menerima balasan itu. OmniClip mengambil blok kode
+     dan metadata, lalu memeriksanya dengan pemeriksa M4.4 yang sama.
+  5. Kalau gagal, galatnya disusun jadi pesan perbaikan untuk ditempel di chat
+     yang sama. Revisi ("lebih cepat", "warna merah") juga lewat chat itu.
 
   Lebih lambat daripada lewat API, tapi tanpa biaya tambahan di luar
-  langganan.
+  langganan. Format permintaan dan balasan sama dengan jalur API (M4.3), jadi
+  pemeriksa, panel properti, dan pustaka tidak tahu jalur mana yang dipakai.
 
 **Selesai bila:** paling sedikit 8 dari 10 permintaan uji lolos pemeriksaan
 tanpa campur tangan, dan semuanya bisa dikoreksi lewat panel properti.
@@ -832,28 +892,36 @@ merender. Ia tidak berjalan terus.
 
 **Isi dan asalnya:**
 
-| Bagian | Asal | Kira-kira ukuran (diukur di M0.4) |
+| Bagian | Asal | Ukuran (terukur 3 Nov 2026, Linux) |
 |---|---|---|
-| Node 22 LTS portabel | nodejs.org, versi + SHA-256 dipatok | ? |
-| Paket mesin (`node_modules` produksi + skrip) | Dibangun CI per sistem operasi, dilampirkan ke rilis GitHub, SHA-256 ditanam ke aplikasi saat build | ? |
-| Chrome Headless Shell | `ensureBrowser()` dari `@remotion/renderer` | ? |
-| Bundel komposisi | Dibangun CI, **ikut di dalam aplikasi** (kecil, berubah tiap versi) | ? |
+| Node v22.23.4 portabel | **Diunduh** dari nodejs.org saat Montase disiapkan, SHA-256 dipatok (`montase/unduh.py`), npm/header dibuang sesudah dibongkar | unduh 31 MB (Windows 36 MB), terbongkar 126 MB |
+| Paket mesin (`node_modules` produksi + `src/` + `uji/`) | **Ikut di dalam aplikasi** (K-16), dibangun CI per sistem operasi | 75 MB terbongkar, ±24 MB terkompresi |
+| Bundel komposisi | **Ikut di dalam aplikasi**, dibangun CI (`src/bundel.mjs`, tanpa source map) | 16 MB |
+| Chrome Headless Shell | **Diunduh** Remotion (`ensureBrowser()`) ke `node_modules/.remotion` milik paket mesin | belum terukur (diblokir jaringan container, lihat bagian 24) |
 
-Semuanya disimpan di `STORAGE_DIR/mesin_montase/<versi>/`. Paket mesin hanya
-berubah ketika versi Remotion naik, sedangkan bundel komposisi ikut setiap rilis
-OmniClip.
+Node disimpan di `STORAGE_DIR/mesin_montase/node-v<versi>/`. Di aplikasi
+terbungkus, paket mesin dan bundel ada di `<bundel>/montase_mesin/`.
 
-**Mode pengembangan:** `cd montase-mesin && npm ci`, lalu `mesin.py` memakai
-Node sistem.
+**Mode pengembangan:** sekali `cd montase-mesin && npm ci && node src/bundel.mjs`,
+lalu `mesin.py` memakai Node sistem (`node` di PATH, versi ≥ 22). Bundel harus
+dibangun ulang setiap kali `frontend/src/features/montase/komposisi/` berubah.
+
+**Variabel lingkungan untuk uji:** `OMNICLIP_NODE` (Node tertentu) dan
+`OMNICLIP_MONTASE_BROWSER` (Chrome/Chromium headless tertentu, untuk komputer
+yang tidak bisa mengunduh Chrome Headless Shell).
 
 **Antarmuka Python → Node:** satu perintah per pemanggilan, masukan JSON di
 stdin, keluaran JSON per baris di stdout:
 
 ```
-node src/render.mjs  < {"serve_url": "...", "props": {...}, "keluar": "...", "kualitas": "tinggi"}
-→ {"kemajuan": 0.42, "bingkai": 1134, "eta": 61}
-→ {"selesai": true, "berkas": "...", "detik": 143.2}
+node src/render.mjs  < {"serve_url": "...", "dokumen": {...}, "sumber": {...}, "keluar": "...", "crf": 18}
+→ {"tahap": "menyiapkan"}
+→ {"kemajuan": 0.42, "bingkai": 380, "total": 900}
+→ {"selesai": true, "berkas": "...", "detik": 87.0, "bingkai": 900}
 ```
+
+Perintah yang ada: `render`, `kompilasi`, `siapkan` (Chrome), dan `bundel`
+(hanya CI/pengembangan). Pemanggilnya `backend/app/montase/mesin.py`.
 
 **Aturan menjalankan:**
 
@@ -1017,22 +1085,26 @@ sebagai tes.
 
 ## 24. Hasil uji teknis
 
-Diisi saat Tahap 0. Mesin uji: komputer pemilik (Linux, VAAPI) dan Windows.
+Diisi saat Tahap 0. Kolom **Container** = lingkungan pengembangan Claude (Linux,
+4 inti, 16 GB, tanpa GPU, Chromium headless 153 bawaan container). Kolom
+**CI** = aplikasi hasil build di GitHub Actions (`--periksa-montase`, render 10
+detik). Kolom **Pemilik** = komputer pemilik (tes 60-63 di UJI-LANGSUNG.md).
 
-| Ukuran | Linux | Windows | Catatan |
-|---|---|---|---|
-| Versi Remotion yang dipatok | | | |
-| Player jalan di React 19 (M0.1) | | | |
-| Render 30 dtk 1080x1920 30 fps: lama | | | |
-| Render 30 dtk: RAM puncak | | | |
-| Render 30 dtk: ukuran berkas | | | |
-| Perkiraan render 60 dtk (lawan ambang T-5) | | | |
-| Ukuran unduhan Node | | | |
-| Ukuran unduhan paket mesin | | | |
-| Ukuran unduhan Chrome Headless Shell | | | |
-| Animasi AI: pratinjau = render (M0.5) | | | |
-| Kotak pasir memutar video bertoken (M0.6) | | | |
-| Keputusan: lanjut / Rencana B | | | |
+| Ukuran | Container (3 Nov) | CI Linux / Windows | Pemilik | Catatan |
+|---|---|---|---|---|
+| Versi Remotion yang dipatok | 4.0.537 | sama | | Rilis 19 Okt 2026. Semua `@remotion/*` sama persis (dijaga tes). |
+| Player jalan di React 19 (M0.1) | Ya, 19.2.8, tanpa galat konsol | | | |
+| Render 30 dtk 1080x1920 30 fps: lama | 87-89 dtk (2,9x) | | | Lewat antrean backend dan langsung, hasilnya sama. |
+| Render 10 dtk (uji CI) | 28 dtk (2,8x) | Linux 23-25 dtk (2,3-2,5x) · Windows 25-28 dtk (2,5-2,8x) | | Run 41610381956 dan 41612685962, aplikasi terbungkus, Node dan Chrome hasil unduhan. |
+| Render 30 dtk: RAM puncak | ±2,4 GB di atas dasar | | | Total semua proses 2,9 GB. |
+| Render 30 dtk: ukuran berkas | 40 MB (crf 18, ±10,3 Mbps) | | | |
+| Perkiraan render 60 dtk (lawan ambang T-5) | ±175 dtk ≈ 2,9 menit | | | Di bawah ambang usulan 4 menit. |
+| Ukuran unduhan Node | 31 MB, 3-5 dtk; 126 MB terbongkar | Linux 2,8 dtk · Windows 1,9 dtk (36 MB) | | npm dan header C dibuang. |
+| Paket mesin di dalam aplikasi (K-16) | 75 MB terbongkar, ±24 MB terkompresi | arsip Linux 371 MB (+25), Windows 298 MB (+28) | | Dibanding v1.3.9 (346 / 270 MB). Termasuk bundel komposisi 16 MB. |
+| Unduhan Chrome Headless Shell | tidak bisa diuji (403 dari proxy) | Linux 1,9 dtk · Windows 4,1 dtk | | Container memakai `OMNICLIP_MONTASE_BROWSER`. Build pertama menemukan Chrome terunduh ke folder APLIKASI; diperbaiki di f65f820 (lihat M0.7). |
+| Animasi AI: pratinjau = render (M0.5) | Ya, kasat mata sama di 4 bingkai | | | SSIM 0,84 karena tangkapan pratinjau hanya 316x561 lalu diskalakan. |
+| Kotak pasir memutar video bertoken (M0.6) | Ya (Playwright) | | | Asal `null`; DOM, cookie, localStorage ditolak. |
+| Keputusan: lanjut / Rencana B | Lanjut, tanpa Rencana B | Lanjut | ditunda ke uji akhir (K-17) | Gerbang Tahap 0 ditutup 3 Nov 2026. |
 
 ## 25. Daftar uji permintaan animasi
 

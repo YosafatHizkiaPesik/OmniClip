@@ -47,7 +47,9 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: |
+            frontend/package-lock.json
+            montase-mesin/package-lock.json
 
       # Antarmuka harus dibangun LEBIH DULU: spec PyInstaller menyalin
       # frontend/dist ke dalam bundel, dan folder yang belum ada tidak akan
@@ -61,6 +63,22 @@ jobs:
       - name: Pastikan antarmuka benar-benar terbangun
         shell: bash
         run: test -f frontend/dist/index.html
+
+      # Mesin Montase (JOB-4): bundel komposisi dibangun di sini, lalu
+      # node_modules dipangkas ke yang dipakai saat berjalan saja (Remotion
+      # renderer + berkas biner compositor untuk sistem INI). Hasilnya ikut ke
+      # dalam bundel lewat omniclip.spec. Node dan Chrome tidak ikut.
+      - name: Bangun Mesin Montase
+        working-directory: montase-mesin
+        shell: bash
+        run: |
+          npm ci
+          node src/bundel.mjs
+          npm prune --omit=dev
+          # Aplikasi Linux dibangun untuk glibc; versi musl tidak pernah dipakai.
+          rm -rf node_modules/@remotion/compositor-linux-*-musl
+          test -f dist/bundel/index.html
+          du -sh node_modules dist/bundel
 
       # Tag dan app/version.py harus menyebut angka yang sama. Kalau tidak,
       # rilis v1.0.1 akan berisi aplikasi yang mengaku 1.0.0 — dan setiap
@@ -199,6 +217,33 @@ jobs:
             shasum -a 256 "${{ matrix.arsip }}" > "${{ matrix.arsip }}.sha256"
           fi
           cat "${{ matrix.arsip }}.sha256"
+
+      # Uji Montase sungguhan di aplikasi terbungkus (JOB-4 M0.7): unduh Node
+      # dan Chrome Headless Shell, lalu render video uji 10 detik berisi
+      # animasi bawaan dan komponen AI. Dijalankan SESUDAH dikemas: build
+      # pertama mengunduh Chrome ke folder aplikasi sebelum dikemas, dan arsip
+      # rilisnya membengkak 130-150 MB. Di sini apa pun yang diunduh tidak
+      # mungkin ikut ke arsip. Selama Montase masih beta, kegagalan di
+      # sini TIDAK menahan rilis (continue-on-error), tapi tandanya terlihat di
+      # ringkasan build. Wajib lulus mulai M6.8.
+      #
+      # Aplikasi Windows berjalan tanpa konsol, jadi keluarannya pergi ke berkas
+      # log; isinya dicetak sesudahnya supaya terbaca di sini.
+      - name: Uji Montase (unduh Node + Chrome, render 10 detik)
+        continue-on-error: true
+        working-directory: backend
+        shell: bash
+        env:
+          OMNICLIP_STORAGE: ${{ runner.temp }}/omniclip-montase
+        run: |
+          KODE=0
+          if [ "${{ matrix.nama }}" = "windows" ]; then
+            ./dist/OmniClip/OmniClip.exe --periksa-montase || KODE=$?
+          else
+            ./dist/OmniClip/OmniClip --periksa-montase || KODE=$?
+          fi
+          cat "$OMNICLIP_STORAGE/logs/omniclip.log" 2>/dev/null | tail -60 || true
+          exit $KODE
 
       - uses: actions/upload-artifact@v4
         with:

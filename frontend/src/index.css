@@ -2149,3 +2149,25 @@ button.tujuan, a.tujuan { cursor: pointer; }
   .bilah-pilih > .btn-secondary { order: 3; flex: 1 1 40%; }
   .panel-rak .plate-head .mark { margin-left: 0 !important; flex-basis: 100%; }
 }
+
+/* --- Montase (JOB-4) ------------------------------------------------------ */
+.montase-uji { display: flex; flex-direction: column; gap: 16px; }
+.montase-uji-dua { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+.montase-uji-baris {
+  display: grid; grid-template-columns: minmax(120px, 180px) 1fr; gap: 10px;
+  padding: 6px 0; border-bottom: 1px solid var(--rule-2); font-size: .85rem;
+}
+.montase-uji-baris code { color: var(--ink-2); overflow-wrap: anywhere; }
+.montase-uji-ket { margin: 8px 0; font-size: .85rem; color: var(--ink-2); }
+.montase-uji-ket[data-siap="tidak"], .montase-uji-ket[data-lolos="tidak"] { color: var(--reh); }
+.montase-uji-galat { color: var(--reh); font-size: .85rem; white-space: pre-wrap; }
+.montase-uji-layar, .montase-pratinjau-layar {
+  max-height: 560px; max-width: 100%; margin: 0 auto; background: #000;
+  border-radius: var(--r-md); overflow: hidden;
+}
+.montase-pratinjau-layar iframe { width: 100%; height: 100%; border: 0; display: block; }
+.montase-pratinjau-kendali { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.montase-pratinjau-kendali input[type="range"] { flex: 1; min-width: 0; }
+.montase-pratinjau-waktu { font-variant-numeric: tabular-nums; font-size: .8rem; color: var(--ink-2); white-space: nowrap; }
+.montase-uji-hasil { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.montase-uji-hasil .montase-uji-baris { width: 100%; }

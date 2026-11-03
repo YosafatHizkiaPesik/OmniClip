@@ -1,4 +1,4 @@
-import { StrictMode } from 'react';
+import { lazy, StrictMode, Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import './index.css';
@@ -18,6 +18,10 @@ import MesinTab from './components/MesinTab';
 import Channel from './routes/Channel.jsx';
 import Langganan from './routes/Langganan.jsx';
 import Riwayat from './routes/Riwayat.jsx';
+
+// Montase dimuat hanya saat dibuka: Remotion menambah ratusan kilobita yang
+// tidak perlu dibayar halaman lain.
+const MontaseUji = lazy(() => import('./features/montase/uji/MontaseUji.jsx'));
 
 // Profil terakhir diambil dari server SEBELUM apa pun digambar. Setiap
 // permintaan membawa nomor profil di headernya, jadi menggambar dulu lalu
@@ -45,6 +49,8 @@ createRoot(document.getElementById('root')).render(
           <Route path="profil" element={<Profil />} />
           <Route path="settings" element={<ProfileTab />} />
           <Route path="mesin" element={<MesinTab />} />
+          {/* Halaman uji Tahap 0 (JOB-4.md); diganti menu Montase di Tahap 1. */}
+          <Route path="montase-uji" element={<Suspense fallback={null}><MontaseUji /></Suspense>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

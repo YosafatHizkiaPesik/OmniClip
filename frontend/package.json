@@ -13,10 +13,14 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@remotion/media": "4.0.537",
+    "@remotion/player": "4.0.537",
     "lucide-react": "^1.28.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "react-router-dom": "^7.18.3"
+    "react-router-dom": "^7.18.3",
+    "remotion": "4.0.537",
+    "zod": "4.5.4"
   },
   "devDependencies": {
     "@types/react": "^19.2.17",

@@ -145,6 +145,35 @@ FILTER_WAJIB = ("ass", "sendcmd", "crop", "loudnorm", "scdet",
 ENCODER_WAJIB = ("libx264", "aac")
 
 
+def periksa_montase() -> int:
+    """
+    Uji Montase ujung ke ujung DI APLIKASI TERBUNGKUS (JOB-4.md M0.7).
+
+    Mengunduh Node portabel dan Chrome Headless Shell ke folder data, lalu
+    merender video uji 10 detik berisi animasi bawaan dan komponen AI. Inilah
+    yang membuktikan, di Windows dan Linux sungguhan, bahwa paket mesin yang
+    dibundel masih utuh (berkas biner Remotion tetap bisa dijalankan) dan bahwa
+    kedua unduhan bekerja. 0 = berhasil.
+    """
+    import json
+
+    from app.config import use_bundled_ffmpeg
+
+    print("=" * 74)
+    print(f"  Uji Montase — {sys.platform}, Python {sys.version.split()[0]}")
+    print("=" * 74)
+    use_bundled_ffmpeg()
+    try:
+        from app.montase import uji
+        angka = uji.uji_lengkap(10, cetak=lambda s: print(f"  {s}", flush=True))
+    except Exception as e:                       # noqa: BLE001
+        print(f"\n  GAGAL: {type(e).__name__}: {e}")
+        return 1
+    print(json.dumps(angka, indent=2, ensure_ascii=False, default=str))
+    print("\n  Montase berjalan.")
+    return 0
+
+
 def periksa() -> int:
     """Memeriksa setiap bagian yang bisa hilang dari bundel. 0 = lengkap."""
     import importlib
@@ -189,6 +218,18 @@ def periksa() -> int:
         lapor("skrip yt-dlp-ejs", n > 1000, f"{n} karakter")
     except Exception as e:
         lapor("skrip yt-dlp-ejs", False, f"{type(e).__name__}: {e}")
+
+    # Montase (JOB-4): paket mesin dan bundel komposisi ikut di dalam aplikasi.
+    # Node dan Chrome TIDAK (diunduh saat pertama dipakai); keduanya diuji
+    # sungguhan oleh --periksa-montase di langkah CI berikutnya.
+    from app.montase import mesin as _mesin_montase
+    paket = _mesin_montase.folder_paket()
+    bundel = _mesin_montase.folder_bundel()
+    lapor("Montase: paket mesin", paket is not None, str(paket))
+    lapor("Montase: bundel komposisi", bundel is not None, str(bundel))
+    if paket is not None:
+        komponen = paket / "uji" / "komponen_ai.jsx"
+        lapor("Montase: komponen uji", komponen.is_file(), str(komponen))
 
     print("\n  ffmpeg")
     folder = use_bundled_ffmpeg()
@@ -373,6 +414,8 @@ if __name__ == "__main__":
 
     if "--periksa" in sys.argv:
         raise SystemExit(periksa())
+    if "--periksa-montase" in sys.argv:
+        raise SystemExit(periksa_montase())
 
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s %(levelname)-7s %(name)s: %(message)s",
