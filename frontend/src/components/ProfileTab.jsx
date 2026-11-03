@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Sun, Moon, Info, AlertTriangle, Sparkles, Scissors, Mic,
-  Languages, UploadCloud, ShieldAlert, Captions, Volume2, Palette, Globe,
+  Languages, UploadCloud, ShieldAlert, Captions, Volume2, Palette, Globe, Clapperboard,
 } from 'lucide-react';
 import { BAHASA, NEGARA, bahasa, namaNegara, setBahasa, setWilayah, tebal, useT, wilayahOtomatis, wilayahPilihan } from '../lib/i18n';
 import HalamanSetelan from './HalamanSetelan';
@@ -11,6 +11,7 @@ import { apiGet, apiPost, apiPut } from '../lib/api';
 import { Link } from 'react-router-dom';
 import SakelarSensor from './SakelarSensor';
 import SakelarGumam from './SakelarGumam';
+import SakelarMontase from './SakelarMontase';
 import SuaraCard from './SuaraCard';
 import CookiesCard from './CookiesCard';
 import TerjemahOtomatisCard from './TerjemahOtomatisCard';
@@ -447,6 +448,14 @@ export default function ProfileTab() {
             </button>
           ))}
         </div>
+      </div>
+
+      <div style={card}>
+        <div style={sectionTitle}>
+          <Clapperboard size={18} style={{ color: 'var(--reh)' }} />
+          {t('montase.setelan.kartu')}
+        </div>
+        <SakelarMontase />
       </div>
 
       <div style={card}>

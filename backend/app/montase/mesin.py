@@ -259,7 +259,8 @@ def jalankan(perintah: str, masukan: dict, *,
                 return
             time.sleep(0.25)
 
-    threading.Thread(target=baca_stderr, daemon=True).start()
+    pembaca = threading.Thread(target=baca_stderr, daemon=True)
+    pembaca.start()
     threading.Thread(target=penjaga, daemon=True).start()
 
     hasil: Optional[dict] = None
@@ -287,6 +288,12 @@ def jalankan(perintah: str, masukan: dict, *,
     finally:
         if proc.poll() is None:
             _hentikan_pohon(proc)
+        pembaca.join(timeout=5)
+        for pipa in (proc.stdout, proc.stderr):
+            try:
+                pipa.close()
+            except OSError:
+                pass
         lepas(proc)
 
     if "batal" in alasan_henti:

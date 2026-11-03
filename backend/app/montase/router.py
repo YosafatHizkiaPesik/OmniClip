@@ -181,6 +181,16 @@ def gandakan_proyek(proyek_id: str):
                             sampul=p["sampul"])
 
 
+@router.post("/proyek/{proyek_id}/ekspor")
+def ekspor_proyek(proyek_id: str):
+    """Render proyek ke Klip jadi (pekerjaan `montase_render`). Menjawab job_id."""
+    from . import ekspor
+    try:
+        return {"job_id": ekspor.mulai(proyek_id)}
+    except KeyError as e:
+        raise NotFound("Proyek tidak ditemukan.") from e
+
+
 # --- bahan --------------------------------------------------------------------
 
 class Rujuk(BaseModel):
@@ -188,13 +198,9 @@ class Rujuk(BaseModel):
     rujukan: str = Field(..., min_length=1, max_length=300)
 
 
-def _bahan_publik(b: dict) -> dict:
-    return {**b, "sampul": f"/api/montase/bahan/{b['id']}/sampul"}
-
-
 @router.get("/bahan")
 def daftar_bahan():
-    return {"bahan": [_bahan_publik(b) for b in repo.daftar_bahan(profil.kini())]}
+    return {"bahan": [(b) for b in repo.daftar_bahan(profil.kini())]}
 
 
 @router.get("/bahan/sumber")
@@ -208,7 +214,7 @@ async def sumber_bahan(asal: str):
 @router.post("/bahan/rujuk")
 async def rujuk_bahan(b: Rujuk):
     try:
-        return _bahan_publik(await run_in_threadpool(bahan_svc.rujuk, b.asal, b.rujukan))
+        return await run_in_threadpool(bahan_svc.rujuk, b.asal, b.rujukan)
     except bahan_svc.BahanTidakSah as e:
         raise InvalidInput(str(e)) from e
 
@@ -243,7 +249,7 @@ async def impor_bahan(berkas: UploadFile = File(...)):
                                             nama=info.get("nama") or Path(nama).stem)
         except bahan_svc.BahanTidakSah as e:
             raise InvalidInput(str(e)) from e
-        return _bahan_publik(baris)
+        return baris
     finally:
         tmp.unlink(missing_ok=True)
 
@@ -260,45 +266,45 @@ def hapus_bahan(bahan_id: str):
     return {"ok": True}
 
 
-def _berkas_turunan(bahan_id: str, nama: str, jenis: str):
-    if repo.ambil_bahan(profil.kini(), bahan_id) is None:
-        raise NotFound("Bahan tidak ditemukan.")
-    jalur = bahan_svc.folder(bahan_id) / nama
-    if not jalur.is_file():
-        raise NotFound("Belum siap.")
-    return FileResponse(jalur, media_type=jenis, headers={"Cache-Control": "no-cache"})
-
-
-@router.get("/bahan/{bahan_id}/sampul")
-def sampul_bahan(bahan_id: str):
-    return _berkas_turunan(bahan_id, "sampul.jpg", "image/jpeg")
-
-
-@router.get("/bahan/{bahan_id}/strip")
-def strip_bahan(bahan_id: str):
-    return _berkas_turunan(bahan_id, "strip.jpg", "image/jpeg")
-
-
-@router.get("/bahan/{bahan_id}/gelombang")
-def gelombang_bahan(bahan_id: str):
-    return _berkas_turunan(bahan_id, "gelombang.json", "application/json")
+def _pid_dari_token(tkn: str) -> int:
+    lingkup = token_svc.lingkup(tkn) or ""
+    if not lingkup.startswith("bahan:"):
+        raise NotFound("Alamat bahan tidak sah atau sudah kedaluwarsa.")
+    try:
+        return int(lingkup.split(":", 1)[1])
+    except ValueError as e:
+        raise NotFound("Alamat bahan tidak sah.") from e
 
 
 @router.get("/t/{tkn}/bahan/{bahan_id}")
 def berkas_bahan(tkn: str, bahan_id: str, sunting: int = 0):
     """Berkas bahan untuk iframe kotak pasir dan mesin render (token, bukan sesi)."""
-    lingkup = token_svc.lingkup(tkn) or ""
-    if not lingkup.startswith("bahan:"):
-        raise NotFound("Alamat bahan tidak sah atau sudah kedaluwarsa.")
-    try:
-        pid = int(lingkup.split(":", 1)[1])
-    except ValueError as e:
-        raise NotFound("Alamat bahan tidak sah.") from e
+    pid = _pid_dari_token(tkn)
     jalur = bahan_svc.jalur_berkas(pid, bahan_id, sunting=bool(sunting))
     if jalur is None:
         raise NotFound("Bahan tidak ditemukan.")
     return FileResponse(jalur, media_type=bahan_svc.jenis_media(jalur),
                         headers={"Cache-Control": "private, max-age=3600"})
+
+
+_TURUNAN = {"sampul": ("sampul.jpg", "image/jpeg"), "strip": ("strip.jpg", "image/jpeg"),
+            "gelombang": ("gelombang.json", "application/json")}
+
+
+@router.get("/t/{tkn}/bahan/{bahan_id}/{turunan}")
+def turunan_bahan(tkn: str, bahan_id: str, turunan: str):
+    """
+    Sampul, strip, dan gelombang. Lewat token juga, bukan sesi: `<img>` tidak
+    membawa header profil, dan tokennya sudah memuat profil pemilik bahan.
+    """
+    pid = _pid_dari_token(tkn)
+    if turunan not in _TURUNAN or repo.ambil_bahan(pid, bahan_id) is None:
+        raise NotFound("Bahan tidak ditemukan.")
+    nama, jenis = _TURUNAN[turunan]
+    jalur = bahan_svc.folder(bahan_id) / nama
+    if not jalur.is_file():
+        raise NotFound("Belum siap.")
+    return FileResponse(jalur, media_type=jenis, headers={"Cache-Control": "no-cache"})
 
 
 # --- uji Tahap 0 --------------------------------------------------------------

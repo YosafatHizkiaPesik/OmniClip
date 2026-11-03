@@ -157,6 +157,8 @@ async def lifespan(app: FastAPI):
     queue.register("montase_uji_render", montase_kerja.run_uji_render, lane="cpu")
     from .montase import bahan as montase_bahan
     queue.register("montase_bahan", montase_bahan.run_siapkan, lane="latar")
+    from .montase import ekspor as montase_ekspor
+    queue.register("montase_render", montase_ekspor.run_ekspor, lane="cpu")
     # Lajur jaringan: sebagian besar waktunya menunggu model menonton klip, dan
     # di lajur cpu itu menahan render yang tidak ada hubungannya.
     from .services.sutradara_ai import run_sutradara

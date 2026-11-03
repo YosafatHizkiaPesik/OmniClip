@@ -221,10 +221,16 @@ class Bahan(DenganProfil):
         sah = token_svc.buat(router.lingkup_bahan(PID_UJI))
         r = router.berkas_bahan(sah, b["id"])
         self.assertTrue(Path(r.path).is_file())
+        bahan_svc.siapkan(b["id"], PID_UJI)
+        self.assertEqual(Path(router.turunan_bahan(sah, b["id"], "sampul").path).name, "sampul.jpg")
+        with self.assertRaises(NotFound):
+            router.turunan_bahan(sah, b["id"], "../../omniclip.db")
         for tkn in (token_svc.buat(router.lingkup_bahan(PID_LAIN)), token_svc.buat("uji"),
                     "palsu.x"):
             with self.assertRaises(NotFound):
                 router.berkas_bahan(tkn, b["id"])
+            with self.assertRaises(NotFound):
+                router.turunan_bahan(tkn, b["id"], "sampul")
 
     def test_bahan_yang_dipakai_tidak_bisa_dihapus(self):
         b = self.rujuk()

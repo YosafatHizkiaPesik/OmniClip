@@ -4,9 +4,9 @@ Pekerjaan latar Montase di antrean `jobs.py`.
   montase_siapkan    lajur net  mengunduh Node (bila perlu) dan Chrome Headless Shell
   montase_uji_render lajur cpu  merender dokumen uji Tahap 0 dan mengukur waktunya
 
-Render memegang `giliran_cpu` seperti render klip: Chrome headless memakai
-semua inti yang diberikan, dan berebut dengan Whisper atau render lain hanya
-membuat keduanya lebih lambat.
+Render berjalan di lajur `cpu`, yang memegang giliran CPU seperti render klip:
+Chrome headless memakai semua inti yang diberikan, dan berebut dengan Whisper
+atau render lain hanya membuat keduanya lebih lambat.
 """
 
 from __future__ import annotations
@@ -32,9 +32,6 @@ def run_siapkan(ctx):
 
 
 def run_uji_render(ctx):
-    ctx.giliran_cpu(lambda: ctx.progress(0.0, stage="antre",
-                                         message="Menunggu giliran render"))
-
     def kabar(baris):
         if "kemajuan" in baris:
             ctx.progress(float(baris["kemajuan"]), stage="render",
@@ -42,4 +39,8 @@ def run_uji_render(ctx):
         elif baris.get("tahap"):
             ctx.progress(0.0, stage="render", message="Menyiapkan render")
 
-    return uji.render(f"http://127.0.0.1:{PORT}", kabar=kabar, batal=lambda: ctx.cancelled)
+    from ..errors import JobCancelled
+    try:
+        return uji.render(f"http://127.0.0.1:{PORT}", kabar=kabar, batal=lambda: ctx.cancelled)
+    except mesin.Dibatalkan as e:
+        raise JobCancelled() from e
