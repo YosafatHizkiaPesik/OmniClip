@@ -415,6 +415,45 @@ di menu). Hasil angka tiap tes ditulis juga di JOB-4.md bagian 24.
   - Diharapkan: menu Montase hilang tanpa memuat ulang; nyalakan lagi, muncul
     kembali, proyek masih ada.
 
+### Tambahan 3 November 2026: Montase Tahap 2, linimasa sungguhan (JOB-4)
+
+- [ ] **69. Top 5 manual.** Proyek baru, impor atau ambil lima klip (urutan
+  apa saja). Seret klip ke atas klip lain untuk menyusun ulang jadi 5-4-3-2-1.
+  - Diharapkan: klip yang dilepas di atas klip lain menyisip di situ dan yang
+    lain bergeser, tidak menumpuk. Garis hijau muncul saat menempel (magnet).
+    Seluruh Top 5 sederhana selesai dalam kurang dari 10 menit.
+- [ ] **70. Belah, pangkas, hapus beriak.** Taruh garis putar di tengah klip,
+  tekan Ctrl+B. Pilih potongan kanan, tekan Shift+Delete. Tarik tepi kanan
+  klip lain ke kiri.
+  - Diharapkan: klip terbelah dua; potongan terhapus dan yang sesudahnya
+    merapat; tepi tidak bisa ditarik melewati panjang videonya.
+- [ ] **71. Batal/ulang dan pintasan.** Ctrl+Z beberapa kali lalu
+  Ctrl+Shift+Z. Coba Spasi, panah, Shift+panah, M, N, + / −, Home/End, juga
+  sesudah mengeklik pratinjau.
+  - Diharapkan: setiap langkah kembali satu per satu (satu seretan = satu
+    langkah). Daftar lengkap pintasan ada di panel Properti saat tidak ada
+    yang dipilih.
+- [ ] **72. Gambar dalam gambar.** **+ Lajur** → Video. Seret bahan dari panel
+  Bahan ke lajur baru itu. Di pratinjau: tarik sudut (perkecil), seret badan
+  (pindah), tarik bulatan atas (putar), klik dua kali lalu tarik tepi (potong).
+  - Diharapkan: pegangan mengikuti item dengan tepat; angka di panel Properti
+    ikut berubah; hasil ekspor sama dengan pratinjau.
+- [ ] **73. Kecepatan, beku, fade.** Pilih klip: 2x. Taruh garis putar di
+  tengah klip lain lalu tombol bingkai beku. Isi Lembut masuk/keluar di klip
+  bersuara.
+  - Diharapkan: klip 2x jadi setengah panjangnya, suaranya tidak cempreng;
+    beku menahan satu bingkai 3 detik tanpa suara; suara membesar dan mengecil
+    perlahan. Tombol "rapatkan celah" menutup celah sesudah klip 2x.
+- [ ] **74. Lajur.** Klik dua kali nama lajur (ganti nama), kunci, bisukan,
+  sembunyikan; klik nama lajur untuk volume lajur.
+  - Diharapkan: lajur terkunci tidak bisa diubah apa pun; lajur bisu tanpa
+    suara di pratinjau dan ekspor; lajur tersembunyi tidak tergambar.
+- [ ] **75. Simpan otomatis.** Matikan jaringan atau backend sebentar saat
+  menyunting, lalu nyalakan lagi.
+  - Diharapkan: muncul "Gagal menyimpan, dicoba lagi otomatis" dengan tombol
+    "Coba sekarang", lalu kembali "Tersimpan" sendiri tanpa kehilangan
+    perubahan.
+
 ### Jalur fitur unggulan (urutan disarankan, ±30 menit)
 
 Satu video podcast pendek (10-20 menit) cukup untuk semuanya:

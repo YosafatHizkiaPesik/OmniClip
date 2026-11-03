@@ -94,7 +94,7 @@ Tiga kemampuan besar, dibangun berurutan:
 |---|---|---|---|
 | 0 | Uji teknis: membuktikan Remotion jalan di dalam OmniClip | ✅ Selesai 3 Nov 2026 | 8/8 |
 | 1 | Kerangka: menu, daftar proyek, media, pratinjau, ekspor | ✅ Selesai 3 Nov 2026 | 10/10 |
-| 2 | Penyuntingan dasar: linimasa sungguhan | ⬜ Belum mulai | 0/8 |
+| 2 | Penyuntingan dasar: linimasa sungguhan | ✅ Selesai 3 Nov 2026 | 8/8 |
 | 3 | Teks, suara, efek, transisi, keyframe | ⬜ Belum mulai | 0/10 |
 | 4 | AI pembuat animasi | ⬜ Belum mulai | 0/10 |
 | 5 | Asisten penyunting AI | ⬜ Belum mulai | 0/6 |
@@ -103,7 +103,7 @@ Tiga kemampuan besar, dibangun berurutan:
 
 Tanda status: ⬜ belum mulai · 🟨 sedang dikerjakan · ✅ selesai · ⛔ tertahan (tulis alasannya).
 
-**Tugas berikutnya:** `M2.1`.
+**Tugas berikutnya:** `M3.1`.
 
 ## 3. Keputusan
 
@@ -413,17 +413,20 @@ pemilik. Tes 64-67 di UJI-LANGSUNG.md untuk uji akhir.
 
 **Tujuan:** linimasa yang terasa seperti CapCut.
 
-- [ ] **M2.1** `features/montase/model/`: semua operasi penyuntingan sebagai
+- [x] **M2.1** `features/montase/model/`: semua operasi penyuntingan sebagai
   **fungsi murni** (masuk dokumen, keluar dokumen baru), dengan tes vitest.
   Batal/ulang menyimpan sampai 100 langkah. Operasi yang sama dipakai tangan
   manusia **dan** AI (Tahap 5).
-- [ ] **M2.2** Banyak lajur: video/gambar, teks, motion, audio. Urutan tumpuk
+  (selesai 3 Nov 2026, commit be61ef3) `model/suntingan.js` (belah, pangkas, pindah, sisip, hapus beriak, rapatkan, salin/tempel/gandakan, bekukan, kecepatan, transformasi, lajur, penanda, magnet) dan `model/riwayat.js`. Ketikan beruntun digabung dalam 0,9 detik; satu seretan selalu satu langkah (`gabung` unik, jendela tak terbatas), dan seretan yang kembali ke awal tidak meninggalkan langkah kosong. Riwayat di ref dan state: ref kebenarannya, jadi dua operasi dalam satu peristiwa tidak saling menimpa.
+- [x] **M2.2** Banyak lajur: video/gambar, teks, motion, audio. Urutan tumpuk
   mengikuti urutan lajur. Setiap lajur bisa dikunci, dibisukan, disembunyikan,
   dan diganti namanya.
-- [ ] **M2.3** Operasi item: seret (antar waktu dan antar lajur), pangkas
+  (selesai 3 Nov 2026, commit be61ef3) Lajur baru disisipkan sesudah lajur terakhir sejenisnya (video kedua tergambar di atas yang pertama). Lajur hanya bisa dihapus bila kosong dan bukan satu-satunya dari jenisnya. Item di lajur terkunci tidak bisa diubah oleh fungsi model mana pun, bukan hanya disembunyikan tombolnya.
+- [x] **M2.3** Operasi item: seret (antar waktu dan antar lajur), pangkas
   kiri/kanan, belah di garis putar, hapus, hapus beriak, salin/tempel,
   gandakan, pilih banyak (Shift dan kotak seret).
-- [ ] **M2.4** Magnet ke garis putar, tepi item, dan penanda (ambang 8 piksel,
+  (selesai 3 Nov 2026, commit be61ef3) Tambahan di luar rencana: satu item yang dilepas di atas item lain DISISIPKAN di situ dan sisanya bergeser (`titikSisip`, `sisipkan`), karena tanpa itu menyusun ulang Top 5 berarti menumpuk klip. Bahan bisa diseret dari panel Bahan ke lajur dan bingkai tertentu. Tombol "rapatkan celah" untuk celah sesudah ubah kecepatan.
+- [x] **M2.4** Magnet ke garis putar, tepi item, dan penanda (ambang 8 piksel,
   bisa dimatikan). Penanda bernama. Perbesar/perkecil linimasa. Daftar
   pintasan:
 
@@ -442,19 +445,36 @@ pemilik. Tes 64-67 di UJI-LANGSUNG.md untuk uji akhir.
   | + / − | Perbesar / perkecil linimasa |
   | Home / End | Ke awal / akhir |
 
-- [ ] **M2.5** Transformasi: posisi, ukuran, putar, transparansi, potong
+  (selesai 3 Nov 2026, commit be61ef3) Semua pintasan di tabel, ditambah Ctrl+A, Ctrl+X, Ctrl+Y, Esc. Tombol yang ditekan saat fokus di dalam iframe pratinjau diteruskan lewat jembatan (`tombol`), jadi pintasan tetap jalan sesudah pratinjau diklik. Esc di kotak isian keluar dari kotak itu. Perbesar berjangkar di garis putar (tombol, + / −) atau di penunjuk (Ctrl+gulir).
+- [x] **M2.5** Transformasi: posisi, ukuran, putar, transparansi, potong
   (*crop*), dengan pegangan yang bisa diseret langsung di pratinjau. Pegangan
   digambar di **luar** iframe dan menerjemahkan koordinat ke kanvas.
-- [ ] **M2.6** Kecepatan 0,25x sampai 4x (nada suara dipertahankan dengan
+  (selesai 3 Nov 2026, commit be61ef3) `komposisi/kotak.js` menentukan kotak dasar item (video "muat" = persegi sesuai rasio bahannya), jadi potong dalam persen gambar. Pegangan memakai `setPointerCapture`: tanpa itu gerakan di atas iframe hilang dan seretan berhenti di tengah. Kotak teks hanya perkiraan (0,56 em per huruf) sampai M3.1.
+- [x] **M2.6** Kecepatan 0,25x sampai 4x (nada suara dipertahankan dengan
   `preservePitch`). Bekukan bingkai.
-- [ ] **M2.7** Volume per item dan per lajur, lembut masuk/keluar
+  (selesai 3 Nov 2026, commit be61ef3) Mengubah kecepatan menjaga potongan bahan (10 detik bahan di 2x = 5 detik linimasa). Bekukan bingkai = belah + item `beku` 3 detik dengan `<Freeze>`, yang sesudahnya bergeser; dicek sama di render.
+- [x] **M2.7** Volume per item dan per lajur, lembut masuk/keluar
   (*fade*), gelombang suara di item audio dan video.
-- [ ] **M2.8** Simpan otomatis 1,5 detik sesudah perubahan terakhir, dan
+  (selesai 3 Nov 2026, commit be61ef3) Fade berupa pengali volume linear (`pengaliFade`), dipendekkan sebanding bila masuk + keluar melebihi item. Gelombang satu jalur SVG per item, paling banyak satu titik per dua piksel.
+- [x] **M2.8** Simpan otomatis 1,5 detik sesudah perubahan terakhir, dan
   pemberitahuan bila penyimpanan gagal.
+  (selesai 3 Nov 2026, commit be61ef3) Gagal simpan: pemberitahuan dengan tombol "Coba sekarang" dan dicoba lagi sendiri tiap 5 detik (diuji dengan server yang menolak: pulih 4,8 detik setelah server kembali).
 
 **Selesai bila:** pemilik bisa membuat video "Top 5" sederhana secara manual,
 tanpa AI, dalam kurang dari 10 menit, dan tidak ada operasi yang terasa
 tersendat pada proyek 5 menit berisi 50 item.
+
+**Gerbang lolos 3 Nov 2026 (K-17):** skrip Playwright membuat Top 5 lewat
+antarmuka sungguhan: impor lima klip, susun ulang jadi 5-4-3-2-1 dengan
+seret-sisip, batal/ulang, belah + hapus beriak, pangkas tepi, lima penanda
+bernama dan judul teks, lajur video kedua dengan bahan diseret dari panel,
+pegangan skala/geser/putar/potong, kunci/bisu/sembunyi/ganti nama lajur,
+kecepatan 2x, beku 3 detik, fade, pilih kotak + salin/tempel + batal, muat
+ulang, ekspor. 15 pemeriksaan lolos, tanpa galat konsol, 96 detik termasuk
+ekspor. MP4 sama dengan pratinjau di 6 bingkai (SSIM 0,92-0,96). Proyek 5
+menit 50 item: 60 fps (p95 16,7 ms) saat seret, pangkas, pilih kotak,
+pintasan, dan pemutaran; nol *long task*. Tangkapan layar dikirim ke pemilik.
+Tes 69-75 di UJI-LANGSUNG.md untuk uji akhir.
 
 ---
 
@@ -782,9 +802,10 @@ Videonya sendiri tidak disalin ke dalam proyek, hanya dirujuk lewat id.
       "item": [
         { "id": "i1", "jenis": "video", "bahan": "b1",
           "mulai": 0, "durasi": 300, "potong_awal": 45,
-          "kecepatan": 1, "volume": 1,
+          "kecepatan": 1, "volume": 1, "fade_masuk": 15, "fade_keluar": 30,
+          "isi": "contain", "beku": false,
           "ubah": { "x": 0, "y": 0, "skala": 1, "putar": 0, "opasitas": 1,
-                    "crop": null },
+                    "potong": { "kiri": 10, "kanan": 0, "atas": 0, "bawah": 0 } },
           "keyframe": { "skala": [ { "t": 0, "v": 1 },
                                    { "t": 30, "v": 1.15, "kurva": "keluar" } ] },
           "warna": { "preset": "vibrant" },
@@ -814,6 +835,9 @@ Videonya sendiri tidak disalin ke dalam proyek, hanya dirujuk lewat id.
 | Setiap item punya `id` tetap. | Batal/ulang, usulan AI, dan komentar menunjuk item lewat id. |
 | `asal`: `"tangan"` (bawaan) atau `"ai"`, plus `alasan` bila `ai`. | P-3. |
 | `versi` naik setiap bentuk dokumen berubah, dengan fungsi migrasi di `skema.py`. | Proyek lama tetap terbuka. |
+| `ubah.x`/`ubah.y` dalam piksel kanvas dari letak asal; `skala` 1 = asli; `putar` derajat; `potong` persen KOTAK DASAR item per sisi (dua sisi berhadapan menyisakan ≥ 5%). Kotak dasar ditentukan `komposisi/kotak.js`: video/gambar "muat" = persegi sesuai rasio bahannya di tengah kanvas, "penuh" dan animasi = seluruh kanvas, teks = kotak teksnya. | Satuan kanvas membuat pratinjau kecil dan render penuh sama; kotak sesuai bahan membuat potong berarti potong gambar. |
+| `fade_masuk`/`fade_keluar` dalam bingkai, untuk volume. `beku: true` = bingkai `potong_awal` ditahan tanpa suara. | M2.6, M2.7. |
+| Menambah kolom baru tidak menaikkan `versi` selama kolom lama tetap berarti sama (Tahap 2 hanya menambah). | Kolom tak dikenal dipertahankan server. |
 
 ## 17. Basis data
 
@@ -974,9 +998,13 @@ pasir), karena animasi AI adalah kode yang tidak kita tulis sendiri.
 
   | Dari editor ke iframe | Dari iframe ke editor |
   |---|---|
-  | `dokumen` (tiap berubah) | `bingkai` (saat diputar) |
-  | `putar`, `jeda`, `ke {bingkai}` | `siap`, `galat {item, pesan}` |
-  | `token` (akses bahan dan komponen) | `ukuran` |
+  | `muat {dokumen, sumber}` (tiap berubah; `sumber` berisi alamat bertoken) | `siap`, `bingkai {bingkai}`, `main {main}` |
+  | `putar`, `jeda`, `ke {bingkai}` | `galat {pesan}`, `tombol {key, shift, ctrl, meta, alt}` |
+
+  Iframe TIDAK pernah melaporkan ukuran atau letak item: pegangan dihitung
+  dari dokumen di luar iframe (`model/geometri.js`). Laporan `bingkai` yang
+  datang sesudah editor melompat ke bingkai lain (laporan basi) diabaikan
+  selama 0,6 detik saat tidak diputar.
 
 - Bahan dan komponen dimuat dengan URL bertoken, dan endpoint-nya menjawab CORS
   untuk asal `null`. Ini juga berlaku untuk berkas JS dan CSS milik
@@ -987,7 +1015,9 @@ pasir), karena animasi AI adalah kode yang tidak kita tulis sendiri.
   mengikuti disiplin `proksi.py`: satu antrean, prioritas terendah, dua inti.
   Render akhir selalu memakai berkas asli.
 - Pegangan transformasi (M2.5) dan garis zona aman digambar di **luar** iframe,
-  di atasnya, supaya tidak bergantung pada kode di dalam kotak pasir.
+  di atasnya, supaya tidak bergantung pada kode di dalam kotak pasir. Pegangan
+  menangkap penunjuk (`setPointerCapture`) karena gerakan di atas iframe
+  dikirim ke dokumen iframe, bukan ke editor.
 - Kode komponen AI dimuat lewat `muatKomponen.js`: unduh teks hasil kompilasi,
   lalu jalankan dengan `new Function(require, module, exports)`. `require`
   hanya mengembalikan modul yang diizinkan kontrak. Hanya iframe yang
@@ -1134,6 +1164,8 @@ detik). Kolom **Pemilik** = komputer pemilik (tes 60-63 di UJI-LANGSUNG.md).
 | Animasi AI: pratinjau = render (M0.5) | Ya, kasat mata sama di 4 bingkai | | | SSIM 0,84 karena tangkapan pratinjau hanya 316x561 lalu diskalakan. |
 | Kotak pasir memutar video bertoken (M0.6) | Ya (Playwright) | | | Asal `null`; DOM, cookie, localStorage ditolak. |
 | Keputusan: lanjut / Rencana B | Lanjut, tanpa Rencana B | Lanjut | ditunda ke uji akhir (K-17) | Gerbang Tahap 0 ditutup 3 Nov 2026. |
+| Tahap 2: proyek 5 menit 50 item | 60 fps, p95 16,7 ms, nol *long task* | | | Seret 90 langkah, pangkas, pilih kotak 50 item, batal/ulang/belah, putar 4 detik. |
+| Tahap 2: ekspor = pratinjau | SSIM 0,92-0,96 di 6 bingkai | | | Gambar-dalam-gambar terputar dan terpotong, 2x, beku, teks. Selisihnya hanya halus huruf. |
 
 ## 25. Daftar uji permintaan animasi
 
