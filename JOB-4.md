@@ -95,7 +95,7 @@ Tiga kemampuan besar, dibangun berurutan:
 | 0 | Uji teknis: membuktikan Remotion jalan di dalam OmniClip | ✅ Selesai 3 Nov 2026 | 8/8 |
 | 1 | Kerangka: menu, daftar proyek, media, pratinjau, ekspor | ✅ Selesai 3 Nov 2026 | 10/10 |
 | 2 | Penyuntingan dasar: linimasa sungguhan | ✅ Selesai 3 Nov 2026 | 8/8 |
-| 3 | Teks, suara, efek, transisi, keyframe | 🟨 Sedang dikerjakan | 7/10 |
+| 3 | Teks, suara, efek, transisi, keyframe | 🟨 Sedang dikerjakan | 9/10 |
 | 4 | AI pembuat animasi | ⬜ Belum mulai | 0/10 |
 | 5 | Asisten penyunting AI | ⬜ Belum mulai | 0/6 |
 | 6 | Rapikan dan rilis | ⬜ Belum mulai | 0/8 |
@@ -103,7 +103,7 @@ Tiga kemampuan besar, dibangun berurutan:
 
 Tanda status: ⬜ belum mulai · 🟨 sedang dikerjakan · ✅ selesai · ⛔ tertahan (tulis alasannya).
 
-**Tugas berikutnya:** `M3.8`.
+**Tugas berikutnya:** `M3.10`.
 
 ## 3. Keputusan
 
@@ -510,11 +510,13 @@ Tes 69-75 di UJI-LANGSUNG.md untuk uji akhir.
   dengan kurva (linear, masuk, keluar, masuk-keluar, pegas). Penanda keyframe
   berbentuk wajik di item linimasa.
   (selesai 3 Nov 2026, commit d7db00b) `t` keyframe relatif ke awal item; `kurva` adalah cara menuju keyframe itu. Sifat berkeyframe mengabaikan nilai dasarnya, dan mengubah nilainya (panel atau pegangan) menulis keyframe di garis putar. Keyframe sebelum 0 sesudah belah/pangkas tidak dibuang supaya gerak bersambung. Pratinjau = ekspor (SSIM 0,92-0,94).
-- [ ] **M3.8** Efek bawaan: punch-in (zoom sekejap), guncang, Ken Burns untuk
+- [x] **M3.8** Efek bawaan: punch-in (zoom sekejap), guncang, Ken Burns untuk
   gambar diam, stiker/emoji, bilah progres.
-- [ ] **M3.9** Penyamaan kekerasan suara saat ekspor: `loudnorm` dua lintasan
+  (selesai 3 Nov 2026, commit 2824e00) Bilah progres adalah animasi bawaan kedua (`ko_bilah_progres`), menghitung ke M4.2. Stiker emoji memakai font emoji SISTEM: pratinjau dan ekspor di komputer yang sama selalu sama, tapi rupa emojinya bisa berbeda antara Windows (Segoe UI Emoji) dan Linux (Noto Color Emoji).
+- [x] **M3.9** Penyamaan kekerasan suara saat ekspor: `loudnorm` dua lintasan
   dengan ffmpeg sesudah Remotion selesai (target −14 LUFS), video disalin tanpa
   dikode ulang (`-c:v copy`).
+  (selesai 3 Nov 2026, commit 2824e00) `montase/kekerasan.py`. Terukur: -28,9 LUFS menjadi -14,0 LUFS, aliran gambar identik byte demi byte (tes `test_montase_kekerasan`).
 - [ ] **M3.10** Uji langsung pemilik: satu video Top 5 lengkap (teks, narasi,
   musik, transisi) dibuat manual dari awal sampai ekspor.
 
