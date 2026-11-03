@@ -31,6 +31,26 @@ export function imporBahan(berkas, onProgress) {
 
 export const ambilToken = () => apiGet('/montase/token').then((r) => r.token);
 
+/** Tema teks siap pakai (dari tema_judul.py) dan font bawaan, sekali per sesi. */
+let gayaTeks = null;
+export function ambilGayaTeks() {
+  if (!gayaTeks) gayaTeks = apiGet('/montase/gaya-teks').catch((e) => { gayaTeks = null; throw e; });
+  return gayaTeks;
+}
+
+export function alamatFont(token, keluarga) {
+  return `/api/montase/t/${token}/font/${encodeURIComponent(keluarga)}`;
+}
+
+/** Font yang dipakai item teks dokumen, urut, untuk kunci memo `sumber`. */
+export function fontDipakai(dokumen) {
+  const hasil = new Set();
+  for (const l of dokumen?.lajur ?? []) {
+    for (const i of l.item) if (i.jenis === 'teks' && i.gaya?.font) hasil.add(i.gaya.font);
+  }
+  return [...hasil].sort();
+}
+
 /**
  * Alamat bertoken untuk bahan. Dipakai iframe kotak pasir dan `<img>`, yang
  * keduanya tidak membawa sesi maupun header profil: tokennya yang membawa.
@@ -41,13 +61,18 @@ export function alamatBahan(token, bahanId, { sunting = false, turunan = null } 
   return sunting ? `${dasar}?sunting=1` : dasar;
 }
 
-/** `sumber` untuk Komposisi: setiap bahan di dokumen -> alamat salinan suntingnya. */
+/**
+ * `sumber` untuk Komposisi: setiap bahan di dokumen -> alamat salinan
+ * suntingnya, setiap font yang dipakai -> alamat fontnya.
+ */
 export function sumberPratinjau(dokumen, token) {
   const bahan = {};
+  const font = {};
   if (token) {
     for (const id of Object.keys(dokumen?.bahan ?? {})) {
       bahan[id] = alamatBahan(token, id, { sunting: true });
     }
+    for (const f of fontDipakai(dokumen)) font[f] = alamatFont(token, f);
   }
-  return { bahan, komponen: {} };
+  return { bahan, font, komponen: {} };
 }

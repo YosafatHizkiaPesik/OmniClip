@@ -20,6 +20,7 @@ import { useT, angka } from '../../../lib/i18n';
 import { formatTime } from '../../../utils/timeFormat';
 import { BAWAAN } from '../komposisi/index.js';
 import { kodeWaktu } from './garisPutar.js';
+import PanelTeks from './PanelTeks.jsx';
 
 const WARNA = /^#[0-9a-fA-F]{6}$/;
 const KECEPATAN = [0.5, 1, 1.5, 2];
@@ -301,7 +302,6 @@ export default function PanelProperti({
   const { item } = terpilih;
   const kunci = Boolean(terpilih.lajur.kunci);
   const ubah = (perubahan) => onUbahItem(item.id, perubahan);
-  const gaya = item.gaya ?? {};
   const media = item.jenis === 'video' || item.jenis === 'audio';
   const bersuara = item.jenis === 'audio'
     || (item.jenis === 'video' && dokumen.bahan[item.bahan]?.ada_suara && !item.beku);
@@ -374,30 +374,7 @@ export default function PanelProperti({
               </select>
             </label>
           )}
-          {item.jenis === 'teks' && (
-            <>
-              <label className="montase-kolom">
-                <span>{t('montase.properti.teks')}</span>
-                <textarea rows={3} maxLength={500} value={item.teks ?? ''}
-                          onChange={(e) => ubah({ teks: e.target.value })} />
-              </label>
-              <Angka label={t('montase.properti.ukuran_huruf')} nilai={gaya.ukuran ?? 96} langkah={4} min={12}
-                     onUbah={(v) => ubah({ gaya: { ...gaya, ukuran: v } })} />
-              <label className="montase-kolom">
-                <span>{t('montase.properti.warna')}</span>
-                <input type="color" value={gaya.warna ?? '#ffffff'}
-                       onChange={(e) => ubah({ gaya: { ...gaya, warna: e.target.value } })} />
-              </label>
-              <label className="montase-kolom">
-                <span>{t('montase.properti.letak')}</span>
-                <select value={gaya.letak ?? 'tengah'} onChange={(e) => ubah({ gaya: { ...gaya, letak: e.target.value } })}>
-                  <option value="atas">{t('montase.properti.letak_atas')}</option>
-                  <option value="tengah">{t('montase.properti.letak_tengah')}</option>
-                  <option value="bawah">{t('montase.properti.letak_bawah')}</option>
-                </select>
-              </label>
-            </>
-          )}
+          {item.jenis === 'teks' && <PanelTeks item={item} onUbah={ubah} />}
           {item.jenis === 'motion' && (
             <>
               <p className="montase-petunjuk">{BAWAAN[item.komponen] ? t('montase.properti.bawaan') : item.komponen}</p>

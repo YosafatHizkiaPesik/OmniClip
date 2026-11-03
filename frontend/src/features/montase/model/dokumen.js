@@ -14,6 +14,15 @@ export const JENIS_LAJUR_ITEM = {
 };
 export const DETIK_GAMBAR = 5;
 export const DETIK_TEKS = 3;
+/**
+ * Gaya teks baru: huruf putih Montserrat bergaris hitam, terbaca di atas
+ * gambar apa pun tanpa pelat. Tema lain dipilih di panel Properti (M3.1).
+ */
+export const GAYA_TEKS_BAWAAN = {
+  font: 'Montserrat', ukuran: 96, warna: '#ffffff', kapital: false, letak: 'tengah',
+  perataan: 'tengah', latar: 'tanpa', warna_latar: '#000000', alfa_latar: 1,
+  garis: 5, warna_garis: '#000000', bayang: 0, kabur: 0, gerak: 'pop',
+};
 
 function salin(dokumen) {
   return {
@@ -125,7 +134,7 @@ export function tambahTeks(dokumen, { mulai = 0, teks = 'Teks', lajurId = null }
   const item = {
     id, jenis: 'teks', mulai: Math.max(0, Math.round(mulai)),
     durasi: Math.round(DETIK_TEKS * dokumen.kanvas.fps), teks,
-    gaya: { letak: 'tengah', ukuran: 96, warna: '#ffffff' }, asal: 'tangan',
+    gaya: { ...GAYA_TEKS_BAWAAN }, asal: 'tangan',
   };
   return { dokumen: sisipkan(dokumen, 'teks', item, lajurId), itemId: id };
 }

@@ -27,7 +27,7 @@ from ..repos import montase as repo
 from ..repos import settings as settings_repo
 from ..services import profil
 from . import bahan as bahan_svc
-from . import mesin, skema, unduh, uji
+from . import mesin, skema, teks, unduh, uji
 from . import token as token_svc
 
 router = APIRouter(prefix="/api/montase", tags=["montase"])
@@ -305,6 +305,23 @@ def turunan_bahan(tkn: str, bahan_id: str, turunan: str):
     if not jalur.is_file():
         raise NotFound("Belum siap.")
     return FileResponse(jalur, media_type=jenis, headers={"Cache-Control": "no-cache"})
+
+
+@router.get("/gaya-teks")
+def gaya_teks():
+    """Tema judul siap pakai dan font bawaan untuk item teks (M3.1)."""
+    return {"gaya": teks.daftar_gaya(), "font": teks.font_bawaan()}
+
+
+@router.get("/t/{tkn}/font/{keluarga}")
+def font_bertoken(tkn: str, keluarga: str):
+    """Font bawaan untuk iframe kotak pasir dan mesin render."""
+    _pid_dari_token(tkn)
+    jalur = teks.jalur_font(keluarga)
+    if jalur is None:
+        raise NotFound("Font tidak ada.")
+    return FileResponse(jalur, media_type="font/ttf",
+                        headers={"Cache-Control": "public, max-age=86400"})
 
 
 # --- uji Tahap 0 --------------------------------------------------------------

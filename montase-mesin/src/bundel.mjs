@@ -47,7 +47,7 @@ export function sisipkanCsp(folder) {
     `img-src 'self' data: blob: ${omniclip}`,
     `media-src 'self' data: blob: ${omniclip}`,
     `connect-src 'self' data: blob: ${omniclip} ws://localhost:* ws://127.0.0.1:*`,
-    "font-src 'self' data:",
+    `font-src 'self' data: ${omniclip}`,
     "worker-src 'self' blob:",
   ].join('; ');
   const meta = `<meta http-equiv="Content-Security-Policy" content="${kebijakan}">`;

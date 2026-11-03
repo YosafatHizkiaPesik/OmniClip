@@ -27,7 +27,7 @@ import { useJobRunner } from '../../hooks/useJob';
 import JobProgress from '../../components/JobProgress';
 import { BAWAAN } from './komposisi/index.js';
 import {
-  ambilProyek, ambilToken, simpanProyek, sumberPratinjau,
+  ambilProyek, ambilToken, fontDipakai, simpanProyek, sumberPratinjau,
 } from './api.js';
 import {
   cariItem, tambahBahan, tambahMotion, tambahTeks, ubahItem, ubahProyek,
@@ -263,9 +263,9 @@ export default function MontaseEditor() {
 
   const sumber = useMemo(
     () => (dokumen ? sumberPratinjau(dokumen, token) : null),
-    // Hanya daftar bahan yang menentukan alamat; perubahan item tidak.
+    // Hanya daftar bahan dan font yang menentukan alamat; perubahan item tidak.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [dokumen && Object.keys(dokumen.bahan).join(','), token],
+    [dokumen && Object.keys(dokumen.bahan).join(','), dokumen && fontDipakai(dokumen).join(','), token],
   );
 
   const semuaId = useMemo(

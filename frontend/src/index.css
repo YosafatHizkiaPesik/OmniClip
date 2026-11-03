@@ -2490,3 +2490,14 @@ button.tujuan, a.tujuan { cursor: pointer; }
 }
 .montase-sempit h1 { font-size: 1.1rem; margin: 0; color: var(--ink); }
 .montase-sempit p { margin: 0 0 8px; max-width: 420px; font-size: .88rem; }
+
+/* Montase M3.1: tema teks */
+.montase-tema-kisi { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 6px; }
+.montase-tema {
+  display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px 4px;
+  border: 1px solid var(--rule-2); border-radius: var(--r-sm); background: #20232b; cursor: pointer;
+}
+.montase-tema.aktif { border-color: var(--reh); box-shadow: 0 0 0 1px var(--reh); }
+.montase-tema small { color: #e7e9ee; font-size: .62rem; text-align: center; line-height: 1.2; }
+.montase-tema-contoh { font-size: 1.15rem; line-height: 1; padding: 3px 7px; border-radius: 4px; paint-order: stroke fill; }
+.montase-bagian > select { font: inherit; font-size: .8rem; padding: 6px; border-radius: var(--r-sm); border: 1px solid var(--rule-2); background: var(--plate); color: var(--ink); }

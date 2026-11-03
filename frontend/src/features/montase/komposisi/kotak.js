@@ -22,6 +22,19 @@ export const LEBAR_HURUF = 0.56;
 export const TINGGI_BARIS = 1.1;
 export const TEPI_TEKS = { datar: 60, tegak: 160 };
 
+// Lebar rata-rata huruf per font bawaan, pecahan dari ukuran (diukur kasar
+// pada "MOMEN TERBAIK"). Hanya untuk besar bingkai pegangan.
+const LEBAR_FONT = {
+  'Bebas Neue': 0.42, Anton: 0.46, Teko: 0.4, 'Fjalla One': 0.5, Oswald: 0.5,
+  'Archivo Black': 0.68, Bungee: 0.72, 'Luckiest Guy': 0.62, 'Lilita One': 0.56,
+  'Playfair Display': 0.58,
+};
+
+/** Tinggi baris teks per jenis latar: stabilo butuh jarak supaya pelatnya tidak bertumpuk. */
+export function tinggiBaris(latar) {
+  return latar === 'sorot' ? 1.3 : TINGGI_BARIS;
+}
+
 export function kotakDasar(dokumen, item) {
   const W = dokumen?.kanvas?.lebar ?? 1080;
   const H = dokumen?.kanvas?.tinggi ?? 1920;
@@ -35,10 +48,14 @@ export function kotakDasar(dokumen, item) {
     return { x: (W - w) / 2, y: (H - h) / 2, w, h };
   }
   if (item.jenis === 'teks') {
-    const ukuran = item.gaya?.ukuran ?? 96;
-    const ruang = Math.max(1, W - 2 * TEPI_TEKS.datar);
+    const g = item.gaya ?? {};
+    const ukuran = g.ukuran ?? 96;
+    const latar = g.latar ?? 'tanpa';
+    const padX = latar === 'tanpa' || latar === 'pita' ? 0 : (g.pad_x ?? 0.42) * ukuran;
+    const padY = latar === 'tanpa' ? 0 : (g.pad_y ?? (latar === 'pita' ? 0.3 : 0.22)) * ukuran;
+    const ruang = Math.max(1, W - 2 * TEPI_TEKS.datar - 2 * padX);
     const baris = String(item.teks ?? '').split('\n');
-    const lebarHuruf = ukuran * LEBAR_HURUF;
+    const lebarHuruf = ukuran * (LEBAR_FONT[g.font] ?? LEBAR_HURUF) * (g.kapital ? 1.12 : 1);
     let terlebar = 0;
     let jumlah = 0;
     for (const b of baris) {
@@ -46,13 +63,17 @@ export function kotakDasar(dokumen, item) {
       terlebar = Math.max(terlebar, Math.min(lebar, ruang));
       jumlah += Math.max(1, Math.ceil(lebar / ruang));
     }
-    const w = terlebar;
-    const h = jumlah * ukuran * TINGGI_BARIS;
-    const letak = item.gaya?.letak ?? 'tengah';
+    const w = latar === 'pita' ? W : terlebar + 2 * padX;
+    const h = jumlah * ukuran * tinggiBaris(latar) + 2 * padY;
+    const letak = g.letak ?? 'tengah';
     let y = (H - h) / 2;
     if (letak === 'atas') y = TEPI_TEKS.tegak;
     else if (letak === 'bawah') y = H - TEPI_TEKS.tegak - h;
-    return { x: (W - w) / 2, y, w, h };
+    const rata = g.perataan ?? 'tengah';
+    let x = (W - w) / 2;
+    if (latar !== 'pita' && rata === 'kiri') x = TEPI_TEKS.datar;
+    else if (latar !== 'pita' && rata === 'kanan') x = W - TEPI_TEKS.datar - w;
+    return { x, y, w, h };
   }
   return penuh;
 }
