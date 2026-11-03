@@ -95,7 +95,7 @@ Tiga kemampuan besar, dibangun berurutan:
 | 0 | Uji teknis: membuktikan Remotion jalan di dalam OmniClip | ✅ Selesai 3 Nov 2026 | 8/8 |
 | 1 | Kerangka: menu, daftar proyek, media, pratinjau, ekspor | ✅ Selesai 3 Nov 2026 | 10/10 |
 | 2 | Penyuntingan dasar: linimasa sungguhan | ✅ Selesai 3 Nov 2026 | 8/8 |
-| 3 | Teks, suara, efek, transisi, keyframe | 🟨 Sedang dikerjakan | 1/10 |
+| 3 | Teks, suara, efek, transisi, keyframe | 🟨 Sedang dikerjakan | 2/10 |
 | 4 | AI pembuat animasi | ⬜ Belum mulai | 0/10 |
 | 5 | Asisten penyunting AI | ⬜ Belum mulai | 0/6 |
 | 6 | Rapikan dan rilis | ⬜ Belum mulai | 0/8 |
@@ -103,7 +103,7 @@ Tiga kemampuan besar, dibangun berurutan:
 
 Tanda status: ⬜ belum mulai · 🟨 sedang dikerjakan · ✅ selesai · ⛔ tertahan (tulis alasannya).
 
-**Tugas berikutnya:** `M3.2`.
+**Tugas berikutnya:** `M3.3`.
 
 ## 3. Keputusan
 
@@ -487,10 +487,11 @@ Tes 69-75 di UJI-LANGSUNG.md untuk uji akhir.
   `tema_judul.py` (diterjemahkan ke komponen komposisi). Font dimuat dengan
   `delayRender` supaya bingkai pertama tidak memakai font cadangan.
   (selesai 3 Nov 2026, commit 35f5daf) Tema TIDAK disalin ke komposisi: `GET /api/montase/gaya-teks` menerjemahkan `tema_judul.TEMA` ke `item.gaya`, dan memilih tema menulis nilainya ke dokumen. Font didaftarkan dengan FontFace tanpa ketebalan dan teks memintanya 400, karena meminta 800 membuat peramban memalsukan tebal. CSP bundel mesin perlu `font-src` OmniClip (sebelumnya hanya 'self'). Diuji: sepuluh tema, pratinjau = ekspor di 10 bingkai (SSIM 0,87-0,93 pada tangkapan 232 px).
-- [ ] **M3.2** Subtitle otomatis: suara di linimasa ditranskrip dengan
+- [x] **M3.2** Subtitle otomatis: suara di linimasa ditranskrip dengan
   `whisper.py` (atau memakai transkrip yang sudah ada kalau bahannya dari
   unduhan atau Klip jadi). Waktu per kata menjadi lajur subtitle yang bisa
   disunting, dengan gaya sorot kata seperti Studio Klip.
+  (selesai 3 Nov 2026, commit 9496abb) Kata per bahan disimpan di `kata.json` (sekali per bahan, dipakai ulang di setiap potongan). Ucapan dua sumber yang bertumpuk tidak diselang-seling: lajur audio menang, lalu lajur video terbawah. Belum diuji dengan Whisper sungguhan (HuggingFace ditolak proxy container); diuji dengan simpanan kata, jadi tes 77 di UJI-LANGSUNG.md wajib dijalankan pemilik.
 - [ ] **M3.3** Narasi: ketik teks, pilih suara dari katalog `tts.py`, dan hasilnya
   jadi item audio. Mengubah teksnya membuat ulang suaranya. Rekam suara sendiri
   lewat mikrofon (MediaRecorder) juga menjadi item audio.
@@ -923,6 +924,7 @@ Semua di bawah `/api/montase`, membawa profil aktif lewat header
 | GET | `/t/{token}/bahan/{id}` | Berkas asli (render) atau salinan sunting (`?sunting=1`). Tanpa sesi. |
 | GET | `/t/{token}/bahan/{id}/{sampul,strip,gelombang}` | Turunan bahan. Lewat token karena `<img>` tidak membawa header profil. |
 | GET, POST | `/setelan` | Sakelar "Montase (beta)" (`{aktif}`) |
+| POST | `/proyek/{id}/subtitle` | Subtitle otomatis (pekerjaan `montase_subtitle`), menjawab potongan untuk dipasang editor (M3.2) |
 | GET | `/gaya-teks` | Tema teks dari `tema_judul.py` dalam bentuk `item.gaya`, dan daftar font bawaan (M3.1) |
 | GET | `/t/{token}/font/{keluarga}` | Berkas font bawaan untuk iframe dan mesin render |
 | POST | `/narasi` | `{teks, suara}`: hasil TTS menjadi bahan audio |
