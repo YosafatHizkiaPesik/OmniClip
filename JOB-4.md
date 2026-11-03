@@ -95,7 +95,7 @@ Tiga kemampuan besar, dibangun berurutan:
 | 0 | Uji teknis: membuktikan Remotion jalan di dalam OmniClip | ✅ Selesai 3 Nov 2026 | 8/8 |
 | 1 | Kerangka: menu, daftar proyek, media, pratinjau, ekspor | ✅ Selesai 3 Nov 2026 | 10/10 |
 | 2 | Penyuntingan dasar: linimasa sungguhan | ✅ Selesai 3 Nov 2026 | 8/8 |
-| 3 | Teks, suara, efek, transisi, keyframe | 🟨 Sedang dikerjakan | 5/10 |
+| 3 | Teks, suara, efek, transisi, keyframe | 🟨 Sedang dikerjakan | 7/10 |
 | 4 | AI pembuat animasi | ⬜ Belum mulai | 0/10 |
 | 5 | Asisten penyunting AI | ⬜ Belum mulai | 0/6 |
 | 6 | Rapikan dan rilis | ⬜ Belum mulai | 0/8 |
@@ -103,7 +103,7 @@ Tiga kemampuan besar, dibangun berurutan:
 
 Tanda status: ⬜ belum mulai · 🟨 sedang dikerjakan · ✅ selesai · ⛔ tertahan (tulis alasannya).
 
-**Tugas berikutnya:** `M3.5`.
+**Tugas berikutnya:** `M3.8`.
 
 ## 3. Keputusan
 
@@ -500,10 +500,12 @@ Tes 69-75 di UJI-LANGSUNG.md untuk uji akhir.
   turun saat ada narasi atau ucapan. Hasilnya berupa keyframe volume biasa,
   jadi terlihat dan bisa diubah.
   (selesai 3 Nov 2026, commit d7db00b) Ucapan = item lajur subtitle dan item audio di lajur audio lain (narasi, rekaman); suara klip tanpa subtitle tidak dihitung, karena tanpa tahu di mana orang berbicara perendaman jadi musik yang pelan sepanjang video. Terukur di ekspor: musik -27,2 dB, -39,3 dB saat narasi (turun ke 20%), -27,1 dB sesudahnya.
-- [ ] **M3.5** Transisi antar item di lajur yang sama: potong, larut, geser,
+- [x] **M3.5** Transisi antar item di lajur yang sama: potong, larut, geser,
   usap, perbesar, kilat, glitch (pakai `@remotion/transitions`).
-- [ ] **M3.6** Penyesuaian warna: kecerahan, kontras, saturasi, suhu, plus
+  (selesai 3 Nov 2026, commit 3fa8071) BEDA DARI RENCANA: tidak memakai `@remotion/transitions`. `TransitionSeries` menumpukkan dua potongan sehingga video lebih pendek sepanjang transisi, sedangkan letak item Montase mutlak dan item lajur lain sudah ditaruh di waktunya. Di sini jendela transisi berpusat di sambungan dan kedua item menahan bingkai ujungnya dengan `<Freeze active>`; suara tetap terpotong di sambungan. Transisi disimpan di item yang MASUK (`item.transisi`). Pratinjau = ekspor di tengah transisi.
+- [x] **M3.6** Penyesuaian warna: kecerahan, kontras, saturasi, suhu, plus
   preset bernama sama dengan `VIDEO_FILTERS` di `render.py`.
+  (selesai 3 Nov 2026, commit 3fa8071) Preset meniru rantai ffmpeg `VIDEO_FILTERS` dengan filter CSS (bukan identik piksel dengan Studio Klip, tapi berkarakter sama); suhu lewat matriks warna SVG karena filter CSS tidak punya suhu.
 - [x] **M3.7** Keyframe untuk posisi, ukuran, putar, transparansi, dan volume,
   dengan kurva (linear, masuk, keluar, masuk-keluar, pegas). Penanda keyframe
   berbentuk wajik di item linimasa.
