@@ -33,6 +33,10 @@ class Potong(unittest.TestCase):
         # Potongan pertama bertahan sampai potongan kedua mulai.
         self.assertEqual(p[0]["mulai"] + p[0]["durasi"], p[1]["mulai"])
 
+    def test_potongan_tidak_melewati_sambungan_klip(self):
+        k = [{"w": "akhir", "t": 0, "u": 8, "i": "a"}, {"w": "awal", "t": 10, "u": 18, "i": "b"}]
+        self.assertEqual([x["teks"] for x in subtitle.potong(k, 30)], ["akhir", "awal"])
+
     def test_lajur_bisu_dan_bingkai_beku_tidak_disalin(self):
         dok = {"kanvas": {"fps": 30}, "bahan": {"b1": {"ada_suara": True}, "b2": {"ada_suara": False}},
                "lajur": [

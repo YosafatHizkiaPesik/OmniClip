@@ -21,6 +21,7 @@ import { formatTime } from '../../../utils/timeFormat';
 import { BAWAAN } from '../komposisi/index.js';
 import { kodeWaktu } from './garisPutar.js';
 import PanelTeks from './PanelTeks.jsx';
+import { KolomNarasi } from './PanelSuara.jsx';
 
 const WARNA = /^#[0-9a-fA-F]{6}$/;
 const KECEPATAN = [0.5, 1, 1.5, 2];
@@ -258,7 +259,7 @@ function PanelTransform({ item, onTransform, onAturUlang }) {
 export default function PanelProperti({
   dokumen, terpilih, jumlahPilihan, lajur, onUbahItem, onKecepatan, onTransform, onHapus,
   onGandakan, onUbahProyek, onUbahLajur, onHapusLajur, bisaHapusLajur, onKe, onUbahPenanda,
-  onHapusPenanda,
+  onHapusPenanda, onBuatUlangNarasi,
 }) {
   const t = useT();
   const fps = dokumen.kanvas.fps;
@@ -326,6 +327,9 @@ export default function PanelProperti({
                    onUbah={(v) => ubah({ durasi: keBingkai(v) })} />
           </div>
 
+          {item.jenis === 'audio' && item.narasi && (
+            <KolomNarasi key={item.id} item={item} onBuatUlang={(n) => onBuatUlangNarasi(item.id, n)} />
+          )}
           {media && (
             <Angka label={t('montase.properti.potong_awal')} nilai={keDetik(item.potong_awal || 0)}
                    akhiran={t('montase.satuan.detik')} onUbah={(v) => ubah({ potong_awal: keBingkai(v) })} />

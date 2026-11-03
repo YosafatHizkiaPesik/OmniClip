@@ -27,7 +27,7 @@ from ..repos import montase as repo
 from ..repos import settings as settings_repo
 from ..services import profil
 from . import bahan as bahan_svc
-from . import mesin, skema, teks, unduh, uji
+from . import mesin, narasi, skema, teks, unduh, uji
 from . import token as token_svc
 
 router = APIRouter(prefix="/api/montase", tags=["montase"])
@@ -315,6 +315,52 @@ def turunan_bahan(tkn: str, bahan_id: str, turunan: str):
     if not jalur.is_file():
         raise NotFound("Belum siap.")
     return FileResponse(jalur, media_type=jenis, headers={"Cache-Control": "no-cache"})
+
+
+class Narasi(BaseModel):
+    teks: str = Field(..., min_length=1, max_length=narasi.TEKS_MAKS)
+    suara: str = Field(..., min_length=1, max_length=60)
+    kecepatan: float = Field(1.0, ge=narasi.KECEPATAN[0], le=narasi.KECEPATAN[1])
+
+
+@router.get("/suara")
+def daftar_suara():
+    """Katalog suara narasi (tts.py) dan apakah masing-masing siap dipakai."""
+    return {"suara": narasi.daftar_suara()}
+
+
+@router.post("/narasi")
+async def buat_narasi(isi: Narasi):
+    """Teks -> suara -> bahan audio (M3.3). Narasi yang persis sama dipakai ulang."""
+    try:
+        return await run_in_threadpool(narasi.buat_narasi, profil.kini(), isi.teks, isi.suara,
+                                       isi.kecepatan)
+    except narasi.GagalNarasi as e:
+        raise InvalidInput(str(e)) from e
+
+
+@router.post("/rekam")
+async def simpan_rekaman(berkas: UploadFile = File(...)):
+    """Rekaman mikrofon dari peramban -> M4A -> bahan audio (M3.3)."""
+    tmp = Path(tempfile.mkstemp(prefix="omni_rekam_", suffix=".webm")[1])
+    total = 0
+    try:
+        with open(tmp, "wb") as keluar:
+            while True:
+                blok = await berkas.read(1 << 20)
+                if not blok:
+                    break
+                total += len(blok)
+                if total > BATAS_IMPOR:
+                    raise AppError("Rekaman terlalu besar.", code="BAHAN_TERLALU_BESAR", status=413)
+                keluar.write(blok)
+        nama = Path(berkas.filename or "Rekaman").stem[:120] or "Rekaman"
+        try:
+            return await run_in_threadpool(narasi.simpan_rekaman, profil.kini(), tmp, nama)
+        except narasi.GagalNarasi as e:
+            raise InvalidInput(str(e)) from e
+    finally:
+        tmp.unlink(missing_ok=True)
 
 
 @router.get("/gaya-teks")

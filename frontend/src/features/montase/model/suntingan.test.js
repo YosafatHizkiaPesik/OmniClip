@@ -4,7 +4,7 @@ import {
 } from './dokumen.js';
 import {
   bekukan, belah, bisaHapusLajur, gandakan, hapusBanyak, hapusBeriak, hapusLajur, pangkasKanan,
-  pangkasKiri, pasangSubtitle, pindahItem, rapatkan, salin, semuaItem, sisipkan, tambahLajur, tambahPenanda, tempel,
+  gantiBahanItem, pangkasKiri, pasangSubtitle, pindahItem, taruhSuara, rapatkan, salin, semuaItem, sisipkan, tambahLajur, tambahPenanda, tempel,
   tempelKe, titikMagnet, titikSisip, ubahKecepatan, ubahLajur, ubahTransform,
 } from './suntingan.js';
 import { batal, buatRiwayat, catat, ulang, BATAS_LANGKAH } from './riwayat.js';
@@ -150,6 +150,24 @@ describe('subtitle', () => {
     expect(b.lajurId).toBe(a.lajurId);
     expect(b.dokumen.lajur.find((x) => x.id === b.lajurId).item).toHaveLength(1);
     expect(b.dokumen.lajur).toHaveLength(a.dokumen.lajur.length);
+  });
+});
+
+describe('narasi dan rekaman', () => {
+  const narasiBahan = (id, durasi) => ({ id, jenis: 'audio', nama: id, durasi, ada_suara: true });
+  it('suara baru di lajur audio kosong; bila terisi, lajur audio baru', () => {
+    let { dokumen, itemId } = taruhSuara(dua(), narasiBahan('bh_n1', 2), { mulai: 30, narasi: { teks: 'halo', suara: 'edge-ardi' } });
+    expect(cariItem(dokumen, itemId)).toMatchObject({ lajur: { id: 'L4' }, item: { mulai: 30, durasi: 60, narasi: { teks: 'halo' } } });
+    const kedua = taruhSuara(dokumen, narasiBahan('bh_n2', 1), { mulai: 45 });
+    expect(cariItem(kedua.dokumen, kedua.itemId).lajur.id).not.toBe('L4');
+    expect(kedua.dokumen.lajur.filter((l) => l.jenis === 'audio')).toHaveLength(2);
+    ({ dokumen } = kedua);
+  });
+  it('ganti bahan: item tetap di tempat, panjang ikut suara baru, bahan lama dibuang', () => {
+    const a = taruhSuara(dua(), narasiBahan('bh_n1', 2), { mulai: 30 });
+    const d = gantiBahanItem(a.dokumen, a.itemId, narasiBahan('bh_n3', 3.5), { narasi: { teks: 'baru' } });
+    expect(item(d, a.itemId)).toMatchObject({ mulai: 30, durasi: 105, bahan: 'bh_n3', narasi: { teks: 'baru' } });
+    expect(d.bahan.bh_n1).toBeUndefined();
   });
 });
 

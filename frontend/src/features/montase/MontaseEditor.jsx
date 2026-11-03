@@ -27,14 +27,14 @@ import { useJobRunner } from '../../hooks/useJob';
 import JobProgress from '../../components/JobProgress';
 import { BAWAAN } from './komposisi/index.js';
 import {
-  ambilProyek, ambilToken, fontDipakai, simpanProyek, sumberPratinjau,
+  ambilProyek, ambilToken, buatNarasi, fontDipakai, simpanProyek, sumberPratinjau,
 } from './api.js';
 import {
   cariItem, tambahBahan, tambahMotion, tambahTeks, ubahItem, ubahProyek,
 } from './model/dokumen.js';
 import {
   bekukan, belah, bisaHapusLajur, gandakan, hapusBanyak, hapusBeriak, hapusLajur, hapusPenanda,
-  pasangSubtitle, rapatkan, salin, semuaItem, tambahLajur, tambahPenanda, tempel, ubahKecepatan, ubahLajur, ubahPenanda,
+  gantiBahanItem, pasangSubtitle, rapatkan, salin, semuaItem, taruhSuara, tambahLajur, tambahPenanda, tempel, ubahKecepatan, ubahLajur, ubahPenanda,
   ubahTransform,
 } from './model/suntingan.js';
 import {
@@ -300,6 +300,15 @@ export default function MontaseEditor() {
     const hasil = tambahBahan(dok(), b, posisi);
     if (terapkan(hasil.dokumen)) pilih([hasil.itemId]);
   };
+  /** Narasi atau rekaman baru di garis putar (M3.3). */
+  const tambahSuara = (b, narasi) => {
+    const hasil = taruhSuara(dok(), b, { mulai: garis.get(), narasi });
+    if (terapkan(hasil.dokumen)) pilih([hasil.itemId]);
+  };
+  const buatUlangNarasi = async (itemId, narasi) => {
+    const bahan = await buatNarasi(narasi.teks, narasi.suara, narasi.kecepatan);
+    terapkan(gantiBahanItem(dok(), itemId, bahan, { narasi }));
+  };
   const tambahTeksDiGaris = () => {
     const hasil = tambahTeks(dok(), { mulai: garis.get(), teks: t('montase.editor.teks_baru') });
     if (terapkan(hasil.dokumen)) pilih([hasil.itemId]);
@@ -552,7 +561,8 @@ export default function MontaseEditor() {
       <div className="montase-editor-tengah"
            style={{ gridTemplateColumns: `${tata.kiri}px 6px minmax(0, 1fr) 6px ${tata.kanan}px` }}
       >
-        <PanelBahan token={token} onTambahKeLinimasa={tambahKeLinimasa} onBahan={catatBahan} />
+        <PanelBahan token={token} onTambahKeLinimasa={tambahKeLinimasa} onTambahSuara={tambahSuara}
+                    onBahan={catatBahan} />
         <Pembatas arah="tegak" onGeser={geser('kiri', 1, [220, 520])} />
         <section className="montase-panel montase-panel-pratinjau" aria-label={t('montase.pratinjau.judul')}>
           {galat && status !== 'bentrok' && status !== 'gagal' && <p className="montase-galat" role="alert">{galat}</p>}
@@ -583,6 +593,7 @@ export default function MontaseEditor() {
           onKe={keBingkai}
           onUbahPenanda={(tt, label) => ubah((d) => ubahPenanda(d, tt, label), { gabung: `penanda:${tt}` })}
           onHapusPenanda={(tt) => terapkan(hapusPenanda(dok(), tt))}
+          onBuatUlangNarasi={buatUlangNarasi}
         />
       </div>
 

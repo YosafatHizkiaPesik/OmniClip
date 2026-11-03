@@ -203,9 +203,13 @@ def dipakai_proyek(pid: int, bahan_id: str) -> list[str]:
 
 
 def hapus(pid: int, bahan_id: str) -> bool:
+    b = repo.ambil_bahan(pid, bahan_id, dengan_jalur=True)
     if not repo.hapus_bahan(pid, bahan_id):
         return False
     shutil.rmtree(folder(bahan_id), ignore_errors=True)
+    if b is not None:
+        from .narasi import hapus_berkas_milik
+        hapus_berkas_milik(b)
     return True
 
 

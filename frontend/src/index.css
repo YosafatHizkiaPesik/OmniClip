@@ -2276,7 +2276,7 @@ button.tujuan, a.tujuan { cursor: pointer; }
 .montase-pembatas:hover { background: var(--reh); }
 .montase-pembatas-tegak { cursor: col-resize; }
 .montase-pembatas-datar { cursor: row-resize; }
-.montase-tab { display: flex; gap: 4px; padding: 8px 10px; border-bottom: 1px solid var(--rule-2); overflow-x: auto; }
+.montase-tab { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 10px; border-bottom: 1px solid var(--rule-2); }
 .montase-tab button {
   font: inherit; font-size: .72rem; font-weight: 700; padding: 5px 9px; border-radius: 99px;
   border: 1px solid var(--rule-2); background: transparent; color: var(--ink-2); cursor: pointer; white-space: nowrap;
@@ -2501,3 +2501,7 @@ button.tujuan, a.tujuan { cursor: pointer; }
 .montase-tema small { color: #e7e9ee; font-size: .62rem; text-align: center; line-height: 1.2; }
 .montase-tema-contoh { font-size: 1.15rem; line-height: 1; padding: 3px 7px; border-radius: 4px; paint-order: stroke fill; }
 .montase-bagian > select { font: inherit; font-size: .8rem; padding: 6px; border-radius: var(--r-sm); border: 1px solid var(--rule-2); background: var(--plate); color: var(--ink); }
+.montase-suara { padding: 0 12px 12px; overflow: auto; display: flex; flex-direction: column; gap: 4px; }
+.montase-suara textarea { font: inherit; font-size: .8rem; padding: 8px; border-radius: var(--r-sm); border: 1px solid var(--rule-2); background: var(--plate); color: var(--ink); resize: vertical; }
+.montase-rekam-aktif { animation: montase-denyut 1.2s ease-in-out infinite; }
+@keyframes montase-denyut { 50% { opacity: .65; } }

@@ -22,6 +22,7 @@ import {
   alamatBahan, daftarBahan, imporBahan, rujukBahan, sumberBahan,
 } from '../api.js';
 import { JENIS_SERET_BAHAN } from './garisPutar.js';
+import PanelSuara from './PanelSuara.jsx';
 
 const ASAL = [
   { id: 'unduhan', kunci: 'montase.bahan.unduhan' },
@@ -67,7 +68,7 @@ function BarisBahan({ b, token, onTambah, sibuk, bisaDiseret = false }) {
   );
 }
 
-export default function PanelBahan({ token, onTambahKeLinimasa, onBahan }) {
+export default function PanelBahan({ token, onTambahKeLinimasa, onTambahSuara, onBahan }) {
   const t = useT();
   const [bahan, setBahan] = useState([]);
   const [asal, setAsal] = useState(null);
@@ -90,7 +91,7 @@ export default function PanelBahan({ token, onTambahKeLinimasa, onBahan }) {
   }, [bahan, muat]);
 
   useEffect(() => {
-    if (!asal) return;
+    if (!asal || asal === 'suara') return;
     setSumber(null);
     sumberBahan(asal).then(setSumber).catch((e) => { setGalat(e.message); setSumber([]); });
   }, [asal]);
@@ -155,9 +156,18 @@ export default function PanelBahan({ token, onTambahKeLinimasa, onBahan }) {
             {t(a.kunci)}
           </button>
         ))}
+        <button type="button" role="tab" aria-selected={asal === 'suara'}
+                className={asal === 'suara' ? 'aktif' : ''} onClick={() => setAsal('suara')}
+        >
+          {t('montase.suara.tab')}
+        </button>
       </div>
 
-      <ul className="montase-bahan-daftar">
+      {asal === 'suara' && (
+        <PanelSuara onTambahSuara={async (b, narasi) => { await muat(); onTambahSuara(b, narasi); }} />
+      )}
+
+      <ul className="montase-bahan-daftar" hidden={asal === 'suara'}>
         {asal === null && bahan.length === 0 && (
           <li className="montase-kosong-kecil">{t('montase.bahan.kosong')}</li>
         )}

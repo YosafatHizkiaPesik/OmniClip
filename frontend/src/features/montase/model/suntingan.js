@@ -11,7 +11,7 @@
  *     gambar, teks ke teks, dan seterusnya).
  */
 import {
-  bersihkanUbah, cariItem, durasiIsi, GAYA_SUBTITLE, idBaru, JENIS_LAJUR_ITEM,
+  bersihkanUbah, cariItem, durasiIsi, GAYA_SUBTITLE, idBaru, JENIS_LAJUR_ITEM, tambahBahan,
 } from './dokumen.js';
 
 const MEDIA = new Set(['video', 'audio']);
@@ -487,4 +487,61 @@ export function pasangSubtitle(dokumen, potongan, { nama = 'Subtitle', alasan = 
     dokumen: rapikan({ ...d, lajur: d.lajur.map((l) => (l.id === lajurId ? { ...l, item } : l)) }),
     lajurId,
   };
+}
+
+
+// --- narasi dan rekaman (M3.3) -----------------------------------------------
+
+function metaBahan(bahan) {
+  return {
+    jenis: bahan.jenis, nama: bahan.nama ?? '', durasi: bahan.durasi ?? null,
+    lebar: bahan.lebar ?? null, tinggi: bahan.tinggi ?? null, fps: bahan.fps ?? null,
+    ada_suara: Boolean(bahan.ada_suara),
+  };
+}
+
+/**
+ * Menaruh bahan suara (narasi, rekaman) di bingkai `mulai`, di lajur audio
+ * pertama yang tidak terkunci dan KOSONG di rentang itu; bila semuanya terisi,
+ * lajur audio baru dibuat (seperti CapCut: suara baru tidak menimpa musik).
+ * `narasi` = {teks, suara, kecepatan} disimpan di item supaya bisa dibuat ulang.
+ */
+export function taruhSuara(dokumen, bahan, { mulai = 0, narasi = null } = {}) {
+  const fps = dokumen.kanvas.fps;
+  const awal = Math.max(0, Math.round(mulai));
+  const panjang = Math.max(1, Math.round((bahan.durasi || 1) * fps));
+  const kosong = (l) => !l.kunci && l.jenis === 'audio'
+    && !l.item.some((i) => i.mulai < awal + panjang && i.mulai + i.durasi > awal);
+  let d = dokumen;
+  let lajur = d.lajur.find(kosong);
+  if (!lajur) {
+    const baru = tambahLajur(d, 'audio');
+    d = baru.dokumen;
+    lajur = d.lajur.find((l) => l.id === baru.lajurId);
+  }
+  const hasil = tambahBahan(d, bahan, { mulai: awal, lajurId: lajur.id });
+  if (!narasi) return hasil;
+  return {
+    dokumen: petaItem(hasil.dokumen, (i) => (i.id === hasil.itemId ? { ...i, narasi } : null)),
+    itemId: hasil.itemId,
+  };
+}
+
+/**
+ * Mengganti bahan item (narasi yang teksnya diubah): item tetap di tempatnya,
+ * panjangnya mengikuti suara baru, bahan lama dibuang bila tidak dipakai lagi.
+ */
+export function gantiBahanItem(dokumen, itemId, bahan, tambahan = {}) {
+  const hit = cariItem(dokumen, itemId);
+  if (!hit || hit.lajur.kunci) return dokumen;
+  const fps = dokumen.kanvas.fps;
+  const d = {
+    ...dokumen,
+    bahan: { ...dokumen.bahan, [bahan.id]: metaBahan(bahan) },
+  };
+  const hasil = petaItem(d, (i) => (i.id !== itemId ? null : {
+    ...i, ...tambahan, bahan: bahan.id, potong_awal: 0,
+    durasi: Math.max(1, Math.round(((bahan.durasi || 1) * fps) / (i.kecepatan || 1))),
+  }));
+  return buangBahanYatim(hasil);
 }

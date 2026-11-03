@@ -31,6 +31,15 @@ export function imporBahan(berkas, onProgress) {
 
 export const ambilToken = () => apiGet('/montase/token').then((r) => r.token);
 
+export const daftarSuara = () => apiGet('/montase/suara').then((r) => r.suara ?? []);
+export const buatNarasi = (teks, suara, kecepatan = 1) =>
+  apiPost('/montase/narasi', { teks, suara, kecepatan });
+export function simpanRekaman(blob, nama) {
+  const data = new FormData();
+  data.append('berkas', blob, `${nama}.webm`);
+  return apiUnggah('/montase/rekam', data);
+}
+
 /** Tema teks siap pakai (dari tema_judul.py) dan font bawaan, sekali per sesi. */
 let gayaTeks = null;
 export function ambilGayaTeks() {

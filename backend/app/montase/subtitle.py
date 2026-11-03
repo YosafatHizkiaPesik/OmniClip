@@ -150,7 +150,7 @@ def ke_linimasa(kata: list[dict], item: dict, fps: int) -> list[dict]:
         t1 = min(mulai + item["durasi"], mulai + (w["e"] * fps - awal) / k)
         t0 = int(round(t0))
         t1 = max(t0 + 1, int(round(t1)))
-        hasil.append({"w": w["w"], "t": t0, "u": t1})
+        hasil.append({"w": w["w"], "t": t0, "u": t1, "i": item.get("id")})
     return hasil
 
 
@@ -165,8 +165,10 @@ def potong(kata: list[dict], fps: int) -> list[dict]:
         if kini:
             teks = " ".join(x["w"] for x in kini + [w])
             jeda = (w["t"] - kini[-1]["u"]) / fps
+            # Potongan tidak melewati sambungan klip: kalimat klip berikutnya
+            # mulai di potongan baru, bersama gambarnya.
             if (len(kini) >= KATA_MAKS or len(teks) > HURUF_MAKS or jeda >= JEDA_PUTUS
-                    or kini[-1]["w"].endswith(TANDA_AKHIR)):
+                    or kini[-1]["w"].endswith(TANDA_AKHIR) or kini[-1].get("i") != w.get("i")):
                 hasil.append(kini)
                 kini = []
         kini.append(w)
