@@ -93,7 +93,7 @@ Tiga kemampuan besar, dibangun berurutan:
 | Tahap | Isi singkat | Status | Tugas |
 |---|---|---|---|
 | 0 | Uji teknis: membuktikan Remotion jalan di dalam OmniClip | ✅ Selesai 3 Nov 2026 | 8/8 |
-| 1 | Kerangka: menu, daftar proyek, media, pratinjau, ekspor | ⬜ Belum mulai | 0/10 |
+| 1 | Kerangka: menu, daftar proyek, media, pratinjau, ekspor | ✅ Selesai 3 Nov 2026 | 10/10 |
 | 2 | Penyuntingan dasar: linimasa sungguhan | ⬜ Belum mulai | 0/8 |
 | 3 | Teks, suara, efek, transisi, keyframe | ⬜ Belum mulai | 0/10 |
 | 4 | AI pembuat animasi | ⬜ Belum mulai | 0/10 |
@@ -103,7 +103,7 @@ Tiga kemampuan besar, dibangun berurutan:
 
 Tanda status: ⬜ belum mulai · 🟨 sedang dikerjakan · ✅ selesai · ⛔ tertahan (tulis alasannya).
 
-**Tugas berikutnya:** `M1.1`.
+**Tugas berikutnya:** `M2.1`.
 
 ## 3. Keputusan
 
@@ -343,22 +343,26 @@ angkanya memaksa.
 **Tujuan:** bisa membuat proyek, memasukkan bahan, menaruhnya berurutan,
 menyimpan, membuka lagi, dan mengekspor. Linimasanya masih sederhana.
 
-- [ ] **M1.1** Migrasi basis data: tabel `montase_proyek`, `montase_bahan`,
+- [x] **M1.1** Migrasi basis data: tabel `montase_proyek`, `montase_bahan`,
   `montase_komponen` ([bagian 17](#17-basis-data)) ditambahkan ke `MIGRATIONS`
   di `db.py`. Repo `backend/app/repos/montase.py`.
-- [ ] **M1.2** `montase/skema.py`: validasi dokumen proyek (pydantic), nomor
+  (selesai 3 Nov 2026, commit 5ac34ee, d8803d5) Migrasi 13. Bedanya dengan rancangan: tanpa FK ke `profil` (sama dengan tabel lain yang memakai `profil_id`), `montase_bahan` punya kolom `nama` dan `siap`, dan salinan sunting tidak punya kolom; letaknya tetap `<data>/montase/bahan/<id>/sunting.mp4`.
+- [x] **M1.2** `montase/skema.py`: validasi dokumen proyek (pydantic), nomor
   `versi`, dan fungsi migrasi dokumen. Migrasi hanya di backend; frontend selalu
   menerima versi terbaru.
-- [ ] **M1.3** `montase/router.py`: buat, baca, simpan, hapus, dan gandakan
+  (selesai 3 Nov 2026, commit 5ac34ee, d8803d5) `montase/skema.py`: kolom tak dikenal dipertahankan (`extra="allow"`), versi lebih baru ditolak, `durasi` dihitung ulang dari ujung item terakhir, item hanya di lajur yang cocok, ukuran genap, fps 24/25/30/50/60, batas 2 MB dan 2000 item.
+- [x] **M1.3** `montase/router.py`: buat, baca, simpan, hapus, dan gandakan
   proyek. Simpan memakai nomor `revisi`, jadi dua tab yang menyimpan bersamaan
   mendapat 409, bukan saling menimpa diam-diam. Semua per profil
   (`profil.kini()`).
-- [ ] **M1.4** Menu: item "Montase" (ikon `Clapperboard`) di kelompok Studio
+  (selesai 3 Nov 2026, commit 5ac34ee, d8803d5) Revisi basi menjawab 409 `REVISI_BENTROK`; bahan dari profil lain ditolak saat simpan. Tes `test_montase_proyek.py`.
+- [x] **M1.4** Menu: item "Montase" (ikon `Clapperboard`) di kelompok Studio
   `NAV_STUDIO`, sesudah Partitur. Rute `/montase` dan `/montase/:id`. Bilah
   menu menutup sendiri di editor (perluas `isEditorPath` di `App.jsx`). Sakelar
   "Montase (beta)" di Pengaturan. Kunci kamus `montase.*` di `id.js` dan
   `en.js`.
-- [ ] **M1.5** Daftar proyek (`MontaseHome.jsx`): kartu dengan sampul, nama,
+  (selesai 3 Nov 2026, commit 5ac34ee, d8803d5) Ikon `Clapperboard`, sakelar di Pengaturan > Tampilan (bawaan menyala), `/montase-uji` tetap ada untuk memeriksa mesin.
+- [x] **M1.5** Daftar proyek (`MontaseHome.jsx`): kartu dengan sampul, nama,
   durasi, dan waktu diubah. "Proyek baru" dengan preset kanvas:
 
   | Preset | Ukuran | Untuk |
@@ -370,26 +374,38 @@ menyimpan, membuka lagi, dan mengekspor. Linimasanya masih sederhana.
   | Sendiri | bebas | |
 
   Pilihan fps: 24, 25, 30, 60 (60 tergantung T-2).
-- [ ] **M1.6** Panel bahan: impor berkas (pakai `apiUnggah`), ambil dari
+  (selesai 3 Nov 2026, commit 5ac34ee, d8803d5) Hapus meminta konfirmasi; bahan dan video yang sudah diekspor tidak ikut terhapus.
+- [x] **M1.6** Panel bahan: impor berkas (pakai `apiUnggah`), ambil dari
   Unduhan, Klip jadi, Aset (musik, efek suara, gambar), dan Stok Pexels.
   Metadata dibaca ffprobe. Sampul, strip gambar (*filmstrip*), dan gelombang
   suara dibuat di latar.
-- [ ] **M1.7** Tata letak editor dengan empat area yang ukurannya bisa diatur:
+  (selesai 3 Nov 2026, commit 5ac34ee, d8803d5) Impor masuk pustaka aset (terlihat juga di Studio Klip). Sampul, strip, dan gelombang disajikan lewat alamat BERTOKEN: `<img>` tidak membawa header profil, jadi lewat sesi bahan profil selain Utama tidak terbaca. Strip baru diminta sesudah bahan siap (404 awal disimpan peramban). Stok Pexels masuk lewat pustaka aset, belum ada tab sendiri.
+- [x] **M1.7** Tata letak editor dengan empat area yang ukurannya bisa diatur:
   bahan (kiri), pratinjau (tengah), properti (kanan), linimasa (bawah). Di
   layar < 900 px tampil pemberitahuan "Montase butuh layar lebar" (T-6).
-- [ ] **M1.8** Pratinjau: Player di kotak pasir, dengan putar/jeda, geser,
+  (selesai 3 Nov 2026, commit 5ac34ee, d8803d5) Ukuran area disimpan per peramban. Linimasa Tahap 1: lajur, item sebanding waktu, strip, gelombang, garis putar, klik penggaris, tukar urutan, hapus. Simpan otomatis sudah ada di sini (M2.8 tinggal pemberitahuan).
+- [x] **M1.8** Pratinjau: Player di kotak pasir, dengan putar/jeda, geser,
   maju/mundur satu bingkai, layar penuh, dan garis zona aman (tombol
   TikTok/Shorts) yang bisa dinyalakan. Memakai salinan sunting kecil
   ([bagian 20](#20-pratinjau-dan-kotak-pasir)).
-- [ ] **M1.9** Ekspor: pekerjaan `montase_render` di antrean `jobs.py`, kemajuan
+  (selesai 3 Nov 2026, commit 5ac34ee, d8803d5) Zona aman vertikal: kiri 6%, kanan 16%, atas 10%, bawah 22% (`pratinjau/zonaAman.js`).
+- [x] **M1.9** Ekspor: pekerjaan `montase_render` di antrean `jobs.py`, kemajuan
   tampil di `JobProgress`, bisa dibatalkan. Hasilnya masuk Klip jadi
   ([bagian 22](#22-hasil-ekspor-dan-klip-jadi)).
-- [ ] **M1.10** Tes penjaga batas modul `test_montase_batas.py`
+  (selesai 3 Nov 2026, commit 5ac34ee, d8803d5) Pekerjaan `montase_render`, nama berkas `<judul>_montase_<tanggal>.mp4`, sidecar `jenis: montase` dengan `sumber_banyak`. Klip jadi menampilkannya seperti klip biasa (nilai tambah 0%: dihitung di M6.2). Tes ekspor sungguhan: tiga video berwarna, 90 bingkai, warnanya tepat per potongan.
+- [x] **M1.10** Tes penjaga batas modul `test_montase_batas.py`
   ([bagian 15](#15-batas-modul)).
+  (selesai 3 Nov 2026, commit 5ac34ee, d8803d5) `test_montase_batas.py` kini mencakup semua berkas Tahap 1 (backend dan frontend).
 
 **Selesai bila:** pemilik bisa membuat proyek, menaruh tiga video berurutan,
 menutup aplikasi, membukanya lagi, dan mengekspor MP4 yang isinya sama dengan
 pratinjau.
+
+**Gerbang lolos 3 Nov 2026 (K-17):** dijalankan di Chromium lewat Playwright:
+proyek baru, tiga video diimpor berurutan, teks dan animasi, muat ulang (lima
+item kembali utuh), ekspor 270 bingkai, tampil di Klip jadi. Bingkai pratinjau
+editor dan MP4 sama di bingkai 15, 45, 105, 225. Tangkapan layar dikirim ke
+pemilik. Tes 64-67 di UJI-LANGSUNG.md untuk uji akhir.
 
 ---
 
@@ -735,8 +751,8 @@ di `test_cacat_diperbaiki.py`).
 
 | Boleh dipakai Montase | Dilarang |
 |---|---|
-| `services/`: `koneksi_ai`, `penyedia_ai`, `kunci_ai`, `pemakaian_ai`, `bahasa_ai`, `tts`, `aset`, `stok`, `soundboard`, `whisper`, `transcript`, `momen`, `peristiwa_suara`, `reframe` (hanya fungsi publik jejak wajah), `proses`, `paths`, `jobs`, `events`, `profil`, `fonts`, `enkoder`, `unggah`, `google_upload`, `gerbang`, `keterangan`, `nilai_tambah`, `sampah` | `services/pipeline.py`, `services/render.py` (render klip), `services/sutradara*.py`, `routers/clips.py`, `routers/projects.py` |
-| `app/config.py`, `app/db.py`, `app/bahasa.py` | Tabel `projects` dan `clips` (Montase punya tabelnya sendiri) |
+| `services/`: `media` (ffprobe), `paths` (`safe_media_path`), `koneksi_ai`, `penyedia_ai`, `kunci_ai`, `pemakaian_ai`, `bahasa_ai`, `tts`, `aset`, `stok`, `soundboard`, `whisper`, `transcript`, `momen`, `peristiwa_suara`, `reframe` (hanya fungsi publik jejak wajah), `proses`, `paths`, `jobs`, `events`, `profil`, `fonts`, `enkoder`, `unggah`, `google_upload`, `gerbang`, `keterangan`, `nilai_tambah`, `sampah` | `services/pipeline.py`, `services/render.py` (render klip), `services/sutradara*.py`, `routers/clips.py`, `routers/projects.py` |
+| `app/config.py`, `app/db.py`, `app/bahasa.py`, `app/errors.py`, `repos/media.py` (unduhan, kredit sumber), `repos/settings.py` | Tabel `projects` dan `clips` (Montase punya tabelnya sendiri) |
 | Frontend: `lib/*`, `components/*`, `hooks/*`, `utils/*` | `features/studio/*` |
 
 Kalau sesuatu di `features/studio/` dibutuhkan Montase (misalnya
@@ -806,7 +822,7 @@ Ditambahkan sebagai satu entri baru di `MIGRATIONS` (`db.py`).
 ```sql
 CREATE TABLE montase_proyek (
   id            TEXT PRIMARY KEY,
-  profil_id     INTEGER NOT NULL DEFAULT 1 REFERENCES profil(id) ON DELETE CASCADE,
+  profil_id     INTEGER NOT NULL DEFAULT 1,
   nama          TEXT NOT NULL,
   dokumen_json  TEXT NOT NULL,
   revisi        INTEGER NOT NULL DEFAULT 1,
@@ -819,22 +835,27 @@ CREATE INDEX idx_montase_proyek ON montase_proyek(profil_id, updated_at DESC);
 
 CREATE TABLE montase_bahan (
   id            TEXT PRIMARY KEY,
-  profil_id     INTEGER NOT NULL DEFAULT 1 REFERENCES profil(id) ON DELETE CASCADE,
+  profil_id     INTEGER NOT NULL DEFAULT 1,
   asal          TEXT NOT NULL CHECK (asal IN
                   ('impor','unduhan','klip_jadi','aset','stok','tts','rekam','render')),
   rujukan       TEXT,          -- id di asalnya (video_id, nama klip, id aset)
+  nama          TEXT NOT NULL,
   rel_path      TEXT NOT NULL,
   jenis         TEXT NOT NULL CHECK (jenis IN ('video','audio','gambar')),
   durasi        REAL, lebar INTEGER, tinggi INTEGER, fps REAL,
   ada_suara     INTEGER NOT NULL DEFAULT 0,
-  sunting_path  TEXT,          -- salinan sunting kecil untuk pratinjau
+  siap          INTEGER NOT NULL DEFAULT 0,  -- turunan dan salinan sunting sudah jadi
   created_at    REAL NOT NULL
 );
+-- unik per (profil_id, asal, rujukan): merujuk berkas yang sama dua kali
+-- mengembalikan bahan yang sudah ada.
+-- Turunan tinggal di <data>/montase/bahan/<id>/: sampul.jpg, strip.jpg,
+-- gelombang.json, sunting.mp4.
 
 CREATE TABLE montase_komponen (
   id            TEXT NOT NULL,
   versi         INTEGER NOT NULL,
-  profil_id     INTEGER NOT NULL DEFAULT 1 REFERENCES profil(id) ON DELETE CASCADE,
+  profil_id     INTEGER NOT NULL DEFAULT 1,
   nama          TEXT NOT NULL,
   asal          TEXT NOT NULL CHECK (asal IN ('bawaan','ai','tangan')),
   sumber_tsx    TEXT NOT NULL,
@@ -870,8 +891,13 @@ Semua di bawah `/api/montase`, membawa profil aktif lewat header
 | GET | `/bahan` | Daftar bahan |
 | POST | `/bahan/impor` | Unggah berkas (multipart) |
 | POST | `/bahan/rujuk` | `{asal, rujukan}`: ambil dari Unduhan, Klip jadi, Aset, atau Stok |
-| GET | `/bahan/{id}/berkas` | Berkas asli (render) atau salinan sunting (`?sunting=1`). Menerima token. |
-| GET | `/bahan/{id}/sampul`, `/bahan/{id}/strip`, `/bahan/{id}/gelombang` | Gambar kecil, strip bingkai, puncak suara |
+| GET | `/bahan/sumber?asal=` | Berkas yang bisa dijadikan bahan (unduhan, klip_jadi, aset), tanpa jalur |
+| POST | `/bahan/impor` | (sudah disebut di atas) unggahan masuk pustaka aset lalu jadi bahan `impor` |
+| DELETE | `/bahan/{id}` | Hapus bahan; 409 `BAHAN_DIPAKAI` bila masih dipakai proyek |
+| GET | `/token` | Token `bahan:<profil>` (6 jam) untuk iframe dan `<img>` |
+| GET | `/t/{token}/bahan/{id}` | Berkas asli (render) atau salinan sunting (`?sunting=1`). Tanpa sesi. |
+| GET | `/t/{token}/bahan/{id}/{sampul,strip,gelombang}` | Turunan bahan. Lewat token karena `<img>` tidak membawa header profil. |
+| GET, POST | `/setelan` | Sakelar "Montase (beta)" (`{aktif}`) |
 | POST | `/narasi` | `{teks, suara}`: hasil TTS menjadi bahan audio |
 | GET | `/komponen` | Pustaka animasi (bawaan + tersimpan) |
 | GET | `/komponen/{id}/{versi}.js` | Hasil kompilasi, untuk iframe dan mesin. Menerima token. |
@@ -884,6 +910,9 @@ Semua di bawah `/api/montase`, membawa profil aktif lewat header
 
 Kemajuan pekerjaan (render, AI, unduh mesin) memakai saluran peristiwa yang
 sudah ada (`events.py`, `JobProgress`), bukan saluran baru.
+
+Status 3 Nov 2026: semua baris di atas sudah ada **kecuali** `/narasi` (M3.3),
+`/komponen*` dan `/motion/*` (Tahap 4), dan `/asisten` (Tahap 5).
 
 ## 19. Mesin Montase
 
