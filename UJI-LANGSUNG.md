@@ -393,6 +393,28 @@ di menu). Hasil angka tiap tes ditulis juga di JOB-4.md bagian 24.
     Chrome; render uji berhasil; tidak ada jendela hitam yang berkedip di
     Windows.
 
+### Tambahan 3 November 2026: Montase Tahap 1, menu dan editor (JOB-4)
+
+- [ ] **64. Menu dan proyek baru.** Buka **Montase** di menu kiri (di bawah
+  Partitur). Tekan **Proyek baru**, beri nama, pilih *Shorts / TikTok*, 30 fps.
+  - Diharapkan: editor terbuka dengan empat area (Bahan, pratinjau, Properti,
+    linimasa), status "Tersimpan".
+- [ ] **65. Tiga video berurutan.** Di Bahan, ambil tiga video dari tab
+  *Unduhan* atau *Klip jadi* (atau **Impor** dari komputer).
+  - Diharapkan: ketiganya tersusun berurutan di lajur Video 1, sampul dan strip
+    gambar muncul beberapa detik kemudian, pratinjau memutar ketiganya.
+    Tutup aplikasi, buka lagi proyeknya: semua masih ada.
+- [ ] **66. Teks, animasi, properti.** Tekan **Teks** dan **Animasi** di
+  linimasa, ubah tulisan dan warna di panel Properti, nyalakan garis zona aman.
+  - Diharapkan: perubahan langsung terlihat di pratinjau; garis kuning
+    menandai area yang tidak tertutup tombol TikTok/Shorts.
+- [ ] **67. Ekspor.** Tekan **Ekspor**, tunggu, lalu **Lihat di Klip jadi**.
+  - Diharapkan: video bernama `<judul>_montase_<tanggal>` muncul di Klip jadi,
+    isinya sama dengan pratinjau, dan bisa diunggah seperti klip biasa.
+- [ ] **68. Sakelar beta.** Pengaturan > Tampilan > Montase: matikan.
+  - Diharapkan: menu Montase hilang tanpa memuat ulang; nyalakan lagi, muncul
+    kembali, proyek masih ada.
+
 ### Jalur fitur unggulan (urutan disarankan, ±30 menit)
 
 Satu video podcast pendek (10-20 menit) cukup untuk semuanya:

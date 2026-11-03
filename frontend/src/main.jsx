@@ -22,6 +22,8 @@ import Riwayat from './routes/Riwayat.jsx';
 // Montase dimuat hanya saat dibuka: Remotion menambah ratusan kilobita yang
 // tidak perlu dibayar halaman lain.
 const MontaseUji = lazy(() => import('./features/montase/uji/MontaseUji.jsx'));
+const MontaseHome = lazy(() => import('./features/montase/MontaseHome.jsx'));
+const MontaseEditor = lazy(() => import('./features/montase/MontaseEditor.jsx'));
 
 // Profil terakhir diambil dari server SEBELUM apa pun digambar. Setiap
 // permintaan membawa nomor profil di headernya, jadi menggambar dulu lalu
@@ -49,7 +51,10 @@ createRoot(document.getElementById('root')).render(
           <Route path="profil" element={<Profil />} />
           <Route path="settings" element={<ProfileTab />} />
           <Route path="mesin" element={<MesinTab />} />
-          {/* Halaman uji Tahap 0 (JOB-4.md); diganti menu Montase di Tahap 1. */}
+          {/* Montase (JOB-4): daftar proyek dan editor satu proyek. */}
+          <Route path="montase" element={<Suspense fallback={null}><MontaseHome /></Suspense>} />
+          <Route path="montase/:proyekId" element={<Suspense fallback={null}><MontaseEditor /></Suspense>} />
+          {/* Halaman uji mesin (Tahap 0), tetap ada untuk memeriksa mesin. */}
           <Route path="montase-uji" element={<Suspense fallback={null}><MontaseUji /></Suspense>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   Search, Download, SlidersHorizontal, Film, Music4, Menu, X, ArrowDownToLine, UserRound, Gauge,
-  BarChart3, Home, TvMinimalPlay, History, Globe,
+  BarChart3, Home, TvMinimalPlay, History, Globe, Clapperboard,
 } from 'lucide-react';
 import { BAHASA, bahasa, setBahasa, useT } from './lib/i18n';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -11,6 +11,7 @@ import KotakCari from './components/KotakCari';
 import { apiGet } from './lib/api';
 import useBuildWatch from './hooks/useBuildWatch';
 import CookiesPeringatan from './components/CookiesPeringatan';
+import { useMontaseAktif } from './features/montase/setelan.js';
 
 // Dikelompokkan seperti YouTube (JOB-3 J3-2): menonton dulu, lalu studio
 // tempat klip dibuat, lalu channel yang diikuti, lalu urusan akun dan mesin.
@@ -26,15 +27,21 @@ const NAV_STUDIO = [
   { to: '/analitik', kunci: 'nav.analitik', Icon: BarChart3 },
   { to: '/downloads', kunci: 'nav.unduhan', Icon: Download },
 ];
+// Montase (JOB-4): studio penyunting kedua, sesudah Partitur. Bisa
+// disembunyikan lewat Pengaturan > Tampilan selama masih beta.
+const NAV_MONTASE = { to: '/montase', kunci: 'nav.montase', Icon: Clapperboard };
 const NAV_LAIN = [
   { to: '/profil', kunci: 'nav.akun', Icon: UserRound },
   { to: '/settings', kunci: 'nav.pengaturan', Icon: SlidersHorizontal },
   { to: '/mesin', kunci: 'nav.mesin', Icon: Gauge },
 ];
 
-/** Editor satu project: /studio/<videoId>. Bukan /studio yang berisi kartu. */
+/**
+ * Editor satu project: /studio/<videoId> atau /montase/<proyekId>. Bukan
+ * /studio dan /montase yang berisi kartu.
+ */
 function isEditorPath(pathname) {
-  return /^\/studio\/[^/]+/.test(pathname);
+  return /^\/(studio|montase)\/[^/]+/.test(pathname);
 }
 
 /**
@@ -84,6 +91,10 @@ export default function App() {
   }, []);
 
   const t = useT();
+  const montaseAktif = useMontaseAktif();
+  const navStudio = montaseAktif
+    ? [NAV_STUDIO[0], NAV_MONTASE, ...NAV_STUDIO.slice(1)]
+    : NAV_STUDIO;
   // Channel yang diikuti akun ini, untuk bagian "Channel diikuti" di menu.
   const [diikuti, setDiikuti] = useState([]);
   useEffect(() => {
@@ -142,7 +153,7 @@ export default function App() {
         <div className="nav-kelompok">{NAV_UTAMA.map((n) => <Item key={n.to} {...n} />)}</div>
         <div className="nav-kelompok">
           <div className="nav-judul">{t('nav.studio_anda')}</div>
-          {NAV_STUDIO.map((n) => <Item key={n.to} {...n} />)}
+          {navStudio.map((n) => <Item key={n.to} {...n} />)}
         </div>
         <div className="nav-kelompok nav-langganan">
           <div className="nav-judul">{t('nav.channel_diikuti')}</div>

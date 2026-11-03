@@ -454,6 +454,67 @@ MIGRATIONS: list[str] = [
     ALTER TABLE analyses_baru RENAME TO analyses;
     CREATE INDEX idx_analyses_video ON analyses(video_id, created_at DESC);
     """,
+    # Montase (JOB-4 M1.1, bagian 17): studio penyunting kedua.
+    #
+    # Tabel sendiri, bukan `projects`/`clips` Studio Klip: proyek Montase tidak
+    # punya satu video sumber, dan batas modulnya (JOB-4 bagian 15) melarang
+    # Montase menyentuh tabel Studio Klip. Isi proyeknya satu dokumen JSON
+    # (bagian 16); `revisi` naik setiap simpan supaya dua tab yang menyimpan
+    # bersamaan mendapat 409, bukan saling menimpa diam-diam.
+    #
+    # `montase_bahan` mencatat JALUR berkas di server. Dokumen proyek dan
+    # peramban hanya pernah menyebut id bahan (P-7).
+    """
+    CREATE TABLE montase_proyek (
+      id            TEXT PRIMARY KEY,
+      profil_id     INTEGER NOT NULL DEFAULT 1,
+      nama          TEXT NOT NULL,
+      dokumen_json  TEXT NOT NULL,
+      revisi        INTEGER NOT NULL DEFAULT 1,
+      sampul        TEXT,
+      durasi_detik  REAL,
+      updated_at    REAL NOT NULL,
+      created_at    REAL NOT NULL
+    );
+    CREATE INDEX idx_montase_proyek ON montase_proyek(profil_id, updated_at DESC);
+    CREATE TABLE montase_bahan (
+      id            TEXT PRIMARY KEY,
+      profil_id     INTEGER NOT NULL DEFAULT 1,
+      asal          TEXT NOT NULL CHECK (asal IN
+                      ('impor','unduhan','klip_jadi','aset','stok','tts','rekam','render')),
+      rujukan       TEXT,
+      nama          TEXT NOT NULL,
+      rel_path      TEXT NOT NULL,
+      jenis         TEXT NOT NULL CHECK (jenis IN ('video','audio','gambar')),
+      durasi        REAL,
+      lebar         INTEGER,
+      tinggi        INTEGER,
+      fps           REAL,
+      ada_suara     INTEGER NOT NULL DEFAULT 0,
+      siap          INTEGER NOT NULL DEFAULT 0,
+      created_at    REAL NOT NULL
+    );
+    CREATE INDEX idx_montase_bahan ON montase_bahan(profil_id, created_at DESC);
+    CREATE UNIQUE INDEX idx_montase_bahan_rujukan ON montase_bahan(profil_id, asal, rujukan);
+    CREATE TABLE montase_komponen (
+      id            TEXT NOT NULL,
+      versi         INTEGER NOT NULL,
+      profil_id     INTEGER NOT NULL DEFAULT 1,
+      nama          TEXT NOT NULL,
+      asal          TEXT NOT NULL CHECK (asal IN ('bawaan','ai','tangan')),
+      sumber_tsx    TEXT NOT NULL,
+      hasil_js      TEXT,
+      skema_json    TEXT,
+      contoh_props  TEXT,
+      durasi_bawaan INTEGER,
+      permintaan    TEXT,
+      status        TEXT NOT NULL CHECK (status IN ('draf','lolos','gagal')),
+      catatan       TEXT,
+      disimpan      INTEGER NOT NULL DEFAULT 0,
+      created_at    REAL NOT NULL,
+      PRIMARY KEY (id, versi)
+    );
+    """,
 ]
 
 
