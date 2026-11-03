@@ -51,6 +51,21 @@ datas += [
     (str(PROJECT / "frontend" / "dist"), "frontend_dist"),
 ]
 
+# Mesin Montase (JOB-4): kode mesin, node_modules produksinya (Remotion
+# renderer + berkas biner compositor untuk sistem yang sedang membangun), dan
+# bundel komposisi. Langkah "Bangun Mesin Montase" di CI menyiapkannya; Node
+# dan Chrome tidak ikut, keduanya diunduh saat Montase pertama dipakai.
+# Tujuannya ditulis persis seperti yang dicari app/montase/mesin.py saat FROZEN.
+_mesin = PROJECT / "montase-mesin"
+if (_mesin / "dist" / "bundel" / "index.html").is_file() and (_mesin / "node_modules").is_dir():
+    datas += [
+        (str(_mesin / "package.json"), "montase_mesin"),
+        (str(_mesin / "src"), "montase_mesin/src"),
+        (str(_mesin / "uji"), "montase_mesin/uji"),
+        (str(_mesin / "node_modules"), "montase_mesin/node_modules"),
+        (str(_mesin / "dist" / "bundel"), "montase_mesin/dist/bundel"),
+    ]
+
 # Model yang cukup kecil untuk ikut. YuNet 232 KB adalah syarat bingkai
 # otomatis bekerja sama sekali; sisanya (SFace 37 MB, CAM++ 27 MB, Whisper,
 # Piper) diunduh saat pertama dipakai supaya unduhan awalnya tidak membengkak.

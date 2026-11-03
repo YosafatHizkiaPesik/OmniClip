@@ -364,6 +364,35 @@ Urutannya sama dengan jalur pemakaian normal.
     tidak bertumpang dengan kotak Permainan (Reaksi mulai tepat di tepi kanan
     Permainan); render mengikuti pratinjau.
 
+### Tambahan 3 November 2026: Montase Tahap 0, uji teknis (JOB-4)
+
+Halaman uji ada di alamat **`/montase-uji`** (ketik di bilah alamat, belum ada
+di menu). Hasil angka tiap tes ditulis juga di JOB-4.md bagian 24.
+
+- [ ] **60. Linux, mode pengembangan.** `git pull`, lalu sekali saja
+  `cd montase-mesin && npm ci && node src/bundel.mjs`, dan `cd frontend && npm ci`.
+  Jalankan aplikasi seperti biasa, buka `/montase-uji`, tekan **Siapkan mesin**.
+  - Diharapkan: "Mesin siap dipakai"; baris Chrome headless terisi sesudah
+    unduhan selesai (±100 MB sekali saja).
+- [ ] **61. Dua pratinjau.** Di halaman yang sama, putar kedua pratinjau.
+  - Diharapkan: video pola warna bersuara nada, "#5" muncul di awal, tulisan
+    "Uji Montase" di detik 2-6, "GILA!" lalu pecah jadi serpihan di detik
+    7-9,5. Pratinjau kotak pasir bisa diputar, dijeda, dan digeser dari tombol
+    di bawahnya.
+- [ ] **62. Render uji.** Tekan **Mulai render uji**, tunggu, lalu **Tonton
+  hasil render**.
+  - Diharapkan: isinya sama dengan pratinjau. Catat angka "Waktu render" (di
+    container pengembangan 4 inti: 87-89 dtk untuk video 30 dtk). Ambang
+    keputusan T-5: paling lama 4x durasi.
+- [ ] **63. Linux dan Windows, aplikasi hasil build.** Di GitHub: Actions →
+  Bangun aplikasi → Run workflow → pilih branch `claude/ecstatic-davinci-scqbbm`.
+  Langkah "Uji Montase" di ringkasan build harus hijau untuk kedua sistem
+  (itu sudah merender 10 detik di Windows dan Linux sungguhan). Lalu unduh
+  artefaknya, jalankan, dan ulangi tes 60-62 tanpa perintah npm apa pun.
+  - Diharapkan: Siapkan mesin mengunduh Node (±31 MB, Windows ±36 MB) dan
+    Chrome; render uji berhasil; tidak ada jendela hitam yang berkedip di
+    Windows.
+
 ### Jalur fitur unggulan (urutan disarankan, ±30 menit)
 
 Satu video podcast pendek (10-20 menit) cukup untuk semuanya:

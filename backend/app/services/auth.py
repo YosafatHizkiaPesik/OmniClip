@@ -58,6 +58,13 @@ OPEN_PATHS = frozenset({
     "/api/build",
 })
 
+# Awalan jalur yang tidak dijaga sesi karena dijaga TOKEN di alamatnya sendiri.
+# Pembacanya tidak bisa membawa cookie: iframe kotak pasir pratinjau Montase
+# (asal `null`) dan Chrome headless milik Mesin Montase. Setiap handler di
+# bawah awalan ini wajib memeriksa tokennya (app/montase/token.py), dan
+# test_montase_token menjaga bahwa tanpa token yang sah jawabannya 404.
+OPEN_PREFIXES = ("/api/montase/t/",)
+
 
 # --- Kata sandi ---------------------------------------------------------------
 

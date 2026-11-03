@@ -125,6 +125,8 @@ Tanda status: ⬜ belum mulai · 🟨 sedang dikerjakan · ✅ selesai · ⛔ te
 | K-12 | 3 Nov 2026 | Urutan AI untuk Montase: **Claude → Gemini → OpenRouter → AI lokal**, dan pengguna bisa memilih sendiri mana yang dipakai. | Jawaban pemilik. `koneksi_ai.py` sudah punya daftar berurutan yang bisa diatur pengguna; Montase menambah pilihan "AI untuk Montase". |
 | K-13 | 3 Nov 2026 | Langganan Claude Pro **tidak bisa** disambungkan ke OmniClip sebagai pengganti API key. Claude di dalam aplikasi lewat **API key** (bayar per pemakaian, terpisah dari Pro), ditambah **mode salin-tempel** (M4.10) yang memakai Claude.ai biasa. | Pro dan API adalah produk terpisah. Untuk produk yang dibagikan ke orang lain, jalur yang aman menurut sumber yang ada adalah API key, bukan login langganan. |
 | K-14 | 3 Nov 2026 | Penggabungan: **PR dokumen sekarang**, lalu **satu PR per tahap** sesudah gerbangnya lolos. | Jawaban pemilik. Dokumen langsung terbaca dari branch utama. |
+| K-15 | 3 Nov 2026 | Pemilik **tidak punya API key Anthropic**, hanya Claude Pro. Jalur Claude utama di aplikasi = **mode salin-tempel lewat Project Claude.ai** (M4.10). Jalur API (M4.3) tetap dibangun untuk pengguna yang punya kunci. Animasi bawaan (M4.2) ditulis saat pengembangan lewat Claude Code. | Jawaban pemilik atas T-7. |
+| K-16 | 3 Nov 2026 | Mengubah K-9: **paket mesin dan bundel komposisi ikut di dalam aplikasi**; yang diunduh saat pertama dipakai hanya **Node** dan **Chrome Headless Shell**. | Build uji dari `workflow_dispatch` tidak punya rilis untuk diunduhi, dan dengan begitu versi mesin selalu sama dengan versi komposisinya. Biayanya ±24 MB terkompresi di unduhan aplikasi. |
 
 ### Masih terbuka (pemilik yang memutuskan)
 
@@ -136,7 +138,7 @@ Tanda status: ⬜ belum mulai · 🟨 sedang dikerjakan · ✅ selesai · ⛔ te
 | T-4 | Layanan suara AI tambahan: ElevenLabs atau lainnya? | Menunggu pemilik | MS.1 |
 | T-5 | Ambang kecepatan render yang masih bisa diterima | Paling lama 4x durasi video (video 60 detik selesai ≤ 4 menit) | Gerbang Tahap 0 |
 | T-6 | Montase bisa dipakai di HP? | Tidak di rilis pertama. Di HP hanya daftar proyek dan ekspor. | M1.7 |
-| T-7 | Apakah pemilik membuat API key Claude (platform.claude.com, isi saldo, terpisah dari Pro)? | Ya, untuk uji M0.5 dan Tahap 4. Perkiraan biaya: ±$0,1–0,25 per animasi (lihat M4.3). Tanpa kunci, M0.5 memakai Gemini/OpenRouter atau mode salin-tempel. | M0.5 |
+| ~~T-7~~ | ~~Apakah pemilik membuat API key Claude?~~ Dijawab 3 Nov 2026: tidak, hanya Claude Pro. Lihat K-15. | | |
 
 **Catatan lisensi Remotion:** gratis, termasuk untuk komersial, bagi perorangan
 atau usaha dengan paling banyak 3 karyawan. Kalau usaha OmniClip melewati itu,
@@ -268,9 +270,11 @@ bulan bekerja.
   Chrome Headless Shell (`ensureBrowser()` Remotion) masuk ke
   `STORAGE_DIR/mesin_montase/`. Versi dan SHA-256 dipatok, polanya sama dengan
   `alat_yt.py`. Ukur total ukuran unduhannya.
-- [ ] **M0.5** Satu animasi buatan AI: minta koneksi AI yang ada menulis satu
-  komponen sesuai [kontrak](#21-kontrak-komponen-animasi-ai), kompilasi dengan
-  `sucrase`, lalu putar di Player **dan** render di mesin. Bingkainya harus sama.
+- [ ] **M0.5** Satu animasi buatan AI: komponen sesuai
+  [kontrak](#21-kontrak-komponen-animasi-ai) ditulis Claude (lewat Claude Code,
+  karena belum ada API key, K-15), dikompilasi dengan `sucrase`, diperiksa,
+  lalu diputar di Player **dan** dirender di mesin. Bingkainya harus sama. Jalur
+  memanggil AI dari dalam aplikasi baru dibangun di Tahap 4.
 - [ ] **M0.6** Kotak pasir: Player berjalan di iframe
   `sandbox="allow-scripts"` (tanpa `allow-same-origin`), dikendalikan lewat
   `postMessage`, dan tetap bisa memutar video dari backend (perlu CORS dan
@@ -533,18 +537,35 @@ Yang disukai disimpan ke pustaka animasi, bisa dipakai di proyek lain
   proyek lain. Animasi AI yang belum lolos pemeriksaan tidak bisa disimpan.
 - [ ] **M4.9** Uji 10 permintaan dari [bagian 25](#25-daftar-uji-permintaan-animasi),
   hasilnya dicatat di sana, termasuk biaya API sebenarnya.
-- [ ] **M4.10** Mode salin-tempel, untuk memakai langganan Claude Pro (atau chat
-  AI lain) tanpa API key (K-13):
-  1. tombol "Salin permintaan" menyalin prompt lengkap (kontrak, contoh,
-     konteks proyek, permintaan) ke papan klip;
-  2. pengguna menempelkannya di Claude.ai, lalu menyalin balasannya;
-  3. tombol "Tempel hasil" menerima balasan itu. OmniClip mengambil blok kode
-     dan metadata, lalu memeriksanya dengan pemeriksa M4.4 yang sama;
-  4. kalau gagal, galatnya disusun jadi permintaan perbaikan yang bisa disalin
-     lagi.
+- [ ] **M4.10** Mode salin-tempel lewat **Project Claude.ai**, untuk memakai
+  langganan Claude Pro (atau chat AI lain) tanpa API key (K-13, K-15).
+
+  **Persiapan sekali saja:**
+  1. Tombol "Unduh paket Project Claude" memberi satu berkas `.md` berisi
+     instruksi proyek, kontrak komponen ([bagian 21](#21-kontrak-komponen-animasi-ai)),
+     daftar font dan zona aman, serta contoh dari pustaka bawaan.
+  2. Pengguna membuat Project baru di Claude.ai (misalnya "OmniClip Montase"),
+     menempel bagian instruksinya ke *Project instructions*, dan mengunggah
+     berkasnya ke *Project knowledge*. Langkah ini tampil di layar bergambar.
+  3. Paket punya nomor versi. Kalau kontrak berubah di versi OmniClip
+     berikutnya, aplikasi memberi tahu bahwa paketnya perlu diunggah ulang.
+
+  **Setiap permintaan:**
+  1. Tombol "Salin permintaan" menyalin pesan pendek: permintaan pengguna,
+     konteks rentang video (kata yang diucapkan, momen tawa/kaget, letak
+     wajah), ukuran kanvas, durasi, dan nomor versi paket.
+  2. Tombol "Buka Claude.ai" membuka tab baru. Prefill alamat (`?q=`) tidak
+     resmi dan pernah berhenti bekerja, jadi papan klip tetap jalan utamanya.
+  3. Pengguna menempel di chat baru dalam Project itu, lalu menyalin seluruh
+     balasan Claude.
+  4. Tombol "Tempel hasil" menerima balasan itu. OmniClip mengambil blok kode
+     dan metadata, lalu memeriksanya dengan pemeriksa M4.4 yang sama.
+  5. Kalau gagal, galatnya disusun jadi pesan perbaikan untuk ditempel di chat
+     yang sama. Revisi ("lebih cepat", "warna merah") juga lewat chat itu.
 
   Lebih lambat daripada lewat API, tapi tanpa biaya tambahan di luar
-  langganan.
+  langganan. Format permintaan dan balasan sama dengan jalur API (M4.3), jadi
+  pemeriksa, panel properti, dan pustaka tidak tahu jalur mana yang dipakai.
 
 **Selesai bila:** paling sedikit 8 dari 10 permintaan uji lolos pemeriksaan
 tanpa campur tangan, dan semuanya bisa dikoreksi lewat panel properti.
@@ -832,28 +853,36 @@ merender. Ia tidak berjalan terus.
 
 **Isi dan asalnya:**
 
-| Bagian | Asal | Kira-kira ukuran (diukur di M0.4) |
+| Bagian | Asal | Ukuran (terukur 3 Nov 2026, Linux) |
 |---|---|---|
-| Node 22 LTS portabel | nodejs.org, versi + SHA-256 dipatok | ? |
-| Paket mesin (`node_modules` produksi + skrip) | Dibangun CI per sistem operasi, dilampirkan ke rilis GitHub, SHA-256 ditanam ke aplikasi saat build | ? |
-| Chrome Headless Shell | `ensureBrowser()` dari `@remotion/renderer` | ? |
-| Bundel komposisi | Dibangun CI, **ikut di dalam aplikasi** (kecil, berubah tiap versi) | ? |
+| Node v22.23.4 portabel | **Diunduh** dari nodejs.org saat Montase disiapkan, SHA-256 dipatok (`montase/unduh.py`), npm/header dibuang sesudah dibongkar | unduh 31 MB (Windows 36 MB), terbongkar 126 MB |
+| Paket mesin (`node_modules` produksi + `src/` + `uji/`) | **Ikut di dalam aplikasi** (K-16), dibangun CI per sistem operasi | 75 MB terbongkar, ±24 MB terkompresi |
+| Bundel komposisi | **Ikut di dalam aplikasi**, dibangun CI (`src/bundel.mjs`, tanpa source map) | 16 MB |
+| Chrome Headless Shell | **Diunduh** Remotion (`ensureBrowser()`) ke `node_modules/.remotion` milik paket mesin | belum terukur (diblokir jaringan container, lihat bagian 24) |
 
-Semuanya disimpan di `STORAGE_DIR/mesin_montase/<versi>/`. Paket mesin hanya
-berubah ketika versi Remotion naik, sedangkan bundel komposisi ikut setiap rilis
-OmniClip.
+Node disimpan di `STORAGE_DIR/mesin_montase/node-v<versi>/`. Di aplikasi
+terbungkus, paket mesin dan bundel ada di `<bundel>/montase_mesin/`.
 
-**Mode pengembangan:** `cd montase-mesin && npm ci`, lalu `mesin.py` memakai
-Node sistem.
+**Mode pengembangan:** sekali `cd montase-mesin && npm ci && node src/bundel.mjs`,
+lalu `mesin.py` memakai Node sistem (`node` di PATH, versi ≥ 22). Bundel harus
+dibangun ulang setiap kali `frontend/src/features/montase/komposisi/` berubah.
+
+**Variabel lingkungan untuk uji:** `OMNICLIP_NODE` (Node tertentu) dan
+`OMNICLIP_MONTASE_BROWSER` (Chrome/Chromium headless tertentu, untuk komputer
+yang tidak bisa mengunduh Chrome Headless Shell).
 
 **Antarmuka Python → Node:** satu perintah per pemanggilan, masukan JSON di
 stdin, keluaran JSON per baris di stdout:
 
 ```
-node src/render.mjs  < {"serve_url": "...", "props": {...}, "keluar": "...", "kualitas": "tinggi"}
-→ {"kemajuan": 0.42, "bingkai": 1134, "eta": 61}
-→ {"selesai": true, "berkas": "...", "detik": 143.2}
+node src/render.mjs  < {"serve_url": "...", "dokumen": {...}, "sumber": {...}, "keluar": "...", "crf": 18}
+→ {"tahap": "menyiapkan"}
+→ {"kemajuan": 0.42, "bingkai": 380, "total": 900}
+→ {"selesai": true, "berkas": "...", "detik": 87.0, "bingkai": 900}
 ```
+
+Perintah yang ada: `render`, `kompilasi`, `siapkan` (Chrome), dan `bundel`
+(hanya CI/pengembangan). Pemanggilnya `backend/app/montase/mesin.py`.
 
 **Aturan menjalankan:**
 

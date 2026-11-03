@@ -106,3 +106,10 @@ simplescreenrecorder-*.mkv
 # yang ada di sana tidak bisa ditarik kembali, dan mengganti client id berarti
 # memutus sambungan semua orang yang sudah login.
 backend/app/identitas_google.py
+
+# Montase (JOB-4): bahan uji, render sementara, dan mesin yang diunduh
+# (Node portabel, ±100 MB) tidak pernah masuk riwayat git. Bundel komposisi
+# adalah hasil build (montase-mesin/src/bundel.mjs), bukan sumber.
+OmniClip_Storage/montase/
+OmniClip_Storage/mesin_montase/
+montase-mesin/dist/

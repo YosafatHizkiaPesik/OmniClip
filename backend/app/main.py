@@ -35,6 +35,8 @@ from .routers import settings as settings_router
 from .routers import update as update_router
 from .routers import uploads as uploads_router
 from .routers import videos as videos_router
+from .montase import router as montase_router
+from .montase.cors import CorsBertoken
 from .services import auth, cf_access
 from .services.events import broker
 from .services.jobs import queue
@@ -149,6 +151,10 @@ async def lifespan(app: FastAPI):
     # AI lokal: unduhan mesin llama.cpp dan model GGUF (gigabita), lajur net.
     from .services.ai_lokal import run_pasang as run_ai_lokal
     queue.register("ai_lokal_pasang", run_ai_lokal, lane="net")
+    # Montase (JOB-4): unduhan Node/Chrome di lajur net, render di lajur cpu.
+    from .montase import pekerjaan as montase_kerja
+    queue.register("montase_siapkan", montase_kerja.run_siapkan, lane="net")
+    queue.register("montase_uji_render", montase_kerja.run_uji_render, lane="cpu")
     # Lajur jaringan: sebagian besar waktunya menunggu model menonton klip, dan
     # di lajur cpu itu menahan render yang tidak ada hubungannya.
     from .services.sutradara_ai import run_sutradara
@@ -304,6 +310,7 @@ app.include_router(projects_router.router)
 app.include_router(profil_router.router)
 app.include_router(uploads_router.router)
 app.include_router(update_router.router)
+app.include_router(montase_router.router)
 
 
 @app.get("/api/health")
@@ -348,6 +355,7 @@ async def gerbang(request: Request, call_next):
     path = request.url.path
     if (path.startswith("/api/")
             and path not in auth.OPEN_PATHS
+            and not path.startswith(auth.OPEN_PREFIXES)
             and auth.auth_required()
             and not auth.valid_session(request.cookies.get(auth.COOKIE_NAME))):
         # Cloudflare Access sudah meminta Anda masuk dengan Google sebelum
@@ -393,6 +401,12 @@ async def gerbang(request: Request, call_next):
     response.headers["Referrer-Policy"] = "same-origin"
     response.headers["X-Content-Type-Options"] = "nosniff"
     return response
+
+
+# Dipasang SESUDAH gerbang dan CORSMiddleware supaya menjadi lapisan terluar:
+# preflight jalur bertoken Montase harus dijawab sebelum CORSMiddleware
+# menolaknya. Lihat app/montase/cors.py.
+app.add_middleware(CorsBertoken)
 
 
 @app.get("/robots.txt", include_in_schema=False)
@@ -444,7 +458,14 @@ if FRONTEND_DIST.is_dir():
                     and candidate.is_relative_to(FRONTEND_DIST.resolve())):
                 cache = ("public, max-age=31536000, immutable"
                          if full_path.startswith("assets/") else "no-cache")
-                return FileResponse(candidate, headers={"Cache-Control": cache})
+                kepala = {"Cache-Control": cache}
+                # Iframe kotak pasir pratinjau Montase beralamat `null`, dan
+                # skrip modulnya dimuat dengan CORS. Isi assets/ sama untuk
+                # semua orang dan tidak memuat data apa pun, jadi izin `*` di
+                # sini tidak membuka apa-apa (JOB-4.md bagian 20).
+                if full_path.startswith("assets/"):
+                    kepala["Access-Control-Allow-Origin"] = "*"
+                return FileResponse(candidate, headers=kepala)
         # Rute React (/studio/xxx, /watch/xxx) bukan berkas: kembalikan shell-nya
         # dan biarkan router di peramban yang memutuskan.
         return FileResponse(_INDEX, headers={"Cache-Control": "no-cache"})
