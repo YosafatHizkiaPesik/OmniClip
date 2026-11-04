@@ -20,12 +20,24 @@ import * as jsxRuntime from 'react/jsx-runtime';
 import * as Remotion from 'remotion';
 import { cancelRender, continueRender, delayRender } from 'remotion';
 import * as zod from 'zod';
+import * as Shapes from '@remotion/shapes';
+import * as Paths from '@remotion/paths';
+import * as Noise from '@remotion/noise';
+import * as ZodTypes from '@remotion/zod-types';
+import * as Transitions from '@remotion/transitions';
 
+// Sama dengan IMPOR_DIIZINKAN di montase-mesin/src/kompilasi.mjs (dijaga
+// test_montase_batas.py): yang lolos pemeriksa mesin harus bisa dimuat di sini.
 export const MODUL_DIIZINKAN = Object.freeze({
-  react: React,
+  'react': React,
   'react/jsx-runtime': jsxRuntime,
-  remotion: Remotion,
-  zod,
+  'remotion': Remotion,
+  'zod': zod,
+  '@remotion/shapes': Shapes,
+  '@remotion/paths': Paths,
+  '@remotion/noise': Noise,
+  '@remotion/zod-types': ZodTypes,
+  '@remotion/transitions': Transitions,
 });
 
 /** Menjalankan kode CommonJS hasil kompilasi dan mengembalikan `exports`-nya. */

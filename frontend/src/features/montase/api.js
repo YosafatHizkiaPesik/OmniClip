@@ -43,7 +43,11 @@ export function simpanRekaman(blob, nama) {
 /** Tema teks siap pakai (dari tema_judul.py) dan font bawaan, sekali per sesi. */
 let gayaTeks = null;
 export function ambilGayaTeks() {
-  if (!gayaTeks) gayaTeks = apiGet('/montase/gaya-teks').catch((e) => { gayaTeks = null; throw e; });
+  if (!gayaTeks) {
+    gayaTeks = apiGet('/montase/gaya-teks')
+      .then((d) => { setFontBawaan((d.font ?? []).map((f) => f.keluarga)); return d; })
+      .catch((e) => { gayaTeks = null; throw e; });
+  }
   return gayaTeks;
 }
 
@@ -51,12 +55,25 @@ export function alamatFont(token, keluarga) {
   return `/api/montase/t/${token}/font/${encodeURIComponent(keluarga)}`;
 }
 
-/** Font yang dipakai item teks dokumen, urut, untuk kunci memo `sumber`. */
+/**
+ * Font yang dipakai dokumen, urut, untuk `sumber.font` dan kunci memonya:
+ * font item teks, ditambah semua font bawaan bila ada animasi buatan AI
+ * (sama dengan teks.font_dipakai di server).
+ */
+let fontBawaan = [];
+export function setFontBawaan(daftar) {
+  fontBawaan = daftar;
+}
 export function fontDipakai(dokumen) {
   const hasil = new Set();
+  let adaAi = false;
   for (const l of dokumen?.lajur ?? []) {
-    for (const i of l.item) if (i.jenis === 'teks' && i.gaya?.font) hasil.add(i.gaya.font);
+    for (const i of l.item) {
+      if (i.jenis === 'teks' && i.gaya?.font) hasil.add(i.gaya.font);
+      if (i.jenis === 'motion' && !String(i.komponen ?? '').startsWith('ko_')) adaAi = true;
+    }
   }
+  if (adaAi) fontBawaan.forEach((f) => hasil.add(f));
   return [...hasil].sort();
 }
 

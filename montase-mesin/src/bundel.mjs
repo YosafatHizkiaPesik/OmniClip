@@ -24,7 +24,10 @@ import { bundle } from '@remotion/bundler';
 const AKAR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
 
-const DIPAKSA = ['react', 'react-dom', 'remotion', '@remotion/media', 'zod'];
+const DIPAKSA = [
+  'react', 'react-dom', 'remotion', '@remotion/media', 'zod', '@remotion/shapes', '@remotion/paths',
+  '@remotion/noise', '@remotion/zod-types', '@remotion/transitions',
+];
 
 function folderPaket(nama) {
   return path.dirname(require.resolve(`${nama}/package.json`));
