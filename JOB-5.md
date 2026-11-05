@@ -25,11 +25,11 @@ lupa untuk selalu mencatatnya agar ... sesi lain masih bisa melanjutkannya".
 | P1 Preset caption subtitle | ✅ 9f6c433 | 10 gaya, sorot kotak/besar |
 | P2 Preset teks milik sendiri | ✅ fc47fb6 | simpan/pakai/hapus gaya |
 | P3 Templat video bawaan | ✅ 1f9b84c | templat bawaan |
-| P4 Templat milik sendiri | ⬜ | |
+| P4 Templat milik sendiri | ✅ 1987605 | templat sendiri |
 | D1 Katalog fitur (FITUR.md) | ⬜ | |
 | D2 Saran fitur berikutnya | ⬜ | |
 
-**Tugas berikutnya:** `P4`.
+**Tugas berikutnya:** `D1`.
 
 **Melanjutkan di sesi baru:** baca papan ini dan bagian 4. Kerjakan tugas
 berikutnya; bila ada catatan "SEBAGIAN" di bawah butirnya, lanjutkan dari
@@ -150,7 +150,8 @@ O3 tetap memperingatkan bila hasilnya terlalu mirip video sebelumnya.
   (selesai 5 Nov 2026, commit 1f9b84c) 5 templat × 3 variasi; op baru penanda & lajur_caption; op teks menerima gaya; skema props tiap komponen diuji (templat.test.js); uji UI Playwright lolos
   podcast, Fakta/edukasi, Sebelum-sesudah): dipilih saat membuat proyek baru,
   atau diterapkan ke proyek berjalan sebagai USULAN (model/usulan.js).
-- [ ] **P4** Templat milik sendiri: "Simpan sebagai templat" dari proyek
+- [x] **P4** Templat milik sendiri: "Simpan sebagai templat" dari proyek
+  (selesai 5 Nov 2026, commit 1987605) model/templatSaya.js (ambilTemplat, operasiTemplatSaya, operasiPilihan), router /templat-saya (maks 20, 200 KB, item ber-bahan ditolak), PilihTemplat bagian Templat saya + hapus, tab Asisten Simpan sebagai templat. Tes templatSaya.test.js + test_montase_templat_saya.py; Playwright 8/8.
   (susunan lajur, teks, animasi, gaya, tanpa bahan video), dipakai seperti P3.
 
 ## 6. Dokumentasi untuk pemilik (diminta 5 Nov 2026)
