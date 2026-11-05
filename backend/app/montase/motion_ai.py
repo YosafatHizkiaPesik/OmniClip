@@ -320,7 +320,7 @@ def nilai_bingkai(permintaan: str, gambar: list[bytes], *, utamakan: Optional[st
         return None
     skema = {"type": "OBJECT", "properties": {"sesuai": {"type": "BOOLEAN"}, "catatan": {"type": "STRING"}},
              "required": ["sesuai", "catatan"]}
-    bahan = [{"teks": f"Permintaan animasi: {permintaan}\nIni lima bingkai contohnya (10-90% durasi). "
+    bahan = [{"teks": f"Permintaan animasi: {permintaan}\nIni lima bingkai contohnya (5-95% durasi). "
                       "Apakah isinya sesuai permintaan? Catatan singkat, satu kalimat."}]
     bahan += [{"gambar": g, "mime": "image/jpeg"} for g in gambar[:5]]
     try:

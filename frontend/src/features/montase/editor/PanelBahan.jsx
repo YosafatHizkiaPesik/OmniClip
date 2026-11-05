@@ -24,6 +24,7 @@ import {
 import { JENIS_SERET_BAHAN } from './garisPutar.js';
 import PanelSuara from './PanelSuara.jsx';
 import PanelAnimasi from './PanelAnimasi.jsx';
+import PanelAsisten from './PanelAsisten.jsx';
 
 const ASAL = [
   { id: 'unduhan', kunci: 'montase.bahan.unduhan' },
@@ -69,7 +70,7 @@ function BarisBahan({ b, token, onTambah, sibuk, bisaDiseret = false }) {
   );
 }
 
-export default function PanelBahan({ token, onTambahKeLinimasa, onTambahSuara, onBahan, animasi }) {
+export default function PanelBahan({ token, onTambahKeLinimasa, onTambahSuara, onBahan, animasi, asisten }) {
   const t = useT();
   const [bahan, setBahan] = useState([]);
   const [asal, setAsal] = useState(null);
@@ -78,6 +79,8 @@ export default function PanelBahan({ token, onTambahKeLinimasa, onTambahSuara, o
   const [unggah, setUnggah] = useState(null);
   const [galat, setGalat] = useState(null);
   const masukan = useRef(null);
+  // Tab yang bukan daftar berkas: isinya panel sendiri.
+  const tabPanel = asal === 'suara' || asal === 'animasi' || asal === 'asisten';
 
   const muat = useCallback(() => daftarBahan()
     .then((daftar) => { setBahan(daftar); onBahan?.(daftar); })
@@ -92,10 +95,10 @@ export default function PanelBahan({ token, onTambahKeLinimasa, onTambahSuara, o
   }, [bahan, muat]);
 
   useEffect(() => {
-    if (!asal || asal === 'suara' || asal === 'animasi') return;
+    if (!asal || tabPanel) return;
     setSumber(null);
     sumberBahan(asal).then(setSumber).catch((e) => { setGalat(e.message); setSumber([]); });
-  }, [asal]);
+  }, [asal, tabPanel]);
 
   const tambahDariSumber = async (s) => {
     const kunci = `${s.asal}:${s.rujukan}`;
@@ -167,14 +170,22 @@ export default function PanelBahan({ token, onTambahKeLinimasa, onTambahSuara, o
         >
           {t('montase.ai.tab')}
         </button>
+        {asisten && (
+          <button type="button" role="tab" aria-selected={asal === 'asisten'}
+                  className={asal === 'asisten' ? 'aktif' : ''} onClick={() => setAsal('asisten')}
+          >
+            {t('montase.asisten.tab')}
+          </button>
+        )}
       </div>
+      {asal === 'asisten' && <PanelAsisten bahan={bahan} {...asisten} />}
       {asal === 'animasi' && <PanelAnimasi token={token} {...animasi} />}
 
       {asal === 'suara' && (
         <PanelSuara onTambahSuara={async (b, narasi) => { await muat(); onTambahSuara(b, narasi); }} />
       )}
 
-      <ul className="montase-bahan-daftar" hidden={asal === 'suara' || asal === 'animasi'}>
+      <ul className="montase-bahan-daftar" hidden={tabPanel}>
         {asal === null && bahan.length === 0 && (
           <li className="montase-kosong-kecil">{t('montase.bahan.kosong')}</li>
         )}
