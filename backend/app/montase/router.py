@@ -514,6 +514,59 @@ async def simpan_rekaman_video(berkas: UploadFile = File(...)):
         tmp.unlink(missing_ok=True)
 
 
+# --- preset teks milik sendiri (JOB-5 P2) ----------------------------------------
+
+PRESET_TEKS_MAKS = 40
+
+
+def _kunci_preset(pid: int) -> str:
+    return f"montase.preset_teks.{pid}"
+
+
+def _preset_teks(pid: int) -> list[dict]:
+    import json as _json
+    try:
+        isi = _json.loads(settings_repo.get(_kunci_preset(pid), "") or "[]")
+    except ValueError:
+        return []
+    return [p for p in isi if isinstance(p, dict) and p.get("id") and isinstance(p.get("gaya"), dict)]
+
+
+class PresetTeks(BaseModel):
+    nama: str = Field(..., min_length=1, max_length=40)
+    gaya: dict[str, Any]
+
+
+@router.get("/preset-teks")
+def daftar_preset_teks():
+    """Gaya teks yang disimpan pemilik profil ini, terbaru dulu."""
+    return {"preset": _preset_teks(profil.kini())}
+
+
+@router.post("/preset-teks")
+def simpan_preset_teks(b: PresetTeks):
+    """Menyimpan `item.gaya` sebagai preset bernama; nama yang sama menimpa."""
+    import json as _json
+    import secrets
+    pid = profil.kini()
+    if len(_json.dumps(b.gaya)) > 4000:
+        raise InvalidInput("Gaya teks terlalu besar.")
+    gaya = {k: v for k, v in b.gaya.items() if k not in ("tema",)}
+    lama = [p for p in _preset_teks(pid) if p["nama"].strip().lower() != b.nama.strip().lower()]
+    baru = [{"id": "pt_" + secrets.token_hex(4), "nama": b.nama.strip(), "gaya": gaya}] + lama
+    settings_repo.set_value(_kunci_preset(pid), _json.dumps(baru[:PRESET_TEKS_MAKS], ensure_ascii=False))
+    return {"preset": baru[:PRESET_TEKS_MAKS]}
+
+
+@router.delete("/preset-teks/{preset_id}")
+def hapus_preset_teks(preset_id: str):
+    import json as _json
+    pid = profil.kini()
+    sisa = [p for p in _preset_teks(pid) if p["id"] != preset_id]
+    settings_repo.set_value(_kunci_preset(pid), _json.dumps(sisa, ensure_ascii=False))
+    return {"preset": sisa}
+
+
 @router.get("/gaya-teks")
 def gaya_teks():
     """Tema judul siap pakai dan font bawaan untuk item teks (M3.1)."""

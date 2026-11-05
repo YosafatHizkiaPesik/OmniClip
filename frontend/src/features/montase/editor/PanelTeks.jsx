@@ -8,10 +8,12 @@
  * keputusan tata letak, bukan gaya.
  */
 import React, { useEffect, useState } from 'react';
-import { AlignCenter, AlignLeft, AlignRight } from 'lucide-react';
+import { AlignCenter, AlignLeft, AlignRight, Save, X } from 'lucide-react';
 import { useT } from '../../../lib/i18n';
 import { fontStack, loadFonts } from '../../../lib/fonts';
-import { ambilGayaTeks } from '../api.js';
+import {
+  ambilGayaTeks, daftarPresetTeks, hapusPresetTeks, simpanPresetTeks,
+} from '../api.js';
 
 const LATAR = ['tanpa', 'pelat', 'sorot', 'pita', 'label'];
 const GERAK = ['muncul', 'pop', 'hentak', 'naik', 'turun', 'geser', 'lempar', 'getar', 'kedip', 'pelan'];
@@ -40,6 +42,51 @@ function ContohTema({ gaya }) {
     >
       Aa
     </span>
+  );
+}
+
+/**
+ * Gaya saya (JOB-5 P2): gaya teks yang pernah diatur sendiri disimpan dengan
+ * nama dan dipakai lagi di proyek mana pun. Letak dan perataan tidak ikut
+ * ditimpa saat dipakai, sama dengan tema bawaan.
+ */
+function GayaSaya({ gaya, onPakai }) {
+  const t = useT();
+  const [daftar, setDaftar] = useState([]);
+  const [nama, setNama] = useState('');
+  const [galat, setGalat] = useState(null);
+  useEffect(() => { daftarPresetTeks().then(setDaftar).catch(() => {}); }, []);
+  const jalan = (janji) => janji.then(setDaftar).catch((e) => setGalat(e.message));
+  return (
+    <section className="montase-bagian">
+      <h3>{t('montase.preset_teks.judul')}</h3>
+      {galat && <p className="montase-galat" role="alert">{galat}</p>}
+      {daftar.length === 0 && <p className="montase-petunjuk">{t('montase.preset_teks.kosong')}</p>}
+      <div className="montase-tema-kisi">
+        {daftar.map((p) => (
+          <span key={p.id} className="montase-preset-teks">
+            <button type="button" className="montase-tema" onClick={() => onPakai(p.gaya)} title={p.nama}>
+              <ContohTema gaya={p.gaya} />
+              <small>{p.nama}</small>
+            </button>
+            <button type="button" className="montase-preset-hapus" onClick={() => jalan(hapusPresetTeks(p.id))}
+                    aria-label={t('montase.preset_teks.hapus', { nama: p.nama })} title={t('montase.preset_teks.hapus', { nama: p.nama })}
+            >
+              <X size={11} />
+            </button>
+          </span>
+        ))}
+      </div>
+      <div className="montase-revisi">
+        <input value={nama} maxLength={40} placeholder={t('montase.preset_teks.nama')}
+               aria-label={t('montase.preset_teks.nama')} onChange={(e) => setNama(e.target.value)} />
+        <button type="button" className="btn-secondary" disabled={!nama.trim()}
+                onClick={() => { jalan(simpanPresetTeks(nama.trim(), gaya)); setNama(''); }}
+        >
+          <Save size={13} />{t('montase.preset_teks.simpan')}
+        </button>
+      </div>
+    </section>
   );
 }
 
@@ -96,6 +143,10 @@ export default function PanelTeks({ item, onUbah }) {
           ))}
         </div>
       </section>
+
+      <GayaSaya gaya={gaya} onPakai={(g) => onUbah({
+        gaya: { ...g, letak: gaya.letak ?? 'tengah', perataan: gaya.perataan ?? 'tengah' },
+      })} />
 
       <section className="montase-bagian">
         <h3>{t('montase.teks.huruf')}</h3>

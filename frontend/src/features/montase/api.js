@@ -72,6 +72,11 @@ export function simpanRekamanVideo(blob, nama) {
   return apiUnggah('/montase/rekam-video', data);
 }
 
+/** Preset teks milik sendiri (JOB-5 P2), per profil. */
+export const daftarPresetTeks = () => apiGet('/montase/preset-teks').then((r) => r.preset ?? []);
+export const simpanPresetTeks = (nama, gaya) => apiPost('/montase/preset-teks', { nama, gaya }).then((r) => r.preset ?? []);
+export const hapusPresetTeks = (id) => apiDelete(`/montase/preset-teks/${encodeURIComponent(id)}`).then((r) => r.preset ?? []);
+
 /** Tema teks siap pakai (dari tema_judul.py) dan font bawaan, sekali per sesi. */
 let gayaTeks = null;
 export function ambilGayaTeks() {

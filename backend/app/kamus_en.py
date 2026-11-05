@@ -1225,6 +1225,7 @@ KATALOG = [
     ("Diam {d} detik.", "Silent for {d} seconds."),
     ("Kata isian, {d} detik.", "Filler word, {d} seconds."),
     ("Mencari wajah", "Looking for faces"),
+    ("Gaya teks terlalu besar.", "The text style is too large."),
     ("Rekaman kamera tidak bisa dibaca. Coba rekam ulang.", "The camera recording could not be read. Try recording again."),
     ("Rekaman terlalu besar.", "The recording is too large."),
     ("Mencari momen terkuat", "Looking for the strongest moment"),
