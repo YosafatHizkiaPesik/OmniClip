@@ -78,6 +78,18 @@ describe('terapkanOperasi', () => {
     expect(anim).toEqual([0, 180]);
   });
 
+  it('geser_semua lalu klip di awal: cuplikan pembuka', () => {
+    let d = tambahBahan(kosong(), { id: 'b1', jenis: 'video', durasi: 10, nama: 'v' }).dokumen;
+    d = { ...d, penanda: [{ t: 30, label: 'x' }] };
+    const { dokumen } = terapkanOperasi(d, [
+      { id: 'c1', jenis: 'geser_semua', delta: 60 },
+      { id: 'c2', jenis: 'klip', bahan: 'b1', bahan_info: info(10), mulai: 0, potong_awal: 120, durasi: 60 },
+    ]);
+    expect(dokumen.lajur[0].item.map((i) => [i.mulai, i.durasi, i.potong_awal])).toEqual([[60, 300, 0], [0, 60, 120]]);
+    expect(dokumen.penanda[0].t).toBe(90);
+    expect(dokumen.durasi).toBe(360);
+  });
+
   it('operasi yang itemnya sudah tidak ada dilewati', () => {
     const { dilewati } = terapkanOperasi(kosong(), [{ id: 'p', jenis: 'potong', item: 'hilang', dari: 0, sampai: 9 }]);
     expect(dilewati).toEqual(['p']);

@@ -83,6 +83,25 @@ function bayanganTeks(g) {
   return lapis.length ? lapis.join(', ') : undefined;
 }
 
+/**
+ * Kata aktif subtitle (JOB-5 P1): `sorot` warna (bawaan), kotak berwarna di
+ * belakang kata, atau kata membesar. Kotak memakai box-decoration-break supaya
+ * tetap rapi bila katanya terpotong baris.
+ */
+function gayaSorot(g, ukuran) {
+  if (g.sorot === 'kotak') {
+    return {
+      background: g.warna_sorot, color: g.warna ?? '#ffffff', borderRadius: 0.16 * ukuran,
+      padding: `0 ${0.12 * ukuran}px`, margin: `0 -${0.06 * ukuran}px`,
+      boxDecorationBreak: 'clone', WebkitBoxDecorationBreak: 'clone',
+    };
+  }
+  if (g.sorot === 'besar') {
+    return { color: g.warna_sorot, display: 'inline-block', transform: 'scale(1.18)', transformOrigin: 'center bottom' };
+  }
+  return { color: g.warna_sorot };
+}
+
 const RATA = { kiri: 'flex-start', tengah: 'center', kanan: 'flex-end' };
 const RATA_TEKS = { kiri: 'left', tengah: 'center', kanan: 'right' };
 
@@ -151,7 +170,7 @@ export default function ItemTeks({ item, sumber }) {
       return (
         <React.Fragment key={i}>
           {i > 0 ? ' ' : null}
-          <span style={aktif ? { color: g.warna_sorot } : undefined}>{w}</span>
+          <span style={aktif ? gayaSorot(g, ukuran) : undefined}>{w}</span>
         </React.Fragment>
       );
     });

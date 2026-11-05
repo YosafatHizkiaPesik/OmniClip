@@ -178,8 +178,33 @@ def kredit(sumber: Optional[dict]) -> str:
     return f"{baris}\n{url}" if url else baris
 
 
+def teks_bab(bab: Optional[list]) -> str:
+    """
+    Bab (chapters) untuk deskripsi YouTube (JOB-5 O7). YouTube hanya membuatnya
+    bila: baris pertama 0:00, paling sedikit tiga bab, masing-masing paling
+    sedikit 10 detik. Yang tidak memenuhi dibuang di sini, bukan dikirim lalu
+    diabaikan diam-diam oleh YouTube.
+    """
+    rapi = []
+    for b in bab or []:
+        try:
+            t = float(b.get("t") or 0)
+        except (TypeError, ValueError):
+            continue
+        judul = " ".join(str(b.get("judul") or "").split())[:80]
+        if judul and (not rapi or t - rapi[-1][0] >= 10):
+            rapi.append((t, judul))
+    if len(rapi) < 3 or rapi[0][0] > 0.5:
+        return ""
+    def waktu(t: float) -> str:
+        t = int(t)
+        return f"{t // 3600}:{t // 60 % 60:02d}:{t % 60:02d}" if t >= 3600 else f"{t // 60}:{t % 60:02d}"
+    return "\n".join(f"{waktu(t if i else 0)} {j}" for i, (t, j) in enumerate(rapi))
+
+
 def deskripsi(templat: str, *, judul: str, hashtag: list[str],
-              sumber: Optional[dict] = None, pakai_kredit: bool = True) -> str:
+              sumber: Optional[dict] = None, pakai_kredit: bool = True,
+              bab: Optional[list] = None) -> str:
     """
     Deskripsi unggahan dari templat profil.
 
@@ -195,6 +220,13 @@ def deskripsi(templat: str, *, judul: str, hashtag: list[str],
         teks = teks.rstrip() + "\n\n{sumber}"
     teks = (teks.replace("{judul}", judul).replace("{hashtag}", tagar)
             .replace("{sumber}", baris_kredit))
+    blok_bab = teks_bab(bab)
+    if blok_bab:
+        # Bab sesudah kalimat pembuka, sebelum kredit dan tagar.
+        if baris_kredit and baris_kredit in teks:
+            teks = teks.replace(baris_kredit, blok_bab + "\n\n" + baris_kredit, 1)
+        else:
+            teks = teks.rstrip() + "\n\n" + blok_bab
     # Templat yang menaruh {sumber} sendirian di satu baris meninggalkan baris
     # kosong beruntun bila sumbernya tak dikenal.
     while "\n\n\n" in teks:

@@ -50,13 +50,16 @@ def daftar_suara() -> list[dict]:
              "mesin": v["engine"], "siap": bool(v["ready"])} for v in tts.catalogue()]
 
 
-def _catat(pid: int, asal: str, rujukan: str, jalur: Path, nama: str) -> dict:
+def _catat(pid: int, asal: str, rujukan: str, jalur: Path, nama: str, *, jenis: str = "audio") -> dict:
     info = probe(jalur)
     data = {
         "asal": asal, "rujukan": rujukan, "nama": nama[:200],
-        "rel_path": media_repo.rel_to_storage(jalur), "jenis": "audio",
-        "durasi": info.get("duration"), "lebar": None, "tinggi": None, "fps": None,
-        "ada_suara": True,
+        "rel_path": media_repo.rel_to_storage(jalur), "jenis": jenis,
+        "durasi": info.get("duration"),
+        "lebar": info.get("width") if jenis == "video" else None,
+        "tinggi": info.get("height") if jenis == "video" else None,
+        "fps": info.get("fps") if jenis == "video" else None,
+        "ada_suara": True if jenis == "audio" else bool(info.get("acodec")),
     }
     baris = repo.catat_bahan(pid, data)
     bahan_svc._jadwalkan_persiapan(baris["id"], pid)
@@ -106,6 +109,26 @@ def simpan_rekaman(pid: int, sumber: Path, nama: str) -> dict:
         tujuan.unlink(missing_ok=True)
         raise GagalNarasi("Rekaman tidak bisa dibaca. Coba rekam ulang.")
     return _catat(pid, "rekam", kunci, tujuan, nama)
+
+
+def simpan_reaksi(pid: int, sumber: Path, nama: str) -> dict:
+    """
+    Rekaman reaksi kamera (JOB-5 O5): WebM kamera + mikrofon dari peramban ->
+    MP4 H.264/AAC paling tinggi 720p, bahan `rekam` berjenis video. Dikode ulang
+    karena WebM dari MediaRecorder sering tanpa durasi dan indeks, yang membuat
+    pencarian bingkai di pratinjau dan render tidak tepat.
+    """
+    kunci = uuid.uuid4().hex[:16]
+    tujuan = folder() / f"reaksi_{kunci}.mp4"
+    tujuan.parent.mkdir(parents=True, exist_ok=True)
+    r = subprocess.run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-i", str(sumber),
+                        "-vf", "scale='min(1280,iw)':-2", "-c:v", "libx264", "-preset", "veryfast",
+                        "-crf", "23", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k", "-ac", "1",
+                        "-movflags", "+faststart", str(tujuan)], capture_output=True, text=True, timeout=1200)
+    if r.returncode != 0 or not tujuan.is_file() or tujuan.stat().st_size == 0:
+        tujuan.unlink(missing_ok=True)
+        raise GagalNarasi("Rekaman kamera tidak bisa dibaca. Coba rekam ulang.")
+    return _catat(pid, "rekam", kunci, tujuan, nama, jenis="video")
 
 
 def hapus_berkas_milik(b: dict) -> None:

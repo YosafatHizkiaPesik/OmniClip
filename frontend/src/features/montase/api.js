@@ -13,6 +13,8 @@ export const buatProyek = (isi) => apiPost('/montase/proyek', isi);
 export const ambilProyek = (id) => apiGet(`/montase/proyek/${encodeURIComponent(id)}`);
 export const simpanProyek = (id, dokumen, revisi) =>
   apiPut(`/montase/proyek/${encodeURIComponent(id)}`, { dokumen, revisi });
+export const periksaKemiripan = (id) =>
+  apiGet(`/montase/proyek/${encodeURIComponent(id)}/kemiripan`);
 export const daftarVersi = (id) =>
   apiGet(`/montase/proyek/${encodeURIComponent(id)}/versi`).then((r) => r.versi ?? []);
 export const pulihkanVersi = (id, versiId, revisi) =>
@@ -62,6 +64,18 @@ export function simpanRekaman(blob, nama) {
   data.append('berkas', blob, `${nama}.webm`);
   return apiUnggah('/montase/rekam', data);
 }
+
+/** Rekaman reaksi kamera (JOB-5 O5): WebM -> server -> MP4, bahan `rekam` berjenis video. */
+export function simpanRekamanVideo(blob, nama) {
+  const data = new FormData();
+  data.append('berkas', blob, `${nama}.webm`);
+  return apiUnggah('/montase/rekam-video', data);
+}
+
+/** Preset teks milik sendiri (JOB-5 P2), per profil. */
+export const daftarPresetTeks = () => apiGet('/montase/preset-teks').then((r) => r.preset ?? []);
+export const simpanPresetTeks = (nama, gaya) => apiPost('/montase/preset-teks', { nama, gaya }).then((r) => r.preset ?? []);
+export const hapusPresetTeks = (id) => apiDelete(`/montase/preset-teks/${encodeURIComponent(id)}`).then((r) => r.preset ?? []);
 
 /** Tema teks siap pakai (dari tema_judul.py) dan font bawaan, sekali per sesi. */
 let gayaTeks = null;
@@ -138,3 +152,9 @@ export function sumberPratinjau(dokumen, token) {
   }
   return { bahan, font, komponen: token ? komponenDipakai(dokumen, token) : {} };
 }
+// Templat milik sendiri (JOB-5 P4): kerangka proyek tanpa bahan.
+export const daftarTemplatSaya = () => apiGet('/montase/templat-saya').then((r) => r.templat ?? []);
+export const simpanTemplatSaya = (nama, kerangka) => apiPost('/montase/templat-saya', { nama, ...kerangka })
+  .then((r) => r.templat ?? []);
+export const hapusTemplatSaya = (id) => apiDelete(`/montase/templat-saya/${encodeURIComponent(id)}`)
+  .then((r) => r.templat ?? []);

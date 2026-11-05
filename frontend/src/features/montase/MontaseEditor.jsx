@@ -18,7 +18,7 @@
  * simpan otomatis dan meminta muat ulang, bukan menimpa diam-diam.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, Check, CircleHelp, CloudOff, Download, Loader2, MonitorSmartphone, RefreshCw, Send, Upload,
 } from 'lucide-react';
@@ -29,7 +29,8 @@ import SiapkanTerbit from '../../components/SiapkanTerbit';
 import UploadModal from '../../components/UploadModal';
 import { BAWAAN } from './komposisi/index.js';
 import {
-  ambilProyek, ambilToken, buatNarasi, fontDipakai, komponenDipakai, pulihkanVersi, simpanProyek,
+  ambilProyek, ambilToken, buatNarasi, daftarTemplatSaya, fontDipakai, komponenDipakai, periksaKemiripan, pulihkanVersi,
+  simpanProyek,
   sumberPratinjau,
 } from './api.js';
 import useSkemaKomponen from './editor/useSkemaKomponen.js';
@@ -39,7 +40,7 @@ import {
 import {
   aturUlangTransform, bekukan, belah, bisaHapusLajur, gandakan, gantiBahanItem, hapusBanyak,
   hapusBeriak, hapusLajur, hapusPenanda, hapusPunch, kurvaKeyframe, pasangSubtitle, rapatkan,
-  rendamMusik, salin, semuaItem, tambahLajur, tambahPenanda, tambahPunch, tambahStiker, taruhSuara,
+  rendamMusik, salin, semuaItem, tambahLajur, tambahPenanda, tambahPunch, tambahReaksi, tambahStiker, taruhSuara,
   tempel, tombolKeyframe, ubahKecepatan, ubahLajur, ubahPenanda, ubahSifatDiBingkai, ubahTransform,
 } from './model/suntingan.js';
 import {
@@ -53,6 +54,13 @@ import PeganganUbah from './editor/PeganganUbah.jsx';
 import { buatGaris } from './editor/garisPutar.js';
 import { TombolUsulan } from './editor/PanelAsisten.jsx';
 import RiwayatVersi from './editor/RiwayatVersi.jsx';
+import MeterOrisinalitas from './editor/MeterOrisinalitas.jsx';
+import Teleprompter from './editor/Teleprompter.jsx';
+import RekamReaksi from './editor/RekamReaksi.jsx';
+import { hitungOrisinalitas } from './model/orisinalitas.js';
+import { periksaAkhir, usulanAkhir } from './model/akhir.js';
+import { terapkanCaption } from './model/presetCaption.js';
+import { AWALAN_SAYA, operasiPilihan } from './model/templatSaya.js';
 import { JendelaBantuan } from './BantuanMontase.jsx';
 import { terapkanOperasi } from './model/usulan.js';
 
@@ -174,6 +182,7 @@ function StatusSimpan({ status, onMuatUlang, onCobaLagi }) {
 export default function MontaseEditor() {
   const t = useT();
   const { proyekId } = useParams();
+  const [cari, setCari] = useSearchParams();
   const navigate = useNavigate();
   const sempit = useLayarSempit();
   const [riwayat, setRiwayat] = useState(null);
@@ -187,6 +196,8 @@ export default function MontaseEditor() {
   const [status, setStatus] = useState('tersimpan');
   const [tata, setTata] = useState(bacaTata);
   const [bahanSiap, setBahanSiap] = useState(() => new Set());
+  // Asal tiap bahan (unduhan, klip_jadi, impor, tts, rekam, ...) untuk meter orisinalitas (JOB-5 O1).
+  const [asalBahan, setAsalBahan] = useState(() => new Map());
   const [garis] = useState(() => buatGaris(0));
   // Usulan asisten (M5.2): {operasi, pilih: Set, sumber, peringatan}. Selama ada,
   // pratinjau dan linimasa memperlihatkan dokumen + operasi terpilih.
@@ -197,8 +208,12 @@ export default function MontaseEditor() {
   const [unggah, setUnggah] = useState(null);
   const [drafLama, setDrafLama] = useState(null);
   const [bantuan, setBantuan] = useState(false);
+  // Teleprompter narasi (JOB-5 O2): daftar {id, teks, direkam} yang sedang direkam ulang.
+  const [teleprompter, setTeleprompter] = useState(null);
+  const [reaksi, setReaksi] = useState(false);
   const catatBahan = useCallback((daftar) => {
     setBahanSiap(new Set(daftar.filter((b) => b.siap).map((b) => b.id)));
+    setAsalBahan(new Map(daftar.map((b) => [b.id, b.asal])));
   }, []);
   const tataSeret = useRef(tata);
   const pratinjau = useRef(null);
@@ -310,6 +325,9 @@ export default function MontaseEditor() {
     [dokumen, usulan],
   );
   const dTampil = tampilUsulan?.dokumen ?? dokumen;
+  // Dihitung dari yang TAMPIL: usulan asisten yang belum diterima ikut terlihat dampaknya.
+  const orisinal = useMemo(() => (dTampil ? hitungOrisinalitas(dTampil, asalBahan) : null), [dTampil, asalBahan]);
+  const akhirVideo = useMemo(() => (dTampil ? periksaAkhir(dTampil) : null), [dTampil]);
   const sumber = useMemo(
     () => (dTampil ? sumberPratinjau(dTampil, token) : null),
     // Hanya daftar bahan dan font yang menentukan alamat; perubahan item tidak.
@@ -324,6 +342,21 @@ export default function MontaseEditor() {
     setUsulan(null);
   }, [usulan, terapkan]);
   const tolakUsulan = useCallback(() => setUsulan(null), []);
+  // Templat dari formulir proyek baru (JOB-5 P3): diusulkan sekali saat proyek
+  // pertama dibuka, lalu parameternya dibuang dari alamat.
+  // Templat milik sendiri (P4) dicari dulu di server.
+  useEffect(() => {
+    const id = cari.get('templat');
+    if (!dokumen || !id) return;
+    const variasi = Number(cari.get('variasi')) || 0;
+    setCari({}, { replace: true });
+    const usulkan = (milik) => {
+      const ops = operasiPilihan(dokumen, id, variasi, milik, (k, isi) => t(`montase.templat.${k}`, isi));
+      if (ops.length) setUsulan({ operasi: ops, pilih: new Set(ops.map((o) => o.id)), sumber: 'lokal', peringatan: [] });
+    };
+    if (id.startsWith(AWALAN_SAYA)) daftarTemplatSaya().then(usulkan).catch(() => {});
+    else usulkan([]);
+  }, [dokumen, cari, setCari, t]);
   // Draf lokal ditunda 400 ms: localStorage sinkron, dan menyeret item
   // mengubah dokumen tiap bingkai (kinerja M6.3 diukur dengan ini menyala).
   useEffect(() => {
@@ -390,6 +423,29 @@ export default function MontaseEditor() {
   const tambahSuara = (b, narasi) => {
     const hasil = taruhSuara(dok(), b, { mulai: garis.get(), narasi });
     if (terapkan(hasil.dokumen)) pilih([hasil.itemId]);
+  };
+  /** Narasi di linimasa, urut waktu; `ids` membatasi, tanpa `ids` yang belum direkam (atau semua). */
+  const bukaTeleprompter = (ids = null) => {
+    const semua = dok().lajur.flatMap((l) => l.item)
+      .filter((i) => i.jenis === 'audio' && i.narasi?.teks)
+      .sort((a, b) => a.mulai - b.mulai)
+      .map((i) => ({ id: i.id, teks: i.narasi.teks, direkam: Boolean(i.narasi.direkam) }));
+    let daftar = ids ? semua.filter((x) => ids.includes(x.id)) : semua.filter((x) => !x.direkam);
+    if (!daftar.length && !ids) daftar = semua;
+    if (daftar.length) setTeleprompter(daftar);
+  };
+  /** Reaksi kamera selesai direkam (JOB-5 O5): gambar-dalam-gambar di bingkai mulainya. */
+  const reaksiSelesai = (bahan, mulai) => {
+    const hasil = tambahReaksi(dok(), bahan, mulai);
+    if (terapkan(hasil.dokumen)) pilih([hasil.itemId]);
+    setAsalBahan((m) => new Map(m).set(bahan.id, 'rekam'));
+    setReaksi(false);
+  };
+  const rekamanNarasi = (itemId, bahan) => {
+    const it = cariItem(dok(), itemId)?.item;
+    if (!it) return;
+    terapkan(gantiBahanItem(dok(), itemId, bahan, { narasi: { ...it.narasi, direkam: true } }));
+    setAsalBahan((m) => new Map(m).set(bahan.id, 'rekam'));
   };
   const buatUlangNarasi = async (itemId, narasi) => {
     const bahan = await buatNarasi(narasi.teks, narasi.suara, narasi.kecepatan);
@@ -644,6 +700,16 @@ export default function MontaseEditor() {
         </button>
         <h1 title={dokumen.nama}>{dokumen.nama}</h1>
         <StatusSimpan status={status} onMuatUlang={muat} onCobaLagi={simpanSekarang} />
+        {orisinal && (
+          <MeterOrisinalitas hasil={orisinal} akhir={akhirVideo} onKe={keBingkai} onRekamNarasi={() => bukaTeleprompter()}
+                             onUsulkanAkhir={() => {
+                               const ops = usulanAkhir(dok(), (k) => t(`montase.akhir.op_${k}`));
+                               if (ops.length) {
+                                 setUsulan({ operasi: ops, pilih: new Set(ops.map((o) => o.id)), sumber: 'lokal', peringatan: [] });
+                               }
+                             }}
+                             onPeriksaKemiripan={async () => { await simpanSekarang(); return periksaKemiripan(proyekId); }} />
+        )}
         <button type="button" className="btn-secondary montase-ikon" onClick={() => setBantuan(true)}
                 aria-label={t('montase.bantuan.judul')} title={t('montase.bantuan.judul')}
         >
@@ -690,12 +756,14 @@ export default function MontaseEditor() {
       >
         <PanelBahan token={token} onTambahKeLinimasa={tambahKeLinimasa} onTambahSuara={tambahSuara}
                     onBahan={catatBahan}
+                    onBukaReaksi={() => setReaksi(true)}
                     animasi={{
                       proyekId, dokumen, garis, terpilih, onSimpanDulu: simpanSekarang,
                       onTambahBawaan: tambahAnimasiDiGaris, onTambahAi: tambahAnimasiAi,
                     }}
                     asisten={{
                       proyekId, terpilih, fps, usulan, onUsulan: setUsulan, onTerima: terimaUsulan,
+                      onRekamNarasi: () => bukaTeleprompter(), adaNarasi: Boolean(orisinal?.detik.suara), dokumen,
                       onTolak: tolakUsulan, onSimpanDulu: simpanSekarang,
                     }} />
         <Pembatas arah="tegak" onGeser={geser('kiri', 1, [220, 520])} />
@@ -744,6 +812,8 @@ export default function MontaseEditor() {
           onUbahPenanda={(tt, label) => ubah((d) => ubahPenanda(d, tt, label), { gabung: `penanda:${tt}` })}
           onHapusPenanda={(tt) => terapkan(hapusPenanda(dok(), tt))}
           onBuatUlangNarasi={buatUlangNarasi}
+          onRekamNarasi={bukaTeleprompter}
+          onCaption={(lajurId, presetId) => terapkan(terapkanCaption(dok(), lajurId, presetId))}
           infoSkema={infoSkema}
           riwayatVersi={<RiwayatVersi proyekId={proyekId} revisi={revisi.current} onPulihkan={pulihkan} />}
           garis={garis}
@@ -794,6 +864,12 @@ export default function MontaseEditor() {
       {terbit && <SiapkanTerbit clip={terbit} onClose={() => setTerbit(null)} onSelesai={() => {}} />}
       {unggah && <UploadModal clip={unggah} onClose={() => setUnggah(null)} onDone={() => {}} />}
       {bantuan && <JendelaBantuan onTutup={() => setBantuan(false)} />}
+      {reaksi && (
+        <RekamReaksi garis={garis} pratinjau={pratinjau} onSelesai={reaksiSelesai} onTutup={() => setReaksi(false)} />
+      )}
+      {teleprompter && (
+        <Teleprompter daftar={teleprompter} onRekaman={rekamanNarasi} onTutup={() => setTeleprompter(null)} />
+      )}
     </div>
   );
 }

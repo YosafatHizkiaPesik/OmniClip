@@ -82,6 +82,12 @@ class TanpaMesin(Dasar):
         self.assertEqual(s["subtitles"][1]["start"], 3.0)
         self.assertEqual(s["hook_text"], "Kucing jatuh")
         self.assertTrue(s["suara_sintetis"])
+        # Narasi yang sudah direkam pemiliknya (teleprompter, JOB-5 O2): bukan sintetis.
+        lajur["audio"]["item"][0]["narasi"]["direkam"] = True
+        s = ekspor.sidecar(dok, pid=PID, berkas="x.mp4", detik=4)
+        self.assertFalse(s["suara_sintetis"])
+        self.assertEqual([x["jenis"] for x in s["lapisan"] if x["t"] == 0 and x["d"] == 1.5], ["rekam"])
+        self.assertEqual([b["text"] for b in s["subtitles"]], ["Kucing jatuh", "Ikuti!"])
 
     def test_linimasa_kosong_ditolak(self):
         with self.assertRaisesRegex(ekspor.GagalEkspor, "kosong"):

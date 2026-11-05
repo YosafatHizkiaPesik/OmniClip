@@ -27,6 +27,7 @@ import { nilaiSifat } from '../model/suntingan.js';
 import PanelTeks from './PanelTeks.jsx';
 import PanelPropsSkema from './PanelPropsSkema.jsx';
 import { KolomNarasi } from './PanelSuara.jsx';
+import KisiCaption from './KisiCaption.jsx';
 
 const WARNA = /^#[0-9a-fA-F]{6}$/;
 const KECEPATAN = [0.5, 1, 1.5, 2];
@@ -160,7 +161,7 @@ function PanelProyek({ dokumen, onUbahProyek, onKe, onUbahPenanda, onHapusPenand
   );
 }
 
-function PanelLajur({ lajur, onUbahLajur, onHapusLajur, bisaHapus, onRendam }) {
+function PanelLajur({ lajur, onUbahLajur, onHapusLajur, bisaHapus, onRendam, onCaption }) {
   const t = useT();
   const [turun, setTurun] = useState(25);
   const ubah = (p) => onUbahLajur(lajur.id, p);
@@ -182,6 +183,13 @@ function PanelLajur({ lajur, onUbahLajur, onHapusLajur, bisaHapus, onRendam }) {
           <span>{t('montase.linimasa.nama_lajur')}</span>
           <input value={lajur.nama} maxLength={60} onChange={(e) => ubah({ nama: e.target.value })} />
         </label>
+        {lajur.subtitle && onCaption && (
+          <section className="montase-bagian">
+            <h3>{t('montase.caption.judul')}</h3>
+            <p className="montase-petunjuk">{t('montase.caption.ket')}</p>
+            <KisiCaption aktif={lajur.gaya_caption} disabled={Boolean(lajur.kunci)} onPilih={(id) => onCaption(lajur.id, id)} />
+          </section>
+        )}
         {bersuara && (
           <label className="montase-kolom">
             <span>{t('montase.properti.volume_lajur')}</span>
@@ -476,7 +484,7 @@ export default function PanelProperti({
   dokumen, terpilih, jumlahPilihan, lajur, onUbahItem, onKecepatan, onTransform, onHapus,
   onGandakan, onUbahProyek, onUbahLajur, onHapusLajur, bisaHapusLajur, onKe, onUbahPenanda,
   onHapusPenanda, onBuatUlangNarasi, garis, onUbahSifat, onTombolKeyframe, onKurvaKeyframe,
-  onAturUlangTransform, onRendam, onPunch, onHapusPunch, infoSkema, riwayatVersi = null,
+  onAturUlangTransform, onRendam, onPunch, onHapusPunch, infoSkema, riwayatVersi = null, onRekamNarasi, onCaption,
 }) {
   const t = useT();
   const fps = dokumen.kanvas.fps;
@@ -505,7 +513,7 @@ export default function PanelProperti({
     return (
       <aside className="montase-panel montase-panel-properti" aria-label={t('montase.properti.judul')}>
         <PanelLajur lajur={lajur} onUbahLajur={onUbahLajur} onHapusLajur={onHapusLajur} bisaHapus={bisaHapusLajur}
-                    onRendam={onRendam} />
+                    onRendam={onRendam} onCaption={onCaption} />
       </aside>
     );
   }
@@ -546,7 +554,8 @@ export default function PanelProperti({
           </div>
 
           {item.jenis === 'audio' && item.narasi && (
-            <KolomNarasi key={item.id} item={item} onBuatUlang={(n) => onBuatUlangNarasi(item.id, n)} />
+            <KolomNarasi key={item.id} item={item} onBuatUlang={(n) => onBuatUlangNarasi(item.id, n)}
+                         onRekam={onRekamNarasi ? () => onRekamNarasi([item.id]) : undefined} />
           )}
           {media && (
             <Angka label={t('montase.properti.potong_awal')} nilai={keDetik(item.potong_awal || 0)}
@@ -589,6 +598,14 @@ export default function PanelProperti({
                 <option value="cover">{t('montase.properti.isi_penuh')}</option>
               </select>
             </label>
+          )}
+          {item.jenis === 'teks' && terpilih.lajur.subtitle && onCaption && (
+            <section className="montase-bagian">
+              <h3>{t('montase.caption.judul')}</h3>
+              <p className="montase-petunjuk">{t('montase.caption.ket_item')}</p>
+              <KisiCaption aktif={terpilih.lajur.gaya_caption} disabled={kunci}
+                           onPilih={(id) => onCaption(terpilih.lajur.id, id)} />
+            </section>
           )}
           {item.jenis === 'teks' && <PanelTeks item={item} onUbah={ubah} />}
           {item.jenis === 'motion' && (

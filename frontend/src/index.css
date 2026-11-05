@@ -2604,3 +2604,90 @@ button.tujuan, a.tujuan { cursor: pointer; }
 .montase-bantuan-jendela { max-width: 880px; width: 100%; max-height: 86vh; overflow: auto; padding: 18px 20px; }
 .montase-bantuan-kepala { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
 .montase-bantuan-kepala h2 { margin: 0; font-size: 1.05rem; }
+
+/* Montase: meter orisinalitas (JOB-5 O1) */
+.montase-orisinal { position: relative; }
+.montase-orisinal-lencana { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 999px;
+  border: 1px solid var(--rule-2); background: transparent; font: inherit; font-size: .78rem; font-weight: 600; cursor: pointer; }
+.montase-orisinal-lencana.baik { color: #1f9d55; border-color: #1f9d55; }
+.montase-orisinal-lencana.sedang { color: #b7791f; border-color: #d69e2e; }
+.montase-orisinal-lencana.kurang { color: var(--reh); border-color: var(--reh); }
+.montase-orisinal-panel { position: absolute; top: calc(100% + 6px); left: 0; z-index: 40; width: min(380px, 90vw);
+  padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; font-size: .8rem; }
+.montase-orisinal-panel h3, .montase-orisinal-panel h4 { margin: 0; font-size: .9rem; }
+.montase-orisinal-panel h4 { font-size: .8rem; }
+.montase-orisinal-status { margin: 0; font-weight: 600; }
+.montase-orisinal-status.baik { color: #1f9d55; }
+.montase-orisinal-status.sedang { color: #b7791f; }
+.montase-orisinal-status.kurang { color: var(--reh); }
+.montase-orisinal-panel dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin: 0; }
+.montase-orisinal-panel dt { color: var(--ink-2); }
+.montase-orisinal-panel dd { margin: 0; font-variant-numeric: tabular-nums; }
+.montase-orisinal-saran { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+.montase-orisinal-celah { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.montase-orisinal-celah li { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.montase-orisinal-celah .btn-secondary { padding: 3px 8px; }
+
+/* Montase: teleprompter narasi (JOB-5 O2) */
+.montase-teleprompter { max-width: 760px; }
+.montase-teleprompter-nomor { margin: 4px 0; font-size: .8rem; color: var(--ink-2); }
+.montase-teleprompter-naskah { margin: 8px 0 12px; padding: 18px 20px; border-left: 4px solid var(--rule-2);
+  font-size: 1.6rem; line-height: 1.45; font-weight: 600; background: var(--paper-2, rgba(0,0,0,.03)); }
+.montase-teleprompter-naskah.merekam { border-left-color: var(--reh); }
+.montase-teleprompter-tombol { justify-content: center; }
+.montase-orisinal-aksi { display: inline-flex; margin-left: 6px; padding: 2px 8px; font-size: .74rem; }
+
+/* Montase: kemiripan antar video (JOB-5 O3) */
+.montase-orisinal-mirip { border-top: 1px solid var(--rule-2); padding-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.montase-orisinal-mirip h4 { margin: 0; }
+.montase-orisinal-mirip > .btn-secondary { align-self: flex-start; padding: 4px 9px; }
+.montase-mirip-hasil p { margin: 0; }
+.montase-mirip-hasil ul { margin: 4px 0 0; padding-left: 18px; }
+.montase-mirip-hasil.aman b { color: #1f9d55; }
+.montase-mirip-hasil.waspada b { color: #b7791f; }
+.montase-mirip-hasil.pola b { color: var(--reh); }
+.montase-orisinal-panel { max-height: 78vh; overflow: auto; }
+
+/* Montase: pembuka (JOB-5 O4) */
+.montase-orisinal-pembuka { border-top: 1px solid var(--rule-2); padding-top: 8px; }
+.montase-orisinal-pembuka h4 { margin: 0 0 4px; }
+.montase-orisinal-pembuka ul { list-style: none; margin: 0; padding: 0; }
+.montase-orisinal-pembuka li.ya { color: #1f9d55; }
+.montase-orisinal-pembuka li.tidak { color: var(--reh); }
+
+/* Montase: rekam reaksi kamera (JOB-5 O5) */
+.montase-reaksi { position: fixed; right: 20px; bottom: 20px; z-index: 55; width: min(340px, calc(100vw - 32px));
+  padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.montase-reaksi h2 { margin: 0; font-size: .95rem; }
+.montase-reaksi-layar { width: 100%; aspect-ratio: 16 / 9; background: #000; border-radius: var(--r-md); object-fit: cover; transform: scaleX(-1); }
+
+/* Montase: preset caption (JOB-5 P1) */
+.montase-kisi-caption { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 6px; }
+.montase-caption-pilihan { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 6px 6px;
+  border: 1px solid var(--rule-2); border-radius: var(--r-md); background: #2a2f3a; cursor: pointer; font: inherit; }
+.montase-caption-pilihan small { color: #e5e7eb; font-size: .7rem; }
+.montase-caption-pilihan.aktif { outline: 2px solid var(--reh); outline-offset: 1px; }
+.montase-caption-contoh { white-space: nowrap; line-height: 1.3; }
+
+/* Montase: gaya teks milik sendiri (JOB-5 P2) */
+.montase-preset-teks { position: relative; display: flex; }
+.montase-preset-teks .montase-tema { flex: 1; }
+.montase-preset-hapus { position: absolute; top: 2px; right: 2px; display: grid; place-items: center; width: 18px; height: 18px;
+  border-radius: 50%; border: 0; background: rgba(0,0,0,.55); color: #fff; cursor: pointer; }
+
+/* Montase: templat video (JOB-5 P3) */
+.montase-templat { display: flex; flex-direction: column; gap: 8px; }
+.montase-templat-kisi { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
+.montase-templat-pil { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 8px 10px; text-align: left;
+  border: 1px solid var(--rule-2); border-radius: var(--r-md); background: transparent; font: inherit; cursor: pointer; }
+.montase-templat-pil b { font-size: .82rem; }
+.montase-templat-pil small { font-size: .72rem; color: var(--ink-2); }
+.montase-templat-pil.aktif { border-color: var(--reh); box-shadow: inset 0 0 0 1px var(--reh); }
+.montase-templat-saya { position: relative; display: flex; }
+.montase-templat-saya .montase-templat-pil { flex: 1; padding-right: 26px; min-width: 0; }
+.montase-templat-saya .montase-templat-pil b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.montase-templat-hapus { position: absolute; top: 4px; right: 4px; display: grid; place-items: center; width: 20px; height: 20px;
+  border: 0; border-radius: 4px; background: transparent; color: var(--ink-2); cursor: pointer; }
+.montase-templat-hapus:hover { background: var(--rule-2); color: var(--ink); }
+.montase-templat-simpan { display: flex; gap: 6px; }
+.montase-templat-simpan input { flex: 1; min-width: 0; }

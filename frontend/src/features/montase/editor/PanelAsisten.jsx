@@ -9,14 +9,18 @@
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Check, CheckCheck, Crop, Loader2, Scissors, Sparkles, X,
+  Check, CheckCheck, Crop, LayoutTemplate, Loader2, Mic, Save, Scissors, Sparkles, X, Zap,
 } from 'lucide-react';
 import { useT } from '../../../lib/i18n';
 import { formatTime } from '../../../utils/timeFormat';
 import { useJobRunner } from '../../../hooks/useJob';
 import JobProgress from '../../../components/JobProgress';
-import { daftarSuara } from '../api.js';
+import {
+  daftarSuara, daftarTemplatSaya, hapusTemplatSaya, simpanTemplatSaya,
+} from '../api.js';
 import { kelompokOperasi } from '../model/usulan.js';
+import { ambilTemplat, operasiPilihan, templatBerisi } from '../model/templatSaya.js';
+import PilihTemplat from './PilihTemplat.jsx';
 
 export function DaftarUsulan({ usulan, onPilih, onTerima, onTolak, fps }) {
   const t = useT();
@@ -95,7 +99,7 @@ export function TombolUsulan({ usulan, onTerima, onTolak, ringkas = false }) {
 }
 
 export default function PanelAsisten({
-  proyekId, bahan, terpilih, fps, usulan, onUsulan, onTerima, onTolak, onSimpanDulu,
+  proyekId, bahan, terpilih, fps, usulan, onUsulan, onTerima, onTolak, onSimpanDulu, onRekamNarasi, adaNarasi, dokumen,
 }) {
   const t = useT();
   const [perintah, setPerintah] = useState('');
@@ -105,13 +109,40 @@ export default function PanelAsisten({
   const [suara, setSuara] = useState('');
   const [daftar, setDaftar] = useState([]);
   const [galat, setGalat] = useState(null);
+  const [templat, setTemplat] = useState('top_n');
+  const [variasi, setVariasi] = useState(0);
+  const [milik, setMilik] = useState([]);
+  const [namaTemplat, setNamaTemplat] = useState('');
+  const [infoTemplat, setInfoTemplat] = useState(null);
   const kerja = useJobRunner();
   const jeda = useJobRunner();
   const bingkai = useJobRunner();
+  const pembuka = useJobRunner();
 
   const video = useMemo(() => bahan.filter((b) => b.jenis === 'video'), [bahan]);
   const dipilih = pilih ?? new Set(video.map((b) => b.id));
   useEffect(() => { daftarSuara().then((s) => { setDaftar(s); }).catch(() => {}); }, []);
+  useEffect(() => { daftarTemplatSaya().then(setMilik).catch(() => {}); }, []);
+  const kerangka = useMemo(() => (dokumen ? ambilTemplat(dokumen) : null), [dokumen]);
+  const simpanTemplat = async () => {
+    setInfoTemplat(null);
+    try {
+      const nama = namaTemplat.trim();
+      setMilik(await simpanTemplatSaya(nama, kerangka));
+      setNamaTemplat('');
+      setInfoTemplat({ ok: true, teks: t('montase.templat.saya_tersimpan', { nama }) });
+    } catch (e) {
+      setInfoTemplat({ ok: false, teks: e.message });
+    }
+  };
+  const hapusTemplat = async (id) => {
+    try {
+      setMilik(await hapusTemplatSaya(id));
+      if (templat === `saya:${id}`) setTemplat('top_n');
+    } catch (e) {
+      setInfoTemplat({ ok: false, teks: e.message });
+    }
+  };
 
   // Satu efek per pekerjaan: hasil yang lama dari pekerjaan lain tidak boleh
   // muncul lagi sebagai usulan (dulu "Cari jeda" memunculkan ulang Top 5).
@@ -129,6 +160,8 @@ export default function PanelAsisten({
   useEffect(() => terimaHasil(jeda.result), [jeda.result]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => terimaHasil(bingkai.result), [bingkai.result]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => terimaHasil(pembuka.result), [pembuka.result]);
 
   const susun = async () => {
     setGalat(null);
@@ -156,7 +189,12 @@ export default function PanelAsisten({
     if (nyala) baru.add(id); else baru.delete(id);
     setPilih(baru);
   };
-  const sibuk = kerja.active || jeda.active || bingkai.active;
+  const sibuk = kerja.active || jeda.active || bingkai.active || pembuka.active;
+  const usulkanPembuka = async () => {
+    setGalat(null);
+    await onSimpanDulu();
+    pembuka.run(`/montase/proyek/${proyekId}/pembuka`, {}).catch((e) => setGalat(e.message));
+  };
 
   if (usulan) {
     return (
@@ -212,6 +250,15 @@ export default function PanelAsisten({
         </button>
         {(kerja.job || kerja.error) && <JobProgress job={kerja.job} error={kerja.error} onCancel={kerja.cancel} compact />}
       </section>
+      {adaNarasi && onRekamNarasi && (
+        <section className="montase-bagian">
+          <h3><span><Mic size={13} /> {t('montase.teleprompter.judul')}</span></h3>
+          <p className="montase-petunjuk">{t('montase.teleprompter.asisten_ket')}</p>
+          <button type="button" className="btn-secondary" onClick={onRekamNarasi}>
+            <Mic size={13} />{t('montase.teleprompter.buka')}
+          </button>
+        </section>
+      )}
       <section className="montase-bagian">
         <h3><span><Scissors size={13} /> {t('montase.asisten.jeda_judul')}</span></h3>
         <p className="montase-petunjuk">{t(bisaJeda ? 'montase.asisten.jeda_ket' : 'montase.asisten.jeda_pilih')}</p>
@@ -220,6 +267,41 @@ export default function PanelAsisten({
           {t('montase.asisten.jeda_tombol')}
         </button>
         {(jeda.job || jeda.error) && <JobProgress job={jeda.job} error={jeda.error} onCancel={jeda.cancel} compact />}
+      </section>
+      <section className="montase-bagian">
+        <h3><span><LayoutTemplate size={13} /> {t('montase.templat.judul')}</span></h3>
+        <p className="montase-petunjuk">{t('montase.templat.ket')}</p>
+        <PilihTemplat nilai={templat} variasi={variasi} onUbah={setTemplat} onVariasi={setVariasi}
+                      milik={milik} onHapus={hapusTemplat} />
+        <button type="button" className="btn-secondary" disabled={!templat || !dokumen} onClick={() => {
+          const ops = operasiPilihan(dokumen, templat, variasi, milik, (k, isi) => t(`montase.templat.${k}`, isi));
+          if (ops.length) onUsulan({ operasi: ops, pilih: new Set(ops.map((o) => o.id)), sumber: 'lokal', peringatan: [] });
+        }}
+        >
+          <LayoutTemplate size={13} />{t('montase.templat.pakai')}
+        </button>
+        <p className="montase-petunjuk">{t('montase.templat.saya_simpan_ket')}</p>
+        <form className="montase-templat-simpan" onSubmit={(e) => { e.preventDefault(); simpanTemplat(); }}>
+          <input type="text" value={namaTemplat} maxLength={60} onChange={(e) => setNamaTemplat(e.target.value)}
+                 placeholder={t('montase.templat.saya_nama')} aria-label={t('montase.templat.saya_nama')} />
+          <button type="submit" className="btn-secondary" disabled={!namaTemplat.trim() || !templatBerisi(kerangka)}>
+            <Save size={13} />{t('montase.templat.saya_simpan')}
+          </button>
+        </form>
+        {infoTemplat && (
+          <p className={infoTemplat.ok ? 'montase-petunjuk' : 'montase-galat'} role={infoTemplat.ok ? 'status' : 'alert'}>
+            {infoTemplat.teks}
+          </p>
+        )}
+      </section>
+      <section className="montase-bagian">
+        <h3><span><Zap size={13} /> {t('montase.pembuka.usul_judul')}</span></h3>
+        <p className="montase-petunjuk">{t('montase.pembuka.usul_ket')}</p>
+        <button type="button" className="btn-secondary" onClick={usulkanPembuka} disabled={sibuk}>
+          {pembuka.active ? <Loader2 size={13} className="animate-spin" /> : <Zap size={13} />}
+          {t('montase.pembuka.usul_tombol')}
+        </button>
+        {(pembuka.job || pembuka.error) && <JobProgress job={pembuka.job} error={pembuka.error} onCancel={pembuka.cancel} compact />}
       </section>
       <section className="montase-bagian">
         <h3><span><Crop size={13} /> {t('montase.asisten.bingkai_judul')}</span></h3>

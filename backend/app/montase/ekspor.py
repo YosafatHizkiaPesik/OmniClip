@@ -126,10 +126,12 @@ def _bersuara_sintetis(pid: int, dokumen: dict) -> bool:
         for i in lajur["item"]:
             if i["jenis"] != "audio":
                 continue
-            if i.get("narasi"):
-                return True
-            b = repo.ambil_bahan(pid, i.get("bahan") or "")
-            if b and b.get("asal") == "tts":
+            b = repo.ambil_bahan(pid, i.get("bahan") or "") or {}
+            # Narasi yang sudah dibacakan pemiliknya sendiri (teleprompter,
+            # JOB-5 O2) bukan suara sintetis, walau naskahnya dari asisten.
+            if b.get("asal") == "rekam" or (i.get("narasi") or {}).get("direkam"):
+                continue
+            if i.get("narasi") or b.get("asal") == "tts":
                 return True
     return False
 
@@ -154,19 +156,49 @@ def lapisan(pid: int, dokumen: dict) -> list[dict]:
             jenis = None
             if i["jenis"] == "audio" and not l.get("bisu"):
                 b = repo.ambil_bahan(pid, i.get("bahan") or "") or {}
-                if i.get("narasi") or b.get("asal") == "tts":
-                    jenis = "narasi"
-                elif b.get("asal") == "rekam":
+                if b.get("asal") == "rekam" or (i.get("narasi") or {}).get("direkam"):
                     jenis = "rekam"
+                elif i.get("narasi") or b.get("asal") == "tts":
+                    jenis = "narasi"
             elif i["jenis"] == "teks":
                 jenis = "teks"
             elif i["jenis"] == "motion":
                 jenis = "animasi"
+            elif i["jenis"] == "video" and (repo.ambil_bahan(pid, i.get("bahan") or "") or {}).get("asal") == "rekam":
+                # Reaksi kamera pemilik kanal (JOB-5 O5): wajah dan suaranya sendiri.
+                jenis = "reaksi"
             elif i["jenis"] in ("gambar", "video") and l["id"] != utama:
                 jenis = "sisipan"
             if jenis:
                 hasil.append({"t": round(i["mulai"] / fps, 2), "d": round(i["durasi"] / fps, 2),
                               "jenis": jenis})
+    return hasil
+
+
+def bab(dokumen: dict) -> list[dict]:
+    """
+    Bab untuk deskripsi video panjang (JOB-5 O7). Dari penanda berlabel bila
+    ada (pilihan pemilik sendiri); bila tidak, dari kartu peringkat (#N judul).
+    Shorts tidak menampilkan bab, jadi video tegak <= 3 menit tidak diberi bab.
+    Aturan YouTube (0:00, >= 3 bab, >= 10 detik) ditegakkan `unggah.teks_bab`.
+    """
+    k = dokumen["kanvas"]
+    fps = k["fps"]
+    if k["tinggi"] > k["lebar"] and dokumen.get("durasi", 0) / fps <= 180:
+        return []
+    hasil = [{"t": round(p["t"] / fps, 2), "judul": p["label"]}
+             for p in sorted(dokumen.get("penanda") or [], key=lambda p: p["t"]) if (p.get("label") or "").strip()]
+    if len(hasil) < 3:
+        hasil = []
+        for l in dokumen["lajur"]:
+            for i in l["item"]:
+                props = i.get("props") or {}
+                if i["jenis"] == "motion" and isinstance(props.get("angka"), (int, float)):
+                    judul = f"#{int(props['angka'])} {props.get('judul') or ''}".strip()
+                    hasil.append({"t": round(i["mulai"] / fps, 2), "judul": judul})
+        hasil.sort(key=lambda b: b["t"])
+    if hasil and hasil[0]["t"] > 0.5:
+        hasil.insert(0, {"t": 0.0, "judul": dokumen.get("nama") or "Pembuka"})
     return hasil
 
 
@@ -187,12 +219,16 @@ def sidecar(dokumen: dict, *, pid: int, berkas: str, detik: float) -> dict:
         "hook_text": baris[0]["text"][:160] if baris else "",
         "sumber_banyak": _sumber_kredit(pid, dokumen),
         "lapisan": lapisan(pid, dokumen),
+        "bab": bab(dokumen),
         "suara_sintetis": _bersuara_sintetis(pid, dokumen),
         "motion_ai": ada_ai,
         "created_at": time.time(),
     }
     # Disimpan seperti sidecar Studio (render.py), untuk lencana di Klip jadi.
     meta["nilai_tambah"] = hitung(meta)
+    # Sidik isi untuk pemeriksa kemiripan antar video (JOB-5 O3).
+    from . import kemiripan
+    meta["sidik"] = kemiripan.sidik(dokumen)
     return meta
 
 

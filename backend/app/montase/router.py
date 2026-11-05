@@ -187,6 +187,26 @@ def simpan_proyek(proyek_id: str, b: SimpanProyek):
     return {"revisi": revisi, "durasi": dokumen["durasi"]}
 
 
+@router.post("/proyek/{proyek_id}/pembuka")
+def pembuka_proyek(proyek_id: str):
+    """Usulan cuplikan pembuka dari momen terkuat (JOB-5 O4), pekerjaan `montase_pembuka`."""
+    from . import pembuka
+    if repo.ambil_proyek(profil.kini(), proyek_id) is None:
+        raise NotFound("Proyek tidak ditemukan.")
+    return {"job_id": pembuka.mulai(proyek_id)}
+
+
+@router.get("/proyek/{proyek_id}/kemiripan")
+def kemiripan_proyek(proyek_id: str):
+    """Proyek ini lawan ekspor Montase sebelumnya di profil ini (JOB-5 O3)."""
+    from . import kemiripan
+    pid = profil.kini()
+    p = repo.ambil_proyek(pid, proyek_id)
+    if p is None:
+        raise NotFound("Proyek tidak ditemukan.")
+    return kemiripan.periksa(pid, p["dokumen"])
+
+
 @router.get("/proyek/{proyek_id}/versi")
 def daftar_versi(proyek_id: str):
     """Riwayat versi (M6.4): 10 potret terakhir, tanpa isi dokumennya."""
@@ -468,6 +488,151 @@ async def simpan_rekaman(berkas: UploadFile = File(...)):
             raise InvalidInput(str(e)) from e
     finally:
         tmp.unlink(missing_ok=True)
+
+
+@router.post("/rekam-video")
+async def simpan_rekaman_video(berkas: UploadFile = File(...)):
+    """Rekaman reaksi kamera dari peramban -> MP4 -> bahan video `rekam` (JOB-5 O5)."""
+    tmp = Path(tempfile.mkstemp(prefix="omni_reaksi_", suffix=".webm")[1])
+    total = 0
+    try:
+        with open(tmp, "wb") as keluar:
+            while True:
+                blok = await berkas.read(1 << 20)
+                if not blok:
+                    break
+                total += len(blok)
+                if total > BATAS_IMPOR:
+                    raise AppError("Rekaman terlalu besar.", code="BAHAN_TERLALU_BESAR", status=413)
+                keluar.write(blok)
+        nama = Path(berkas.filename or "Reaksi").stem[:120] or "Reaksi"
+        try:
+            return await run_in_threadpool(narasi.simpan_reaksi, profil.kini(), tmp, nama)
+        except narasi.GagalNarasi as e:
+            raise InvalidInput(str(e)) from e
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
+# --- preset teks milik sendiri (JOB-5 P2) ----------------------------------------
+
+PRESET_TEKS_MAKS = 40
+
+
+def _kunci_preset(pid: int) -> str:
+    return f"montase.preset_teks.{pid}"
+
+
+def _preset_teks(pid: int) -> list[dict]:
+    import json as _json
+    try:
+        isi = _json.loads(settings_repo.get(_kunci_preset(pid), "") or "[]")
+    except ValueError:
+        return []
+    return [p for p in isi if isinstance(p, dict) and p.get("id") and isinstance(p.get("gaya"), dict)]
+
+
+class PresetTeks(BaseModel):
+    nama: str = Field(..., min_length=1, max_length=40)
+    gaya: dict[str, Any]
+
+
+@router.get("/preset-teks")
+def daftar_preset_teks():
+    """Gaya teks yang disimpan pemilik profil ini, terbaru dulu."""
+    return {"preset": _preset_teks(profil.kini())}
+
+
+@router.post("/preset-teks")
+def simpan_preset_teks(b: PresetTeks):
+    """Menyimpan `item.gaya` sebagai preset bernama; nama yang sama menimpa."""
+    import json as _json
+    import secrets
+    pid = profil.kini()
+    if len(_json.dumps(b.gaya)) > 4000:
+        raise InvalidInput("Gaya teks terlalu besar.")
+    gaya = {k: v for k, v in b.gaya.items() if k not in ("tema",)}
+    lama = [p for p in _preset_teks(pid) if p["nama"].strip().lower() != b.nama.strip().lower()]
+    baru = [{"id": "pt_" + secrets.token_hex(4), "nama": b.nama.strip(), "gaya": gaya}] + lama
+    settings_repo.set_value(_kunci_preset(pid), _json.dumps(baru[:PRESET_TEKS_MAKS], ensure_ascii=False))
+    return {"preset": baru[:PRESET_TEKS_MAKS]}
+
+
+@router.delete("/preset-teks/{preset_id}")
+def hapus_preset_teks(preset_id: str):
+    import json as _json
+    pid = profil.kini()
+    sisa = [p for p in _preset_teks(pid) if p["id"] != preset_id]
+    settings_repo.set_value(_kunci_preset(pid), _json.dumps(sisa, ensure_ascii=False))
+    return {"preset": sisa}
+
+
+# --- templat milik sendiri (JOB-5 P4) ---------------------------------------------
+
+TEMPLAT_SAYA_MAKS = 20
+TEMPLAT_SAYA_BYTE = 200_000
+
+
+def _kunci_templat(pid: int) -> str:
+    return f"montase.templat_saya.{pid}"
+
+
+def _templat_saya(pid: int) -> list[dict]:
+    import json as _json
+    try:
+        isi = _json.loads(settings_repo.get(_kunci_templat(pid), "") or "[]")
+    except ValueError:
+        return []
+    return [t for t in isi if isinstance(t, dict) and t.get("id") and isinstance(t.get("isi"), list)]
+
+
+class TemplatSaya(BaseModel):
+    """Kerangka dari model/templatSaya.js `ambilTemplat`: tanpa bahan, waktu dalam detik."""
+    nama: str = Field(..., min_length=1, max_length=60)
+    kanvas: dict[str, Any] = Field(default_factory=dict)
+    detik: float = Field(0, ge=0, le=36_000)
+    caption: Optional[str] = Field(None, max_length=40)
+    isi: list[dict[str, Any]] = Field(default_factory=list, max_length=200)
+    penanda: list[dict[str, Any]] = Field(default_factory=list, max_length=200)
+
+
+@router.get("/templat-saya")
+def daftar_templat_saya():
+    """Templat yang disimpan pemilik profil ini, terbaru dulu."""
+    return {"templat": _templat_saya(profil.kini())}
+
+
+@router.post("/templat-saya")
+def simpan_templat_saya(b: TemplatSaya):
+    """Menyimpan kerangka proyek sebagai templat bernama; nama yang sama menimpa.
+
+    Item ber-bahan ditolak di sini juga (bukan hanya di klien): templat yang
+    membawa klip akan menghasilkan video yang sama berulang kali.
+    """
+    import json as _json
+    import secrets
+    pid = profil.kini()
+    if not (b.isi or b.penanda or b.caption):
+        raise InvalidInput("Proyek belum punya teks, animasi, atau penanda untuk dijadikan templat.")
+    if any(not isinstance(i, dict) or i.get("jenis") not in ("teks", "animasi") or "bahan" in i for i in b.isi):
+        raise InvalidInput("Templat hanya boleh berisi teks dan animasi.")
+    data = b.model_dump()
+    data["nama"] = b.nama.strip()
+    if len(_json.dumps(data, ensure_ascii=False).encode()) > TEMPLAT_SAYA_BYTE:
+        raise InvalidInput("Templat terlalu besar.")
+    lama = [t for t in _templat_saya(pid) if t["nama"].strip().lower() != data["nama"].lower()]
+    baru = ([{"id": "ts_" + secrets.token_hex(4), **data}] + lama)[:TEMPLAT_SAYA_MAKS]
+    settings_repo.set_value(_kunci_templat(pid), _json.dumps(baru, ensure_ascii=False))
+    return {"templat": baru}
+
+
+@router.delete("/templat-saya/{templat_id}")
+def hapus_templat_saya(templat_id: str):
+    import json as _json
+    pid = profil.kini()
+    sisa = [t for t in _templat_saya(pid) if t["id"] != templat_id]
+    settings_repo.set_value(_kunci_templat(pid), _json.dumps(sisa, ensure_ascii=False))
+    return {"templat": sisa}
 
 
 @router.get("/gaya-teks")

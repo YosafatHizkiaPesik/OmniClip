@@ -12,7 +12,7 @@ import {
   aturKeyframe, kurvaKeyframe, nilaiSifat, tombolKeyframe, ubahSifatDiBingkai,
 } from './suntingan.js';
 import { nilaiPada, ubahPada, bingkaiKeyframe } from '../komposisi/keyframe.js';
-import { rendamMusik } from './suntingan.js';
+import { rendamMusik, tambahReaksi } from './suntingan.js';
 
 function kosong() {
   return {
@@ -334,5 +334,24 @@ describe('riwayat', () => {
     let r = buatRiwayat(0);
     for (let i = 1; i <= 150; i += 1) r = catat(r, i);
     expect(r.lalu).toHaveLength(BATAS_LANGKAH);
+  });
+});
+
+describe('tambahReaksi (JOB-5 O5)', () => {
+  it('gambar-dalam-gambar di lajur video baru, sudut kanan bawah di atas zona subtitle', () => {
+    let d = tambahBahan(kosong(), video('b1', 20)).dokumen;
+    const h = tambahReaksi(d, { id: 'r1', jenis: 'video', durasi: 5, lebar: 1280, tinggi: 720, nama: 'Reaksi' }, 60);
+    d = h.dokumen;
+    const lajurVideo = d.lajur.filter((l) => l.jenis === 'video');
+    expect(lajurVideo).toHaveLength(2);
+    const it = lajurVideo[1].item[0];
+    expect([it.mulai, it.durasi]).toEqual([60, 150]);
+    expect(it.ubah.skala).toBeCloseTo(0.42, 2);
+    const w = 1080 * it.ubah.skala;
+    expect(540 + it.ubah.x + w / 2).toBeLessThanOrEqual(1080);
+    expect(960 + it.ubah.y).toBeLessThan(0.72 * 1920);
+    // Rekaman kedua di rentang lain memakai lajur yang sama.
+    const h2 = tambahReaksi(d, { id: 'r2', jenis: 'video', durasi: 2, lebar: 1280, tinggi: 720 }, 300);
+    expect(h2.lajurId).toBe(h.lajurId);
   });
 });

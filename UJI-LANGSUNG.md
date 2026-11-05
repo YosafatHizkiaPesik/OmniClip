@@ -602,6 +602,65 @@ di menu). Hasil angka tiap tes ditulis juga di JOB-4.md bagian 24.
 **Sesudah semua tes Montase lolos:** buat tag `v1.4.0` (versi sudah 1.4.0 di
 `version.py`); build rilisnya menerbitkan pembaruan ke semua pemasangan.
 
+### Tambahan 5 November 2026: orisinalitas dan algoritma YouTube (JOB-5)
+
+- [ ] **103. Meter orisinalitas.** Buka proyek Montase yang memakai Klip jadi
+  atau Unduhan tanpa narasi, lalu klik lencana **Orisinal xx%** di kepala editor.
+  - Diharapkan: merah, "belum lolos gerbang tinjau". Sesudah narasi ditambahkan:
+    kuning atau hijau. Klip orang lain lebih dari 12 detik tanpa tambahan muncul
+    di "Potongan tanpa tambahan", dan **Lompat** membawa garis putar ke sana.
+- [ ] **104. Rekam narasi dengan suara sendiri.** Pada proyek Top 5 dari
+  asisten (narasi suara AI): meter → **Rekam dengan suara saya**, atau tab Asisten.
+  - Diharapkan: naskah tampil besar; Rekam/Berhenti mengganti narasi itu
+    dengan suara Anda di tempat yang sama, lalu pindah ke narasi berikutnya.
+    Ctrl+Z mengembalikan suara AI. Hasil ekspor yang semua narasinya direkam
+    tidak lagi berlabel konten sintetis.
+- [ ] **105. Kemiripan antar video.** Ekspor dua atau tiga video Top N dengan
+  susunan dan suara yang sama, buat yang keempat, lalu meter → **Bandingkan
+  dengan ekspor sebelumnya**.
+  - Diharapkan: "pola berulang" atau "sangat mirip", dengan dimensi yang sama
+    (susunan, animasi, suara narasi) dan saran mengubahnya. Video dengan
+    susunan dan suara berbeda: "Tidak ada yang terlalu mirip".
+- [ ] **106. Pembuka kuat.** Meter → bagian Pembuka (tiga centang). Tab
+  Asisten → **Usulkan cuplikan pembuka** → Terima.
+  - Diharapkan: 2 detik momen paling heboh muncul paling depan dengan tulisan
+    "Tunggu momen ini!", dan seluruh isi lain mundur 2 detik.
+- [ ] **107. Reaksi kamera.** Tab Suara → **Rekam reaksi** (pakai earphone).
+  Taruh garis putar di klip, **Rekam sambil memutar**, berbicaralah, Berhenti.
+  - Diharapkan: wajah Anda muncul kecil di kanan bawah tepat di bingkai mulai
+    merekam, sinkron dengan klipnya; angka meter naik.
+- [ ] **108. Akhir menyambung dan judul unik.** Meter → bagian Akhir video →
+  **Usulkan akhir menyambung** → Terima, lalu putar ulang hasil ekspornya di HP.
+  Lalu di formulir Unggah, ketik judul yang mirip video Anda sebelumnya.
+  - Diharapkan: tidak ada layar hitam di ujung, dan putaran ulang terasa
+    menyambung. Di bawah kolom judul muncul peringatan judul yang mirip. Video
+    datar yang lebih panjang dari 3 menit dengan penanda berlabel mendapat bab
+    (0:00, ...) di deskripsinya.
+
+### Tambahan 5 November 2026: preset dan templat Montase (JOB-5 P1-P4)
+
+- [ ] **109. Preset caption.** Proyek dengan subtitle (tombol **Subtitle** di
+  bilah alat), klik nama lajur Subtitle → pilih **Pantul**, lalu **Neon**.
+  - Diharapkan: SEMUA baris subtitle berganti gaya sekaligus, kata yang sedang
+    diucapkan tersorot sesuai gaya (pantul: membesar kuning; kotak ungu: kotak
+    di belakang kata). Buat ulang subtitle: gaya terakhir tetap dipakai.
+- [ ] **110. Gaya teks saya.** Pilih item teks, atur font/warna, isi **Nama
+  gaya** → **Simpan gaya ini**. Buka proyek lain, pilih teks, terapkan gaya itu.
+  - Diharapkan: gaya muncul di daftar "Gaya saya" di proyek mana pun pada
+    profil yang sama, bisa dihapus, dan tidak muncul di profil lain.
+- [ ] **111. Templat bawaan.** Montase → **Proyek baru** → templat **Top 5
+  hitung mundur**, variasi **3** → Buat proyek.
+  - Diharapkan: usulan bergaris putus berisi 5 kartu, bilah peringkat yang
+    menyala sesuai nomor yang tampil, ajakan berlangganan di akhir, dan 5
+    penanda "Taruh klip #n di sini". **Terima semua** lalu taruh klip di
+    penanda. Ulangi dengan variasi 1: warna dan gaya caption berbeda.
+- [ ] **112. Templat saya.** Di proyek dari tes 111 (sesudah ditata), tab
+  **Asisten** → isi **Nama templat** → **Simpan sebagai templat**. Lalu Proyek
+  baru 60 fps → pilih templat itu di bagian "Templat saya".
+  - Diharapkan: kartu, teks (beserta posisinya), penanda, dan gaya caption
+    ikut di waktu yang sama (dalam detik); klip, musik, dan teks subtitle
+    TIDAK ikut. Tombol × menghapus templatnya.
+
 ### Jalur fitur unggulan (urutan disarankan, ±30 menit)
 
 Satu video podcast pendek (10-20 menit) cukup untuk semuanya:

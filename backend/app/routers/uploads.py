@@ -221,12 +221,23 @@ async def saran_deskripsi(clip_name: str, judul: str = ""):
         return {
             "deskripsi": deskripsi(setel.get("deskripsi", ""),
                                    judul=judul or meta.get("title") or "",
-                                   hashtag=tagar, sumber=sumber, pakai_kredit=pakai),
+                                   hashtag=tagar, sumber=sumber, pakai_kredit=pakai,
+                                   bab=meta.get("bab")),
             "kredit": kredit(sumber) if pakai else "",
             "sumber": sumber,
         }
 
     return await asyncio.to_thread(kerja)
+
+
+@router.get("/keunikan")
+async def lihat_keunikan(clip_name: str, judul: str = ""):
+    """Judul ini lawan judul unggahan dan Klip jadi sebelumnya (JOB-5 O7). Tidak memblokir."""
+    import asyncio
+
+    from ..services import keunikan, profil
+
+    return await asyncio.to_thread(keunikan.periksa, judul, clip_name=clip_name, profil_id=profil.kini())
 
 
 @router.get("/gerbang")

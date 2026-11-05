@@ -15,6 +15,7 @@ import {
   tambahBahan, ubahItem,
 } from './dokumen.js';
 import { KURVA, nilaiPada, punyaKeyframe, SIFAT_KEYFRAME } from '../komposisi/keyframe.js';
+import { presetCaption } from './presetCaption.js';
 
 const MEDIA = new Set(['video', 'audio']);
 
@@ -475,6 +476,8 @@ export function pasangSubtitle(dokumen, potongan, { nama = 'Subtitle', alasan = 
     lajur = d.lajur.find((l) => l.id === hasil.lajurId);
   }
   const dipakai = new Set(d.lajur.filter((l) => l.id !== lajur.id).flatMap((l) => l.item.map((i) => i.id)));
+  // Subtitle yang dibuat ulang memakai preset caption lajurnya (JOB-5 P1).
+  const gaya = presetCaption(lajur.gaya_caption)?.gaya ?? GAYA_SUBTITLE;
   let n = 1;
   const item = [];
   for (const p of potongan) {
@@ -483,7 +486,7 @@ export function pasangSubtitle(dokumen, potongan, { nama = 'Subtitle', alasan = 
     dipakai.add(id);
     item.push({
       id, jenis: 'teks', mulai: Math.max(0, Math.round(p.mulai)), durasi: Math.max(1, Math.round(p.durasi)),
-      teks: String(p.teks).slice(0, 500), kata: p.kata, gaya: { ...GAYA_SUBTITLE }, asal: 'ai', alasan,
+      teks: String(p.teks).slice(0, 500), kata: p.kata, gaya: { ...gaya }, asal: 'ai', alasan,
     });
   }
   const lajurId = lajur.id;
@@ -783,5 +786,53 @@ export function tambahStiker(dokumen, { mulai = 0, emoji = '🔥' } = {}) {
   return {
     dokumen: rapikan({ ...dokumen, lajur: dokumen.lajur.map((l) => (l.id === lajur.id ? { ...l, item: [...l.item, item] } : l)) }),
     itemId: id,
+  };
+}
+
+// --- reaksi kamera (JOB-5 O5) --------------------------------------------------
+
+/**
+ * Rekaman reaksi kamera sebagai gambar-dalam-gambar di bingkai `mulai`: di
+ * lajur video SELAIN lajur utama yang kosong di rentang itu (atau lajur video
+ * baru), diperkecil ke sudut kanan bawah, di atas zona subtitle (22% bawah
+ * kanvas tegak). Ukurannya kira-kira 42% lebar kanvas tegak, 30% kanvas datar.
+ */
+export function tambahReaksi(dokumen, bahan, mulai) {
+  const fps = dokumen.kanvas.fps;
+  const awal = Math.max(0, Math.round(mulai));
+  const panjang = Math.max(1, Math.round((bahan.durasi || 1) * fps));
+  const video = dokumen.lajur.filter((l) => l.jenis === 'video');
+  const kosong = video.slice(1).find((l) => !l.kunci
+    && !l.item.some((i) => i.mulai < awal + panjang && i.mulai + i.durasi > awal));
+  let d = dokumen;
+  let lajurId = kosong?.id;
+  if (!lajurId) {
+    const baru = tambahLajur(d, 'video');
+    d = baru.dokumen;
+    lajurId = baru.lajurId;
+  }
+  const hasil = tambahBahan(d, { ...bahan, jenis: 'video' }, { mulai: awal, lajurId });
+  const W = dokumen.kanvas.lebar;
+  const H = dokumen.kanvas.tinggi;
+  const bw = bahan.lebar || 16;
+  const bh = bahan.tinggi || 9;
+  const s0 = Math.min(W / bw, H / bh);
+  const kotakW = bw * s0;
+  const kotakH = bh * s0;
+  const tegak = H > W;
+  const skala = ((tegak ? 0.42 : 0.3) * W) / kotakW;
+  const w = kotakW * skala;
+  const h = kotakH * skala;
+  const tepi = 0.04 * W;
+  const bawah = tegak ? 0.72 * H : H - tepi;
+  const ubah = {
+    skala: Math.round(skala * 1000) / 1000,
+    x: Math.round(W - tepi - w / 2 - W / 2),
+    y: Math.round(bawah - h / 2 - H / 2),
+  };
+  return {
+    dokumen: ubahItem(hasil.dokumen, hasil.itemId, { ubah, nama: bahan.nama || undefined }),
+    itemId: hasil.itemId,
+    lajurId,
   };
 }
