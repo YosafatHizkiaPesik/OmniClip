@@ -90,7 +90,9 @@ export function hitungOrisinalitas(dokumen, asalBahan = new Map()) {
     for (const i of l.item) {
       const r = [i.mulai, i.mulai + i.durasi];
       const asal = i.bahan ? asalBahan.get(i.bahan) : null;
-      if ((i.jenis === 'video' || i.jenis === 'gambar') && ASAL_LAIN.has(asal)) {
+      if (i.jenis === 'video' && asal === 'rekam') {
+        suaraSendiri.push(r);                     // reaksi kamera pemilik kanal (JOB-5 O5)
+      } else if ((i.jenis === 'video' || i.jenis === 'gambar') && ASAL_LAIN.has(asal)) {
         lain.push(r);
         if (l.id !== utama) tambahan.push(r);      // gambar-dalam-gambar tetap suntingan
       } else if (i.jenis === 'audio' && !l.bisu) {

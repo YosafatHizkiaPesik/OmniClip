@@ -2654,3 +2654,9 @@ button.tujuan, a.tujuan { cursor: pointer; }
 .montase-orisinal-pembuka ul { list-style: none; margin: 0; padding: 0; }
 .montase-orisinal-pembuka li.ya { color: #1f9d55; }
 .montase-orisinal-pembuka li.tidak { color: var(--reh); }
+
+/* Montase: rekam reaksi kamera (JOB-5 O5) */
+.montase-reaksi { position: fixed; right: 20px; bottom: 20px; z-index: 55; width: min(340px, calc(100vw - 32px));
+  padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.montase-reaksi h2 { margin: 0; font-size: .95rem; }
+.montase-reaksi-layar { width: 100%; aspect-ratio: 16 / 9; background: #000; border-radius: var(--r-md); object-fit: cover; transform: scaleX(-1); }

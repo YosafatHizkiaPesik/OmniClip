@@ -12,7 +12,7 @@
  * ulang suara" menyala dan menggantinya sekali.
  */
 import React, { useEffect, useState } from 'react';
-import { Loader2, Mic, RefreshCw, Square, Wand2 } from 'lucide-react';
+import { Loader2, Mic, RefreshCw, Square, Video, Wand2 } from 'lucide-react';
 import { useT, angka } from '../../../lib/i18n';
 import { buatNarasi, daftarSuara, simpanRekaman } from '../api.js';
 import { detikRekam, useRekamMikrofon } from './rekamMikrofon.js';
@@ -49,7 +49,7 @@ function suaraAwal(suara) {
   return suara.find((s) => s.siap && s.bahasa === 'id')?.id ?? suara.find((s) => s.siap)?.id ?? '';
 }
 
-export default function PanelSuara({ onTambahSuara }) {
+export default function PanelSuara({ onTambahSuara, onBukaReaksi }) {
   const t = useT();
   const suara = useSuara();
   const [teks, setTeks] = useState('');
@@ -130,6 +130,15 @@ export default function PanelSuara({ onTambahSuara }) {
           </button>
         )}
       </section>
+      {onBukaReaksi && (
+        <section className="montase-bagian">
+          <h3>{t('montase.reaksi.judul')}</h3>
+          <p className="montase-petunjuk">{t('montase.reaksi.tab_ket')}</p>
+          <button type="button" className="btn-secondary" onClick={onBukaReaksi}>
+            <Video size={13} />{t('montase.reaksi.buka')}
+          </button>
+        </section>
+      )}
     </div>
   );
 }

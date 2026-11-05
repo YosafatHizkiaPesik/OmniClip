@@ -70,7 +70,7 @@ function BarisBahan({ b, token, onTambah, sibuk, bisaDiseret = false }) {
   );
 }
 
-export default function PanelBahan({ token, onTambahKeLinimasa, onTambahSuara, onBahan, animasi, asisten }) {
+export default function PanelBahan({ token, onTambahKeLinimasa, onTambahSuara, onBahan, animasi, asisten, onBukaReaksi }) {
   const t = useT();
   const [bahan, setBahan] = useState([]);
   const [asal, setAsal] = useState(null);
@@ -182,7 +182,8 @@ export default function PanelBahan({ token, onTambahKeLinimasa, onTambahSuara, o
       {asal === 'animasi' && <PanelAnimasi token={token} {...animasi} />}
 
       {asal === 'suara' && (
-        <PanelSuara onTambahSuara={async (b, narasi) => { await muat(); onTambahSuara(b, narasi); }} />
+        <PanelSuara onTambahSuara={async (b, narasi) => { await muat(); onTambahSuara(b, narasi); }}
+                    onBukaReaksi={onBukaReaksi} />
       )}
 
       <ul className="montase-bahan-daftar" hidden={tabPanel}>

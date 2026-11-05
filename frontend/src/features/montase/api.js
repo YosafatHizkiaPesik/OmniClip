@@ -65,6 +65,13 @@ export function simpanRekaman(blob, nama) {
   return apiUnggah('/montase/rekam', data);
 }
 
+/** Rekaman reaksi kamera (JOB-5 O5): WebM -> server -> MP4, bahan `rekam` berjenis video. */
+export function simpanRekamanVideo(blob, nama) {
+  const data = new FormData();
+  data.append('berkas', blob, `${nama}.webm`);
+  return apiUnggah('/montase/rekam-video', data);
+}
+
 /** Tema teks siap pakai (dari tema_judul.py) dan font bawaan, sekali per sesi. */
 let gayaTeks = null;
 export function ambilGayaTeks() {

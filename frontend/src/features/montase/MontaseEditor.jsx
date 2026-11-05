@@ -40,7 +40,7 @@ import {
 import {
   aturUlangTransform, bekukan, belah, bisaHapusLajur, gandakan, gantiBahanItem, hapusBanyak,
   hapusBeriak, hapusLajur, hapusPenanda, hapusPunch, kurvaKeyframe, pasangSubtitle, rapatkan,
-  rendamMusik, salin, semuaItem, tambahLajur, tambahPenanda, tambahPunch, tambahStiker, taruhSuara,
+  rendamMusik, salin, semuaItem, tambahLajur, tambahPenanda, tambahPunch, tambahReaksi, tambahStiker, taruhSuara,
   tempel, tombolKeyframe, ubahKecepatan, ubahLajur, ubahPenanda, ubahSifatDiBingkai, ubahTransform,
 } from './model/suntingan.js';
 import {
@@ -56,6 +56,7 @@ import { TombolUsulan } from './editor/PanelAsisten.jsx';
 import RiwayatVersi from './editor/RiwayatVersi.jsx';
 import MeterOrisinalitas from './editor/MeterOrisinalitas.jsx';
 import Teleprompter from './editor/Teleprompter.jsx';
+import RekamReaksi from './editor/RekamReaksi.jsx';
 import { hitungOrisinalitas } from './model/orisinalitas.js';
 import { JendelaBantuan } from './BantuanMontase.jsx';
 import { terapkanOperasi } from './model/usulan.js';
@@ -205,6 +206,7 @@ export default function MontaseEditor() {
   const [bantuan, setBantuan] = useState(false);
   // Teleprompter narasi (JOB-5 O2): daftar {id, teks, direkam} yang sedang direkam ulang.
   const [teleprompter, setTeleprompter] = useState(null);
+  const [reaksi, setReaksi] = useState(false);
   const catatBahan = useCallback((daftar) => {
     setBahanSiap(new Set(daftar.filter((b) => b.siap).map((b) => b.id)));
     setAsalBahan(new Map(daftar.map((b) => [b.id, b.asal])));
@@ -411,6 +413,13 @@ export default function MontaseEditor() {
     let daftar = ids ? semua.filter((x) => ids.includes(x.id)) : semua.filter((x) => !x.direkam);
     if (!daftar.length && !ids) daftar = semua;
     if (daftar.length) setTeleprompter(daftar);
+  };
+  /** Reaksi kamera selesai direkam (JOB-5 O5): gambar-dalam-gambar di bingkai mulainya. */
+  const reaksiSelesai = (bahan, mulai) => {
+    const hasil = tambahReaksi(dok(), bahan, mulai);
+    if (terapkan(hasil.dokumen)) pilih([hasil.itemId]);
+    setAsalBahan((m) => new Map(m).set(bahan.id, 'rekam'));
+    setReaksi(false);
   };
   const rekamanNarasi = (itemId, bahan) => {
     const it = cariItem(dok(), itemId)?.item;
@@ -721,6 +730,7 @@ export default function MontaseEditor() {
       >
         <PanelBahan token={token} onTambahKeLinimasa={tambahKeLinimasa} onTambahSuara={tambahSuara}
                     onBahan={catatBahan}
+                    onBukaReaksi={() => setReaksi(true)}
                     animasi={{
                       proyekId, dokumen, garis, terpilih, onSimpanDulu: simpanSekarang,
                       onTambahBawaan: tambahAnimasiDiGaris, onTambahAi: tambahAnimasiAi,
@@ -827,6 +837,9 @@ export default function MontaseEditor() {
       {terbit && <SiapkanTerbit clip={terbit} onClose={() => setTerbit(null)} onSelesai={() => {}} />}
       {unggah && <UploadModal clip={unggah} onClose={() => setUnggah(null)} onDone={() => {}} />}
       {bantuan && <JendelaBantuan onTutup={() => setBantuan(false)} />}
+      {reaksi && (
+        <RekamReaksi garis={garis} pratinjau={pratinjau} onSelesai={reaksiSelesai} onTutup={() => setReaksi(false)} />
+      )}
       {teleprompter && (
         <Teleprompter daftar={teleprompter} onRekaman={rekamanNarasi} onTutup={() => setTeleprompter(null)} />
       )}
