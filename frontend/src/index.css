@@ -2573,8 +2573,8 @@ button.tujuan, a.tujuan { cursor: pointer; }
 /* Montase: usulan asisten (JOB-4 M5.2) */
 .montase-item.usulan { outline: 2px dashed #ffd400; outline-offset: -2px; opacity: .82; }
 .montase-item.usulan.dipilih { outline-style: dashed; }
-.montase-bilah-usulan { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 10px;
-  background: rgba(255, 212, 0, .12); border: 1px dashed #ffd400; border-radius: var(--r-md); font-size: .8rem; }
+.montase-bilah-usulan { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 10px; margin: 6px 8px 0;
+  background: rgba(36, 30, 0, .92); color: #ffe680; border: 1px dashed #ffd400; border-radius: var(--r-md); font-size: .8rem; }
 .montase-bilah-usulan > span { flex: 1 1 160px; }
 .montase-asisten { display: flex; flex-direction: column; gap: 10px; padding: 8px 12px 16px; overflow: auto; }
 .montase-asisten textarea { width: 100%; font: inherit; font-size: .82rem; }

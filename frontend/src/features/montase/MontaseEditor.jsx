@@ -20,11 +20,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
-  ArrowLeft, Check, CloudOff, Download, Loader2, MonitorSmartphone, RefreshCw,
+  ArrowLeft, Check, CloudOff, Download, Loader2, MonitorSmartphone, RefreshCw, Send,
 } from 'lucide-react';
 import { useT } from '../../lib/i18n';
 import { useJobRunner } from '../../hooks/useJob';
 import JobProgress from '../../components/JobProgress';
+import SiapkanTerbit from '../../components/SiapkanTerbit';
 import { BAWAAN } from './komposisi/index.js';
 import {
   ambilProyek, ambilToken, buatNarasi, fontDipakai, komponenDipakai, simpanProyek, sumberPratinjau,
@@ -173,6 +174,8 @@ export default function MontaseEditor() {
   // Usulan asisten (M5.2): {operasi, pilih: Set, sumber, peringatan}. Selama ada,
   // pratinjau dan linimasa memperlihatkan dokumen + operasi terpilih.
   const [usulan, setUsulan] = useState(null);
+  // Saran judul, caption, dan tagar untuk hasil ekspor (M5.6, keterangan.py).
+  const [terbit, setTerbit] = useState(null);
   const catatBahan = useCallback((daftar) => {
     setBahanSiap(new Set(daftar.filter((b) => b.siap).map((b) => b.id)));
   }, []);
@@ -597,6 +600,13 @@ export default function MontaseEditor() {
         {hasil && (
           <Link className="btn-secondary" to="/clips">{t('montase.editor.lihat_klip', { berkas: hasil.berkas })}</Link>
         )}
+        {hasil && (
+          <button type="button" className="btn-secondary" onClick={() => setTerbit({ file_name: hasil.berkas, metadata: {} })}
+                  title={t('klip.siapkan_judul')}
+          >
+            <Send size={14} />{t('klip.siapkan')}
+          </button>
+        )}
         <button type="button" className="btn-primary" onClick={mulaiEkspor}
                 disabled={ekspor.active || status === 'bentrok'}
         >
@@ -701,6 +711,7 @@ export default function MontaseEditor() {
         bisaUlang={bisaUlang(riwayat)}
         onJatuhBahan={tambahKeLinimasa}
       />
+      {terbit && <SiapkanTerbit clip={terbit} onClose={() => setTerbit(null)} onSelesai={() => {}} />}
     </div>
   );
 }

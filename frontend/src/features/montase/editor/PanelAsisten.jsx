@@ -9,7 +9,7 @@
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Check, CheckCheck, Loader2, Scissors, Sparkles, X,
+  Check, CheckCheck, Crop, Loader2, Scissors, Sparkles, X,
 } from 'lucide-react';
 import { useT } from '../../../lib/i18n';
 import { formatTime } from '../../../utils/timeFormat';
@@ -107,21 +107,28 @@ export default function PanelAsisten({
   const [galat, setGalat] = useState(null);
   const kerja = useJobRunner();
   const jeda = useJobRunner();
+  const bingkai = useJobRunner();
 
   const video = useMemo(() => bahan.filter((b) => b.jenis === 'video'), [bahan]);
   const dipilih = pilih ?? new Set(video.map((b) => b.id));
   useEffect(() => { daftarSuara().then((s) => { setDaftar(s); }).catch(() => {}); }, []);
 
-  useEffect(() => {
-    const h = kerja.result ?? jeda.result;
+  // Satu efek per pekerjaan: hasil yang lama dari pekerjaan lain tidak boleh
+  // muncul lagi sebagai usulan (dulu "Cari jeda" memunculkan ulang Top 5).
+  const terimaHasil = (h) => {
     if (!h) return;
     if (!h.operasi?.length) {
       setGalat(t('montase.asisten.tanpa_usulan'));
       return;
     }
     onUsulan({ ...h, pilih: new Set(h.operasi.map((o) => o.id)) });
+  };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kerja.result, jeda.result]);
+  useEffect(() => terimaHasil(kerja.result), [kerja.result]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => terimaHasil(jeda.result), [jeda.result]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => terimaHasil(bingkai.result), [bingkai.result]);
 
   const susun = async () => {
     setGalat(null);
@@ -138,12 +145,18 @@ export default function PanelAsisten({
     await onSimpanDulu();
     jeda.run(`/montase/proyek/${proyekId}/jeda`, { item: item.id }).catch((e) => setGalat(e.message));
   };
+  const bisaBingkai = item && item.jenis === 'video';
+  const bingkaiUlang = async () => {
+    setGalat(null);
+    await onSimpanDulu();
+    bingkai.run(`/montase/proyek/${proyekId}/bingkai`, { item: item.id }).catch((e) => setGalat(e.message));
+  };
   const centang = (id, nyala) => {
     const baru = new Set(dipilih);
     if (nyala) baru.add(id); else baru.delete(id);
     setPilih(baru);
   };
-  const sibuk = kerja.active || jeda.active;
+  const sibuk = kerja.active || jeda.active || bingkai.active;
 
   if (usulan) {
     return (
@@ -207,6 +220,15 @@ export default function PanelAsisten({
           {t('montase.asisten.jeda_tombol')}
         </button>
         {(jeda.job || jeda.error) && <JobProgress job={jeda.job} error={jeda.error} onCancel={jeda.cancel} compact />}
+      </section>
+      <section className="montase-bagian">
+        <h3><span><Crop size={13} /> {t('montase.asisten.bingkai_judul')}</span></h3>
+        <p className="montase-petunjuk">{t(bisaBingkai ? 'montase.asisten.bingkai_ket' : 'montase.asisten.bingkai_pilih')}</p>
+        <button type="button" className="btn-secondary" onClick={bingkaiUlang} disabled={!bisaBingkai || sibuk}>
+          {bingkai.active ? <Loader2 size={13} className="animate-spin" /> : <Crop size={13} />}
+          {t('montase.asisten.bingkai_tombol')}
+        </button>
+        {(bingkai.job || bingkai.error) && <JobProgress job={bingkai.job} error={bingkai.error} onCancel={bingkai.cancel} compact />}
       </section>
     </div>
   );

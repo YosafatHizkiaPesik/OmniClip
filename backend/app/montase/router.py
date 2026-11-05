@@ -256,6 +256,15 @@ def jeda_proyek(proyek_id: str, b: Jeda):
     return {"job_id": jeda.mulai(proyek_id, b.item)}
 
 
+@router.post("/proyek/{proyek_id}/bingkai")
+def bingkai_proyek(proyek_id: str, b: Jeda):
+    """Usulan bingkai ulang 9:16 mengikuti wajah untuk satu item video (M5.5)."""
+    from . import bingkai
+    if repo.ambil_proyek(profil.kini(), proyek_id) is None:
+        raise NotFound("Proyek tidak ditemukan.")
+    return {"job_id": bingkai.mulai(proyek_id, b.item)}
+
+
 # --- bahan --------------------------------------------------------------------
 
 class Rujuk(BaseModel):

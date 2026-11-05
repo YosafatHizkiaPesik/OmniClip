@@ -66,6 +66,18 @@ describe('terapkanOperasi', () => {
       [0, 30, 0], [30, 90, 60], [120, 120, 180], [240, 60, 0]]);
   });
 
+  it('potongan ikut menggeser item lajur lain yang sesudahnya', () => {
+    let d = tambahBahan(kosong(), { id: 'b1', jenis: 'video', durasi: 10, nama: 'v' }).dokumen;
+    const id = d.lajur[0].item[0].id;
+    d = terapkanOperasi(d, [
+      { id: 'k1', jenis: 'animasi', komponen: 'ko_hitung_mundur', mulai: 240, durasi: 30, props: {} },
+      { id: 'k0', jenis: 'animasi', komponen: 'ko_hitung_mundur', mulai: 0, durasi: 20, props: {} },
+    ]).dokumen;
+    const { dokumen } = terapkanOperasi(d, [{ id: 'p', jenis: 'potong', item: id, dari: 60, sampai: 120 }]);
+    const anim = dokumen.lajur[1].item.map((i) => i.mulai).sort((a, b) => a - b);
+    expect(anim).toEqual([0, 180]);
+  });
+
   it('operasi yang itemnya sudah tidak ada dilewati', () => {
     const { dilewati } = terapkanOperasi(kosong(), [{ id: 'p', jenis: 'potong', item: 'hilang', dari: 0, sampai: 9 }]);
     expect(dilewati).toEqual(['p']);

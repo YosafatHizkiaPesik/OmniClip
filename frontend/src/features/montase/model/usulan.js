@@ -14,11 +14,29 @@
  *   ubah     {item, ubah?, keyframe?}      bingkai ulang (posisi, skala)
  * Semua operasi punya {id, kelompok, label, alasan}.
  */
-import { cariItem, tambahBahan, tambahMotion, tambahTeks, ubahItem } from './dokumen.js';
+import {
+  cariItem, durasiIsi, tambahBahan, tambahMotion, tambahTeks, ubahItem,
+} from './dokumen.js';
 import { belah, hapusBeriak, taruhSuara } from './suntingan.js';
 
 function tandaiAi(dokumen, itemId, op, tambahan = {}) {
   return ubahItem(dokumen, itemId, { asal: 'ai', alasan: (op.alasan || '').slice(0, 500), ...tambahan });
+}
+
+/**
+ * Potongan jeda menggeser juga item di lajur LAIN yang mulai sesudah
+ * potongannya (kartu, narasi, teks), supaya tetap menempel pada klipnya.
+ * `hapusBeriak` sendiri hanya meriak di lajurnya; di Top 5 hasil asisten itu
+ * membuat kartu #1 menimpa awal klip #1 sesudah jeda klip #5 dibuang.
+ */
+function geserLajurLain(dokumen, lajurId, sampai, delta) {
+  const baru = {
+    ...dokumen,
+    lajur: dokumen.lajur.map((l) => (l.id === lajurId || l.kunci ? l : {
+      ...l, item: l.item.map((i) => (i.mulai >= sampai ? { ...i, mulai: Math.max(0, i.mulai - delta) } : i)),
+    })),
+  };
+  return { ...baru, durasi: durasiIsi(baru) };
 }
 
 function jalankanSatu(d, op) {
@@ -66,7 +84,8 @@ function jalankanSatu(d, op) {
         tengah = b.itemBaru;
       }
       if (!tengah) return { dokumen: d, itemId: null };
-      return { dokumen: hapusBeriak(x, tengah), itemId: null };
+      const beriak = hapusBeriak(x, tengah);
+      return { dokumen: geserLajurLain(beriak, hit.lajur.id, sampai, sampai - dari), itemId: null };
     }
     default:
       return { dokumen: d, itemId: null };
@@ -96,7 +115,7 @@ export function terapkanOperasi(dokumen, operasi, pilih = null) {
     }
     if (h.dokumen === d && op.jenis !== 'ubah') dilewati.push(op.id);
     d = h.dokumen;
-    if (h.itemId && op.jenis !== 'ubah') itemUsulan.set(h.itemId, op.id);
+    if (h.itemId) itemUsulan.set(h.itemId, op.id);
   }
   return { dokumen: d, itemUsulan, dilewati };
 }

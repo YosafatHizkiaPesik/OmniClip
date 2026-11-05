@@ -163,8 +163,13 @@ def minat(perintah: str) -> set[str]:
 
 
 def skor(r: dict, dicari: set[str]) -> float:
-    """Jumlah kekuatan momen, dibobot dua kali lipat bila jenisnya yang dicari."""
-    return round(sum(m["kuat"] * (2.0 if dicari & set(m["jenis"]) else 1.0) for m in r["momen"]), 3)
+    """
+    Momen terkuat ditambah 0,3 x sisanya; kekuatan dibobot dua kali lipat bila
+    jenisnya yang dicari. Bukan jumlah biasa: klip dengan banyak momen sedang
+    tidak boleh mengalahkan satu momen yang benar-benar kuat.
+    """
+    nilai = sorted((m["kuat"] * (2.0 if dicari & set(m["jenis"]) else 1.0) for m in r["momen"]), reverse=True)
+    return round(nilai[0] + 0.3 * sum(nilai[1:]), 3) if nilai else 0.0
 
 
 def _judul_lokal(r: dict) -> str:
@@ -401,7 +406,7 @@ def run_asisten(ctx):
     ctx.progress(0.03, stage="bahan", message="Membaca klip")
     ringkasan = ringkas_bahan(pid, list(p.get("bahan") or []), batal=lambda: ctx.cancelled,
                               kabar=lambda f, n: ctx.progress(0.03 + 0.4 * f, stage="bahan",
-                                                              message=f"Membaca {n}"))
+                                                              message=f"Membaca klip: {n}"))
     if not ringkasan:
         raise InvalidInput("Pilih paling sedikit satu klip video di Bahan saya.")
 
@@ -448,6 +453,6 @@ def mulai(proyek_id: str, payload: dict) -> str:
     from ..services.jobs import queue
     pid = profil.kini()
     job_id, _ = queue.enqueue("montase_asisten", {**payload, "proyek_id": proyek_id, "profil_id": pid},
-                              lane="net")
+                              lane="cpu")
     return job_id
 

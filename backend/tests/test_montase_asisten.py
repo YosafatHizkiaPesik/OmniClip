@@ -39,7 +39,7 @@ class RencanaLokal(unittest.TestCase):
         r = A.rencana_lokal("Top 3 momen paling lucu", RINGKAS, maks=20, bahasa="id")
         urut = r["urutan"]
         self.assertEqual([s["peringkat"] for s in urut], [3, 2, 1])
-        # Tawa dibobot dua kali: b2 (1,8 + 0,6) > b1 (1,0) > b4 (0,8) > b5 (0,6).
+        # Tawa dibobot dua kali: b2 (1,8 + 0,3 x 0,6) > b1 (1,0) > b4 (0,8) > b5 (0,6).
         self.assertEqual([s["bahan"] for s in urut], ["b4", "b1", "b2"])
         b2 = urut[-1]
         self.assertAlmostEqual(b2["sampai"] - b2["dari"], 20.0)
