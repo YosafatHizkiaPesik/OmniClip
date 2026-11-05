@@ -20,9 +20,9 @@ lupa untuk selalu mencatatnya agar ... sesi lain masih bisa melanjutkannya".
 | O4 Pembuka kuat | ✅ a1e7e6e | cek 3 detik + cuplikan |
 | O5 Rekam reaksi kamera | ✅ 9b20252 | PiP sinkron dengan pratinjau |
 | O6 Akhir menyambung | ✅ bacd105 | ekor mati + sambung ke awal |
-| O7 Keterangan unik + bab | ⬜ | |
+| O7 Keterangan unik + bab | ✅ 100d129 | judul unik + bab |
 
-**Tugas berikutnya:** `O7`.
+**Tugas berikutnya:** `PR JOB-5`.
 
 **Melanjutkan di sesi baru:** baca papan ini dan bagian 4. Kerjakan tugas
 berikutnya; bila ada catatan "SEBAGIAN" di bawah butirnya, lanjutkan dari
@@ -117,7 +117,8 @@ Urutan dari dampak terbesar terhadap penilaian orisinalitas.
   (selesai 5 Nov 2026, commit 9b20252) editor/RekamReaksi.jsx (kamera + putar pratinjau bersamaan), model tambahReaksi (PiP 42% lebar kanvas tegak, kanan bawah di atas 72% tinggi), server POST /rekam-video (commit 20828c7). Lapisan reaksi dihitung penuh. Playwright dengan kamera palsu Chromium 4/4; meter 42% -> 63%.
 - [x] **O6** Akhir menyambung.
   (selesai 5 Nov 2026, commit bacd105) model/akhir.js periksaAkhir + usulanAkhir (potong ekor tanpa gambar, sambung 1 dtk pertama di ujung); bagian Akhir video + tombol usulan di panel meter; tanpa server. Playwright 4/4 termasuk Ctrl+Z.
-- [ ] **O7** Keterangan unik dan bab.
+- [x] **O7** Keterangan unik dan bab.
+  (selesai 5 Nov 2026, commit 100d129) services/keunikan.py (judul vs unggahan + Klip jadi, Jaccard kata >= 0,7, >= 3 = pola), peringatan di UploadModal; bab dari penanda/kartu peringkat di sidecar (bukan Shorts), unggah.teks_bab menegakkan aturan bab YouTube. API diuji; peringatan di formulir belum terlihat di container karena akun Google tidak tersambung (UJI-LANGSUNG).
 
 ## Sumber
 
