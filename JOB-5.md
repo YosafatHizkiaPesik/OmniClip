@@ -26,10 +26,10 @@ lupa untuk selalu mencatatnya agar ... sesi lain masih bisa melanjutkannya".
 | P2 Preset teks milik sendiri | ✅ fc47fb6 | simpan/pakai/hapus gaya |
 | P3 Templat video bawaan | ✅ 1f9b84c | templat bawaan |
 | P4 Templat milik sendiri | ✅ 1987605 | templat sendiri |
-| D1 Katalog fitur (FITUR.md) | ⬜ | |
-| D2 Saran fitur berikutnya | ⬜ | |
+| D1 Katalog fitur (FITUR.md) | ✅ d68ffad | katalog fitur |
+| D2 Saran fitur berikutnya | ✅ d68ffad | saran fitur |
 
-**Tugas berikutnya:** `D1`.
+**Tugas berikutnya:** `uji pemilik (UJI-LANGSUNG 103-112), lalu CI dan merge PR #13`.
 
 **Melanjutkan di sesi baru:** baca papan ini dan bagian 4. Kerjakan tugas
 berikutnya; bila ada catatan "SEBAGIAN" di bawah butirnya, lanjutkan dari
@@ -160,11 +160,13 @@ O3 tetap memperingatkan bila hasilnya terlalu mirip video sebelumnya.
 serta study case penggunaannya seperti apa. lalu apakah tidak ada lagi fitur
 yang kamu sarankan untuk ditambah di sistem sebagai penunjang".
 
-- [ ] **D1** `FITUR.md`: katalog SEMUA fitur OmniClip (Studio Klip, Montase,
+- [x] **D1** `FITUR.md`: katalog SEMUA fitur OmniClip (Studio Klip, Montase,
+  (selesai 5 Nov 2026, commit d68ffad) FITUR.md (11 bagian, tabel apa/manfaat/contoh, 3 studi kasus), ditautkan dari CLAUDE.md
   unggah, analitik, pengaturan, pemeliharaan), per fitur: apa itu, manfaatnya,
   dan contoh kasus pemakaian; disusun dari kode dan JOB-1..JOB-5, bukan
   ingatan. Ditautkan dari CLAUDE.md.
-- [ ] **D2** Saran fitur penunjang berikutnya (bagian akhir FITUR.md), diurutkan
+- [x] **D2** Saran fitur penunjang berikutnya (bagian akhir FITUR.md), diurutkan
+  (selesai 5 Nov 2026, commit d68ffad) FITUR.md bagian 12: 10 saran (thumbnail, retensi di linimasa, analitik per templat, komentar jadi ide, chroma key, cek musik, kompilasi mingguan, dubbing, kalender, masking)
   menurut manfaat, dengan alasan dan perkiraan besar pekerjaannya.
 
 ## Sumber
