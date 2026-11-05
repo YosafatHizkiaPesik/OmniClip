@@ -15,14 +15,14 @@ lupa untuk selalu mencatatnya agar ... sesi lain masih bisa melanjutkannya".
 | Tugas | Status | Catatan singkat |
 |---|---|---|
 | O1 Meter orisinalitas | ✅ 298209a | |
-| O2 Rekam narasi dari naskah | ⬜ | |
+| O2 Rekam narasi dari naskah | ✅ fc2e23d | teleprompter, direkam bukan sintetis |
 | O3 Kemiripan antar video | ⬜ | |
 | O4 Pembuka kuat | ⬜ | |
 | O5 Rekam reaksi kamera | ⬜ | |
 | O6 Akhir menyambung | ⬜ | |
 | O7 Keterangan unik + bab | ⬜ | |
 
-**Tugas berikutnya:** `O2`.
+**Tugas berikutnya:** `O3`.
 
 **Melanjutkan di sesi baru:** baca papan ini dan bagian 4. Kerjakan tugas
 berikutnya; bila ada catatan "SEBAGIAN" di bawah butirnya, lanjutkan dari
@@ -107,7 +107,8 @@ Urutan dari dampak terbesar terhadap penilaian orisinalitas.
 
 - [x] **O1** Meter orisinalitas langsung di editor Montase.
   (selesai 5 Nov 2026, commit 298209a) Lencana + panel di kepala editor; rumus sama dengan gerbang tinjau; celah = video orang lain > 12 dtk tanpa tambahan dan tanpa narasi pengantar 3 dtk sebelumnya.
-- [ ] **O2** Rekam narasi dari naskah (teleprompter).
+- [x] **O2** Rekam narasi dari naskah (teleprompter).
+  (selesai 5 Nov 2026, commit fc2e23d) editor/Teleprompter.jsx + hook rekamMikrofon.js; rekaman menggantikan item narasi lewat gantiBahanItem dengan narasi.direkam=true; pintu: saran meter, tab Asisten, panel properti. Server: narasi direkam = rekam, bukan sintetis. Diuji Playwright dengan mikrofon palsu Chromium 4/4.
 - [ ] **O3** Pemeriksa kemiripan antar video.
 - [ ] **O4** Pembuka kuat.
 - [ ] **O5** Rekam reaksi kamera.
