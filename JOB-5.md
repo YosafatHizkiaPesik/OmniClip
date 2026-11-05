@@ -26,6 +26,8 @@ lupa untuk selalu mencatatnya agar ... sesi lain masih bisa melanjutkannya".
 | P2 Preset teks milik sendiri | ⬜ | |
 | P3 Templat video bawaan | ⬜ | |
 | P4 Templat milik sendiri | ⬜ | |
+| D1 Katalog fitur (FITUR.md) | ⬜ | |
+| D2 Saran fitur berikutnya | ⬜ | |
 
 **Tugas berikutnya:** `P1`. (O1-O7: PR #13 dibuka 5 Nov 2026, CI berjalan; merge bila hijau.)
 
@@ -147,6 +149,19 @@ O3 tetap memperingatkan bila hasilnya terlalu mirip video sebelumnya.
   atau diterapkan ke proyek berjalan sebagai USULAN (model/usulan.js).
 - [ ] **P4** Templat milik sendiri: "Simpan sebagai templat" dari proyek
   (susunan lajur, teks, animasi, gaya, tanpa bahan video), dipakai seperti P3.
+
+## 6. Dokumentasi untuk pemilik (diminta 5 Nov 2026)
+
+"berikan catatan segala fitur yang ada di sistem dan fungsi manfaatnya apa
+serta study case penggunaannya seperti apa. lalu apakah tidak ada lagi fitur
+yang kamu sarankan untuk ditambah di sistem sebagai penunjang".
+
+- [ ] **D1** `FITUR.md`: katalog SEMUA fitur OmniClip (Studio Klip, Montase,
+  unggah, analitik, pengaturan, pemeliharaan), per fitur: apa itu, manfaatnya,
+  dan contoh kasus pemakaian; disusun dari kode dan JOB-1..JOB-5, bukan
+  ingatan. Ditautkan dari CLAUDE.md.
+- [ ] **D2** Saran fitur penunjang berikutnya (bagian akhir FITUR.md), diurutkan
+  menurut manfaat, dengan alasan dan perkiraan besar pekerjaannya.
 
 ## Sumber
 
