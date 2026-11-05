@@ -18,7 +18,8 @@ commit), perbarui Papan status, commit, push.
 
 | Berkas | Isi |
 |---|---|
-| `JOB-4.md` | Rencana dan kemajuan Montase (aktif) |
+| `JOB-5.md` | Orisinalitas dan algoritma YouTube untuk Montase (aktif) |
+| `JOB-4.md` | Rencana dan kemajuan Montase (selesai, menunggu uji pemilik) |
 | `JOB-3.md` | Tampilan seperti YouTube dan dua bahasa (selesai, kecuali J3-13) |
 | `JOB-2.md` | Kepatuhan kebijakan konten YouTube: komentar, kredit, nilai tambah, gerbang tinjau |
 | `JOB-1.md` | Mengurus izin unggah dan daftar pekerjaan lama |
