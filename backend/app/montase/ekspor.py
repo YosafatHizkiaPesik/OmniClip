@@ -164,6 +164,9 @@ def lapisan(pid: int, dokumen: dict) -> list[dict]:
                 jenis = "teks"
             elif i["jenis"] == "motion":
                 jenis = "animasi"
+            elif i["jenis"] == "video" and (repo.ambil_bahan(pid, i.get("bahan") or "") or {}).get("asal") == "rekam":
+                # Reaksi kamera pemilik kanal (JOB-5 O5): wajah dan suaranya sendiri.
+                jenis = "reaksi"
             elif i["jenis"] in ("gambar", "video") and l["id"] != utama:
                 jenis = "sisipan"
             if jenis:

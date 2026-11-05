@@ -1225,6 +1225,8 @@ KATALOG = [
     ("Diam {d} detik.", "Silent for {d} seconds."),
     ("Kata isian, {d} detik.", "Filler word, {d} seconds."),
     ("Mencari wajah", "Looking for faces"),
+    ("Rekaman kamera tidak bisa dibaca. Coba rekam ulang.", "The camera recording could not be read. Try recording again."),
+    ("Rekaman terlalu besar.", "The recording is too large."),
     ("Mencari momen terkuat", "Looking for the strongest moment"),
     ("Belum ada klip video di lajur utama.", "There is no video clip on the main track yet."),
     ("Isi lama digeser ke belakang sepanjang cuplikan.", "The existing content moves back by the length of the teaser."),

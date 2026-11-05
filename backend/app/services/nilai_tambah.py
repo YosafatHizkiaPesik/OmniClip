@@ -89,7 +89,7 @@ def hitung(meta: Optional[dict]) -> dict:
             continue
         if d <= 0:
             continue
-        if l.get("jenis") in ("narasi", "rekam"):
+        if l.get("jenis") in ("narasi", "rekam", "reaksi"):
             suara_montase.append((t, t + d))
         elif l.get("jenis") in ("teks", "animasi", "stiker", "sisipan"):
             rentang.append((t, t + d))

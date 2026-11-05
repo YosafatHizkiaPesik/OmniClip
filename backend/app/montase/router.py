@@ -490,6 +490,30 @@ async def simpan_rekaman(berkas: UploadFile = File(...)):
         tmp.unlink(missing_ok=True)
 
 
+@router.post("/rekam-video")
+async def simpan_rekaman_video(berkas: UploadFile = File(...)):
+    """Rekaman reaksi kamera dari peramban -> MP4 -> bahan video `rekam` (JOB-5 O5)."""
+    tmp = Path(tempfile.mkstemp(prefix="omni_reaksi_", suffix=".webm")[1])
+    total = 0
+    try:
+        with open(tmp, "wb") as keluar:
+            while True:
+                blok = await berkas.read(1 << 20)
+                if not blok:
+                    break
+                total += len(blok)
+                if total > BATAS_IMPOR:
+                    raise AppError("Rekaman terlalu besar.", code="BAHAN_TERLALU_BESAR", status=413)
+                keluar.write(blok)
+        nama = Path(berkas.filename or "Reaksi").stem[:120] or "Reaksi"
+        try:
+            return await run_in_threadpool(narasi.simpan_reaksi, profil.kini(), tmp, nama)
+        except narasi.GagalNarasi as e:
+            raise InvalidInput(str(e)) from e
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
 @router.get("/gaya-teks")
 def gaya_teks():
     """Tema judul siap pakai dan font bawaan untuk item teks (M3.1)."""
