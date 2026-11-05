@@ -76,7 +76,7 @@ export function hitungOrisinalitas(dokumen, asalBahan = new Map()) {
         lain.push(r);
         if (l.id !== utama) tambahan.push(r);      // gambar-dalam-gambar tetap suntingan
       } else if (i.jenis === 'audio' && !l.bisu) {
-        if (asal === 'rekam') suaraSendiri.push(r);
+        if (asal === 'rekam' || i.narasi?.direkam) suaraSendiri.push(r);
         else if (i.narasi || asal === 'tts') suaraTts.push(r);
       } else if (i.jenis === 'teks' || i.jenis === 'motion') {
         tambahan.push(r);

@@ -476,7 +476,7 @@ export default function PanelProperti({
   dokumen, terpilih, jumlahPilihan, lajur, onUbahItem, onKecepatan, onTransform, onHapus,
   onGandakan, onUbahProyek, onUbahLajur, onHapusLajur, bisaHapusLajur, onKe, onUbahPenanda,
   onHapusPenanda, onBuatUlangNarasi, garis, onUbahSifat, onTombolKeyframe, onKurvaKeyframe,
-  onAturUlangTransform, onRendam, onPunch, onHapusPunch, infoSkema, riwayatVersi = null,
+  onAturUlangTransform, onRendam, onPunch, onHapusPunch, infoSkema, riwayatVersi = null, onRekamNarasi,
 }) {
   const t = useT();
   const fps = dokumen.kanvas.fps;
@@ -546,7 +546,8 @@ export default function PanelProperti({
           </div>
 
           {item.jenis === 'audio' && item.narasi && (
-            <KolomNarasi key={item.id} item={item} onBuatUlang={(n) => onBuatUlangNarasi(item.id, n)} />
+            <KolomNarasi key={item.id} item={item} onBuatUlang={(n) => onBuatUlangNarasi(item.id, n)}
+                         onRekam={onRekamNarasi ? () => onRekamNarasi([item.id]) : undefined} />
           )}
           {media && (
             <Angka label={t('montase.properti.potong_awal')} nilai={keDetik(item.potong_awal || 0)}

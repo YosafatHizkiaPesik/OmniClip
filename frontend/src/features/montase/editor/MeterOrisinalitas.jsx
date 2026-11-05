@@ -14,7 +14,7 @@ import { formatTime } from '../../../utils/timeFormat';
 
 const IKON = { baik: ShieldCheck, sedang: ShieldHalf, kurang: ShieldAlert };
 
-export default function MeterOrisinalitas({ hasil, onKe }) {
+export default function MeterOrisinalitas({ hasil, onKe, onRekamNarasi }) {
   const t = useT();
   const [buka, setBuka] = useState(false);
   const wadah = useRef(null);
@@ -45,7 +45,18 @@ export default function MeterOrisinalitas({ hasil, onKe }) {
           </dl>
           {hasil.saran.length > 0 && (
             <ul className="montase-orisinal-saran">
-              {hasil.saran.map((s) => <li key={s.kunci}>{t(`montase.orisinal.saran_${s.kunci}`, { n: s.n })}</li>)}
+              {hasil.saran.map((s) => (
+                <li key={s.kunci}>
+                  {t(`montase.orisinal.saran_${s.kunci}`, { n: s.n })}
+                  {s.kunci === 'suara_sendiri' && onRekamNarasi && (
+                    <button type="button" className="btn-secondary montase-orisinal-aksi"
+                            onClick={() => { setBuka(false); onRekamNarasi(); }}
+                    >
+                      {t('montase.teleprompter.buka')}
+                    </button>
+                  )}
+                </li>
+              ))}
             </ul>
           )}
           {hasil.celah.length > 0 && (

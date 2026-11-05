@@ -56,6 +56,15 @@ describe('hitungOrisinalitas', () => {
     expect(h.saran).toEqual([]);
   });
 
+  it('narasi yang sudah direkam (teleprompter) dihitung suara sendiri walau bahannya belum dikenal', () => {
+    const h = hitungOrisinalitas(dok([
+      v(0, 10),
+      ['audio', { id: 'n', jenis: 'audio', bahan: 'bBaru', narasi: { teks: 'x', direkam: true }, mulai: 0, durasi: 3 * F }],
+    ]), asal);
+    expect(h.detik.sendiri).toBe(3);
+    expect(h.saran.map((s) => s.kunci)).not.toContain('suara_sendiri');
+  });
+
   it('bahan milik sendiri saja selalu cukup', () => {
     const h = hitungOrisinalitas(dok([v(0, 60, 'bSendiri')]), asal);
     expect([h.cukup, h.adaLain, h.celah.length, h.tingkat]).toEqual([true, false, 0, 'baik']);

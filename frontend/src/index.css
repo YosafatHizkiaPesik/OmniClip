@@ -2627,3 +2627,12 @@ button.tujuan, a.tujuan { cursor: pointer; }
 .montase-orisinal-celah { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .montase-orisinal-celah li { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .montase-orisinal-celah .btn-secondary { padding: 3px 8px; }
+
+/* Montase: teleprompter narasi (JOB-5 O2) */
+.montase-teleprompter { max-width: 760px; }
+.montase-teleprompter-nomor { margin: 4px 0; font-size: .8rem; color: var(--ink-2); }
+.montase-teleprompter-naskah { margin: 8px 0 12px; padding: 18px 20px; border-left: 4px solid var(--rule-2);
+  font-size: 1.6rem; line-height: 1.45; font-weight: 600; background: var(--paper-2, rgba(0,0,0,.03)); }
+.montase-teleprompter-naskah.merekam { border-left-color: var(--reh); }
+.montase-teleprompter-tombol { justify-content: center; }
+.montase-orisinal-aksi { display: inline-flex; margin-left: 6px; padding: 2px 8px; font-size: .74rem; }

@@ -9,7 +9,7 @@
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Check, CheckCheck, Crop, Loader2, Scissors, Sparkles, X,
+  Check, CheckCheck, Crop, Loader2, Mic, Scissors, Sparkles, X,
 } from 'lucide-react';
 import { useT } from '../../../lib/i18n';
 import { formatTime } from '../../../utils/timeFormat';
@@ -95,7 +95,7 @@ export function TombolUsulan({ usulan, onTerima, onTolak, ringkas = false }) {
 }
 
 export default function PanelAsisten({
-  proyekId, bahan, terpilih, fps, usulan, onUsulan, onTerima, onTolak, onSimpanDulu,
+  proyekId, bahan, terpilih, fps, usulan, onUsulan, onTerima, onTolak, onSimpanDulu, onRekamNarasi, adaNarasi,
 }) {
   const t = useT();
   const [perintah, setPerintah] = useState('');
@@ -212,6 +212,15 @@ export default function PanelAsisten({
         </button>
         {(kerja.job || kerja.error) && <JobProgress job={kerja.job} error={kerja.error} onCancel={kerja.cancel} compact />}
       </section>
+      {adaNarasi && onRekamNarasi && (
+        <section className="montase-bagian">
+          <h3><span><Mic size={13} /> {t('montase.teleprompter.judul')}</span></h3>
+          <p className="montase-petunjuk">{t('montase.teleprompter.asisten_ket')}</p>
+          <button type="button" className="btn-secondary" onClick={onRekamNarasi}>
+            <Mic size={13} />{t('montase.teleprompter.buka')}
+          </button>
+        </section>
+      )}
       <section className="montase-bagian">
         <h3><span><Scissors size={13} /> {t('montase.asisten.jeda_judul')}</span></h3>
         <p className="montase-petunjuk">{t(bisaJeda ? 'montase.asisten.jeda_ket' : 'montase.asisten.jeda_pilih')}</p>

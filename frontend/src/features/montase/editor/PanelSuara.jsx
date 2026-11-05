@@ -11,10 +11,11 @@
  * yang diubah tidak langsung mengirim permintaan per ketukan; tombol "Buat
  * ulang suara" menyala dan menggantinya sekali.
  */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Loader2, Mic, RefreshCw, Square, Wand2 } from 'lucide-react';
 import { useT, angka } from '../../../lib/i18n';
 import { buatNarasi, daftarSuara, simpanRekaman } from '../api.js';
+import { detikRekam, useRekamMikrofon } from './rekamMikrofon.js';
 
 let simpananSuara = null;
 function useSuara() {
@@ -48,11 +49,6 @@ function suaraAwal(suara) {
   return suara.find((s) => s.siap && s.bahasa === 'id')?.id ?? suara.find((s) => s.siap)?.id ?? '';
 }
 
-function detik(ms) {
-  const s = Math.floor(ms / 1000);
-  return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
-}
-
 export default function PanelSuara({ onTambahSuara }) {
   const t = useT();
   const suara = useSuara();
@@ -61,17 +57,8 @@ export default function PanelSuara({ onTambahSuara }) {
   const [kecepatan, setKecepatan] = useState(1);
   const [sibuk, setSibuk] = useState(false);
   const [galat, setGalat] = useState(null);
-  const [rekam, setRekam] = useState(null);       // {mulai} saat merekam
-  const [lama, setLama] = useState(0);
-  const perekam = useRef(null);
+  const mik = useRekamMikrofon();
   const suaraDipakai = pilihan || suaraAwal(suara);
-
-  useEffect(() => {
-    if (!rekam) return undefined;
-    const id = setInterval(() => setLama(Date.now() - rekam.mulai), 250);
-    return () => clearInterval(id);
-  }, [rekam]);
-  useEffect(() => () => perekam.current?.stream?.getTracks().forEach((x) => x.stop()), []);
 
   const narasi = async () => {
     setGalat(null);
@@ -90,28 +77,18 @@ export default function PanelSuara({ onTambahSuara }) {
   const mulaiRekam = async () => {
     setGalat(null);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const rec = new MediaRecorder(stream);
-      const potongan = [];
-      rec.ondataavailable = (e) => { if (e.data.size) potongan.push(e.data); };
-      rec.onstop = async () => {
-        stream.getTracks().forEach((x) => x.stop());
-        setRekam(null);
+      await mik.mulai(async (blob) => {
         setSibuk(true);
         try {
           const nama = `${t('montase.suara.rekaman')} ${new Date().toLocaleTimeString().slice(0, 5)}`;
-          const bahan = await simpanRekaman(new Blob(potongan, { type: rec.mimeType }), nama);
+          const bahan = await simpanRekaman(blob, nama);
           onTambahSuara(bahan, null);
         } catch (e) {
           setGalat(e.message);
         } finally {
           setSibuk(false);
         }
-      };
-      perekam.current = rec;
-      rec.start(250);
-      setLama(0);
-      setRekam({ mulai: Date.now() });
+      });
     } catch {
       setGalat(t('montase.suara.mik_ditolak'));
     }
@@ -143,9 +120,9 @@ export default function PanelSuara({ onTambahSuara }) {
       <section className="montase-bagian">
         <h3>{t('montase.suara.rekam')}</h3>
         <p className="montase-petunjuk">{t('montase.suara.rekam_ket')}</p>
-        {rekam ? (
-          <button type="button" className="btn-primary montase-rekam-aktif" onClick={() => perekam.current?.stop()}>
-            <Square size={13} />{t('montase.suara.berhenti')} · {detik(lama)}
+        {mik.merekam ? (
+          <button type="button" className="btn-primary montase-rekam-aktif" onClick={mik.berhenti}>
+            <Square size={13} />{t('montase.suara.berhenti')} · {detikRekam(mik.lama)}
           </button>
         ) : (
           <button type="button" className="btn-secondary" disabled={sibuk} onClick={mulaiRekam}>
@@ -157,7 +134,7 @@ export default function PanelSuara({ onTambahSuara }) {
   );
 }
 
-export function KolomNarasi({ item, onBuatUlang }) {
+export function KolomNarasi({ item, onBuatUlang, onRekam }) {
   const t = useT();
   const suara = useSuara();
   const asli = item.narasi;
@@ -192,12 +169,20 @@ export function KolomNarasi({ item, onBuatUlang }) {
           <small>{angka(draf.kecepatan)}x</small>
         </span>
       </label>
-      <button type="button" className="btn-secondary" disabled={!berubah || sibuk || !draf.teks.trim()}
-              onClick={buatUlang}
-      >
-        {sibuk ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
-        {t('montase.suara.buat_ulang')}
-      </button>
+      {asli.direkam && <p className="montase-petunjuk">{t('montase.teleprompter.sudah_direkam')}</p>}
+      <div className="montase-baris-tombol">
+        {onRekam && (
+          <button type="button" className="btn-primary" disabled={sibuk} onClick={onRekam}>
+            <Mic size={13} />{t(asli.direkam ? 'montase.teleprompter.rekam_ulang' : 'montase.teleprompter.rekam_satu')}
+          </button>
+        )}
+        <button type="button" className="btn-secondary"
+                disabled={(!berubah && !asli.direkam) || sibuk || !draf.teks.trim()} onClick={buatUlang}
+        >
+          {sibuk ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+          {t(asli.direkam ? 'montase.teleprompter.kembali_ai' : 'montase.suara.buat_ulang')}
+        </button>
+      </div>
     </section>
   );
 }

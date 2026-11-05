@@ -54,6 +54,7 @@ import { buatGaris } from './editor/garisPutar.js';
 import { TombolUsulan } from './editor/PanelAsisten.jsx';
 import RiwayatVersi from './editor/RiwayatVersi.jsx';
 import MeterOrisinalitas from './editor/MeterOrisinalitas.jsx';
+import Teleprompter from './editor/Teleprompter.jsx';
 import { hitungOrisinalitas } from './model/orisinalitas.js';
 import { JendelaBantuan } from './BantuanMontase.jsx';
 import { terapkanOperasi } from './model/usulan.js';
@@ -201,6 +202,8 @@ export default function MontaseEditor() {
   const [unggah, setUnggah] = useState(null);
   const [drafLama, setDrafLama] = useState(null);
   const [bantuan, setBantuan] = useState(false);
+  // Teleprompter narasi (JOB-5 O2): daftar {id, teks, direkam} yang sedang direkam ulang.
+  const [teleprompter, setTeleprompter] = useState(null);
   const catatBahan = useCallback((daftar) => {
     setBahanSiap(new Set(daftar.filter((b) => b.siap).map((b) => b.id)));
     setAsalBahan(new Map(daftar.map((b) => [b.id, b.asal])));
@@ -397,6 +400,22 @@ export default function MontaseEditor() {
   const tambahSuara = (b, narasi) => {
     const hasil = taruhSuara(dok(), b, { mulai: garis.get(), narasi });
     if (terapkan(hasil.dokumen)) pilih([hasil.itemId]);
+  };
+  /** Narasi di linimasa, urut waktu; `ids` membatasi, tanpa `ids` yang belum direkam (atau semua). */
+  const bukaTeleprompter = (ids = null) => {
+    const semua = dok().lajur.flatMap((l) => l.item)
+      .filter((i) => i.jenis === 'audio' && i.narasi?.teks)
+      .sort((a, b) => a.mulai - b.mulai)
+      .map((i) => ({ id: i.id, teks: i.narasi.teks, direkam: Boolean(i.narasi.direkam) }));
+    let daftar = ids ? semua.filter((x) => ids.includes(x.id)) : semua.filter((x) => !x.direkam);
+    if (!daftar.length && !ids) daftar = semua;
+    if (daftar.length) setTeleprompter(daftar);
+  };
+  const rekamanNarasi = (itemId, bahan) => {
+    const it = cariItem(dok(), itemId)?.item;
+    if (!it) return;
+    terapkan(gantiBahanItem(dok(), itemId, bahan, { narasi: { ...it.narasi, direkam: true } }));
+    setAsalBahan((m) => new Map(m).set(bahan.id, 'rekam'));
   };
   const buatUlangNarasi = async (itemId, narasi) => {
     const bahan = await buatNarasi(narasi.teks, narasi.suara, narasi.kecepatan);
@@ -651,7 +670,7 @@ export default function MontaseEditor() {
         </button>
         <h1 title={dokumen.nama}>{dokumen.nama}</h1>
         <StatusSimpan status={status} onMuatUlang={muat} onCobaLagi={simpanSekarang} />
-        {orisinal && <MeterOrisinalitas hasil={orisinal} onKe={keBingkai} />}
+        {orisinal && <MeterOrisinalitas hasil={orisinal} onKe={keBingkai} onRekamNarasi={() => bukaTeleprompter()} />}
         <button type="button" className="btn-secondary montase-ikon" onClick={() => setBantuan(true)}
                 aria-label={t('montase.bantuan.judul')} title={t('montase.bantuan.judul')}
         >
@@ -704,6 +723,7 @@ export default function MontaseEditor() {
                     }}
                     asisten={{
                       proyekId, terpilih, fps, usulan, onUsulan: setUsulan, onTerima: terimaUsulan,
+                      onRekamNarasi: () => bukaTeleprompter(), adaNarasi: Boolean(orisinal?.detik.suara),
                       onTolak: tolakUsulan, onSimpanDulu: simpanSekarang,
                     }} />
         <Pembatas arah="tegak" onGeser={geser('kiri', 1, [220, 520])} />
@@ -752,6 +772,7 @@ export default function MontaseEditor() {
           onUbahPenanda={(tt, label) => ubah((d) => ubahPenanda(d, tt, label), { gabung: `penanda:${tt}` })}
           onHapusPenanda={(tt) => terapkan(hapusPenanda(dok(), tt))}
           onBuatUlangNarasi={buatUlangNarasi}
+          onRekamNarasi={bukaTeleprompter}
           infoSkema={infoSkema}
           riwayatVersi={<RiwayatVersi proyekId={proyekId} revisi={revisi.current} onPulihkan={pulihkan} />}
           garis={garis}
@@ -802,6 +823,9 @@ export default function MontaseEditor() {
       {terbit && <SiapkanTerbit clip={terbit} onClose={() => setTerbit(null)} onSelesai={() => {}} />}
       {unggah && <UploadModal clip={unggah} onClose={() => setUnggah(null)} onDone={() => {}} />}
       {bantuan && <JendelaBantuan onTutup={() => setBantuan(false)} />}
+      {teleprompter && (
+        <Teleprompter daftar={teleprompter} onRekaman={rekamanNarasi} onTutup={() => setTeleprompter(null)} />
+      )}
     </div>
   );
 }

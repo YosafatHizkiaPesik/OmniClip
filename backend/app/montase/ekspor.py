@@ -126,10 +126,12 @@ def _bersuara_sintetis(pid: int, dokumen: dict) -> bool:
         for i in lajur["item"]:
             if i["jenis"] != "audio":
                 continue
-            if i.get("narasi"):
-                return True
-            b = repo.ambil_bahan(pid, i.get("bahan") or "")
-            if b and b.get("asal") == "tts":
+            b = repo.ambil_bahan(pid, i.get("bahan") or "") or {}
+            # Narasi yang sudah dibacakan pemiliknya sendiri (teleprompter,
+            # JOB-5 O2) bukan suara sintetis, walau naskahnya dari asisten.
+            if b.get("asal") == "rekam" or (i.get("narasi") or {}).get("direkam"):
+                continue
+            if i.get("narasi") or b.get("asal") == "tts":
                 return True
     return False
 
@@ -154,10 +156,10 @@ def lapisan(pid: int, dokumen: dict) -> list[dict]:
             jenis = None
             if i["jenis"] == "audio" and not l.get("bisu"):
                 b = repo.ambil_bahan(pid, i.get("bahan") or "") or {}
-                if i.get("narasi") or b.get("asal") == "tts":
-                    jenis = "narasi"
-                elif b.get("asal") == "rekam":
+                if b.get("asal") == "rekam" or (i.get("narasi") or {}).get("direkam"):
                     jenis = "rekam"
+                elif i.get("narasi") or b.get("asal") == "tts":
+                    jenis = "narasi"
             elif i["jenis"] == "teks":
                 jenis = "teks"
             elif i["jenis"] == "motion":
