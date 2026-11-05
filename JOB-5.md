@@ -24,12 +24,12 @@ lupa untuk selalu mencatatnya agar ... sesi lain masih bisa melanjutkannya".
 
 | P1 Preset caption subtitle | ✅ 9f6c433 | 10 gaya, sorot kotak/besar |
 | P2 Preset teks milik sendiri | ✅ fc47fb6 | simpan/pakai/hapus gaya |
-| P3 Templat video bawaan | ⬜ | |
+| P3 Templat video bawaan | ✅ 1f9b84c | templat bawaan |
 | P4 Templat milik sendiri | ⬜ | |
 | D1 Katalog fitur (FITUR.md) | ⬜ | |
 | D2 Saran fitur berikutnya | ⬜ | |
 
-**Tugas berikutnya:** `P3`.
+**Tugas berikutnya:** `P4`.
 
 **Melanjutkan di sesi baru:** baca papan ini dan bagian 4. Kerjakan tugas
 berikutnya; bila ada catatan "SEBAGIAN" di bawah butirnya, lanjutkan dari
@@ -146,7 +146,8 @@ O3 tetap memperingatkan bila hasilnya terlalu mirip video sebelumnya.
 - [x] **P2** Preset teks milik sendiri: "Simpan gaya ini" dari item teks,
   (selesai 5 Nov 2026, commit fc47fb6) router /preset-teks (settings montase.preset_teks.<pid>), GayaSaya di PanelTeks.jsx. Tes test_montase_preset_teks.py; uji antarmuka digabung dengan P3.
   tersimpan per profil, muncul bersama tema bawaan di panel teks; bisa dihapus.
-- [ ] **P3** Templat video bawaan (Top N hitung mundur, Reaksi, Sorotan
+- [x] **P3** Templat video bawaan (Top N hitung mundur, Reaksi, Sorotan
+  (selesai 5 Nov 2026, commit 1f9b84c) 5 templat × 3 variasi; op baru penanda & lajur_caption; op teks menerima gaya; skema props tiap komponen diuji (templat.test.js); uji UI Playwright lolos
   podcast, Fakta/edukasi, Sebelum-sesudah): dipilih saat membuat proyek baru,
   atau diterapkan ke proyek berjalan sebagai USULAN (model/usulan.js).
 - [ ] **P4** Templat milik sendiri: "Simpan sebagai templat" dari proyek
