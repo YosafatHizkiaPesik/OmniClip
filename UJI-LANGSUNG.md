@@ -637,6 +637,30 @@ di menu). Hasil angka tiap tes ditulis juga di JOB-4.md bagian 24.
     datar yang lebih panjang dari 3 menit dengan penanda berlabel mendapat bab
     (0:00, ...) di deskripsinya.
 
+### Tambahan 5 November 2026: preset dan templat Montase (JOB-5 P1-P4)
+
+- [ ] **109. Preset caption.** Proyek dengan subtitle (tombol **Subtitle** di
+  bilah alat), klik nama lajur Subtitle → pilih **Pantul**, lalu **Neon**.
+  - Diharapkan: SEMUA baris subtitle berganti gaya sekaligus, kata yang sedang
+    diucapkan tersorot sesuai gaya (pantul: membesar kuning; kotak ungu: kotak
+    di belakang kata). Buat ulang subtitle: gaya terakhir tetap dipakai.
+- [ ] **110. Gaya teks saya.** Pilih item teks, atur font/warna, isi **Nama
+  gaya** → **Simpan gaya ini**. Buka proyek lain, pilih teks, terapkan gaya itu.
+  - Diharapkan: gaya muncul di daftar "Gaya saya" di proyek mana pun pada
+    profil yang sama, bisa dihapus, dan tidak muncul di profil lain.
+- [ ] **111. Templat bawaan.** Montase → **Proyek baru** → templat **Top 5
+  hitung mundur**, variasi **3** → Buat proyek.
+  - Diharapkan: usulan bergaris putus berisi 5 kartu, bilah peringkat yang
+    menyala sesuai nomor yang tampil, ajakan berlangganan di akhir, dan 5
+    penanda "Taruh klip #n di sini". **Terima semua** lalu taruh klip di
+    penanda. Ulangi dengan variasi 1: warna dan gaya caption berbeda.
+- [ ] **112. Templat saya.** Di proyek dari tes 111 (sesudah ditata), tab
+  **Asisten** → isi **Nama templat** → **Simpan sebagai templat**. Lalu Proyek
+  baru 60 fps → pilih templat itu di bagian "Templat saya".
+  - Diharapkan: kartu, teks (beserta posisinya), penanda, dan gaya caption
+    ikut di waktu yang sama (dalam detik); klip, musik, dan teks subtitle
+    TIDAK ikut. Tombol × menghapus templatnya.
+
 ### Jalur fitur unggulan (urutan disarankan, ±30 menit)
 
 Satu video podcast pendek (10-20 menit) cukup untuk semuanya:

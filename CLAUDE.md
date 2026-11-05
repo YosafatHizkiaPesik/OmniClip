@@ -18,6 +18,7 @@ commit), perbarui Papan status, commit, push.
 
 | Berkas | Isi |
 |---|---|
+| `FITUR.md` | Katalog semua fitur: apa, manfaat, contoh kasus, dan saran fitur berikutnya |
 | `JOB-5.md` | Orisinalitas dan algoritma YouTube untuk Montase (aktif) |
 | `JOB-4.md` | Rencana dan kemajuan Montase (selesai, menunggu uji pemilik) |
 | `JOB-3.md` | Tampilan seperti YouTube dan dua bahasa (selesai, kecuali J3-13) |
