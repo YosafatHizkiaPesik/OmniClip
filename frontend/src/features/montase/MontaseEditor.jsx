@@ -59,6 +59,7 @@ import Teleprompter from './editor/Teleprompter.jsx';
 import RekamReaksi from './editor/RekamReaksi.jsx';
 import { hitungOrisinalitas } from './model/orisinalitas.js';
 import { periksaAkhir, usulanAkhir } from './model/akhir.js';
+import { terapkanCaption } from './model/presetCaption.js';
 import { JendelaBantuan } from './BantuanMontase.jsx';
 import { terapkanOperasi } from './model/usulan.js';
 
@@ -795,6 +796,7 @@ export default function MontaseEditor() {
           onHapusPenanda={(tt) => terapkan(hapusPenanda(dok(), tt))}
           onBuatUlangNarasi={buatUlangNarasi}
           onRekamNarasi={bukaTeleprompter}
+          onCaption={(lajurId, presetId) => terapkan(terapkanCaption(dok(), lajurId, presetId))}
           infoSkema={infoSkema}
           riwayatVersi={<RiwayatVersi proyekId={proyekId} revisi={revisi.current} onPulihkan={pulihkan} />}
           garis={garis}

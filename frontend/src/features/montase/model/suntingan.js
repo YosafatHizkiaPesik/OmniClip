@@ -15,6 +15,7 @@ import {
   tambahBahan, ubahItem,
 } from './dokumen.js';
 import { KURVA, nilaiPada, punyaKeyframe, SIFAT_KEYFRAME } from '../komposisi/keyframe.js';
+import { presetCaption } from './presetCaption.js';
 
 const MEDIA = new Set(['video', 'audio']);
 
@@ -475,6 +476,8 @@ export function pasangSubtitle(dokumen, potongan, { nama = 'Subtitle', alasan = 
     lajur = d.lajur.find((l) => l.id === hasil.lajurId);
   }
   const dipakai = new Set(d.lajur.filter((l) => l.id !== lajur.id).flatMap((l) => l.item.map((i) => i.id)));
+  // Subtitle yang dibuat ulang memakai preset caption lajurnya (JOB-5 P1).
+  const gaya = presetCaption(lajur.gaya_caption)?.gaya ?? GAYA_SUBTITLE;
   let n = 1;
   const item = [];
   for (const p of potongan) {
@@ -483,7 +486,7 @@ export function pasangSubtitle(dokumen, potongan, { nama = 'Subtitle', alasan = 
     dipakai.add(id);
     item.push({
       id, jenis: 'teks', mulai: Math.max(0, Math.round(p.mulai)), durasi: Math.max(1, Math.round(p.durasi)),
-      teks: String(p.teks).slice(0, 500), kata: p.kata, gaya: { ...GAYA_SUBTITLE }, asal: 'ai', alasan,
+      teks: String(p.teks).slice(0, 500), kata: p.kata, gaya: { ...gaya }, asal: 'ai', alasan,
     });
   }
   const lajurId = lajur.id;
