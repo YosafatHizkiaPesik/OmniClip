@@ -567,6 +567,41 @@ di menu). Hasil angka tiap tes ditulis juga di JOB-4.md bagian 24.
   - Diharapkan: caption dan tagar menyebut isi videonya (judul peringkat),
     bukan hanya nama proyek; label konten sintetis berlaku karena ada narasi.
 
+### Tambahan 5 November 2026: Montase Tahap 6, rapikan dan rilis (JOB-4)
+
+- [ ] **97. Unggah dari Montase.** Sambungkan akun Google dulu (Akun). Ekspor
+  proyek yang memakai Klip jadi dari dua video YouTube berbeda, lalu tekan
+  **Unggah** di kepala editor.
+  - Diharapkan: deskripsi berisi "Sumber:" dengan KEDUA video (judul, kanal,
+    tautan); peringatan izin menyebut kanal yang belum diizinkan. Tanpa narasi,
+    formulir menyebut "wajib bernarasi"; sesudah narasi ditambah dan diekspor
+    ulang, alasan itu hilang. Unggahan otomatis tanpa narasi turun ke privat.
+- [ ] **98. Proyek besar tetap lancar.** Proyek 10 menit dengan sekitar 100
+  item: seret, pangkas, pilih banyak, putar, gulir linimasa yang diperbesar.
+  - Diharapkan: tidak ada patah-patah yang terasa, juga di Windows.
+- [ ] **99. Riwayat versi.** Sunting proyek beberapa menit, buka panel Proyek
+  (klik tempat kosong) → **Riwayat versi** → **Pulihkan** versi lama.
+  - Diharapkan: proyek kembali ke keadaan itu; di daftar muncul potret
+    "sebelum dipulihkan" yang bisa dipulihkan lagi.
+- [ ] **100. Tertutup mendadak.** Matikan backend (tutup jendela OmniClip)
+  tepat sesudah mengubah sesuatu, buka lagi proyeknya.
+  - Diharapkan: bilah kuning "Ada perubahan yang belum tersimpan" dengan
+    **Pulihkan perubahan** / **Buang**.
+- [ ] **101. Sampah dan cadangan.** Halaman Mesin → Penyimpanan → kartu Sampah: **Pindai lagi**.
+  Hapus satu Klip jadi yang dipakai sebagai bahan di Montase tapi tidak di
+  proyek mana pun, lalu pindai lagi. Buat cadangan.
+  - Diharapkan: muncul "Berkas Montase yang bahannya sudah tidak ada" untuk
+    bahan itu, dan membersihkannya tidak menyentuh bahan lain. Teks cadangan
+    menyebut proyek Montase.
+- [ ] **102. Bantuan dan bahasa Inggris.** Beranda Montase → **Cara pakai**;
+  di editor tombol **?** (Escape menutupnya). Ganti bahasa ke English, buat
+  animasi yang sengaja salah (misalnya memakai `transition: 'all 1s'`).
+  - Diharapkan: tujuh langkah cara pakai; tidak ada label "beta" lagi; pesan
+    pemeriksa dan kabar pekerjaan Montase berbahasa Inggris.
+
+**Sesudah semua tes Montase lolos:** buat tag `v1.4.0` (versi sudah 1.4.0 di
+`version.py`); build rilisnya menerbitkan pembaruan ke semua pemasangan.
+
 ### Jalur fitur unggulan (urutan disarankan, ±30 menit)
 
 Satu video podcast pendek (10-20 menit) cukup untuk semuanya:

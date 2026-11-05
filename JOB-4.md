@@ -98,12 +98,12 @@ Tiga kemampuan besar, dibangun berurutan:
 | 3 | Teks, suara, efek, transisi, keyframe | ✅ Selesai 3 Nov 2026 | 10/10 |
 | 4 | AI pembuat animasi | ✅ Selesai 5 Nov 2026 | 10/10 |
 | 5 | Asisten penyunting AI | ✅ Selesai 5 Nov 2026 (penilaian draf oleh pemilik menunggu, K-17) | 6/6 |
-| 6 | Rapikan dan rilis | ⬜ Belum mulai | 0/9 |
+| 6 | Rapikan dan rilis | ✅ Selesai 5 Nov 2026 (tag rilis v1.4.0 menunggu pemilik) | 9/9 |
 | ✱ | Suara AI baru (ElevenLabs dan lainnya), kapan saja | ⬜ Menunggu pilihan pemilik | 0/3 |
 
 Tanda status: ⬜ belum mulai · 🟨 sedang dikerjakan · ✅ selesai · ⛔ tertahan (tulis alasannya).
 
-**Tugas berikutnya:** `M6.1`.
+**Tugas berikutnya:** uji pemilik (UJI-LANGSUNG 60-102), lalu tag `v1.4.0` bila lolos. Suara AI baru (MS.1-MS.3) menunggu T-4.
 
 ## 3. Keputusan
 
@@ -127,18 +127,19 @@ Tanda status: ⬜ belum mulai · 🟨 sedang dikerjakan · ✅ selesai · ⛔ te
 | K-14 | 3 Nov 2026 | Penggabungan: **PR dokumen sekarang**, lalu **satu PR per tahap** sesudah gerbangnya lolos. | Jawaban pemilik. Dokumen langsung terbaca dari branch utama. |
 | K-15 | 3 Nov 2026 | Pemilik **tidak punya API key Anthropic**, hanya Claude Pro. Jalur Claude utama di aplikasi = **mode salin-tempel lewat Project Claude.ai** (M4.10). Jalur API (M4.3) tetap dibangun untuk pengguna yang punya kunci. Animasi bawaan (M4.2) ditulis saat pengembangan lewat Claude Code. | Jawaban pemilik atas T-7. |
 | K-16 | 3 Nov 2026 | Mengubah K-9: **paket mesin dan bundel komposisi ikut di dalam aplikasi**; yang diunduh saat pertama dipakai hanya **Node** dan **Chrome Headless Shell**. | Build uji dari `workflow_dispatch` tidak punya rilis untuk diunduhi, dan dengan begitu versi mesin selalu sama dengan versi komposisinya. Biayanya ±24 MB terkompresi di unduhan aplikasi. |
+| K-18 | 5 Nov 2026 | T-1, T-2, T-3, T-6 dipakai sesuai saran karena pemilik tidak menjawab: menu "Montase", ekspor 60 fps sebagai pilihan (bawaan 30), Montase dengan video orang lain **wajib bernarasi** lewat gerbang tinjau, dan HP hanya daftar proyek. | Pemilik diberi tahu 5 Nov 2026 dan boleh mengubahnya. |
 | K-17 | 3 Nov 2026 | Pemilik **tidak bisa menguji sekarang** dan akan menguji semuanya sekaligus di akhir. Gerbang tiap tahap diganti: (1) tes otomatis + uji CI di Windows dan Linux sungguhan, (2) tangkapan layar dan cuplikan video dari Claude, dikirim ke pemilik di setiap tahap. Tes UJI-LANGSUNG.md tetap ditulis per tahap untuk uji akhir. **T-5 memakai angka usulan:** render paling lama 4x durasi. | Jawaban pemilik: "lanjutkan saja pengerjaannya, nanti saya tes semua sekaligus". |
 
 ### Masih terbuka (pemilik yang memutuskan)
 
 | No | Pertanyaan | Saran | Perlu diputuskan sebelum |
 |---|---|---|---|
-| T-1 | Nama menu: "Montase" atau lainnya? | Montase (id) / Montage (en) | M1.4 |
-| T-2 | Ekspor 60 fps tersedia? | Ya, sebagai pilihan. Bawaan 30 fps. | M1.9 |
-| T-3 | Apakah video Montase yang memakai video orang lain wajib bernarasi sebelum boleh diunggah publik? | Ya, ikut gerbang tinjau (`gerbang.py`) dan nilai tambah. Narasi dihitung seperti komentar. | M6.1 |
+| ~~T-1~~ | ~~Nama menu: "Montase" atau lainnya?~~ Dipakai sesuai saran (K-18). | Montase (id) / Montage (en) | M1.4 |
+| ~~T-2~~ | ~~Ekspor 60 fps tersedia?~~ Dipakai sesuai saran (K-18). | Ya, sebagai pilihan. Bawaan 30 fps. | M1.9 |
+| ~~T-3~~ | ~~Apakah video Montase yang memakai video orang lain wajib bernarasi sebelum boleh diunggah publik?~~ Dipakai sesuai saran (K-18). | Ya, ikut gerbang tinjau (`gerbang.py`) dan nilai tambah. Narasi dihitung seperti komentar. | M6.1 |
 | T-4 | Layanan suara AI tambahan: ElevenLabs atau lainnya? | Menunggu pemilik | MS.1 |
 | ~~T-5~~ | ~~Ambang kecepatan render~~ Dipakai angka usulan: paling lama 4x durasi (K-17). Terukur 2,3-2,9x. | | |
-| T-6 | Montase bisa dipakai di HP? | Tidak di rilis pertama. Di HP hanya daftar proyek dan ekspor. | M1.7 |
+| ~~T-6~~ | ~~Montase bisa dipakai di HP?~~ Dipakai sesuai saran (K-18). | Tidak di rilis pertama. Di HP hanya daftar proyek dan ekspor. | M1.7 |
 | ~~T-7~~ | ~~Apakah pemilik membuat API key Claude?~~ Dijawab 3 Nov 2026: tidak, hanya Claude Pro. Lihat K-15. | | |
 
 **Catatan lisensi Remotion:** gratis, termasuk untuk komersial, bagi perorangan
@@ -738,26 +739,35 @@ Penilaian "layak sebagai draf" menunggu pemilik (K-17, UJI-LANGSUNG tes 92).
 
 ## Tahap 6: Rapikan dan rilis
 
-- [ ] **M6.1** Unggah dari Montase lewat alur yang sudah ada (`UploadModal`,
+- [x] **M6.1** Unggah dari Montase lewat alur yang sudah ada (`UploadModal`,
   `gerbang.py`). Kredit **banyak sumber** di deskripsi, label konten sintetis
   bila ada suara TTS (keputusan T-3).
-- [ ] **M6.2** Skor nilai tambah untuk video Montase (`nilai_tambah.py`):
+  (selesai 5 Nov 2026, commit 35de9e0) Tombol Unggah sesudah ekspor membuka `UploadModal` yang sama. `unggah.sumber_klip` membawa `banyak` untuk video Montase; `kredit()` menulis satu baris per sumber; izin diizinkan hanya bila SEMUA kanal diizinkan, dan peringatannya menyebut kanal yang belum. Montase dari bahan milik sendiri tidak dituntut kredit maupun izin. Label sintetis dari `suara_sintetis` sidecar (M5.3). Diuji lewat API: dua Klip jadi bersumber -> tanpa narasi gerbang menolak, dengan narasi lolos (42%).
+- [x] **M6.2** Skor nilai tambah untuk video Montase (`nilai_tambah.py`):
   narasi dihitung seperti komentar, sedangkan teks, animasi, dan sisipan
   setengah bobot.
-- [ ] **M6.3** Kinerja: proyek 10 menit dengan 100 item tetap lancar
+  (selesai 5 Nov 2026, commit 35de9e0) Sidecar ekspor menulis `lapisan` [{t, d, jenis}] dan `nilai_tambah`. `nilai_tambah.hitung` membaca `lapisan`: narasi/rekam seperti komentar, teks/animasi/stiker/sisipan setengah bobot, subtitle tidak dihitung. **T-3:** Montase dengan `sumber_banyak` cukup hanya bila narasi/rekaman >= 2 detik, berapa pun banyak animasinya; Montase dari bahan sendiri selalu cukup (tidak ada yang digunakan ulang).
+- [x] **M6.3** Kinerja: proyek 10 menit dengan 100 item tetap lancar
   (linimasa tervirtualisasi, sampul di-cache).
-- [ ] **M6.4** Riwayat versi proyek (10 simpanan terakhir) dan pemulihan sesudah
+  (selesai 5 Nov 2026, commit 6b3104d) Diukur dulu: 10 menit, 100 item (60 video, 20 teks, 10 animasi, 10 suara): seret, pangkas, pilih kotak, putar, gulir semuanya p95 16,7 ms, nol long task. **Virtualisasi tidak dibuat** karena tidak dibutuhkan di ukuran ini. Turunan bahan kini `private, max-age=21600` (selama token berlaku), bukan `no-cache`.
+- [x] **M6.4** Riwayat versi proyek (10 simpanan terakhir) dan pemulihan sesudah
   aplikasi tertutup mendadak.
-- [ ] **M6.5** Pembersihan penyimpanan: salinan sunting, render sementara, dan
+  (selesai 5 Nov 2026, commit 6b3104d) Tabel `montase_proyek_versi` (migrasi 13): potret paling sering 2 menit sekali saat simpan (simpan otomatis tiap 1,5 dtk, jadi memotret setiap simpanan membuat sepuluh versi hanya 15 detik), selalu saat ekspor dan sebelum pulihkan; 10 terbaru. Panel Proyek > Riwayat versi > Pulihkan. Draf lokal per proyek (ditunda 400 ms) bila simpanan belum sampai ke server; ditawarkan saat proyek dibuka lagi, dihapus begitu tersimpan. Diuji Playwright 6/6, termasuk simpanan yang digagalkan lalu muat ulang.
+- [x] **M6.5** Pembersihan penyimpanan: salinan sunting, render sementara, dan
   bahan yatim ditangani `sampah.py` dan `bersih_otomatis.py`.
-- [ ] **M6.6** Proyek dan pustaka animasi ikut fitur cadangan.
-- [ ] **M6.7** `UJI-LANGSUNG.md` bagian Montase lengkap, dan halaman bantuan
+  (selesai 5 Nov 2026, commit b2719eb) `montase/bersih.py` di pemindai `sampah.py`: render terputus dan sisa pemeriksa (diam > 1 jam, ikut sapuan saat mulai), turunan yang barisnya sudah dihapus, dan bahan yang berkas sumbernya hilang serta tidak dipakai proyek mana pun (barisnya ikut dirapikan). **Menyimpang:** `bersih_otomatis.py` tidak diubah: salinan sunting bahan yang masih dipakai tidak bisa dibuktikan sampah, dan bahan di Bahan saya memang untuk nanti.
+- [x] **M6.6** Proyek dan pustaka animasi ikut fitur cadangan.
+  (selesai 5 Nov 2026, commit b2719eb) Tidak perlu kode baru: cadangan menyalin seluruh basis data, dan proyek, versi, bahan, serta pustaka animasi Montase ada di sana. Dibuktikan `test_montase_cadangan.py`; teks Pengaturan kini menyebutnya, dan bahwa berkas video/suara tidak ikut.
+- [x] **M6.7** `UJI-LANGSUNG.md` bagian Montase lengkap, dan halaman bantuan
   singkat di dalam aplikasi.
-- [ ] **M6.8** Rilis: label "beta" dilepas, versi dinaikkan di `version.py`.
-- [ ] **M6.9** Pesan server Montase dalam bahasa Inggris: string Tahap 0-4
+  (selesai 5 Nov 2026, commit cdad7f2) `BantuanMontase.jsx`: tujuh langkah alur kerja, di beranda (Cara pakai) dan jendela dari tombol ? di editor. UJI-LANGSUNG tes 97-102 untuk Tahap 6.
+- [x] **M6.8** Rilis: label "beta" dilepas, versi dinaikkan di `version.py`.
+  (selesai 5 Nov 2026, commit cdad7f2) Label beta dilepas; `version.py` 1.4.0 (sesudah 1.3.9 angka tengah naik, aturan 29 Sep 2026). **Tag `v1.4.0` TIDAK dibuat:** tag memicu build rilis yang terbit ke semua pemasangan, dan pemilik belum menguji (K-17). Pemilik yang membuat tagnya sesudah uji akhir.
+- [x] **M6.9** Pesan server Montase dalam bahasa Inggris: string Tahap 0-4
   (galat, kabar pekerjaan, masalah pemeriksa animasi) belum ada di
   `kamus_en.py`, jadi tetap berbahasa Indonesia di mode English. Tahap 5 sudah
   (ditemukan 5 Nov 2026).
+  (selesai 5 Nov 2026, commit 9d18382) 73 entri `kamus_en.py`: galat, kabar kemajuan, dan masalah pemeriksa animasi (termasuk dari montase-mesin). Pesan perbaikan untuk AI tetap berbahasa Indonesia.
 
 ---
 
@@ -1251,6 +1261,7 @@ detik). Kolom **Pemilik** = komputer pemilik (tes 60-63 di UJI-LANGSUNG.md).
 | Tahap 3: perendam musik | -27,2 dB -> -39,3 dB saat narasi | | | Musik 220 Hz diukur dengan bandpass di ekspor. |
 | Tahap 4: satu pemeriksaan animasi | 4,4-5,4 dtk (kompilasi + 5 bingkai + nilai gerak) | | | Satu Chrome untuk kelima bingkai. |
 | Tahap 4: animasi AI, ekspor = pratinjau | SSIM 0,94 | | | Lingkaran + panah sesudah props diubah dan titik posisi diseret. |
+| Tahap 6: proyek 10 menit 100 item | p95 16,7 ms semua interaksi, nol long task | | | Seret, pangkas, pilih kotak 90 item, putar 4 dtk, gulir linimasa diperbesar. |
 | Tahap 5: asisten Top 5 dari 5 klip | 1,9-3,4 dtk (lokal, tanpa Whisper) | | | Termasuk 5 narasi TTS tiruan dan pendengar momen tanpa YAMNet. |
 
 ## 25. Daftar uji permintaan animasi
