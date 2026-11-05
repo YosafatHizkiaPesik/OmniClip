@@ -22,7 +22,12 @@ lupa untuk selalu mencatatnya agar ... sesi lain masih bisa melanjutkannya".
 | O6 Akhir menyambung | ✅ bacd105 | ekor mati + sambung ke awal |
 | O7 Keterangan unik + bab | ✅ 100d129 | judul unik + bab |
 
-**Tugas berikutnya:** `PR JOB-5`.
+| P1 Preset caption subtitle | ⬜ | |
+| P2 Preset teks milik sendiri | ⬜ | |
+| P3 Templat video bawaan | ⬜ | |
+| P4 Templat milik sendiri | ⬜ | |
+
+**Tugas berikutnya:** `P1`. (O1-O7: PR #13 dibuka 5 Nov 2026, CI berjalan; merge bila hijau.)
 
 **Melanjutkan di sesi baru:** baca papan ini dan bagian 4. Kerjakan tugas
 berikutnya; bila ada catatan "SEBAGIAN" di bawah butirnya, lanjutkan dari
@@ -119,6 +124,29 @@ Urutan dari dampak terbesar terhadap penilaian orisinalitas.
   (selesai 5 Nov 2026, commit bacd105) model/akhir.js periksaAkhir + usulanAkhir (potong ekor tanpa gambar, sambung 1 dtk pertama di ujung); bagian Akhir video + tombol usulan di panel meter; tanpa server. Playwright 4/4 termasuk Ctrl+Z.
 - [x] **O7** Keterangan unik dan bab.
   (selesai 5 Nov 2026, commit 100d129) services/keunikan.py (judul vs unggahan + Klip jadi, Jaccard kata >= 0,7, >= 3 = pola), peringatan di UploadModal; bab dari penanda/kartu peringkat di sidecar (bukan Shorts), unggah.teks_bab menegakkan aturan bab YouTube. API diuji; peringatan di formulir belum terlihat di container karena akun Google tidak tersambung (UJI-LANGSUNG).
+
+## 5. Tambahan: preset dan templat (diminta pemilik 5 Nov 2026)
+
+"tambahkan preset preset baik itu preset teks caption atau preset template
+video di montage".
+
+Catatan orisinalitas (O3): templat MEMPERCEPAT kerja tetapi juga mudah
+menghasilkan video yang bersusun sama. Karena itu tiap templat bawaan punya
+pilihan variasi (warna, animasi pembuka, gaya caption), dan pemeriksa kemiripan
+O3 tetap memperingatkan bila hasilnya terlalu mirip video sebelumnya.
+
+- [ ] **P1** Preset caption subtitle: kira-kira sepuluh gaya untuk lajur
+  subtitle (sorot warna, sorot kotak, kata aktif membesar, pelat, pita, neon,
+  stiker, sinema, minimal), diterapkan ke seluruh lajur sekaligus dan dipakai
+  untuk subtitle baru. Butuh mode sorot baru di ItemTeks (`sorot`: warna |
+  kotak | besar).
+- [ ] **P2** Preset teks milik sendiri: "Simpan gaya ini" dari item teks,
+  tersimpan per profil, muncul bersama tema bawaan di panel teks; bisa dihapus.
+- [ ] **P3** Templat video bawaan (Top N hitung mundur, Reaksi, Sorotan
+  podcast, Fakta/edukasi, Sebelum-sesudah): dipilih saat membuat proyek baru,
+  atau diterapkan ke proyek berjalan sebagai USULAN (model/usulan.js).
+- [ ] **P4** Templat milik sendiri: "Simpan sebagai templat" dari proyek
+  (susunan lajur, teks, animasi, gaya, tanpa bahan video), dipakai seperti P3.
 
 ## Sumber
 
