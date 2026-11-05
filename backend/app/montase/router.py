@@ -57,7 +57,13 @@ def _setelan() -> dict:
         "ai_koneksi": settings_repo.get(KUNCI_AI, ""),
         "koneksi": [{"id": k["id"], "nama": k["nama"], "penyedia": k["penyedia"]}
                     for k in koneksi_ai.semua() if k.get("aktif")],
+        "versi_paket": _versi_paket(),
     }
+
+
+def _versi_paket() -> int:
+    from . import motion_ai
+    return motion_ai.VERSI_KONTRAK
 
 
 @router.get("/setelan")

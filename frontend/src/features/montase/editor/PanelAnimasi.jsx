@@ -88,6 +88,8 @@ function KartuHasil({ versi, token, onTambah, onSimpan, onRevisi, mode, onVersi,
   );
 }
 
+const KUNCI_PAKET = 'omniclip.montase.paket_claude';
+
 export default function PanelAnimasi({ token, proyekId, dokumen, garis, terpilih, onTambahBawaan, onTambahAi, onSimpanDulu }) {
   const t = useT();
   const fps = dokumen.kanvas.fps;
@@ -103,6 +105,17 @@ export default function PanelAnimasi({ token, proyekId, dokumen, garis, terpilih
   const [semuaVersi, setSemuaVersi] = useState([]);
   const [galat, setGalat] = useState(null);
   const kerja = useJobRunner();
+  // Versi paket Project Claude yang terakhir diunduh di peramban ini. Kalau
+  // kontraknya naik versi, paket lama di Project knowledge harus diganti.
+  const [paketDiunduh, setPaketDiunduh] = useState(() => {
+    try { return Number(localStorage.getItem(KUNCI_PAKET)) || 0; } catch { return 0; }
+  });
+  const catatUnduhPaket = () => {
+    const v = setelan?.versi_paket ?? 0;
+    setPaketDiunduh(v);
+    try { localStorage.setItem(KUNCI_PAKET, String(v)); } catch { /* tidak apa */ }
+  };
+  const paketUsang = Boolean(setelan?.versi_paket && paketDiunduh && paketDiunduh !== setelan.versi_paket);
 
   const muatPustaka = useCallback(() => {
     daftarKomponen({ pustaka: true, cari }).then(setPustaka).catch(() => {});
@@ -249,7 +262,14 @@ export default function PanelAnimasi({ token, proyekId, dokumen, garis, terpilih
           <ol className="montase-langkah-claude">
             <li>
               {t('montase.ai.claude_1')}{' '}
-              <a href={ALAMAT_PAKET_CLAUDE} download><Download size={12} /> {t('montase.ai.unduh_paket')}</a>
+              <a href={ALAMAT_PAKET_CLAUDE} download onClick={catatUnduhPaket}>
+                <Download size={12} /> {t('montase.ai.unduh_paket')}{setelan?.versi_paket ? ` (v${setelan.versi_paket})` : ''}
+              </a>
+              {paketUsang && (
+                <p className="montase-galat" role="alert">
+                  {t('montase.ai.paket_usang', { lama: paketDiunduh, baru: setelan.versi_paket })}
+                </p>
+              )}
             </li>
             <li>
               <button type="button" className="btn-secondary" disabled={permintaan.trim().length < 3} onClick={salinPermintaan}>

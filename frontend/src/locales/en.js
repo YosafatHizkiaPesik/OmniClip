@@ -2153,6 +2153,7 @@ export default {
   'montase.ai.buat_tombol': "Create animation",
   'montase.ai.claude_1': "Once: create a Project on Claude.ai, paste the instructions, upload the package to Project knowledge.",
   'montase.ai.unduh_paket': "Download the Claude Project package",
+  'montase.ai.paket_usang': "The animation contract changed from version {lama} to {baru}. Download this package again and replace the old file in your Claude Project knowledge.",
   'montase.ai.salin_permintaan': "Copy request",
   'montase.ai.buka_claude': "Open Claude.ai",
   'montase.ai.tempel': "Claude's reply",

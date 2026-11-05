@@ -2154,6 +2154,7 @@ export default {
   'montase.ai.buat_tombol': "Buat animasi",
   'montase.ai.claude_1': "Sekali saja: buat Project di Claude.ai, tempel instruksinya, unggah paketnya ke Project knowledge.",
   'montase.ai.unduh_paket': "Unduh paket Project Claude",
+  'montase.ai.paket_usang': "Kontrak animasi naik dari versi {lama} ke {baru}. Unduh paket ini lagi dan ganti berkas lama di Project knowledge Claude.",
   'montase.ai.salin_permintaan': "Salin permintaan",
   'montase.ai.buka_claude': "Buka Claude.ai",
   'montase.ai.tempel': "Balasan Claude",
