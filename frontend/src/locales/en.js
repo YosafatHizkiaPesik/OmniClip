@@ -1763,6 +1763,8 @@ export default {
   'unggah.belum_lolos_ket': "Automatic uploads would downgrade it to Private because:",
   'unggah.tetap_publik': "Here you can still publish it publicly.",
   'unggah.tujuan': "Destination",
+  'unggah.keunikan_waspada': "This title is similar to {n} of your earlier titles:",
+  'unggah.keunikan_pola': "Repeating title pattern ({n} similar titles). YouTube treats templated metadata as a sign of mass-produced content. Write a title that names what is special about this video. Similar:",
   'unggah.judul_video': "Title",
   'unggah.deskripsi': "Description",
   'unggah.siapa': "Who can watch",

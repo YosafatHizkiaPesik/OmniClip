@@ -42,6 +42,17 @@ export default function UploadModal({ clip, onClose, onDone }) {
   const [kemajuan, setKemajuan] = useState(0);
   const [target, setTarget] = useState('drive');
   const [title, setTitle] = useState(defaultTitle);
+  // Judul yang terlalu mirip unggahan/klip sebelumnya (JOB-5 O7): pola
+  // bertemplat dinilai per kanal. Hanya peringatan, tidak memblokir.
+  const [keunikan, setKeunikan] = useState(null);
+  useEffect(() => {
+    if (!title.trim()) { setKeunikan(null); return undefined; }
+    const id = setTimeout(() => {
+      apiGet(`/uploads/keunikan?clip_name=${encodeURIComponent(clip.file_name)}&judul=${encodeURIComponent(title.trim())}`)
+        .then(setKeunikan).catch(() => setKeunikan(null));
+    }, 600);
+    return () => clearTimeout(id);
+  }, [title, clip.file_name]);
   // Tagar yang sudah disetel di editor mengisi deskripsi sendiri. Mengetiknya
   // ulang di sini adalah pekerjaan yang sudah selesai sekali.
   const [description, setDescription] = useState(
@@ -263,6 +274,12 @@ export default function UploadModal({ clip, onClose, onDone }) {
               </span>
               <input className="field" value={title} maxLength={100}
                      onChange={(e) => setTitle(e.target.value)} />
+              {keunikan && keunikan.tingkat !== 'aman' && (
+                <span role="status" style={{ fontSize: '.78rem', color: keunikan.tingkat === 'pola' ? 'var(--reh)' : '#b7791f' }}>
+                  {t(`unggah.keunikan_${keunikan.tingkat}`, { n: keunikan.mirip.length })}
+                  {' '}{keunikan.mirip.slice(0, 3).map((m) => `"${m.judul}"`).join(', ')}
+                </span>
+              )}
             </label>
 
             {target !== 'drive' && (

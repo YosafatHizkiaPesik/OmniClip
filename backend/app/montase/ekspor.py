@@ -175,6 +175,33 @@ def lapisan(pid: int, dokumen: dict) -> list[dict]:
     return hasil
 
 
+def bab(dokumen: dict) -> list[dict]:
+    """
+    Bab untuk deskripsi video panjang (JOB-5 O7). Dari penanda berlabel bila
+    ada (pilihan pemilik sendiri); bila tidak, dari kartu peringkat (#N judul).
+    Shorts tidak menampilkan bab, jadi video tegak <= 3 menit tidak diberi bab.
+    Aturan YouTube (0:00, >= 3 bab, >= 10 detik) ditegakkan `unggah.teks_bab`.
+    """
+    k = dokumen["kanvas"]
+    fps = k["fps"]
+    if k["tinggi"] > k["lebar"] and dokumen.get("durasi", 0) / fps <= 180:
+        return []
+    hasil = [{"t": round(p["t"] / fps, 2), "judul": p["label"]}
+             for p in sorted(dokumen.get("penanda") or [], key=lambda p: p["t"]) if (p.get("label") or "").strip()]
+    if len(hasil) < 3:
+        hasil = []
+        for l in dokumen["lajur"]:
+            for i in l["item"]:
+                props = i.get("props") or {}
+                if i["jenis"] == "motion" and isinstance(props.get("angka"), (int, float)):
+                    judul = f"#{int(props['angka'])} {props.get('judul') or ''}".strip()
+                    hasil.append({"t": round(i["mulai"] / fps, 2), "judul": judul})
+        hasil.sort(key=lambda b: b["t"])
+    if hasil and hasil[0]["t"] > 0.5:
+        hasil.insert(0, {"t": 0.0, "judul": dokumen.get("nama") or "Pembuka"})
+    return hasil
+
+
 def sidecar(dokumen: dict, *, pid: int, berkas: str, detik: float) -> dict:
     from ..services.nilai_tambah import hitung
     k = dokumen["kanvas"]
@@ -192,6 +219,7 @@ def sidecar(dokumen: dict, *, pid: int, berkas: str, detik: float) -> dict:
         "hook_text": baris[0]["text"][:160] if baris else "",
         "sumber_banyak": _sumber_kredit(pid, dokumen),
         "lapisan": lapisan(pid, dokumen),
+        "bab": bab(dokumen),
         "suara_sintetis": _bersuara_sintetis(pid, dokumen),
         "motion_ai": ada_ai,
         "created_at": time.time(),

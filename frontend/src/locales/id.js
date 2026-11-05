@@ -1764,6 +1764,8 @@ export default {
   'unggah.belum_lolos_ket': "Unggahan otomatis akan menurunkannya ke Private karena:",
   'unggah.tetap_publik': "Di sini Anda tetap bisa menerbitkannya publik.",
   'unggah.tujuan': "Tujuan",
+  'unggah.keunikan_waspada': "Judul ini mirip {n} judul Anda sebelumnya:",
+  'unggah.keunikan_pola': "Pola judul berulang ({n} judul mirip). YouTube menilai metadata bertemplat sebagai tanda konten diproduksi massal. Tulis judul yang menyebut isi khas video ini. Mirip:",
   'unggah.judul_video': "Judul",
   'unggah.deskripsi': "Deskripsi",
   'unggah.siapa': "Siapa yang boleh melihat",
