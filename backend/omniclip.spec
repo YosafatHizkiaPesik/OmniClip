@@ -49,6 +49,10 @@ datas += collect_data_files("faster_whisper")
 datas += [
     (str(HERE / "app" / "assets"), "app/assets"),
     (str(PROJECT / "frontend" / "dist"), "frontend_dist"),
+    # Montase Tahap 4: kontrak komponen dan sumber animasi bawaan sebagai
+    # contoh di prompt AI dan paket Project Claude (app/montase/motion_ai.py).
+    (str(HERE / "app" / "montase" / "kontrak_komponen.md"), "app/montase"),
+    (str(PROJECT / "frontend" / "src" / "features" / "montase" / "komposisi" / "motion"), "montase_contoh"),
 ]
 
 # Mesin Montase (JOB-4): kode mesin, node_modules produksinya (Remotion

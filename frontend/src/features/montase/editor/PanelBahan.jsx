@@ -23,6 +23,7 @@ import {
 } from '../api.js';
 import { JENIS_SERET_BAHAN } from './garisPutar.js';
 import PanelSuara from './PanelSuara.jsx';
+import PanelAnimasi from './PanelAnimasi.jsx';
 
 const ASAL = [
   { id: 'unduhan', kunci: 'montase.bahan.unduhan' },
@@ -68,7 +69,7 @@ function BarisBahan({ b, token, onTambah, sibuk, bisaDiseret = false }) {
   );
 }
 
-export default function PanelBahan({ token, onTambahKeLinimasa, onTambahSuara, onBahan }) {
+export default function PanelBahan({ token, onTambahKeLinimasa, onTambahSuara, onBahan, animasi }) {
   const t = useT();
   const [bahan, setBahan] = useState([]);
   const [asal, setAsal] = useState(null);
@@ -91,7 +92,7 @@ export default function PanelBahan({ token, onTambahKeLinimasa, onTambahSuara, o
   }, [bahan, muat]);
 
   useEffect(() => {
-    if (!asal || asal === 'suara') return;
+    if (!asal || asal === 'suara' || asal === 'animasi') return;
     setSumber(null);
     sumberBahan(asal).then(setSumber).catch((e) => { setGalat(e.message); setSumber([]); });
   }, [asal]);
@@ -161,13 +162,19 @@ export default function PanelBahan({ token, onTambahKeLinimasa, onTambahSuara, o
         >
           {t('montase.suara.tab')}
         </button>
+        <button type="button" role="tab" aria-selected={asal === 'animasi'}
+                className={asal === 'animasi' ? 'aktif' : ''} onClick={() => setAsal('animasi')}
+        >
+          {t('montase.ai.tab')}
+        </button>
       </div>
+      {asal === 'animasi' && <PanelAnimasi token={token} {...animasi} />}
 
       {asal === 'suara' && (
         <PanelSuara onTambahSuara={async (b, narasi) => { await muat(); onTambahSuara(b, narasi); }} />
       )}
 
-      <ul className="montase-bahan-daftar" hidden={asal === 'suara'}>
+      <ul className="montase-bahan-daftar" hidden={asal === 'suara' || asal === 'animasi'}>
         {asal === null && bahan.length === 0 && (
           <li className="montase-kosong-kecil">{t('montase.bahan.kosong')}</li>
         )}

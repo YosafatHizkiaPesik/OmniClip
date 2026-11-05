@@ -6,7 +6,7 @@
  *     "durasi": bingkai | null, "props": {...} | null, "keluar": folder PNG,
  *     "browser": jalur Chrome | null }
  * Keluaran (stdout, satu JSON):
- *   { "lolos": false, "tahap": "kompilasi"|"ekspor"|"render", "masalah": [...] }
+ *   { "lolos": false, "tahap_gagal": "kompilasi"|"ekspor"|"render", "masalah": [...] }
  *   atau { "lolos": true, "js": "...", "ekspor": [...], "peringatan": [...],
  *          "bingkai": [{"bingkai": n, "berkas": "...png", "ms": 812}], "durasi": n }
  *
@@ -22,7 +22,7 @@
  * berkas PNG ini.
  */
 import path from 'node:path';
-import { renderStill, selectComposition } from '@remotion/renderer';
+import { openBrowser, renderStill, selectComposition } from '@remotion/renderer';
 import { jalankan, tulis } from './alat.mjs';
 import { kompilasi } from './kompilasi.mjs';
 
@@ -33,13 +33,13 @@ const EKSPOR_WAJIB = ['skema', 'contohProps'];
 await jalankan(async (m) => {
   const hasil = kompilasi(m.sumber ?? '');
   if (!hasil.lolos) {
-    tulis({ lolos: false, tahap: 'kompilasi', masalah: hasil.masalah, peringatan: hasil.peringatan ?? [] });
+    tulis({ lolos: false, tahap_gagal: 'kompilasi', masalah: hasil.masalah, peringatan: hasil.peringatan ?? [] });
     return;
   }
   const kurang = EKSPOR_WAJIB.filter((n) => !hasil.ekspor.includes(n));
   if (kurang.length) {
     tulis({
-      lolos: false, tahap: 'ekspor', peringatan: hasil.peringatan,
+      lolos: false, tahap_gagal: 'ekspor', peringatan: hasil.peringatan,
       masalah: kurang.map((n) => `Ekspor "${n}" wajib ada: panel properti dibuat dari situ.`),
     });
     return;
@@ -68,6 +68,12 @@ await jalankan(async (m) => {
     timeoutInMilliseconds: 30000,
   };
   const bingkai = [];
+  // Satu Chrome untuk pemilihan komposisi dan kelima bingkai; tanpa ini
+  // setiap renderStill membuka Chrome baru (beberapa detik per bingkai).
+  const browser = await openBrowser('chrome', {
+    browserExecutable: m.browser ?? null, chromiumOptions: {}, logLevel: 'error',
+  });
+  bersama.puppeteerInstance = browser;
   try {
     const komposisi = await selectComposition({ ...bersama, id: ID_KOMPOSISI });
     for (const p of [0.1, 0.3, 0.5, 0.7, 0.9]) {
@@ -79,14 +85,16 @@ await jalankan(async (m) => {
     }
   } catch (e) {
     const pesan = String(e?.message ?? e).split('\n').slice(0, 6).join('\n');
-    tulis({ lolos: false, tahap: 'render', masalah: [`Render gagal: ${pesan}`], peringatan: hasil.peringatan });
+    tulis({ lolos: false, tahap_gagal: 'render', masalah: [`Render gagal: ${pesan}`], peringatan: hasil.peringatan });
     return;
+  } finally {
+    await browser.close({ silent: true }).catch(() => {});
   }
   // Bingkai pertama ikut memuat Chrome dan komponen; yang dinilai sisanya.
   const lambat = bingkai.slice(1).filter((b) => b.ms > BATAS_MS_BINGKAI);
   if (lambat.length) {
     tulis({
-      lolos: false, tahap: 'render', peringatan: hasil.peringatan, bingkai,
+      lolos: false, tahap_gagal: 'render', peringatan: hasil.peringatan, bingkai,
       masalah: [`Satu bingkai butuh lebih dari ${BATAS_MS_BINGKAI / 1000} detik (${Math.max(...lambat.map((b) => b.ms))} ms). Sederhanakan animasinya.`],
     });
     return;

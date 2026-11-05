@@ -27,8 +27,9 @@ import { useJobRunner } from '../../hooks/useJob';
 import JobProgress from '../../components/JobProgress';
 import { BAWAAN } from './komposisi/index.js';
 import {
-  ambilProyek, ambilToken, buatNarasi, fontDipakai, simpanProyek, sumberPratinjau,
+  ambilProyek, ambilToken, buatNarasi, fontDipakai, komponenDipakai, simpanProyek, sumberPratinjau,
 } from './api.js';
+import useSkemaKomponen from './editor/useSkemaKomponen.js';
 import {
   cariItem, tambahBahan, tambahMotion, tambahTeks, ubahItem, ubahProyek,
 } from './model/dokumen.js';
@@ -268,7 +269,8 @@ export default function MontaseEditor() {
     () => (dokumen ? sumberPratinjau(dokumen, token) : null),
     // Hanya daftar bahan dan font yang menentukan alamat; perubahan item tidak.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [dokumen && Object.keys(dokumen.bahan).join(','), dokumen && fontDipakai(dokumen).join(','), token],
+    [dokumen && Object.keys(dokumen.bahan).join(','), dokumen && fontDipakai(dokumen).join(','),
+      dokumen && Object.keys(komponenDipakai(dokumen, '-')).join(','), token],
   );
 
   const semuaId = useMemo(
@@ -276,6 +278,9 @@ export default function MontaseEditor() {
     [dokumen?.lajur],
   );
   const pilihanSah = useMemo(() => pilihan.filter((id) => semuaId.has(id)), [pilihan, semuaId]);
+  const itemTerpilih = dokumen && pilihanSah.length === 1 ? cariItem(dokumen, pilihanSah[0])?.item : null;
+  // Skema props animasi terpilih (M4.5): bawaan di sini, komponen AI dari kotak pasir.
+  const infoSkema = useSkemaKomponen(itemTerpilih, pratinjau, token);
 
   const pilih = useCallback((ids) => {
     setPilihan(ids);
@@ -321,6 +326,19 @@ export default function MontaseEditor() {
     const panjang = komponen === 'ko_bilah_progres';
     let hasil = tambahMotion(dok(), { komponen, modul, mulai: panjang ? 0 : garis.get() });
     if (panjang) hasil = { ...hasil, dokumen: ubahItem(hasil.dokumen, hasil.itemId, { durasi: Math.max(dok().durasi, 1) }) };
+    if (terapkan(hasil.dokumen)) pilih([hasil.itemId]);
+  };
+  /** Animasi buatan AI (versi yang lolos) di bingkai `mulai` (M4.3, M4.7). */
+  const tambahAnimasiAi = (v, { mulai, durasi }) => {
+    let hasil = tambahMotion(dok(), {
+      komponen: v.id, modul: { contohProps: {}, durasiBawaan: Math.max(1, Math.round(durasi)) }, mulai,
+    });
+    hasil = {
+      ...hasil,
+      dokumen: ubahItem(hasil.dokumen, hasil.itemId, {
+        versi: v.versi, asal: 'ai', alasan: (v.catatan?.alasan || v.permintaan || '').slice(0, 500),
+      }),
+    };
     if (terapkan(hasil.dokumen)) pilih([hasil.itemId]);
   };
   const tambahStikerDiGaris = (emoji) => {
@@ -571,7 +589,11 @@ export default function MontaseEditor() {
            style={{ gridTemplateColumns: `${tata.kiri}px 6px minmax(0, 1fr) 6px ${tata.kanan}px` }}
       >
         <PanelBahan token={token} onTambahKeLinimasa={tambahKeLinimasa} onTambahSuara={tambahSuara}
-                    onBahan={catatBahan} />
+                    onBahan={catatBahan}
+                    animasi={{
+                      proyekId, dokumen, garis, terpilih, onSimpanDulu: simpanSekarang,
+                      onTambahBawaan: tambahAnimasiDiGaris, onTambahAi: tambahAnimasiAi,
+                    }} />
         <Pembatas arah="tegak" onGeser={geser('kiri', 1, [220, 520])} />
         <section className="montase-panel montase-panel-pratinjau" aria-label={t('montase.pratinjau.judul')}>
           {galat && status !== 'bentrok' && status !== 'gagal' && <p className="montase-galat" role="alert">{galat}</p>}
@@ -581,7 +603,7 @@ export default function MontaseEditor() {
                                onTombol={tombolPratinjau}
           >
             <PeganganUbah key={terpilih?.item.id ?? 'kosong'} dokumen={dokumen} terpilih={terpilih}
-                          garis={garis} onUbah={ubah} />
+                          garis={garis} onUbah={ubah} infoSkema={infoSkema} />
           </PratinjauKotakPasir>
         </section>
         <Pembatas arah="tegak" onGeser={geser('kanan', -1, [240, 520])} />
@@ -603,6 +625,7 @@ export default function MontaseEditor() {
           onUbahPenanda={(tt, label) => ubah((d) => ubahPenanda(d, tt, label), { gabung: `penanda:${tt}` })}
           onHapusPenanda={(tt) => terapkan(hapusPenanda(dok(), tt))}
           onBuatUlangNarasi={buatUlangNarasi}
+          infoSkema={infoSkema}
           garis={garis}
           onUbahSifat={(id, s) => ubah((d) => {
             const it = cariItem(d, id)?.item;

@@ -27,6 +27,7 @@ import {
 import { ubahSifatDiBingkai, ubahTransform } from '../model/suntingan.js';
 import { ubahPada } from '../komposisi/keyframe.js';
 import { useGaris } from './garisPutar.js';
+import { kunciPosisi } from './PanelPropsSkema.jsx';
 
 const AMBANG_TENGAH = 8;
 let nomor = 0;
@@ -41,7 +42,40 @@ function gayaKotak({ cx, cy, w, h }, putar, k) {
   };
 }
 
-export default function PeganganUbah({ dokumen, terpilih, garis, onUbah }) {
+/**
+ * Titik props "posisi" animasi (M4.5): x, y persen kanvas, diseret langsung di
+ * pratinjau. Nilai ditulis ke `item.props`, bukan ke transformasi item.
+ */
+function TitikPosisi({ item, kunci, nilai, lebar, tinggi, onUbah }) {
+  const mulai = (k) => (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    try { e.currentTarget.setPointerCapture?.(e.pointerId); } catch { /* tidak apa */ }
+    const rect = e.currentTarget.parentElement.getBoundingClientRect();
+    const opsi = { gabung: `titik:${item.id}:${k}:${(nomor += 1)}`, jendela: Infinity };
+    const gerak = (ev) => {
+      const x = Math.round(Math.min(100, Math.max(0, ((ev.clientX - rect.left) / rect.width) * 100)) * 10) / 10;
+      const y = Math.round(Math.min(100, Math.max(0, ((ev.clientY - rect.top) / rect.height) * 100)) * 10) / 10;
+      onUbah((d) => ubahItem(d, item.id, { props: { ...nilai, ...item.props, [k]: { x, y } } }), opsi);
+    };
+    const lepas = () => {
+      window.removeEventListener('pointermove', gerak);
+      window.removeEventListener('pointerup', lepas);
+    };
+    window.addEventListener('pointermove', gerak);
+    window.addEventListener('pointerup', lepas);
+  };
+  return kunci.map((k) => {
+    const p = { ...nilai, ...item.props }[k] ?? { x: 50, y: 50 };
+    return (
+      <span key={k} className="montase-titik-posisi" title={k} onPointerDown={mulai(k)}
+            style={{ left: (p.x / 100) * lebar, top: (p.y / 100) * tinggi }} />
+    );
+  });
+}
+
+export default function PeganganUbah({ dokumen, terpilih, garis, onUbah, infoSkema }) {
   const t = useT();
   const wadah = useRef(null);
   const [lebar, setLebar] = useState(0);
@@ -149,8 +183,13 @@ export default function PeganganUbah({ dokumen, terpilih, garis, onUbah }) {
   const bawah = Math.min(dokumen.kanvas.tinggi * k - 34, Math.max(...sudut.map((s) => s.y)) * k + 8);
   const tengahX = Math.min(lebar - 40, Math.max(40, r.cx * k));
 
+  const posisi = item.jenis === 'motion' && !kunci ? kunciPosisi(infoSkema?.skema) : [];
   return (
     <div ref={wadah} className="montase-pegangan-wadah">
+      {posisi.length > 0 && (
+        <TitikPosisi item={item} kunci={posisi} nilai={infoSkema?.contoh ?? {}} lebar={lebar}
+                     tinggi={lebar * (dokumen.kanvas.tinggi / W)} onUbah={onUbah} />
+      )}
       {bantu.tegak && <div className="montase-bantu-tegak" aria-hidden />}
       {bantu.datar && <div className="montase-bantu-datar" aria-hidden />}
       {modePotong && (

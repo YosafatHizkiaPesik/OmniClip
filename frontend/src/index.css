@@ -2530,3 +2530,39 @@ button.tujuan, a.tujuan { cursor: pointer; }
 }
 .montase-item-punch { position: absolute; top: 2px; height: 4px; background: #ff7a00; border-radius: 2px; z-index: 2; pointer-events: none; }
 .montase-stiker { width: 92px; }
+
+/* Montase Tahap 4: animasi AI */
+.montase-animasi { padding: 0 12px 12px; overflow: auto; display: flex; flex-direction: column; gap: 4px; }
+.montase-animasi textarea { font: inherit; font-size: .78rem; padding: 8px; border-radius: var(--r-sm); border: 1px solid var(--rule-2); background: var(--plate); color: var(--ink); resize: vertical; width: 100%; box-sizing: border-box; }
+.montase-kisi-animasi { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.montase-kisi-animasi .btn-secondary { justify-content: flex-start; font-size: .7rem; padding: 5px 6px; text-align: left; }
+.montase-cari { display: flex; align-items: center; gap: 6px; border: 1px solid var(--rule-2); border-radius: var(--r-sm); padding: 4px 8px; }
+.montase-cari input { border: 0; background: transparent; font: inherit; font-size: .78rem; flex: 1; min-width: 0; color: var(--ink); }
+.montase-daftar-pustaka { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.montase-daftar-pustaka li { display: flex; align-items: center; gap: 8px; font-size: .78rem; }
+.montase-daftar-pustaka img { width: 28px; height: 50px; object-fit: cover; border-radius: 3px; background: #000; }
+.montase-daftar-pustaka span { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.montase-daftar-pustaka small { color: var(--ink-3); }
+.montase-langkah-claude { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 8px; font-size: .76rem; color: var(--ink-2); }
+.montase-langkah-claude li > * { margin-top: 4px; }
+.montase-langkah-claude a { display: inline-flex; align-items: center; gap: 4px; }
+.montase-hasil-ai { border: 1px solid var(--rule-2); border-radius: var(--r-md); padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+.montase-hasil-ai.lolos { border-color: #2fbf71; }
+.montase-hasil-ai.gagal { border-color: var(--reh); }
+.montase-hasil-kepala { display: flex; align-items: center; gap: 6px; font-size: .78rem; flex-wrap: wrap; }
+.montase-hasil-ai.lolos .montase-hasil-kepala svg { color: #2fbf71; }
+.montase-hasil-ai.gagal .montase-hasil-kepala svg { color: var(--reh); }
+.montase-hasil-kepala small { color: var(--ink-3); }
+.montase-hasil-kepala select { margin-left: auto; font: inherit; font-size: .72rem; }
+.montase-hasil-bingkai { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; }
+.montase-hasil-bingkai img { width: 100%; border-radius: 3px; background: #000; }
+.montase-daftar-masalah, .montase-daftar-peringatan { margin: 0; padding-left: 16px; font-size: .72rem; }
+.montase-daftar-masalah { color: var(--reh); }
+.montase-daftar-peringatan { color: #b7791f; }
+.montase-revisi { display: flex; gap: 4px; }
+.montase-revisi input, .montase-hasil-ai .montase-baris-tombol input { flex: 1; min-width: 0; font: inherit; font-size: .76rem; padding: 4px 6px; }
+.montase-titik-posisi {
+  position: absolute; width: 18px; height: 18px; margin: -9px 0 0 -9px; border-radius: 50%; pointer-events: auto;
+  background: #ffd400; border: 2px solid #000; box-shadow: 0 0 0 2px rgba(255,255,255,.7); cursor: grab; z-index: 3;
+}
+.montase-angka-kecil { width: 72px; }

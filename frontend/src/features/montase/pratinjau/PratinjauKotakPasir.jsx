@@ -50,6 +50,7 @@ const PratinjauKotakPasir = forwardRef(function PratinjauKotakPasir(
   // Saat tidak diputar, laporan yang berbeda dari lompatan terakhir dalam
   // JEDA_LAPORAN diabaikan.
   const lompatan = useRef({ bingkai: null, waktu: 0 });
+  const mintaan = useRef(new Map());
   const mainRef = useRef(false);
 
   const ke = useCallback((b) => {
@@ -64,6 +65,17 @@ const PratinjauKotakPasir = forwardRef(function PratinjauKotakPasir(
     putar: () => kirim('putar'),
     jeda: () => kirim('jeda'),
     putarJeda: () => kirim(main ? 'jeda' : 'putar'),
+    /** Skema props komponen AI, dihitung di dalam kotak pasir. */
+    mintaSkema: (kunci, url) => new Promise((selesai) => {
+      mintaan.current.set(kunci, selesai);
+      kirim('skema?', { kunci, url });
+      setTimeout(() => {
+        if (mintaan.current.get(kunci) === selesai) {
+          mintaan.current.delete(kunci);
+          selesai({ skema: null, contoh: {}, galat: 'waktu habis' });
+        }
+      }, 15000);
+    }),
     main: () => main,
   }), [ke, kirim, main]);
 
@@ -85,6 +97,17 @@ const PratinjauKotakPasir = forwardRef(function PratinjauKotakPasir(
       }
       else if (d.jenis === 'galat') onGalat?.(d.pesan);
       else if (d.jenis === 'tombol' && typeof d.key === 'string') onTombol?.(d);
+      else if (d.jenis === 'skema' && typeof d.kunci === 'string') {
+        const tunggu = mintaan.current.get(d.kunci);
+        if (tunggu) {
+          mintaan.current.delete(d.kunci);
+          tunggu({
+            skema: d.skema && typeof d.skema === 'object' ? d.skema : null,
+            contoh: d.contoh && typeof d.contoh === 'object' ? d.contoh : {},
+            galat: typeof d.galat === 'string' ? d.galat : null,
+          });
+        }
+      }
     };
     window.addEventListener('message', dengar);
     return () => window.removeEventListener('message', dengar);

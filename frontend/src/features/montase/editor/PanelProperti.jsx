@@ -25,6 +25,7 @@ import { kodeWaktu, useGaris } from './garisPutar.js';
 import { bingkaiKeyframe, KURVA, SIFAT_KEYFRAME } from '../komposisi/keyframe.js';
 import { nilaiSifat } from '../model/suntingan.js';
 import PanelTeks from './PanelTeks.jsx';
+import PanelPropsSkema from './PanelPropsSkema.jsx';
 import { KolomNarasi } from './PanelSuara.jsx';
 
 const WARNA = /^#[0-9a-fA-F]{6}$/;
@@ -474,7 +475,7 @@ export default function PanelProperti({
   dokumen, terpilih, jumlahPilihan, lajur, onUbahItem, onKecepatan, onTransform, onHapus,
   onGandakan, onUbahProyek, onUbahLajur, onHapusLajur, bisaHapusLajur, onKe, onUbahPenanda,
   onHapusPenanda, onBuatUlangNarasi, garis, onUbahSifat, onTombolKeyframe, onKurvaKeyframe,
-  onAturUlangTransform, onRendam, onPunch, onHapusPunch,
+  onAturUlangTransform, onRendam, onPunch, onHapusPunch, infoSkema,
 }) {
   const t = useT();
   const fps = dokumen.kanvas.fps;
@@ -591,8 +592,17 @@ export default function PanelProperti({
           {item.jenis === 'teks' && <PanelTeks item={item} onUbah={ubah} />}
           {item.jenis === 'motion' && (
             <>
-              <p className="montase-petunjuk">{BAWAAN[item.komponen] ? t('montase.properti.bawaan') : item.komponen}</p>
-              <KolomProps props={item.props ?? {}} onUbah={(props) => ubah({ props })} />
+              <p className="montase-petunjuk">
+                {BAWAAN[item.komponen]
+                  ? t(`montase.animasi.${item.komponen}`)
+                  : t('montase.props.animasi_ai', { versi: item.versi ?? 1 })}
+              </p>
+              {infoSkema === null && !BAWAAN[item.komponen]
+                ? <p className="montase-petunjuk">{t('montase.props.memuat')}</p>
+                : infoSkema?.skema
+                  ? <PanelPropsSkema skema={infoSkema.skema} nilai={{ ...infoSkema.contoh, ...item.props }}
+                                     onUbah={(props) => ubah({ props })} />
+                  : <KolomProps props={item.props ?? {}} onUbah={(props) => ubah({ props })} />}
             </>
           )}
           {(item.jenis === 'video' || item.jenis === 'gambar') && <PanelWarna item={item} onUbah={ubah} />}

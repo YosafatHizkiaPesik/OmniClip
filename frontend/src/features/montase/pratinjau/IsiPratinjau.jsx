@@ -13,6 +13,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Player } from '@remotion/player';
 import { Komposisi, ukuranDokumen } from '../komposisi/index.js';
 import { pesan, pesanSah } from './jembatan.js';
+import { muatModul } from '../komposisi/muatKomponen.js';
+import { contohAman, skemaJson } from '../komposisi/skemaJson.js';
 
 function kirim(jenis, isi) {
   window.parent.postMessage(pesan(jenis, isi), '*');
@@ -30,6 +32,13 @@ export default function IsiPratinjau() {
       else if (d.jenis === 'putar') pemutar.current?.play();
       else if (d.jenis === 'jeda') pemutar.current?.pause();
       else if (d.jenis === 'ke' && Number.isFinite(d.bingkai)) pemutar.current?.seekTo(d.bingkai);
+      else if (d.jenis === 'skema?' && typeof d.url === 'string') {
+        // Komponen AI dijalankan HANYA di sini; editor menerima skemanya
+        // sebagai data (JSON Schema) untuk membangun panel properti.
+        muatModul(d.url)
+          .then((m) => kirim('skema', { kunci: d.kunci, skema: skemaJson(m), contoh: contohAman(m) }))
+          .catch((e) => kirim('skema', { kunci: d.kunci, galat: String(e?.message ?? e).slice(0, 300) }));
+      }
     };
     const galat = (e) => kirim('galat', { pesan: String(e?.message ?? e?.reason?.message ?? e?.reason ?? e) });
     // Fokus di dalam iframe menelan tombol keyboard; diteruskan ke induk

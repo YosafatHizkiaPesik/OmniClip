@@ -42,18 +42,36 @@ def lingkup_bahan(pid: int) -> str:
 # --- setelan dan mesin --------------------------------------------------------
 
 class Setelan(BaseModel):
-    aktif: bool
+    aktif: Optional[bool] = None
+    ai_koneksi: Optional[str] = None
+
+
+KUNCI_AI = "montase.ai_koneksi"
+
+
+def _setelan() -> dict:
+    from ..services import koneksi_ai
+    return {
+        "aktif": settings_repo.get(KUNCI_AKTIF, "1") == "1",
+        # "" = ikuti urutan koneksi di Pengaturan > AI (K-12).
+        "ai_koneksi": settings_repo.get(KUNCI_AI, ""),
+        "koneksi": [{"id": k["id"], "nama": k["nama"], "penyedia": k["penyedia"]}
+                    for k in koneksi_ai.semua() if k.get("aktif")],
+    }
 
 
 @router.get("/setelan")
 def ambil_setelan():
-    return {"aktif": settings_repo.get(KUNCI_AKTIF, "1") == "1"}
+    return _setelan()
 
 
 @router.post("/setelan")
 def simpan_setelan(b: Setelan):
-    settings_repo.set_value(KUNCI_AKTIF, "1" if b.aktif else "0")
-    return {"aktif": b.aktif}
+    if b.aktif is not None:
+        settings_repo.set_value(KUNCI_AKTIF, "1" if b.aktif else "0")
+    if b.ai_koneksi is not None:
+        settings_repo.set_value(KUNCI_AI, b.ai_koneksi[:60])
+    return _setelan()
 
 
 @router.get("/mesin")
@@ -378,6 +396,136 @@ def font_bertoken(tkn: str, keluarga: str):
         raise NotFound("Font tidak ada.")
     return FileResponse(jalur, media_type="font/ttf",
                         headers={"Cache-Control": "public, max-age=86400"})
+
+
+# --- komponen animasi AI (Tahap 4) -------------------------------------------
+
+class Rentang(BaseModel):
+    mulai: int = Field(..., ge=0)
+    durasi: int = Field(..., ge=1)
+
+
+class BuatKomponen(BaseModel):
+    permintaan: str = Field(..., min_length=3, max_length=2000)
+    proyek_id: Optional[str] = None
+    durasi: Optional[int] = Field(None, ge=1, le=36000)
+    rentang: Optional[Rentang] = None
+    komponen_id: Optional[str] = Field(None, max_length=40)
+
+
+class TempelKomponen(BaseModel):
+    balasan: str = Field(..., min_length=10, max_length=200_000)
+    permintaan: str = Field("", max_length=2000)
+    proyek_id: Optional[str] = None
+    durasi: Optional[int] = Field(None, ge=1, le=36000)
+    rentang: Optional[Rentang] = None
+    komponen_id: Optional[str] = Field(None, max_length=40)
+
+
+class SimpanPustaka(BaseModel):
+    nama: str = Field(..., min_length=1, max_length=80)
+
+
+def _versi_publik(v: dict) -> dict:
+    from . import komponen as komponen_svc
+    return {**v, "gambar": komponen_svc.jumlah_gambar(v)}
+
+
+@router.post("/komponen/buat")
+def buat_komponen(b: BuatKomponen):
+    """Animasi baru (atau revisi bila komponen_id) lewat AI: pekerjaan `montase_motion`."""
+    from . import komponen as komponen_svc
+    return {"job_id": komponen_svc.mulai({"mode": "ai", **b.model_dump()})}
+
+
+@router.post("/komponen/tempel")
+def tempel_komponen(b: TempelKomponen):
+    """Balasan dari Claude.ai (salin-tempel) diperiksa dengan pemeriksa yang sama."""
+    from . import komponen as komponen_svc
+    return {"job_id": komponen_svc.mulai({"mode": "tempel", **b.model_dump()})}
+
+
+@router.post("/komponen/permintaan-claude")
+def permintaan_claude(b: BuatKomponen):
+    """Pesan siap salin untuk chat di Project Claude.ai (M4.10)."""
+    from . import motion_ai
+    pid = profil.kini()
+    dokumen = (repo.ambil_proyek(pid, b.proyek_id) or {}).get("dokumen") if b.proyek_id else None
+    kanvas = (dokumen or {}).get("kanvas") or {"lebar": 1080, "tinggi": 1920, "fps": 30}
+    fakta = None
+    if dokumen and b.rentang:
+        try:
+            fakta = motion_ai.lembar_fakta(pid, dokumen, b.rentang.mulai, b.rentang.durasi)["teks"]
+        except Exception:       # noqa: BLE001
+            fakta = None
+    kode_lama = None
+    if b.komponen_id:
+        kode_lama = (repo.ambil_komponen(pid, b.komponen_id) or {}).get("sumber_tsx")
+    return {"teks": motion_ai.pesan(b.permintaan, kanvas=kanvas, durasi=b.durasi, fakta=fakta,
+                                    kode_lama=kode_lama),
+            "versi_paket": motion_ai.VERSI_KONTRAK}
+
+
+@router.get("/komponen/paket-claude")
+def paket_claude():
+    """Berkas .md untuk Project Claude.ai: instruksi + kontrak + contoh (M4.10)."""
+    from fastapi.responses import Response
+    from . import motion_ai
+    return Response(motion_ai.paket_claude(), media_type="text/markdown; charset=utf-8",
+                    headers={"Content-Disposition":
+                             f'attachment; filename="omniclip-montase-claude-v{motion_ai.VERSI_KONTRAK}.md"'})
+
+
+@router.get("/komponen")
+def daftar_komponen(pustaka: int = 0, cari: str = ""):
+    return {"komponen": [_versi_publik(v) for v in
+                         repo.daftar_komponen(profil.kini(), hanya_disimpan=bool(pustaka), cari=cari[:80])]}
+
+
+@router.get("/komponen/{komponen_id}")
+def versi_komponen(komponen_id: str):
+    daftar = repo.versi_komponen(profil.kini(), komponen_id)
+    if not daftar:
+        raise NotFound("Animasi tidak ditemukan.")
+    return {"versi": [_versi_publik(v) for v in daftar]}
+
+
+@router.post("/komponen/{komponen_id}/{versi}/simpan")
+def simpan_ke_pustaka(komponen_id: str, versi: int, b: SimpanPustaka):
+    """Simpan ke pustaka profil (M4.8). Hanya versi yang lolos pemeriksaan."""
+    if not repo.tandai_simpan(profil.kini(), komponen_id, versi, b.nama):
+        raise InvalidInput("Hanya animasi yang lolos pemeriksaan yang bisa disimpan ke pustaka.")
+    return _versi_publik(repo.ambil_komponen(profil.kini(), komponen_id, versi))
+
+
+@router.delete("/komponen/{komponen_id}/pustaka")
+def keluarkan_dari_pustaka(komponen_id: str):
+    repo.hapus_dari_pustaka(profil.kini(), komponen_id)
+    return {"ok": True}
+
+
+@router.get("/t/{tkn}/komponen/{komponen_id}/{versi}/kode.js")
+def kode_komponen(tkn: str, komponen_id: str, versi: int):
+    """Hasil kompilasi untuk pratinjau dan render. Hanya versi yang lolos."""
+    from fastapi.responses import Response
+    pid = _pid_dari_token(tkn)
+    v = repo.ambil_komponen(pid, komponen_id, versi, dengan_kode=True)
+    if v is None or v["status"] != "lolos" or not v.get("hasil_js"):
+        raise NotFound("Animasi tidak ada atau belum lolos pemeriksaan.")
+    return Response(v["hasil_js"], media_type="text/javascript; charset=utf-8",
+                    headers={"Cache-Control": "private, max-age=86400"})
+
+
+@router.get("/t/{tkn}/komponen/{komponen_id}/{versi}/gambar/{n}")
+def gambar_komponen(tkn: str, komponen_id: str, versi: int, n: int):
+    from . import periksa as periksa_svc
+    pid = _pid_dari_token(tkn)
+    if repo.ambil_komponen(pid, komponen_id, versi) is None:
+        raise NotFound("Animasi tidak ditemukan.")
+    jalur = periksa_svc.folder_gambar(komponen_id, versi) / f"bingkai_{n}.jpg"
+    if not jalur.is_file():
+        raise NotFound("Gambar tidak ada.")
+    return FileResponse(jalur, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=86400"})
 
 
 # --- uji Tahap 0 --------------------------------------------------------------

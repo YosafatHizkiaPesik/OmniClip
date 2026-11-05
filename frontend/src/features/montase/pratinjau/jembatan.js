@@ -3,8 +3,10 @@
  * (JOB-4.md bagian 20).
  *
  * Induk -> iframe:  muat {dokumen, sumber} · putar · jeda · ke {bingkai}
+ *                   skema? {kunci, url}  (skema props komponen AI, M4.5)
  * Iframe -> induk:  siap · bingkai {bingkai} · main {main} · galat {pesan}
  *                   tombol {key, shift, ctrl, meta, alt}  (pintasan keyboard)
+ *                   skema {kunci, skema (JSON Schema), contoh} atau {kunci, galat}
  *
  * Iframe beralamat `null`, jadi `targetOrigin` harus '*'. Yang menjamin pesan
  * berasal dari pihak yang benar adalah pemeriksaan `event.source` di kedua

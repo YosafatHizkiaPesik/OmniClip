@@ -6,6 +6,7 @@ import { apiDelete, apiGet, apiPost, apiPut, apiUnggah } from '../../lib/api';
 
 export const ambilSetelan = () => apiGet('/montase/setelan');
 export const simpanSetelan = (aktif) => apiPost('/montase/setelan', { aktif });
+export const simpanSetelanAi = (aiKoneksi) => apiPost('/montase/setelan', { ai_koneksi: aiKoneksi });
 
 export const daftarProyek = () => apiGet('/montase/proyek').then((r) => r.proyek ?? []);
 export const buatProyek = (isi) => apiPost('/montase/proyek', isi);
@@ -30,6 +31,24 @@ export function imporBahan(berkas, onProgress) {
 }
 
 export const ambilToken = () => apiGet('/montase/token').then((r) => r.token);
+
+// --- animasi AI (Tahap 4) ---
+export const buatKomponen = (isi) => apiPost('/montase/komponen/buat', isi);
+export const tempelKomponen = (isi) => apiPost('/montase/komponen/tempel', isi);
+export const permintaanClaude = (isi) => apiPost('/montase/komponen/permintaan-claude', isi);
+export const ALAMAT_PAKET_CLAUDE = '/api/montase/komponen/paket-claude';
+export const daftarKomponen = ({ pustaka = false, cari = '' } = {}) =>
+  apiGet(`/montase/komponen?pustaka=${pustaka ? 1 : 0}&cari=${encodeURIComponent(cari)}`).then((r) => r.komponen ?? []);
+export const versiKomponen = (id) => apiGet(`/montase/komponen/${encodeURIComponent(id)}`).then((r) => r.versi ?? []);
+export const simpanKePustaka = (id, versi, nama) =>
+  apiPost(`/montase/komponen/${encodeURIComponent(id)}/${versi}/simpan`, { nama });
+export const keluarkanDariPustaka = (id) => apiDelete(`/montase/komponen/${encodeURIComponent(id)}/pustaka`);
+export function alamatKodeKomponen(token, id, versi) {
+  return `/api/montase/t/${token}/komponen/${encodeURIComponent(id)}/${versi}/kode.js`;
+}
+export function alamatGambarKomponen(token, id, versi, n) {
+  return `/api/montase/t/${token}/komponen/${encodeURIComponent(id)}/${versi}/gambar/${n}`;
+}
 
 export const daftarSuara = () => apiGet('/montase/suara').then((r) => r.suara ?? []);
 export const buatNarasi = (teks, suara, kecepatan = 1) =>
@@ -87,6 +106,19 @@ export function alamatBahan(token, bahanId, { sunting = false, turunan = null } 
   return sunting ? `${dasar}?sunting=1` : dasar;
 }
 
+/** Alamat bertoken untuk setiap komponen AI (`id@versi`) yang dipakai dokumen. */
+export function komponenDipakai(dokumen, token) {
+  const hasil = {};
+  for (const l of dokumen?.lajur ?? []) {
+    for (const i of l.item) {
+      if (i.jenis === 'motion' && i.komponen && !String(i.komponen).startsWith('ko_')) {
+        hasil[`${i.komponen}@${i.versi ?? 1}`] = alamatKodeKomponen(token, i.komponen, i.versi ?? 1);
+      }
+    }
+  }
+  return hasil;
+}
+
 /**
  * `sumber` untuk Komposisi: setiap bahan di dokumen -> alamat salinan
  * suntingnya, setiap font yang dipakai -> alamat fontnya.
@@ -100,5 +132,5 @@ export function sumberPratinjau(dokumen, token) {
     }
     for (const f of fontDipakai(dokumen)) font[f] = alamatFont(token, f);
   }
-  return { bahan, font, komponen: {} };
+  return { bahan, font, komponen: token ? komponenDipakai(dokumen, token) : {} };
 }
