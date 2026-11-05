@@ -183,7 +183,46 @@ def simpan_proyek(proyek_id: str, b: SimpanProyek):
         raise AppError("Proyek ini sudah diubah di tab atau perangkat lain. Muat ulang untuk "
                        "melihat versi terbarunya.", code="REVISI_BENTROK", status=409,
                        detail=str(e.revisi_kini)) from e
+    repo.catat_versi(pid, proyek_id, revisi, dokumen)
     return {"revisi": revisi, "durasi": dokumen["durasi"]}
+
+
+@router.get("/proyek/{proyek_id}/versi")
+def daftar_versi(proyek_id: str):
+    """Riwayat versi (M6.4): 10 potret terakhir, tanpa isi dokumennya."""
+    pid = profil.kini()
+    if repo.ambil_proyek(pid, proyek_id) is None:
+        raise NotFound("Proyek tidak ditemukan.")
+    return {"versi": repo.daftar_versi(pid, proyek_id)}
+
+
+class Pulihkan(BaseModel):
+    revisi: int = Field(..., ge=1)
+
+
+@router.post("/proyek/{proyek_id}/versi/{versi_id}/pulihkan")
+def pulihkan_versi(proyek_id: str, versi_id: int, b: Pulihkan):
+    """
+    Mengembalikan proyek ke satu versi. Keadaan sekarang dipotret dulu, jadi
+    memulihkan pun bisa dibatalkan dengan memulihkan potret itu.
+    """
+    pid = profil.kini()
+    kini = repo.ambil_proyek(pid, proyek_id)
+    v = repo.ambil_versi(pid, proyek_id, versi_id)
+    if kini is None or v is None:
+        raise NotFound("Versi tidak ditemukan.")
+    dokumen = _periksa(v["dokumen"])
+    hilang = [bid for bid in dokumen["bahan"] if repo.ambil_bahan(pid, bid) is None]
+    if hilang:
+        raise InvalidInput("Versi ini memakai bahan yang sudah dihapus dari pustaka: " + ", ".join(hilang[:5]))
+    repo.catat_versi(pid, proyek_id, kini["revisi"], kini["dokumen"], alasan="sebelum_pulihkan", paksa=True)
+    try:
+        revisi = repo.simpan_proyek(pid, proyek_id, dokumen, b.revisi,
+                                    durasi_detik=_durasi_detik(dokumen), sampul=_sampul(dokumen))
+    except repo.RevisiBentrok as e:
+        raise AppError("Proyek ini sudah diubah di tab atau perangkat lain. Muat ulang dulu.",
+                       code="REVISI_BENTROK", status=409, detail=str(e.revisi_kini)) from e
+    return {"revisi": revisi, "dokumen": dokumen}
 
 
 @router.delete("/proyek/{proyek_id}")
@@ -378,7 +417,11 @@ def turunan_bahan(tkn: str, bahan_id: str, turunan: str):
     jalur = bahan_svc.folder(bahan_id) / nama
     if not jalur.is_file():
         raise NotFound("Belum siap.")
-    return FileResponse(jalur, media_type=jenis, headers={"Cache-Control": "no-cache"})
+    # Turunan ditulis sekali saat bahan disiapkan dan tidak berubah lagi, dan
+    # alamatnya membawa token: aman disimpan peramban selama token berlaku
+    # (M6.3). Dulu `no-cache`, jadi setiap item yang dipasang ulang saat
+    # menggulir linimasa memvalidasi ulang sampul dan stripnya.
+    return FileResponse(jalur, media_type=jenis, headers={"Cache-Control": "private, max-age=21600"})
 
 
 class Narasi(BaseModel):

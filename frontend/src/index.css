@@ -2590,3 +2590,9 @@ button.tujuan, a.tujuan { cursor: pointer; }
 .montase-usulan-op small { display: block; margin-left: 22px; color: var(--ink-2); }
 .montase-usulan-jenis { display: inline-block; padding: 0 5px; border-radius: 4px; background: var(--rule-2); font-size: .7rem; text-transform: uppercase; letter-spacing: .03em; }
 .montase-tombol-usulan .btn-primary, .montase-tombol-usulan .btn-secondary { padding: 5px 9px; }
+.montase-riwayat-versi summary { display: flex; align-items: center; gap: 6px; }
+.montase-riwayat-versi ul { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.montase-riwayat-versi li { display: flex; align-items: center; gap: 8px; font-size: .78rem; }
+.montase-riwayat-versi li > span { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.montase-riwayat-versi small { color: var(--ink-2); }
+.montase-riwayat-versi .btn-secondary { padding: 4px 8px; }

@@ -216,6 +216,8 @@ def ekspor(pid: int, proyek_id: str, *, kabar=None, batal=None, dasar_url: Optio
         raise GagalEkspor("Dokumen proyek tidak sah: " + "; ".join(e.pesan[:3])) from e
     if not any(lajur["item"] for lajur in dokumen["lajur"]):
         raise GagalEkspor("Linimasa masih kosong.")
+    # Versi yang diekspor selalu bisa dikembalikan (M6.4).
+    repo.catat_versi(pid, proyek_id, p["revisi"], dokumen, alasan="ekspor", paksa=True)
     hilang = [meta.get("nama") or bahan_id for bahan_id, meta in dokumen["bahan"].items()
               if bahan_svc.jalur_asli(pid, bahan_id) is None]
     if hilang:

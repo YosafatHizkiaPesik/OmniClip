@@ -95,7 +95,64 @@ def hapus_proyek(profil_id: int, proyek_id: str) -> bool:
     with tx() as c:
         cur = c.execute("DELETE FROM montase_proyek WHERE id = ? AND profil_id = ?",
                         (proyek_id, profil_id))
+        c.execute("DELETE FROM montase_proyek_versi WHERE proyek_id = ? AND profil_id = ?",
+                  (proyek_id, profil_id))
     return cur.rowcount > 0
+
+
+# --- riwayat versi (JOB-4 M6.4) -------------------------------------------------
+
+VERSI_SIMPAN = 10
+JEDA_VERSI = 120.0          # detik antar potret simpan otomatis
+
+
+def _jumlah_item(dokumen: dict) -> int:
+    return sum(len(l.get("item") or []) for l in dokumen.get("lajur") or [])
+
+
+def catat_versi(profil_id: int, proyek_id: str, revisi: int, dokumen: dict, *,
+                alasan: str = "simpan", paksa: bool = False) -> bool:
+    """
+    Memotret dokumen. Potret `simpan` dilewati bila potret terakhir belum
+    JEDA_VERSI detik; `paksa` (ekspor, sebelum pulihkan) selalu dicatat.
+    Hanya VERSI_SIMPAN terbaru per proyek yang dipertahankan.
+    """
+    t = now()
+    with tx() as c:
+        if not paksa:
+            row = c.execute("SELECT MAX(created_at) AS t FROM montase_proyek_versi "
+                            "WHERE proyek_id = ? AND profil_id = ?", (proyek_id, profil_id)).fetchone()
+            if row and row["t"] and t - row["t"] < JEDA_VERSI:
+                return False
+        fps = (dokumen.get("kanvas") or {}).get("fps") or 30
+        c.execute("""INSERT INTO montase_proyek_versi (proyek_id, profil_id, revisi, alasan, dokumen_json,
+                       durasi_detik, jumlah_item, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                  (proyek_id, profil_id, revisi, alasan, json.dumps(dokumen, ensure_ascii=False),
+                   (dokumen.get("durasi") or 0) / fps, _jumlah_item(dokumen), t))
+        c.execute("""DELETE FROM montase_proyek_versi WHERE proyek_id = ? AND profil_id = ? AND id NOT IN (
+                       SELECT id FROM montase_proyek_versi WHERE proyek_id = ? AND profil_id = ?
+                       ORDER BY created_at DESC, id DESC LIMIT ?)""",
+                  (proyek_id, profil_id, proyek_id, profil_id, VERSI_SIMPAN))
+    return True
+
+
+def daftar_versi(profil_id: int, proyek_id: str) -> list[dict]:
+    rows = get_conn().execute(
+        """SELECT id, revisi, alasan, durasi_detik, jumlah_item, created_at FROM montase_proyek_versi
+           WHERE proyek_id = ? AND profil_id = ? ORDER BY created_at DESC, id DESC""",
+        (proyek_id, profil_id)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def ambil_versi(profil_id: int, proyek_id: str, versi_id: int) -> Optional[dict]:
+    row = get_conn().execute(
+        "SELECT * FROM montase_proyek_versi WHERE id = ? AND proyek_id = ? AND profil_id = ?",
+        (versi_id, proyek_id, profil_id)).fetchone()
+    if row is None:
+        return None
+    hasil = dict(row)
+    hasil["dokumen"] = json.loads(hasil.pop("dokumen_json"))
+    return hasil
 
 
 # --- bahan --------------------------------------------------------------------

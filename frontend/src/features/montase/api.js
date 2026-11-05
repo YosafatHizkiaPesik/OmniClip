@@ -13,6 +13,10 @@ export const buatProyek = (isi) => apiPost('/montase/proyek', isi);
 export const ambilProyek = (id) => apiGet(`/montase/proyek/${encodeURIComponent(id)}`);
 export const simpanProyek = (id, dokumen, revisi) =>
   apiPut(`/montase/proyek/${encodeURIComponent(id)}`, { dokumen, revisi });
+export const daftarVersi = (id) =>
+  apiGet(`/montase/proyek/${encodeURIComponent(id)}/versi`).then((r) => r.versi ?? []);
+export const pulihkanVersi = (id, versiId, revisi) =>
+  apiPost(`/montase/proyek/${encodeURIComponent(id)}/versi/${versiId}/pulihkan`, { revisi });
 export const hapusProyek = (id) => apiDelete(`/montase/proyek/${encodeURIComponent(id)}`);
 export const gandakanProyek = (id) =>
   apiPost(`/montase/proyek/${encodeURIComponent(id)}/gandakan`);
