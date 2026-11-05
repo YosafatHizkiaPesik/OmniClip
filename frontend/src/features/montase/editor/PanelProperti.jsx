@@ -95,7 +95,7 @@ function Bagian({ judul, children, aksi }) {
   );
 }
 
-function PanelProyek({ dokumen, onUbahProyek, onKe, onUbahPenanda, onHapusPenanda }) {
+function PanelProyek({ dokumen, onUbahProyek, onKe, onUbahPenanda, onHapusPenanda, riwayatVersi }) {
   const t = useT();
   const k = dokumen.kanvas;
   const fps = k.fps;
@@ -146,6 +146,7 @@ function PanelProyek({ dokumen, onUbahProyek, onKe, onUbahPenanda, onHapusPenand
           </ul>
         </Bagian>
 
+        {riwayatVersi}
         <details className="montase-pintasan">
           <summary>{t('montase.pintasan.judul')}</summary>
           <dl>
@@ -475,7 +476,7 @@ export default function PanelProperti({
   dokumen, terpilih, jumlahPilihan, lajur, onUbahItem, onKecepatan, onTransform, onHapus,
   onGandakan, onUbahProyek, onUbahLajur, onHapusLajur, bisaHapusLajur, onKe, onUbahPenanda,
   onHapusPenanda, onBuatUlangNarasi, garis, onUbahSifat, onTombolKeyframe, onKurvaKeyframe,
-  onAturUlangTransform, onRendam, onPunch, onHapusPunch, infoSkema,
+  onAturUlangTransform, onRendam, onPunch, onHapusPunch, infoSkema, riwayatVersi = null,
 }) {
   const t = useT();
   const fps = dokumen.kanvas.fps;
@@ -512,7 +513,7 @@ export default function PanelProperti({
     return (
       <aside className="montase-panel montase-panel-properti" aria-label={t('montase.properti.judul')}>
         <PanelProyek dokumen={dokumen} onUbahProyek={onUbahProyek} onKe={onKe}
-                     onUbahPenanda={onUbahPenanda} onHapusPenanda={onHapusPenanda} />
+                     onUbahPenanda={onUbahPenanda} onHapusPenanda={onHapusPenanda} riwayatVersi={riwayatVersi} />
       </aside>
     );
   }

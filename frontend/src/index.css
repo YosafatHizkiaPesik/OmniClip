@@ -2178,11 +2178,6 @@ button.tujuan, a.tujuan { cursor: pointer; }
 .montase-uji-hasil .montase-uji-baris { width: 100%; }
 
 /* --- Montase: daftar proyek -------------------------------------------- */
-.montase-beta {
-  font-size: .62rem; font-weight: 800; letter-spacing: .06em; vertical-align: middle;
-  padding: 2px 7px; border-radius: 99px; background: var(--reh); color: var(--reh-ink);
-  text-transform: uppercase;
-}
 .montase-galat { color: var(--reh); font-size: .82rem; margin: 6px 0; white-space: pre-wrap; }
 .montase-ikon { padding: 6px 8px; }
 .montase-ikon.aktif { border-color: var(--reh); color: var(--reh); }
@@ -2590,3 +2585,22 @@ button.tujuan, a.tujuan { cursor: pointer; }
 .montase-usulan-op small { display: block; margin-left: 22px; color: var(--ink-2); }
 .montase-usulan-jenis { display: inline-block; padding: 0 5px; border-radius: 4px; background: var(--rule-2); font-size: .7rem; text-transform: uppercase; letter-spacing: .03em; }
 .montase-tombol-usulan .btn-primary, .montase-tombol-usulan .btn-secondary { padding: 5px 9px; }
+.montase-riwayat-versi summary { display: flex; align-items: center; gap: 6px; }
+.montase-riwayat-versi ul { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.montase-riwayat-versi li { display: flex; align-items: center; gap: 8px; font-size: .78rem; }
+.montase-riwayat-versi li > span { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.montase-riwayat-versi small { color: var(--ink-2); }
+.montase-riwayat-versi .btn-secondary { padding: 4px 8px; }
+
+/* Montase: bantuan (JOB-4 M6.7) */
+.montase-bantuan { padding: 16px 20px; margin-bottom: 16px; }
+.montase-bantuan h2 { margin: 0 0 8px; font-size: 1rem; }
+.montase-bantuan-langkah { margin: 0; padding-left: 0; list-style: none; display: grid; gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+.montase-bantuan-langkah b { display: block; font-size: .86rem; margin-bottom: 2px; }
+.montase-bantuan-langkah p { margin: 0; font-size: .8rem; line-height: 1.45; color: var(--ink-2); }
+.montase-bantuan-latar { position: fixed; inset: 0; z-index: 60; background: rgba(0, 0, 0, .55);
+  display: flex; align-items: center; justify-content: center; padding: 16px; }
+.montase-bantuan-jendela { max-width: 880px; width: 100%; max-height: 86vh; overflow: auto; padding: 18px 20px; }
+.montase-bantuan-kepala { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.montase-bantuan-kepala h2 { margin: 0; font-size: 1.05rem; }

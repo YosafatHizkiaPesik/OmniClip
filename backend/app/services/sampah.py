@@ -26,6 +26,9 @@ kelompoknya harus bisa dibuktikan, bukan ditebak:
                         sumbernya sudah dihapus.
   folder_kosong         Folder akun kosong yang profilnya sudah tidak ada.
   panggung_pembaruan    Sisa bongkaran pembaruan yang berhenti di tengah.
+  montase_sementara     Render Montase yang terputus dan sisa pemeriksa animasi.
+  montase_yatim         Turunan Montase yang barisnya sudah dihapus, dan bahan
+                        yang berkas sumbernya hilang (montase/bersih.py).
 
 Yang TIDAK pernah masuk daftar ini, apa pun umurnya: video sumber, klip jadi,
 transkrip, model, font, dan basis data. Kalau suatu hari sesuatu dari daftar
@@ -82,6 +85,7 @@ def _folder() -> dict:
         "suara": Path(cfg.STORAGE_DIR) / "suara",
         "sampul": Path(cfg.THUMBS_DIR),
         "impor": Path(cfg.IMPOR_DIR),
+        "montase": Path(cfg.STORAGE_DIR) / "montase",
     }
 
 
@@ -261,9 +265,21 @@ def _panggung_pembaruan() -> list[dict]:
     return out
 
 
+def _montase(folder: dict, jenis: str) -> list[dict]:
+    akar = folder.get("montase")
+    if akar is None or not akar.is_dir():
+        return []
+    try:
+        from ..montase import bersih
+        return getattr(bersih, jenis)(akar)
+    except Exception as e:                           # noqa: BLE001 - basis data belum siap, dsb.
+        log.info("Sampah Montase tidak terbaca: %s", str(e)[:140])
+        return []
+
+
 KELOMPOK = ("salinan_terbengkalai", "pecahan_unduhan", "berkas_kosong",
             "sidecar_yatim", "turunan_yatim", "folder_kosong",
-            "panggung_pembaruan")
+            "panggung_pembaruan", "montase_sementara", "montase_yatim")
 
 LABEL = {
     "salinan_terbengkalai": "Salinan pratinjau yang terputus",
@@ -273,6 +289,8 @@ LABEL = {
     "turunan_yatim": "Turunan dari video yang sudah dihapus",
     "folder_kosong": "Folder akun kosong",
     "panggung_pembaruan": "Sisa pemasangan pembaruan",
+    "montase_sementara": "Sisa render dan pemeriksaan Montase",
+    "montase_yatim": "Berkas Montase yang bahannya sudah tidak ada",
     "berkas_rusak": "Berkas media yang tidak bisa dibaca",
 }
 
@@ -298,6 +316,8 @@ def pindai(saat_mulai: bool = False) -> dict:
         "turunan_yatim": _turunan_yatim(folder),
         "folder_kosong": _folder_kosong(folder),
         "panggung_pembaruan": _panggung_pembaruan(),
+        "montase_sementara": _montase(folder, "sementara"),
+        "montase_yatim": _montase(folder, "yatim"),
     }
     kelompok = [
         {"nama": k, "label": LABEL[k], "jumlah": len(v),
@@ -432,6 +452,11 @@ def bersihkan(jalur: Optional[list] = None, saat_mulai: bool = False) -> dict:
             gagal += 1
     if dibuang:
         log.info("Sampah dibuang: %d berkas, %.1f MB", dibuang, lega / 1e6)
+        try:
+            from ..montase import bersih
+            bersih.rapikan(pilih, _folder()["montase"])
+        except Exception as e:                       # noqa: BLE001
+            log.info("Baris bahan Montase tidak dirapikan: %s", str(e)[:140])
     return {"dibuang": dibuang, "gagal": gagal, "lega": lega}
 
 
@@ -448,7 +473,8 @@ def bersihkan_di_latar() -> None:
     def kerja():
         try:
             temuan = pindai(saat_mulai=True)
-            aman = {"salinan_terbengkalai", "pecahan_unduhan", "panggung_pembaruan"}
+            aman = {"salinan_terbengkalai", "pecahan_unduhan", "panggung_pembaruan",
+                    "montase_sementara"}
             jalur = [b["jalur"] for k in temuan["kelompok"] if k["nama"] in aman
                      for b in k["berkas"]]
             if jalur:

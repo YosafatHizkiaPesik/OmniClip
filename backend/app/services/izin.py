@@ -56,13 +56,33 @@ def _kunci_sumber(sumber: Optional[dict]) -> list[str]:
     return out
 
 
-def status(sumber: Optional[dict]) -> str:
-    """`diizinkan` atau `belum`. Sumber yang tak dikenal selalu `belum`."""
-    peta = _semua()
+def _daftar(sumber: Optional[dict]) -> list[dict]:
+    """Video Montase membawa `banyak` (JOB-4 M6.1); klip biasa satu sumber."""
+    s = sumber or {}
+    if isinstance(s.get("banyak"), list):
+        return [b for b in s["banyak"] if isinstance(b, dict)]
+    return [s]
+
+
+def _status_satu(sumber: dict, peta: dict) -> str:
     for k in _kunci_sumber(sumber):
         if peta.get(k, {}).get("status") == DIIZINKAN:
             return DIIZINKAN
     return BELUM
+
+
+def status(sumber: Optional[dict]) -> str:
+    """
+    `diizinkan` atau `belum`. Sumber yang tak dikenal selalu `belum`.
+
+    Banyak sumber: diizinkan hanya bila SEMUA kanalnya diizinkan. Video Montase
+    tanpa video orang lain sama sekali tidak butuh izin siapa pun.
+    """
+    peta = _semua()
+    daftar = _daftar(sumber)
+    if not daftar:
+        return DIIZINKAN
+    return DIIZINKAN if all(_status_satu(s, peta) == DIIZINKAN for s in daftar) else BELUM
 
 
 def setel(sumber: Optional[dict], diizinkan: bool, catatan: str = "") -> str:
@@ -74,7 +94,7 @@ def setel(sumber: Optional[dict], diizinkan: bool, catatan: str = "") -> str:
     """
     import time
 
-    kunci = _kunci_sumber(sumber)
+    kunci = [k for s in _daftar(sumber) for k in _kunci_sumber(s)]
     if not kunci:
         raise ValueError("Kanal sumbernya tidak dikenal, jadi izinnya tidak bisa dicatat.")
     peta = _semua()
@@ -97,8 +117,14 @@ def peringatan(sumber: Optional[dict]) -> str:
     """
     if status(sumber) == DIIZINKAN:
         return ""
-    kanal = ((sumber or {}).get("kanal") or "").strip()
-    siapa = f"kanal {kanal}" if kanal else "kanal sumbernya"
+    peta = _semua()
+    belum = [(s.get("kanal") or "").strip() for s in _daftar(sumber) if _status_satu(s, peta) != DIIZINKAN]
+    nama = [k for k in dict.fromkeys(belum) if k]
+    if len(nama) > 1:
+        siapa = "kanal " + ", ".join(nama)
+    else:
+        kanal = nama[0] if nama else ((sumber or {}).get("kanal") or "").strip()
+        siapa = f"kanal {kanal}" if kanal else "kanal sumbernya"
     return (f"Klip ini diambil dari {siapa}, dan belum tercatat ada izin darinya. "
             "Tanpa izin, klaim Content ID bisa mengalihkan pendapatan klip ini "
             "ke pemilik aslinya, seberapa pun besar suntingan Anda. Kredit di "

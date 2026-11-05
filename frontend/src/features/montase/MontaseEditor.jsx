@@ -20,15 +20,17 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
-  ArrowLeft, Check, CloudOff, Download, Loader2, MonitorSmartphone, RefreshCw, Send,
+  ArrowLeft, Check, CircleHelp, CloudOff, Download, Loader2, MonitorSmartphone, RefreshCw, Send, Upload,
 } from 'lucide-react';
 import { useT } from '../../lib/i18n';
 import { useJobRunner } from '../../hooks/useJob';
 import JobProgress from '../../components/JobProgress';
 import SiapkanTerbit from '../../components/SiapkanTerbit';
+import UploadModal from '../../components/UploadModal';
 import { BAWAAN } from './komposisi/index.js';
 import {
-  ambilProyek, ambilToken, buatNarasi, fontDipakai, komponenDipakai, simpanProyek, sumberPratinjau,
+  ambilProyek, ambilToken, buatNarasi, fontDipakai, komponenDipakai, pulihkanVersi, simpanProyek,
+  sumberPratinjau,
 } from './api.js';
 import useSkemaKomponen from './editor/useSkemaKomponen.js';
 import {
@@ -50,12 +52,27 @@ import Linimasa from './editor/Linimasa.jsx';
 import PeganganUbah from './editor/PeganganUbah.jsx';
 import { buatGaris } from './editor/garisPutar.js';
 import { TombolUsulan } from './editor/PanelAsisten.jsx';
+import RiwayatVersi from './editor/RiwayatVersi.jsx';
+import { JendelaBantuan } from './BantuanMontase.jsx';
 import { terapkanOperasi } from './model/usulan.js';
 
 const JEDA_SIMPAN = 1500;
 const ULANG_GAGAL = 5000;
 const KUNCI_TATA = 'omniclip.montase.tata';
 const KUNCI_MAGNET = 'omniclip.montase.magnet';
+// Draf lokal (M6.4): perubahan yang belum sampai ke server bila aplikasi atau
+// peramban tertutup mendadak. Dicatat per proyek, dihapus begitu tersimpan.
+const KUNCI_DRAF = 'omniclip.montase.draf.';
+
+function bacaDraf(id) {
+  try { return JSON.parse(localStorage.getItem(KUNCI_DRAF + id) || 'null'); } catch { return null; }
+}
+function tulisDraf(id, isi) {
+  try {
+    if (isi) localStorage.setItem(KUNCI_DRAF + id, JSON.stringify(isi));
+    else localStorage.removeItem(KUNCI_DRAF + id);
+  } catch { /* penyimpanan penuh atau dimatikan: draf lokal hanya cadangan */ }
+}
 const TATA_BAWAAN = { kiri: 280, kanan: 300, bawah: 300 };
 const DETIK_BEKU = 3;
 // Selama usulan tampil, linimasa tidak menyunting: terima atau tolak dulu.
@@ -176,6 +193,10 @@ export default function MontaseEditor() {
   const [usulan, setUsulan] = useState(null);
   // Saran judul, caption, dan tagar untuk hasil ekspor (M5.6, keterangan.py).
   const [terbit, setTerbit] = useState(null);
+  // Unggah ke YouTube/Drive lewat formulir yang sama dengan Klip jadi (M6.1).
+  const [unggah, setUnggah] = useState(null);
+  const [drafLama, setDrafLama] = useState(null);
+  const [bantuan, setBantuan] = useState(false);
   const catatBahan = useCallback((daftar) => {
     setBahanSiap(new Set(daftar.filter((b) => b.siap).map((b) => b.id)));
   }, []);
@@ -201,6 +222,14 @@ export default function MontaseEditor() {
         riwayatRef.current = buatRiwayat(p.dokumen);
         setRiwayat(riwayatRef.current);
         setStatus('tersimpan');
+        // Draf dari sesi yang tertutup sebelum sempat menyimpan: hanya berlaku
+        // bila dibuat di atas revisi yang sama dengan yang ada di server.
+        const draf = bacaDraf(proyekId);
+        if (draf && draf.revisi === p.revisi && JSON.stringify(draf.dokumen) !== JSON.stringify(p.dokumen)) {
+          setDrafLama(draf);
+        } else if (draf) {
+          tulisDraf(proyekId, null);
+        }
       })
       .catch((e) => setGalat(e.message));
     ambilToken().then(setToken).catch(() => {});
@@ -216,6 +245,7 @@ export default function MontaseEditor() {
       try {
         const r = await simpanProyek(proyekId, d, revisi.current);
         revisi.current = r.revisi;
+        if (!kotor.current) tulisDraf(proyekId, null);
         setStatus(kotor.current ? 'belum' : 'tersimpan');
         setGalat(null);
       } catch (e) {
@@ -294,6 +324,34 @@ export default function MontaseEditor() {
     setUsulan(null);
   }, [usulan, terapkan]);
   const tolakUsulan = useCallback(() => setUsulan(null), []);
+  // Draf lokal ditunda 400 ms: localStorage sinkron, dan menyeret item
+  // mengubah dokumen tiap bingkai (kinerja M6.3 diukur dengan ini menyala).
+  useEffect(() => {
+    if (!dokumen || !kotor.current) return undefined;
+    const id = setTimeout(() => {
+      if (kotor.current) tulisDraf(proyekId, { revisi: revisi.current, waktu: Date.now(), dokumen });
+    }, 400);
+    return () => clearTimeout(id);
+  }, [dokumen, proyekId]);
+  const pulihkanDraf = () => {
+    if (drafLama) terapkan(drafLama.dokumen);
+    setDrafLama(null);
+  };
+  const buangDraf = () => {
+    tulisDraf(proyekId, null);
+    setDrafLama(null);
+  };
+  const pulihkan = useCallback(async (versiId) => {
+    await simpanSekarang();
+    const r = await pulihkanVersi(proyekId, versiId, revisi.current);
+    revisi.current = r.revisi;
+    kotor.current = false;
+    tulisDraf(proyekId, null);
+    riwayatRef.current = buatRiwayat(r.dokumen);
+    setRiwayat(riwayatRef.current);
+    setUsulan(null);
+    setStatus('tersimpan');
+  }, [proyekId, simpanSekarang]);
 
   const semuaId = useMemo(
     () => new Set((dokumen?.lajur ?? []).flatMap((l) => l.item.map((i) => i.id))),
@@ -586,6 +644,11 @@ export default function MontaseEditor() {
         </button>
         <h1 title={dokumen.nama}>{dokumen.nama}</h1>
         <StatusSimpan status={status} onMuatUlang={muat} onCobaLagi={simpanSekarang} />
+        <button type="button" className="btn-secondary montase-ikon" onClick={() => setBantuan(true)}
+                aria-label={t('montase.bantuan.judul')} title={t('montase.bantuan.judul')}
+        >
+          <CircleHelp size={14} />
+        </button>
         <span className="montase-linimasa-spasi" />
         {(subtitleKerja.active || subtitleKerja.error) && (
           <div className="montase-ekspor-kabar">
@@ -605,6 +668,13 @@ export default function MontaseEditor() {
                   title={t('klip.siapkan_judul')}
           >
             <Send size={14} />{t('klip.siapkan')}
+          </button>
+        )}
+        {hasil && (
+          <button type="button" className="btn-secondary"
+                  onClick={() => setUnggah({ file_name: hasil.berkas, metadata: { title: dokumen.nama } })}
+          >
+            <Upload size={14} />{t('montase.editor.unggah')}
           </button>
         )}
         <button type="button" className="btn-primary" onClick={mulaiEkspor}
@@ -632,6 +702,15 @@ export default function MontaseEditor() {
         <section className="montase-panel montase-panel-pratinjau" aria-label={t('montase.pratinjau.judul')}>
           {galat && status !== 'bentrok' && status !== 'gagal' && <p className="montase-galat" role="alert">{galat}</p>}
           {galatPratinjau && <p className="montase-galat" role="alert">{galatPratinjau}</p>}
+          {drafLama && (
+            <div className="montase-bilah-usulan" role="alert">
+              <span>{t('montase.versi.draf', { waktu: new Date(drafLama.waktu).toLocaleString() })}</span>
+              <div className="montase-baris-tombol">
+                <button type="button" className="btn-primary" onClick={pulihkanDraf}>{t('montase.versi.draf_pulihkan')}</button>
+                <button type="button" className="btn-secondary" onClick={buangDraf}>{t('montase.versi.draf_buang')}</button>
+              </div>
+            </div>
+          )}
           {usulan && (
             <div className="montase-bilah-usulan" role="status">
               <span>{t('montase.asisten.bilah', { n: usulan.pilih.size, total: usulan.operasi.length })}</span>
@@ -666,6 +745,7 @@ export default function MontaseEditor() {
           onHapusPenanda={(tt) => terapkan(hapusPenanda(dok(), tt))}
           onBuatUlangNarasi={buatUlangNarasi}
           infoSkema={infoSkema}
+          riwayatVersi={<RiwayatVersi proyekId={proyekId} revisi={revisi.current} onPulihkan={pulihkan} />}
           garis={garis}
           onUbahSifat={(id, s) => ubah((d) => {
             const it = cariItem(d, id)?.item;
@@ -712,6 +792,8 @@ export default function MontaseEditor() {
         onJatuhBahan={tambahKeLinimasa}
       />
       {terbit && <SiapkanTerbit clip={terbit} onClose={() => setTerbit(null)} onSelesai={() => {}} />}
+      {unggah && <UploadModal clip={unggah} onClose={() => setUnggah(null)} onDone={() => {}} />}
+      {bantuan && <JendelaBantuan onTutup={() => setBantuan(false)} />}
     </div>
   );
 }

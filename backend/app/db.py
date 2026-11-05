@@ -515,6 +515,25 @@ MIGRATIONS: list[str] = [
       PRIMARY KEY (id, versi)
     );
     """,
+    # --- 13: riwayat versi proyek Montase (JOB-4 M6.4) ---
+    # Potret dokumen paling sedikit dua menit sekali saat disimpan, sebelum
+    # ekspor, dan sebelum sebuah versi dipulihkan; hanya 10 terbaru per proyek
+    # yang disimpan. Simpan otomatis berjalan tiap 1,5 detik, jadi memotret
+    # SETIAP simpanan akan membuat sepuluh versi itu hanya 15 detik terakhir.
+    """
+    CREATE TABLE montase_proyek_versi (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      proyek_id     TEXT NOT NULL,
+      profil_id     INTEGER NOT NULL DEFAULT 1,
+      revisi        INTEGER NOT NULL,
+      alasan        TEXT NOT NULL DEFAULT 'simpan',
+      dokumen_json  TEXT NOT NULL,
+      durasi_detik  REAL,
+      jumlah_item   INTEGER,
+      created_at    REAL NOT NULL
+    );
+    CREATE INDEX idx_montase_proyek_versi ON montase_proyek_versi(proyek_id, created_at DESC);
+    """,
 ]
 
 

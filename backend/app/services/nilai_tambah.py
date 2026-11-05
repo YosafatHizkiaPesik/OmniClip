@@ -18,6 +18,14 @@ Yang TIDAK dihitung: subtitle, bingkai, tema, kartu judul. Semuanya dibuat
 otomatis dan sama di setiap klip, dan itu persis "produksi massal" yang sedang
 dihindari, bukan nilai tambah.
 
+Video Montase (JOB-4 M6.2) membawa `lapisan` [{t, d, jenis}] di sidecarnya:
+narasi dan rekaman suara dihitung seperti komentar; teks, animasi, stiker,
+dan gambar sisipan setengah bobot. Subtitle tetap tidak dihitung. Montase
+yang memakai video orang lain (`sumber_banyak`) WAJIB bernarasi (keputusan
+T-3): `cukup` baru benar bila ada narasi/rekaman paling sedikit
+`KOMENTAR_MIN` detik, berapa pun banyak teks dan animasinya. Montase dari
+bahan milik sendiri saja selalu cukup: tidak ada karya orang lain di dalamnya.
+
 Gerbang tinjau (`gerbang.nilai`) memakai `cukup`: ada komentar paling sedikit
 `KOMENTAR_MIN` detik, atau skornya paling sedikit `SKOR_MIN`. Angkanya sengaja
 rendah: satu kalimat pembuka yang jujur sudah mengubah klip dari potongan
@@ -71,13 +79,33 @@ def hitung(meta: Optional[dict]) -> dict:
                 reaksi.append((t, t + d))
             else:
                 rentang.append((t, t + d))
+    suara_montase = []
+    for l in meta.get("lapisan") or []:
+        if not isinstance(l, dict):
+            continue
+        try:
+            t, d = float(l.get("t") or 0.0), float(l.get("d") or 0.0)
+        except (TypeError, ValueError):
+            continue
+        if d <= 0:
+            continue
+        if l.get("jenis") in ("narasi", "rekam"):
+            suara_montase.append((t, t + d))
+        elif l.get("jenis") in ("teks", "animasi", "stiker", "sisipan"):
+            rentang.append((t, t + d))
+    detik_narasi = _gabung(suara_montase)
     detik_sisipan = _gabung(rentang)
     detik_reaksi = _gabung(reaksi)
     detik_komentar_saja = detik_komentar
-    detik_komentar += detik_reaksi
+    detik_komentar += detik_reaksi + detik_narasi
     berlapis = detik_komentar + BOBOT_SISIPAN * detik_sisipan
     skor = min(1.0, berlapis / durasi) if durasi > 0 else 0.0
     cukup = detik_komentar >= KOMENTAR_MIN or skor >= SKOR_MIN
+    if meta.get("jenis") == "montase":
+        # Dengan video orang lain: wajib narasi/rekaman. Tanpa video orang lain
+        # (bahan impor sendiri) tidak ada yang "digunakan ulang", jadi tidak
+        # ada yang perlu ditambahkan di atasnya.
+        cukup = detik_komentar >= KOMENTAR_MIN if meta.get("sumber_banyak") else True
 
     rincian = []
     if komentar:
@@ -86,6 +114,8 @@ def hitung(meta: Optional[dict]) -> dict:
                        + (f", {suara} dengan suara Anda" if suara else ""))
     if detik_reaksi:
         rincian.append(f"reaksi kamera {detik_reaksi:.1f} detik")
+    if detik_narasi:
+        rincian.append(f"narasi {detik_narasi:.1f} detik")
     if detik_sisipan:
         rincian.append(f"sisipan {detik_sisipan:.1f} detik")
     return {"skor": round(skor, 3), "persen": int(round(skor * 100)),

@@ -134,11 +134,48 @@ def _bersuara_sintetis(pid: int, dokumen: dict) -> bool:
     return False
 
 
+def lapisan(pid: int, dokumen: dict) -> list[dict]:
+    """
+    Lapisan buatan pemilik kanal untuk skor nilai tambah (JOB-4 M6.2), dalam
+    detik: narasi TTS dan rekaman mikrofon (dihitung seperti komentar), teks,
+    animasi, dan sisipan gambar/video di atas lajur utama (setengah bobot).
+    Subtitle tidak dihitung, sama dengan Studio Klip: dibuat otomatis dan sama
+    di setiap video.
+    """
+    fps = dokumen["kanvas"]["fps"]
+    hasil = []
+    lajur_video = [l for l in dokumen["lajur"] if l["jenis"] == "video"]
+    # Lajur digambar berurutan (Komposisi.jsx): video pertama paling bawah = lajur utama.
+    utama = lajur_video[0]["id"] if lajur_video else None
+    for l in dokumen["lajur"]:
+        if l.get("sembunyi") or l.get("subtitle"):
+            continue
+        for i in l["item"]:
+            jenis = None
+            if i["jenis"] == "audio" and not l.get("bisu"):
+                b = repo.ambil_bahan(pid, i.get("bahan") or "") or {}
+                if i.get("narasi") or b.get("asal") == "tts":
+                    jenis = "narasi"
+                elif b.get("asal") == "rekam":
+                    jenis = "rekam"
+            elif i["jenis"] == "teks":
+                jenis = "teks"
+            elif i["jenis"] == "motion":
+                jenis = "animasi"
+            elif i["jenis"] in ("gambar", "video") and l["id"] != utama:
+                jenis = "sisipan"
+            if jenis:
+                hasil.append({"t": round(i["mulai"] / fps, 2), "d": round(i["durasi"] / fps, 2),
+                              "jenis": jenis})
+    return hasil
+
+
 def sidecar(dokumen: dict, *, pid: int, berkas: str, detik: float) -> dict:
+    from ..services.nilai_tambah import hitung
     k = dokumen["kanvas"]
     ada_ai = any(i.get("asal") == "ai" for lajur in dokumen["lajur"] for i in lajur["item"])
     baris = baris_teks(dokumen)
-    return {
+    meta = {
         "jenis": "montase",
         "montase_id": dokumen["id"],
         "file_name": berkas,
@@ -149,10 +186,14 @@ def sidecar(dokumen: dict, *, pid: int, berkas: str, detik: float) -> dict:
         "subtitles": baris,
         "hook_text": baris[0]["text"][:160] if baris else "",
         "sumber_banyak": _sumber_kredit(pid, dokumen),
+        "lapisan": lapisan(pid, dokumen),
         "suara_sintetis": _bersuara_sintetis(pid, dokumen),
         "motion_ai": ada_ai,
         "created_at": time.time(),
     }
+    # Disimpan seperti sidecar Studio (render.py), untuk lencana di Klip jadi.
+    meta["nilai_tambah"] = hitung(meta)
+    return meta
 
 
 def mulai(proyek_id: str) -> str:
@@ -175,6 +216,8 @@ def ekspor(pid: int, proyek_id: str, *, kabar=None, batal=None, dasar_url: Optio
         raise GagalEkspor("Dokumen proyek tidak sah: " + "; ".join(e.pesan[:3])) from e
     if not any(lajur["item"] for lajur in dokumen["lajur"]):
         raise GagalEkspor("Linimasa masih kosong.")
+    # Versi yang diekspor selalu bisa dikembalikan (M6.4).
+    repo.catat_versi(pid, proyek_id, p["revisi"], dokumen, alasan="ekspor", paksa=True)
     hilang = [meta.get("nama") or bahan_id for bahan_id, meta in dokumen["bahan"].items()
               if bahan_svc.jalur_asli(pid, bahan_id) is None]
     if hilang:
