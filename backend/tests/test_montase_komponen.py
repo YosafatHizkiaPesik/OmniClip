@@ -33,6 +33,14 @@ export default function A({ teks, warna }) {
 DIAM = BAGUS.replace("[0, 600]", "[300, 300]")
 PROPS_SALAH = BAGUS.replace('contohProps = { teks: "Halo"', 'contohProps = { teks: 5')
 CSS = BAGUS.replace("fontSize: 160,", "fontSize: 160, transition: 'all 1s',")
+# Dua animasi sah yang dulu salah ditolak (uji M4.9): kilat layar penuh (tiap
+# bingkai satu warna, tetapi kecerahannya berubah) dan label yang masuk lalu
+# diam (tidak bergerak sama sekali di 10-90% durasinya).
+KILAT = BAGUS.replace(
+    '<AbsoluteFill><div style={{ position: "absolute", left: x, top: 800, fontSize: 160,\n'
+    '    color: warna, fontFamily: "sans-serif" }}>{teks}</div></AbsoluteFill>',
+    '<AbsoluteFill style={{ background: warna, opacity: interpolate(f, [0, 12, 29], [0, 1, 0]) }} />')
+MASUK_LALU_DIAM = BAGUS.replace("[0, 30], [0, 600]", "[0, 4], [0, 600]")
 
 
 def _bersihkan():
@@ -83,6 +91,12 @@ class Pemeriksa(unittest.TestCase):
         self.assertEqual(v["status"], "lolos", v["catatan"])
         self.assertEqual(komponen.jumlah_gambar(v), 5)
         self.assertIn("exports", repo.ambil_komponen(PID, v["id"], 1, dengan_kode=True)["hasil_js"])
+
+    def test_kilat_dan_masuk_lalu_diam_lolos(self):
+        self.assertIn("opacity: interpolate", KILAT)
+        for kode in (KILAT, MASUK_LALU_DIAM):
+            v = self._cek(kode)
+            self.assertEqual(v["status"], "lolos", v["catatan"])
 
     def test_diam_props_salah_dan_css_ditolak_dengan_alasan(self):
         for kode, tahap, kata in ((DIAM, "gerak", "tidak bergerak"), (PROPS_SALAH, "render", "skema"),

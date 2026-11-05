@@ -135,7 +135,7 @@ const ItemLinimasa = memo(function ItemLinimasa({
   }
   let label = '';
   if (item.jenis === 'teks') label = item.teks;
-  else if (item.jenis === 'motion') label = item.komponen;
+  else if (item.jenis === 'motion') label = item.nama || (item.komponen?.startsWith('ko_') ? t(`montase.animasi.${item.komponen}`) : item.komponen);
   else label = bahan?.nama || item.bahan;
   const bersuara = (item.jenis === 'audio' || (item.jenis === 'video' && bahan?.ada_suara)) && !item.beku;
   return (

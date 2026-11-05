@@ -34,10 +34,17 @@ from . import token as token_svc
 log = logging.getLogger("omniclip.montase.periksa")
 
 # Kotak kecil abu-abu untuk membandingkan bingkai: cukup untuk "kosong" dan
-# "tidak bergerak", tidak terpengaruh perbedaan halus huruf.
-UKURAN_BANDING = (36, 64)
+# "tidak bergerak", tidak terpengaruh perbedaan halus huruf. 90x160 karena di
+# 36x64 garis setebal 14 px (lingkaran + panah, uji M4.9 no. 6) hampir hilang.
+UKURAN_BANDING = (90, 160)
 AMBANG_KOSONG = 1.5      # simpangan baku kecerahan di bawah ini = satu warna
-AMBANG_DIAM = 0.6        # selisih rata-rata antar bingkai di bawah ini = sama
+AMBANG_PIKSEL = 16       # selisih kecerahan satu piksel di atas ini = piksel berubah
+AMBANG_DIAM = 4          # piksel berubah antar bingkai paling banyak ini = sama
+
+# Render bingkai deterministik: dua bingkai yang sama menghasilkan berkas yang
+# sama persis, jadi ambangnya boleh kecil. Yang dihitung adalah JUMLAH piksel
+# yang berubah, bukan rata-rata selisih: gerak tipis (garis, titik) hanya
+# mengubah sedikit piksel tetapi tetap gerak.
 
 
 def folder_gambar(komponen_id: str, versi: int) -> Path:
@@ -57,20 +64,26 @@ def _simpangan(b: bytes) -> float:
     return (sum((x - rata) ** 2 for x in b) / n) ** 0.5
 
 
-def _selisih(a: bytes, b: bytes) -> float:
-    return sum(abs(x - y) for x, y in zip(a, b)) / len(a)
+def _berubah(a: bytes, b: bytes) -> int:
+    return sum(1 for x, y in zip(a, b) if abs(x - y) > AMBANG_PIKSEL)
 
 
 def nilai_gerak(berkas: list[Path]) -> list[str]:
-    """Masalah dari bingkai contoh: kosong semua, atau semuanya sama."""
+    """
+    Masalah dari bingkai contoh: kosong semua, atau semuanya sama.
+
+    "Kosong" berarti setiap bingkai satu warna DAN warnanya tidak berubah:
+    kilat layar penuh (uji M4.9 no. 9) memang satu warna per bingkai, tetapi
+    kecerahannya naik turun, dan itu animasi yang sah.
+    """
     abu = [_abu(p) for p in berkas]
-    if any(a is None for a in abu) or not abu:
+    if not abu or any(a is None for a in abu):
         return ["Bingkai contoh tidak bisa dibaca."]
-    if all(_simpangan(a) < AMBANG_KOSONG for a in abu):
+    beda = [_berubah(abu[i], abu[i + 1]) for i in range(len(abu) - 1)]
+    if all(_simpangan(a) < AMBANG_KOSONG for a in abu) and max(beda, default=0) <= AMBANG_DIAM:
         return ["Kelima bingkai contoh kosong (satu warna saja). Pastikan komponennya menggambar "
                 "sesuatu dengan contohProps, dan tidak tersembunyi di luar layar."]
-    beda = [_selisih(abu[i], abu[i + 1]) for i in range(len(abu) - 1)]
-    if max(beda) < AMBANG_DIAM:
+    if max(beda, default=0) <= AMBANG_DIAM:
         return ["Kelima bingkai contoh sama persis: animasinya tidak bergerak. Gerak harus "
                 "berasal dari useCurrentFrame() (interpolate/spring)."]
     return []

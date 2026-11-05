@@ -17,7 +17,9 @@
  * MELEMPAR galat (bukan menggambar kotak merah) bila props tidak sah, supaya
  * pemeriksaan gagal dengan pesan yang bisa dikembalikan ke AI.
  *
- * Lima bingkai di 10/30/50/70/90% durasi. Bingkai kosong atau lima bingkai
+ * Lima bingkai di 5/25/50/75/95% durasi. Ujung-ujungnya sengaja dekat awal dan
+ * akhir: label yang masuk lalu diam (uji M4.9 no. 3) tidak bergerak sama sekali
+ * di 10-90%, sehingga dulu dinilai "diam". Bingkai kosong atau lima bingkai
  * yang sama persis dinilai di sisi Python (montase/periksa.py), yang membaca
  * berkas PNG ini.
  */
@@ -30,7 +32,30 @@ const ID_KOMPOSISI = 'Montase';
 const BATAS_MS_BINGKAI = 5000;
 const EKSPOR_WAJIB = ['skema', 'contohProps'];
 
+// Komponen yang melempar galat saat render (mis. props tidak sah) bisa membuat
+// Chrome menutup soketnya selagi Remotion masih menunggu; galat soket itu
+// datang sebagai peristiwa tanpa pendengar dan mematikan Node dengan kode 1,
+// sehingga Python hanya melihat "Mesin berhenti" tanpa alasan. Di sini galat
+// semacam itu menjadi hasil "render gagal" biasa, atau diabaikan bila hasil
+// sudah ditulis.
+let sudahDitulis = false;
+const tulisSekali = (objek) => {
+  if (sudahDitulis) return;
+  sudahDitulis = true;
+  tulis(objek);
+};
+const tangkapLepas = (e) => {
+  tulisSekali({
+    lolos: false, tahap_gagal: 'render', peringatan: [],
+    masalah: [`Render gagal: ${String(e?.message || e || 'Chrome berhenti').split('\n').slice(0, 6).join('\n')}`],
+  });
+  process.exit(0);
+};
+process.on('uncaughtException', tangkapLepas);
+process.on('unhandledRejection', tangkapLepas);
+
 await jalankan(async (m) => {
+  const tulis = tulisSekali;
   const hasil = kompilasi(m.sumber ?? '');
   if (!hasil.lolos) {
     tulis({ lolos: false, tahap_gagal: 'kompilasi', masalah: hasil.masalah, peringatan: hasil.peringatan ?? [] });
@@ -76,7 +101,7 @@ await jalankan(async (m) => {
   bersama.puppeteerInstance = browser;
   try {
     const komposisi = await selectComposition({ ...bersama, id: ID_KOMPOSISI });
-    for (const p of [0.1, 0.3, 0.5, 0.7, 0.9]) {
+    for (const p of [0.05, 0.25, 0.5, 0.75, 0.95]) {
       const f = Math.min(durasi - 1, Math.round(durasi * p));
       const berkas = path.join(m.keluar, `bingkai_${f}.png`);
       const mulai = Date.now();

@@ -2471,6 +2471,7 @@ button.tujuan, a.tujuan { cursor: pointer; }
 .montase-baris-tombol .btn-secondary.aktif { border-color: var(--reh); color: var(--reh); }
 .montase-geser-angka { display: flex; align-items: center; gap: 8px; }
 .montase-geser-angka input[type="range"] { flex: 1; min-width: 0; padding: 0; }
+.montase-geser-angka .montase-angka-kecil { flex: 0 0 72px; }
 .montase-geser-angka small { min-width: 38px; text-align: right; font-variant-numeric: tabular-nums; color: var(--ink-2); }
 .montase-label-kecil { margin: 0; font-size: .72rem; font-weight: 700; color: var(--ink-2); }
 .montase-label-kunci { margin: 0; display: flex; gap: 6px; align-items: center; font-size: .72rem; padding: 6px 8px; border-radius: var(--r-sm); background: var(--plate-2); color: var(--ink-2); }
@@ -2561,6 +2562,8 @@ button.tujuan, a.tujuan { cursor: pointer; }
 .montase-daftar-peringatan { color: #b7791f; }
 .montase-revisi { display: flex; gap: 4px; }
 .montase-revisi input, .montase-hasil-ai .montase-baris-tombol input { flex: 1; min-width: 0; font: inherit; font-size: .76rem; padding: 4px 6px; }
+.montase-hasil-ai .montase-baris-tombol .btn-primary { flex: 1 1 100%; justify-content: center; }
+.montase-hasil-ai .montase-baris-tombol input { min-width: 90px; }
 .montase-titik-posisi {
   position: absolute; width: 18px; height: 18px; margin: -9px 0 0 -9px; border-radius: 50%; pointer-events: auto;
   background: #ffd400; border: 2px solid #000; box-shadow: 0 0 0 2px rgba(255,255,255,.7); cursor: grab; z-index: 3;

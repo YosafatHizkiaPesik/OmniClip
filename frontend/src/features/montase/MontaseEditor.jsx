@@ -337,6 +337,7 @@ export default function MontaseEditor() {
       ...hasil,
       dokumen: ubahItem(hasil.dokumen, hasil.itemId, {
         versi: v.versi, asal: 'ai', alasan: (v.catatan?.alasan || v.permintaan || '').slice(0, 500),
+        nama: (v.nama || '').slice(0, 80) || undefined,
       }),
     };
     if (terapkan(hasil.dokumen)) pilih([hasil.itemId]);
