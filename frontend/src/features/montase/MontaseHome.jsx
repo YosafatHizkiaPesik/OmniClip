@@ -9,8 +9,11 @@
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Clapperboard, Copy, Film, Loader2, Plus, RefreshCw, Trash2, X } from 'lucide-react';
+import {
+  CircleHelp, Clapperboard, Copy, Film, Loader2, Plus, RefreshCw, Trash2, X,
+} from 'lucide-react';
 import { lokal, useT } from '../../lib/i18n';
+import { IsiBantuan } from './BantuanMontase.jsx';
 import { formatTime } from '../../utils/timeFormat';
 import {
   alamatBahan, ambilToken, buatProyek, daftarProyek, gandakanProyek, hapusProyek,
@@ -164,6 +167,7 @@ export default function MontaseHome() {
   const [token, setToken] = useState(null);
   const [galat, setGalat] = useState(null);
   const [formBaru, setFormBaru] = useState(false);
+  const [bantuan, setBantuan] = useState(false);
 
   const muat = useCallback(() => {
     setGalat(null);
@@ -186,11 +190,16 @@ export default function MontaseHome() {
       <header className="rak-kepala">
         <div className="rak-kepala-teks">
           <h1 className="work-title rak-judul">
-            {t('montase.home.judul')} <span className="montase-beta">{t('montase.beta')}</span>
+            {t('montase.home.judul')}
           </h1>
           <p className="rak-sub">{t('montase.home.sub')}</p>
         </div>
         <div className="rak-aksi">
+          <button type="button" className="btn-secondary" onClick={() => setBantuan((v) => !v)}
+                  aria-expanded={bantuan}
+          >
+            <CircleHelp size={14} />{t('montase.bantuan.tombol')}
+          </button>
           <button type="button" className="btn-secondary" onClick={muat}>
             <RefreshCw size={14} />{t('umum.muat_ulang')}
           </button>
@@ -201,6 +210,12 @@ export default function MontaseHome() {
       </header>
 
       {galat && <p className="montase-galat" role="alert">{galat}</p>}
+      {bantuan && (
+        <section className="plate montase-bantuan" aria-label={t('montase.bantuan.judul')}>
+          <h2>{t('montase.bantuan.judul')}</h2>
+          <IsiBantuan />
+        </section>
+      )}
       {formBaru && (
         <FormProyekBaru onBatal={() => setFormBaru(false)}
                         onJadi={(p) => navigate(`/montase/${p.id}`)} />

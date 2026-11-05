@@ -20,7 +20,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
-  ArrowLeft, Check, CloudOff, Download, Loader2, MonitorSmartphone, RefreshCw, Send, Upload,
+  ArrowLeft, Check, CircleHelp, CloudOff, Download, Loader2, MonitorSmartphone, RefreshCw, Send, Upload,
 } from 'lucide-react';
 import { useT } from '../../lib/i18n';
 import { useJobRunner } from '../../hooks/useJob';
@@ -53,6 +53,7 @@ import PeganganUbah from './editor/PeganganUbah.jsx';
 import { buatGaris } from './editor/garisPutar.js';
 import { TombolUsulan } from './editor/PanelAsisten.jsx';
 import RiwayatVersi from './editor/RiwayatVersi.jsx';
+import { JendelaBantuan } from './BantuanMontase.jsx';
 import { terapkanOperasi } from './model/usulan.js';
 
 const JEDA_SIMPAN = 1500;
@@ -195,6 +196,7 @@ export default function MontaseEditor() {
   // Unggah ke YouTube/Drive lewat formulir yang sama dengan Klip jadi (M6.1).
   const [unggah, setUnggah] = useState(null);
   const [drafLama, setDrafLama] = useState(null);
+  const [bantuan, setBantuan] = useState(false);
   const catatBahan = useCallback((daftar) => {
     setBahanSiap(new Set(daftar.filter((b) => b.siap).map((b) => b.id)));
   }, []);
@@ -642,6 +644,11 @@ export default function MontaseEditor() {
         </button>
         <h1 title={dokumen.nama}>{dokumen.nama}</h1>
         <StatusSimpan status={status} onMuatUlang={muat} onCobaLagi={simpanSekarang} />
+        <button type="button" className="btn-secondary montase-ikon" onClick={() => setBantuan(true)}
+                aria-label={t('montase.bantuan.judul')} title={t('montase.bantuan.judul')}
+        >
+          <CircleHelp size={14} />
+        </button>
         <span className="montase-linimasa-spasi" />
         {(subtitleKerja.active || subtitleKerja.error) && (
           <div className="montase-ekspor-kabar">
@@ -786,6 +793,7 @@ export default function MontaseEditor() {
       />
       {terbit && <SiapkanTerbit clip={terbit} onClose={() => setTerbit(null)} onSelesai={() => {}} />}
       {unggah && <UploadModal clip={unggah} onClose={() => setUnggah(null)} onDone={() => {}} />}
+      {bantuan && <JendelaBantuan onTutup={() => setBantuan(false)} />}
     </div>
   );
 }
