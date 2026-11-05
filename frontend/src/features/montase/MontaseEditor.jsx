@@ -58,6 +58,7 @@ import MeterOrisinalitas from './editor/MeterOrisinalitas.jsx';
 import Teleprompter from './editor/Teleprompter.jsx';
 import RekamReaksi from './editor/RekamReaksi.jsx';
 import { hitungOrisinalitas } from './model/orisinalitas.js';
+import { periksaAkhir, usulanAkhir } from './model/akhir.js';
 import { JendelaBantuan } from './BantuanMontase.jsx';
 import { terapkanOperasi } from './model/usulan.js';
 
@@ -323,6 +324,7 @@ export default function MontaseEditor() {
   const dTampil = tampilUsulan?.dokumen ?? dokumen;
   // Dihitung dari yang TAMPIL: usulan asisten yang belum diterima ikut terlihat dampaknya.
   const orisinal = useMemo(() => (dTampil ? hitungOrisinalitas(dTampil, asalBahan) : null), [dTampil, asalBahan]);
+  const akhirVideo = useMemo(() => (dTampil ? periksaAkhir(dTampil) : null), [dTampil]);
   const sumber = useMemo(
     () => (dTampil ? sumberPratinjau(dTampil, token) : null),
     // Hanya daftar bahan dan font yang menentukan alamat; perubahan item tidak.
@@ -681,7 +683,13 @@ export default function MontaseEditor() {
         <h1 title={dokumen.nama}>{dokumen.nama}</h1>
         <StatusSimpan status={status} onMuatUlang={muat} onCobaLagi={simpanSekarang} />
         {orisinal && (
-          <MeterOrisinalitas hasil={orisinal} onKe={keBingkai} onRekamNarasi={() => bukaTeleprompter()}
+          <MeterOrisinalitas hasil={orisinal} akhir={akhirVideo} onKe={keBingkai} onRekamNarasi={() => bukaTeleprompter()}
+                             onUsulkanAkhir={() => {
+                               const ops = usulanAkhir(dok(), (k) => t(`montase.akhir.op_${k}`));
+                               if (ops.length) {
+                                 setUsulan({ operasi: ops, pilih: new Set(ops.map((o) => o.id)), sumber: 'lokal', peringatan: [] });
+                               }
+                             }}
                              onPeriksaKemiripan={async () => { await simpanSekarang(); return periksaKemiripan(proyekId); }} />
         )}
         <button type="button" className="btn-secondary montase-ikon" onClick={() => setBantuan(true)}

@@ -56,7 +56,9 @@ function Kemiripan({ onPeriksa }) {
   );
 }
 
-export default function MeterOrisinalitas({ hasil, onKe, onRekamNarasi, onPeriksaKemiripan }) {
+export default function MeterOrisinalitas({
+  hasil, akhir, onKe, onRekamNarasi, onPeriksaKemiripan, onUsulkanAkhir,
+}) {
   const t = useT();
   const [buka, setBuka] = useState(false);
   const wadah = useRef(null);
@@ -127,6 +129,27 @@ export default function MeterOrisinalitas({ hasil, onKe, onRekamNarasi, onPeriks
             </ul>
             {!hasil.pembuka.baik && <p className="montase-petunjuk">{t('montase.pembuka.saran')}</p>}
           </section>
+          {akhir && (
+            <section className="montase-orisinal-pembuka">
+              <h4>{t('montase.akhir.judul')}</h4>
+              <ul>
+                <li className={akhir.ekorMati ? 'tidak' : 'ya'}>
+                  {akhir.ekorMati ? `✗ ${t('montase.akhir.ekor_mati', { d: akhir.ekorMati.toFixed(1) })}` : `✓ ${t('montase.akhir.ekor_baik')}`}
+                </li>
+                <li className={akhir.menyambung ? 'ya' : 'tidak'}>
+                  {akhir.menyambung ? '✓' : '✗'} {t('montase.akhir.menyambung')}
+                </li>
+                {akhir.shortsTerlaluPanjang && <li className="tidak">✗ {t('montase.akhir.terlalu_panjang')}</li>}
+              </ul>
+              {!akhir.baik && onUsulkanAkhir && (akhir.ekorMati > 0 || !akhir.menyambung) && (
+                <button type="button" className="btn-secondary montase-orisinal-aksi"
+                        onClick={() => { setBuka(false); onUsulkanAkhir(); }}
+                >
+                  {t('montase.akhir.usulkan')}
+                </button>
+              )}
+            </section>
+          )}
           {onPeriksaKemiripan && <Kemiripan onPeriksa={onPeriksaKemiripan} />}
           <p className="montase-petunjuk">{t('montase.orisinal.ket')}</p>
         </div>
