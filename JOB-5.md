@@ -22,7 +22,7 @@ lupa untuk selalu mencatatnya agar ... sesi lain masih bisa melanjutkannya".
 | O6 Akhir menyambung | ⬜ | |
 | O7 Keterangan unik + bab | ⬜ | |
 
-**Tugas berikutnya:** `O5` (lanjutan: perekam di peramban).
+**Tugas berikutnya:** `O6`.
 
 **Melanjutkan di sesi baru:** baca papan ini dan bagian 4. Kerjakan tugas
 berikutnya; bila ada catatan "SEBAGIAN" di bawah butirnya, lanjutkan dari
