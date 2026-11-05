@@ -1497,7 +1497,7 @@ export default {
   'pelihara.hitung_ulang': "Recalculate",
   'pelihara.menghitung': "Calculating…",
   'pelihara.cadangan': "Database backup",
-  'pelihara.cadangan_ket': "All your work (analyses, clips, transcripts, accounts and settings) lives in one file. Backups are made with SQLite's own method, not a plain copy, so they stay intact even while the app is working. The last ten backups are kept.",
+  'pelihara.cadangan_ket': "All your work (analyses, clips, transcripts, accounts, settings, and Montage projects with their version history and animation library) lives in one file. Video and audio files are not part of the backup. Backups are made with SQLite's own method, not a plain copy, so they stay intact even while the app is working. The last ten backups are kept.",
   'pelihara.cadangkan': "Back up now",
   'pelihara.menyiapkan': "Preparing…",
   'pelihara.pulihkan': "Restore",

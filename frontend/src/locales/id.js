@@ -1498,7 +1498,7 @@ export default {
   'pelihara.hitung_ulang': "Hitung ulang",
   'pelihara.menghitung': "Menghitung…",
   'pelihara.cadangan': "Cadangan basis data",
-  'pelihara.cadangan_ket': "Seluruh pekerjaan Anda (analisis, klip, transkrip, profil, dan setelan) ada di satu berkas. Cadangan dibuat dengan cara SQLite sendiri, bukan disalin begitu saja, supaya isinya utuh walau dibuat saat aplikasi sedang bekerja. Sepuluh cadangan terakhir disimpan.",
+  'pelihara.cadangan_ket': "Seluruh pekerjaan Anda (analisis, klip, transkrip, profil, setelan, serta proyek Montase beserta riwayat versinya dan pustaka animasinya) ada di satu berkas. Berkas video dan suara tidak ikut tercadangkan. Cadangan dibuat dengan cara SQLite sendiri, bukan disalin begitu saja, supaya isinya utuh walau dibuat saat aplikasi sedang bekerja. Sepuluh cadangan terakhir disimpan.",
   'pelihara.cadangkan': "Cadangkan sekarang",
   'pelihara.menyiapkan': "Menyiapkan…",
   'pelihara.pulihkan': "Pulihkan",

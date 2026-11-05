@@ -175,6 +175,27 @@ def daftar_bahan(profil_id: int) -> list[dict]:
     return [_baris_bahan(r) for r in rows]
 
 
+def semua_bahan_ringkas() -> list[dict]:
+    """Semua bahan semua profil (id, profil, asal, jalur), untuk pembersih sampah (M6.5)."""
+    rows = get_conn().execute("SELECT id, profil_id, asal, rel_path FROM montase_bahan").fetchall()
+    return [dict(r) for r in rows]
+
+
+def semua_id_komponen() -> set[str]:
+    return {r[0] for r in get_conn().execute("SELECT DISTINCT id FROM montase_komponen").fetchall()}
+
+
+def bahan_dipakai_semua() -> set[str]:
+    """Id bahan yang disebut dokumen proyek mana pun, semua profil."""
+    dipakai: set[str] = set()
+    for (isi,) in get_conn().execute("SELECT dokumen_json FROM montase_proyek").fetchall():
+        try:
+            dipakai.update((json.loads(isi).get("bahan") or {}).keys())
+        except ValueError:
+            continue
+    return dipakai
+
+
 def ambil_bahan(profil_id: int, bahan_id: str, *, dengan_jalur: bool = False) -> Optional[dict]:
     row = get_conn().execute(
         "SELECT * FROM montase_bahan WHERE id = ? AND profil_id = ?",
