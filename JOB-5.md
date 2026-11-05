@@ -17,12 +17,12 @@ lupa untuk selalu mencatatnya agar ... sesi lain masih bisa melanjutkannya".
 | O1 Meter orisinalitas | ✅ 298209a | |
 | O2 Rekam narasi dari naskah | ✅ fc2e23d | teleprompter, direkam bukan sintetis |
 | O3 Kemiripan antar video | ✅ 8fad116 | sidik ekspor, pola trigram |
-| O4 Pembuka kuat | ⬜ | |
+| O4 Pembuka kuat | ✅ a1e7e6e | cek 3 detik + cuplikan |
 | O5 Rekam reaksi kamera | ⬜ | |
 | O6 Akhir menyambung | ⬜ | |
 | O7 Keterangan unik + bab | ⬜ | |
 
-**Tugas berikutnya:** `O4`.
+**Tugas berikutnya:** `O5`.
 
 **Melanjutkan di sesi baru:** baca papan ini dan bagian 4. Kerjakan tugas
 berikutnya; bila ada catatan "SEBAGIAN" di bawah butirnya, lanjutkan dari
@@ -111,7 +111,8 @@ Urutan dari dampak terbesar terhadap penilaian orisinalitas.
   (selesai 5 Nov 2026, commit fc2e23d) editor/Teleprompter.jsx + hook rekamMikrofon.js; rekaman menggantikan item narasi lewat gantiBahanItem dengan narasi.direkam=true; pintu: saran meter, tab Asisten, panel properti. Server: narasi direkam = rekam, bukan sintetis. Diuji Playwright dengan mikrofon palsu Chromium 4/4.
 - [x] **O3** Pemeriksa kemiripan antar video.
   (selesai 5 Nov 2026, commit 8fad116) montase/kemiripan.py: sidik di sidecar ekspor (versi 1), GET /proyek/{id}/kemiripan, tampil di panel meter. Struktur dibandingkan sebagai pola trigram (Top 2 dan Top 10 bersusunan sama = sama); mirip = skor >= 0,75 ATAU >= 3 dimensi inti sama. Ekspor LAMA tanpa sidik tidak ikut dibandingkan. Data uji: Top 5 lawan Uji unggah narasi = waspada (susunan, animasi, suara).
-- [ ] **O4** Pembuka kuat.
+- [x] **O4** Pembuka kuat.
+  (selesai 5 Nov 2026, commit a1e7e6e) orisinalitas.periksaPembuka + bagian Pembuka di panel meter; montase/pembuka.py (POST /proyek/{id}/pembuka) mengusulkan geser_semua 2 dtk + klip momen terkuat + teks pengait. Momen dicari di SELURUH bahan lalu disaring: pendeteksi lonjakan butuh suara sebelum lonjakan (terukur: rentang mulai 4 dtk sebelum puncak tidak menemukan apa pun). Playwright 4/4 termasuk Ctrl+Z.
 - [ ] **O5** Rekam reaksi kamera.
 - [ ] **O6** Akhir menyambung.
 - [ ] **O7** Keterangan unik dan bab.
