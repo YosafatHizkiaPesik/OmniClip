@@ -1225,6 +1225,8 @@ KATALOG = [
     ("Diam {d} detik.", "Silent for {d} seconds."),
     ("Kata isian, {d} detik.", "Filler word, {d} seconds."),
     ("Mencari wajah", "Looking for faces"),
+    ("Belum ada narasi atau rekaman suara Anda. Video yang memakai video orang lain wajib bernarasi; tambahkan lewat tab Suara atau Asisten di Montase lalu ekspor ulang.", "There is no narration or recording of your own voice yet. A video that uses other people's videos must be narrated; add it in the Voice or Assistant tab in Montage, then export again."),
+    ("narasi {d} detik", "narration {d} seconds"),
     ("Pilih satu klip video.", "Select one video clip."),
     ("Klip ini sudah setegak kanvasnya; tidak ada yang perlu dibingkai ulang.", "This clip is already as tall as the canvas; there is nothing to reframe."),
     ("Berkas bahan tidak ditemukan.", "The media file was not found."),

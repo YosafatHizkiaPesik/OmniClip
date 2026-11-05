@@ -2086,6 +2086,7 @@ export default {
   'montase.editor.menyimpan': "Menyimpan…",
   'montase.editor.gagal_simpan': "Gagal menyimpan, dicoba lagi otomatis",
   'montase.editor.bentrok': "Diubah di tab lain",
+  'montase.editor.unggah': "Unggah",
   'montase.editor.ekspor': "Ekspor",
   'montase.editor.lihat_klip': "Lihat di Klip jadi",
   'montase.editor.teks_baru': "Teks baru",

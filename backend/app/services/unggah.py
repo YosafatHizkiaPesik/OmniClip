@@ -126,6 +126,12 @@ def sumber_klip(clip_name: str, profil_id: int) -> dict:
     """
     from .analitik import _sidecar
     meta = _sidecar(clip_name, profil_id) or {}
+    if meta.get("jenis") == "montase":
+        # Video Montase bisa memakai banyak video sumber (JOB-4 M6.1), atau
+        # tidak satu pun bila bahannya milik sendiri. Sumber pertama tetap di
+        # tingkat atas supaya pemanggil lama (izin, formulir) membaca kanalnya.
+        banyak = [s for s in meta.get("sumber_banyak") or [] if isinstance(s, dict)]
+        return {**(banyak[0] if banyak else {}), "banyak": banyak}
     ada = meta.get("sumber")
     if isinstance(ada, dict) and (ada.get("judul") or ada.get("url")):
         return ada
@@ -148,6 +154,18 @@ def kredit(sumber: Optional[dict]) -> str:
     Kredit tidak menggantikan izin. Lihat catatan izin di JOB-2.md.
     """
     s = sumber or {}
+    banyak = s.get("banyak")
+    if isinstance(banyak, list) and len(banyak) > 1:
+        baris = ["Sumber:"]
+        for b in banyak:
+            j = (b.get("judul") or "").strip()
+            k = (b.get("kanal") or "").strip()
+            u = (b.get("url") or "").strip()
+            if not (j or u):
+                continue
+            baris.append("- " + (f'"{j}"' if j else "video asli") + (f" oleh {k}" if k else "")
+                         + (f"\n  {u}" if u else ""))
+        return "\n".join(baris) if len(baris) > 1 else ""
     judul = (s.get("judul") or "").strip()
     kanal = (s.get("kanal") or "").strip()
     url = (s.get("url") or "").strip()

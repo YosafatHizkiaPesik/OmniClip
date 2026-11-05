@@ -2085,6 +2085,7 @@ export default {
   'montase.editor.menyimpan': "Saving…",
   'montase.editor.gagal_simpan': "Could not save, retrying automatically",
   'montase.editor.bentrok': "Changed in another tab",
+  'montase.editor.unggah': "Upload",
   'montase.editor.ekspor': "Export",
   'montase.editor.lihat_klip': "View in Finished clips",
   'montase.editor.teks_baru': "New text",

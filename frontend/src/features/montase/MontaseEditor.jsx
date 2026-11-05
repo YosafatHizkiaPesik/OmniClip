@@ -20,12 +20,13 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
-  ArrowLeft, Check, CloudOff, Download, Loader2, MonitorSmartphone, RefreshCw, Send,
+  ArrowLeft, Check, CloudOff, Download, Loader2, MonitorSmartphone, RefreshCw, Send, Upload,
 } from 'lucide-react';
 import { useT } from '../../lib/i18n';
 import { useJobRunner } from '../../hooks/useJob';
 import JobProgress from '../../components/JobProgress';
 import SiapkanTerbit from '../../components/SiapkanTerbit';
+import UploadModal from '../../components/UploadModal';
 import { BAWAAN } from './komposisi/index.js';
 import {
   ambilProyek, ambilToken, buatNarasi, fontDipakai, komponenDipakai, simpanProyek, sumberPratinjau,
@@ -176,6 +177,8 @@ export default function MontaseEditor() {
   const [usulan, setUsulan] = useState(null);
   // Saran judul, caption, dan tagar untuk hasil ekspor (M5.6, keterangan.py).
   const [terbit, setTerbit] = useState(null);
+  // Unggah ke YouTube/Drive lewat formulir yang sama dengan Klip jadi (M6.1).
+  const [unggah, setUnggah] = useState(null);
   const catatBahan = useCallback((daftar) => {
     setBahanSiap(new Set(daftar.filter((b) => b.siap).map((b) => b.id)));
   }, []);
@@ -607,6 +610,13 @@ export default function MontaseEditor() {
             <Send size={14} />{t('klip.siapkan')}
           </button>
         )}
+        {hasil && (
+          <button type="button" className="btn-secondary"
+                  onClick={() => setUnggah({ file_name: hasil.berkas, metadata: { title: dokumen.nama } })}
+          >
+            <Upload size={14} />{t('montase.editor.unggah')}
+          </button>
+        )}
         <button type="button" className="btn-primary" onClick={mulaiEkspor}
                 disabled={ekspor.active || status === 'bentrok'}
         >
@@ -712,6 +722,7 @@ export default function MontaseEditor() {
         onJatuhBahan={tambahKeLinimasa}
       />
       {terbit && <SiapkanTerbit clip={terbit} onClose={() => setTerbit(null)} onSelesai={() => {}} />}
+      {unggah && <UploadModal clip={unggah} onClose={() => setUnggah(null)} onDone={() => {}} />}
     </div>
   );
 }

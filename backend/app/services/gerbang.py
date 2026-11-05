@@ -51,13 +51,20 @@ def nilai(meta: Optional[dict], *, sumber: Optional[dict] = None,
         for c in hasil_fyp.get("catatan") or []:
             if c.get("berat") == "berat":
                 alasan.append(f"{c.get('judul')}.")
-    if not (pakai_kredit and kredit(sumber)):
+    # Video Montase dari bahan milik sendiri tidak punya sumber untuk dikredit.
+    tanpa_sumber = isinstance((sumber or {}).get("banyak"), list) and not sumber["banyak"]
+    if not tanpa_sumber and not (pakai_kredit and kredit(sumber)):
         alasan.append("Deskripsinya tidak menyebut video sumber.")
     nilai_tambah = hitung(meta)
     if meta and not nilai_tambah["cukup"]:
-        alasan.append("Belum ada komentar atau tambahan dari Anda sendiri. Tanpa itu "
-                      "YouTube menilainya sebagai potongan ulang; isi tab Komentar di "
-                      "Studio lalu render ulang.")
+        if (meta or {}).get("jenis") == "montase":
+            alasan.append("Belum ada narasi atau rekaman suara Anda. Video yang memakai video "
+                          "orang lain wajib bernarasi; tambahkan lewat tab Suara atau Asisten "
+                          "di Montase lalu ekspor ulang.")
+        else:
+            alasan.append("Belum ada komentar atau tambahan dari Anda sendiri. Tanpa itu "
+                          "YouTube menilainya sebagai potongan ulang; isi tab Komentar di "
+                          "Studio lalu render ulang.")
     return {"lolos": not alasan, "alasan": alasan, "fyp": hasil_fyp,
             "nilai_tambah": nilai_tambah}
 
