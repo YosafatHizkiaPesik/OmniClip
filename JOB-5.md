@@ -21,7 +21,6 @@ lupa untuk selalu mencatatnya agar ... sesi lain masih bisa melanjutkannya".
 | O5 Rekam reaksi kamera | ✅ 9b20252 | PiP sinkron dengan pratinjau |
 | O6 Akhir menyambung | ✅ bacd105 | ekor mati + sambung ke awal |
 | O7 Keterangan unik + bab | ✅ 100d129 | judul unik + bab |
-
 | P1 Preset caption subtitle | ✅ 9f6c433 | 10 gaya, sorot kotak/besar |
 | P2 Preset teks milik sendiri | ✅ fc47fb6 | simpan/pakai/hapus gaya |
 | P3 Templat video bawaan | ✅ 1f9b84c | templat bawaan |
@@ -29,7 +28,7 @@ lupa untuk selalu mencatatnya agar ... sesi lain masih bisa melanjutkannya".
 | D1 Katalog fitur (FITUR.md) | ✅ d68ffad | katalog fitur |
 | D2 Saran fitur berikutnya | ✅ d68ffad | saran fitur |
 
-**Tugas berikutnya:** `uji pemilik (UJI-LANGSUNG 103-112), lalu CI dan merge PR #13`.
+**Tugas berikutnya:** uji pemilik (UJI-LANGSUNG 103-112). Pemilik 5 November 2026: "tidak usah diuji biarkan nanti saya saja yang mengujinya", jadi CI dan merge PR #13 menunggu pemilik. Tes unit terakhir: backend 1268 (1 gagal bawaan lingkungan: font CJK, juga gagal di main), frontend lolos, lint 0 galat, build OK.
 
 **Melanjutkan di sesi baru:** baca papan ini dan bagian 4. Kerjakan tugas
 berikutnya; bila ada catatan "SEBAGIAN" di bawah butirnya, lanjutkan dari
