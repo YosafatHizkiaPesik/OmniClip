@@ -567,6 +567,74 @@ def hapus_preset_teks(preset_id: str):
     return {"preset": sisa}
 
 
+# --- templat milik sendiri (JOB-5 P4) ---------------------------------------------
+
+TEMPLAT_SAYA_MAKS = 20
+TEMPLAT_SAYA_BYTE = 200_000
+
+
+def _kunci_templat(pid: int) -> str:
+    return f"montase.templat_saya.{pid}"
+
+
+def _templat_saya(pid: int) -> list[dict]:
+    import json as _json
+    try:
+        isi = _json.loads(settings_repo.get(_kunci_templat(pid), "") or "[]")
+    except ValueError:
+        return []
+    return [t for t in isi if isinstance(t, dict) and t.get("id") and isinstance(t.get("isi"), list)]
+
+
+class TemplatSaya(BaseModel):
+    """Kerangka dari model/templatSaya.js `ambilTemplat`: tanpa bahan, waktu dalam detik."""
+    nama: str = Field(..., min_length=1, max_length=60)
+    kanvas: dict[str, Any] = Field(default_factory=dict)
+    detik: float = Field(0, ge=0, le=36_000)
+    caption: Optional[str] = Field(None, max_length=40)
+    isi: list[dict[str, Any]] = Field(default_factory=list, max_length=200)
+    penanda: list[dict[str, Any]] = Field(default_factory=list, max_length=200)
+
+
+@router.get("/templat-saya")
+def daftar_templat_saya():
+    """Templat yang disimpan pemilik profil ini, terbaru dulu."""
+    return {"templat": _templat_saya(profil.kini())}
+
+
+@router.post("/templat-saya")
+def simpan_templat_saya(b: TemplatSaya):
+    """Menyimpan kerangka proyek sebagai templat bernama; nama yang sama menimpa.
+
+    Item ber-bahan ditolak di sini juga (bukan hanya di klien): templat yang
+    membawa klip akan menghasilkan video yang sama berulang kali.
+    """
+    import json as _json
+    import secrets
+    pid = profil.kini()
+    if not (b.isi or b.penanda or b.caption):
+        raise InvalidInput("Proyek belum punya teks, animasi, atau penanda untuk dijadikan templat.")
+    if any(not isinstance(i, dict) or i.get("jenis") not in ("teks", "animasi") or "bahan" in i for i in b.isi):
+        raise InvalidInput("Templat hanya boleh berisi teks dan animasi.")
+    data = b.model_dump()
+    data["nama"] = b.nama.strip()
+    if len(_json.dumps(data, ensure_ascii=False).encode()) > TEMPLAT_SAYA_BYTE:
+        raise InvalidInput("Templat terlalu besar.")
+    lama = [t for t in _templat_saya(pid) if t["nama"].strip().lower() != data["nama"].lower()]
+    baru = ([{"id": "ts_" + secrets.token_hex(4), **data}] + lama)[:TEMPLAT_SAYA_MAKS]
+    settings_repo.set_value(_kunci_templat(pid), _json.dumps(baru, ensure_ascii=False))
+    return {"templat": baru}
+
+
+@router.delete("/templat-saya/{templat_id}")
+def hapus_templat_saya(templat_id: str):
+    import json as _json
+    pid = profil.kini()
+    sisa = [t for t in _templat_saya(pid) if t["id"] != templat_id]
+    settings_repo.set_value(_kunci_templat(pid), _json.dumps(sisa, ensure_ascii=False))
+    return {"templat": sisa}
+
+
 @router.get("/gaya-teks")
 def gaya_teks():
     """Tema judul siap pakai dan font bawaan untuk item teks (M3.1)."""

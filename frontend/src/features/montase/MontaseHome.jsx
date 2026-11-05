@@ -17,7 +17,7 @@ import { IsiBantuan } from './BantuanMontase.jsx';
 import PilihTemplat from './editor/PilihTemplat.jsx';
 import { formatTime } from '../../utils/timeFormat';
 import {
-  alamatBahan, ambilToken, buatProyek, daftarProyek, gandakanProyek, hapusProyek,
+  alamatBahan, ambilToken, buatProyek, daftarProyek, daftarTemplatSaya, gandakanProyek, hapusProyek,
 } from './api.js';
 
 export const PRESET = [
@@ -42,8 +42,11 @@ function FormProyekBaru({ onBatal, onJadi }) {
   const [fps, setFps] = useState(30);
   const [templat, setTemplat] = useState(null);
   const [variasi, setVariasi] = useState(0);
+  const [milik, setMilik] = useState([]);
   const [sibuk, setSibuk] = useState(false);
   const [galat, setGalat] = useState(null);
+
+  useEffect(() => { daftarTemplatSaya().then(setMilik).catch(() => {}); }, []);
 
   const kirim = async (e) => {
     e.preventDefault();
@@ -116,7 +119,8 @@ function FormProyekBaru({ onBatal, onJadi }) {
         </label>
         <div className="montase-kolom">
           <span>{t('montase.templat.judul')}</span>
-          <PilihTemplat nilai={templat} variasi={variasi} onUbah={setTemplat} onVariasi={setVariasi} denganKosong />
+          <PilihTemplat nilai={templat} variasi={variasi} onUbah={setTemplat} onVariasi={setVariasi} denganKosong
+                        milik={milik} />
         </div>
         {galat && <p className="montase-galat" role="alert">{galat}</p>}
         <button type="submit" className="btn-primary" disabled={sibuk}>
@@ -225,7 +229,7 @@ export default function MontaseHome() {
       )}
       {formBaru && (
         <FormProyekBaru onBatal={() => setFormBaru(false)}
-                        onJadi={(p, tpl) => navigate(tpl ? `/montase/${p.id}?templat=${tpl.templat}&variasi=${tpl.variasi}` : `/montase/${p.id}`)} />
+                        onJadi={(p, tpl) => navigate(tpl ? `/montase/${p.id}?templat=${encodeURIComponent(tpl.templat)}&variasi=${tpl.variasi}` : `/montase/${p.id}`)} />
       )}
 
       {proyek === null && <Loader2 size={18} className="animate-spin" />}

@@ -9,15 +9,17 @@
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Check, CheckCheck, Crop, LayoutTemplate, Loader2, Mic, Scissors, Sparkles, X, Zap,
+  Check, CheckCheck, Crop, LayoutTemplate, Loader2, Mic, Save, Scissors, Sparkles, X, Zap,
 } from 'lucide-react';
 import { useT } from '../../../lib/i18n';
 import { formatTime } from '../../../utils/timeFormat';
 import { useJobRunner } from '../../../hooks/useJob';
 import JobProgress from '../../../components/JobProgress';
-import { daftarSuara } from '../api.js';
+import {
+  daftarSuara, daftarTemplatSaya, hapusTemplatSaya, simpanTemplatSaya,
+} from '../api.js';
 import { kelompokOperasi } from '../model/usulan.js';
-import { operasiTemplat } from '../model/templat.js';
+import { ambilTemplat, operasiPilihan, templatBerisi } from '../model/templatSaya.js';
 import PilihTemplat from './PilihTemplat.jsx';
 
 export function DaftarUsulan({ usulan, onPilih, onTerima, onTolak, fps }) {
@@ -109,6 +111,9 @@ export default function PanelAsisten({
   const [galat, setGalat] = useState(null);
   const [templat, setTemplat] = useState('top_n');
   const [variasi, setVariasi] = useState(0);
+  const [milik, setMilik] = useState([]);
+  const [namaTemplat, setNamaTemplat] = useState('');
+  const [infoTemplat, setInfoTemplat] = useState(null);
   const kerja = useJobRunner();
   const jeda = useJobRunner();
   const bingkai = useJobRunner();
@@ -117,6 +122,27 @@ export default function PanelAsisten({
   const video = useMemo(() => bahan.filter((b) => b.jenis === 'video'), [bahan]);
   const dipilih = pilih ?? new Set(video.map((b) => b.id));
   useEffect(() => { daftarSuara().then((s) => { setDaftar(s); }).catch(() => {}); }, []);
+  useEffect(() => { daftarTemplatSaya().then(setMilik).catch(() => {}); }, []);
+  const kerangka = useMemo(() => (dokumen ? ambilTemplat(dokumen) : null), [dokumen]);
+  const simpanTemplat = async () => {
+    setInfoTemplat(null);
+    try {
+      const nama = namaTemplat.trim();
+      setMilik(await simpanTemplatSaya(nama, kerangka));
+      setNamaTemplat('');
+      setInfoTemplat({ ok: true, teks: t('montase.templat.saya_tersimpan', { nama }) });
+    } catch (e) {
+      setInfoTemplat({ ok: false, teks: e.message });
+    }
+  };
+  const hapusTemplat = async (id) => {
+    try {
+      setMilik(await hapusTemplatSaya(id));
+      if (templat === `saya:${id}`) setTemplat('top_n');
+    } catch (e) {
+      setInfoTemplat({ ok: false, teks: e.message });
+    }
+  };
 
   // Satu efek per pekerjaan: hasil yang lama dari pekerjaan lain tidak boleh
   // muncul lagi sebagai usulan (dulu "Cari jeda" memunculkan ulang Top 5).
@@ -245,14 +271,28 @@ export default function PanelAsisten({
       <section className="montase-bagian">
         <h3><span><LayoutTemplate size={13} /> {t('montase.templat.judul')}</span></h3>
         <p className="montase-petunjuk">{t('montase.templat.ket')}</p>
-        <PilihTemplat nilai={templat} variasi={variasi} onUbah={setTemplat} onVariasi={setVariasi} />
+        <PilihTemplat nilai={templat} variasi={variasi} onUbah={setTemplat} onVariasi={setVariasi}
+                      milik={milik} onHapus={hapusTemplat} />
         <button type="button" className="btn-secondary" disabled={!templat || !dokumen} onClick={() => {
-          const ops = operasiTemplat(dokumen, templat, variasi, (k, isi) => t(`montase.templat.${k}`, isi));
+          const ops = operasiPilihan(dokumen, templat, variasi, milik, (k, isi) => t(`montase.templat.${k}`, isi));
           if (ops.length) onUsulan({ operasi: ops, pilih: new Set(ops.map((o) => o.id)), sumber: 'lokal', peringatan: [] });
         }}
         >
           <LayoutTemplate size={13} />{t('montase.templat.pakai')}
         </button>
+        <p className="montase-petunjuk">{t('montase.templat.saya_simpan_ket')}</p>
+        <form className="montase-templat-simpan" onSubmit={(e) => { e.preventDefault(); simpanTemplat(); }}>
+          <input type="text" value={namaTemplat} maxLength={60} onChange={(e) => setNamaTemplat(e.target.value)}
+                 placeholder={t('montase.templat.saya_nama')} aria-label={t('montase.templat.saya_nama')} />
+          <button type="submit" className="btn-secondary" disabled={!namaTemplat.trim() || !templatBerisi(kerangka)}>
+            <Save size={13} />{t('montase.templat.saya_simpan')}
+          </button>
+        </form>
+        {infoTemplat && (
+          <p className={infoTemplat.ok ? 'montase-petunjuk' : 'montase-galat'} role={infoTemplat.ok ? 'status' : 'alert'}>
+            {infoTemplat.teks}
+          </p>
+        )}
       </section>
       <section className="montase-bagian">
         <h3><span><Zap size={13} /> {t('montase.pembuka.usul_judul')}</span></h3>

@@ -152,3 +152,9 @@ export function sumberPratinjau(dokumen, token) {
   }
   return { bahan, font, komponen: token ? komponenDipakai(dokumen, token) : {} };
 }
+// Templat milik sendiri (JOB-5 P4): kerangka proyek tanpa bahan.
+export const daftarTemplatSaya = () => apiGet('/montase/templat-saya').then((r) => r.templat ?? []);
+export const simpanTemplatSaya = (nama, kerangka) => apiPost('/montase/templat-saya', { nama, ...kerangka })
+  .then((r) => r.templat ?? []);
+export const hapusTemplatSaya = (id) => apiDelete(`/montase/templat-saya/${encodeURIComponent(id)}`)
+  .then((r) => r.templat ?? []);

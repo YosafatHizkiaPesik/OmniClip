@@ -29,7 +29,7 @@ import SiapkanTerbit from '../../components/SiapkanTerbit';
 import UploadModal from '../../components/UploadModal';
 import { BAWAAN } from './komposisi/index.js';
 import {
-  ambilProyek, ambilToken, buatNarasi, fontDipakai, komponenDipakai, periksaKemiripan, pulihkanVersi,
+  ambilProyek, ambilToken, buatNarasi, daftarTemplatSaya, fontDipakai, komponenDipakai, periksaKemiripan, pulihkanVersi,
   simpanProyek,
   sumberPratinjau,
 } from './api.js';
@@ -60,7 +60,7 @@ import RekamReaksi from './editor/RekamReaksi.jsx';
 import { hitungOrisinalitas } from './model/orisinalitas.js';
 import { periksaAkhir, usulanAkhir } from './model/akhir.js';
 import { terapkanCaption } from './model/presetCaption.js';
-import { operasiTemplat } from './model/templat.js';
+import { AWALAN_SAYA, operasiPilihan } from './model/templatSaya.js';
 import { JendelaBantuan } from './BantuanMontase.jsx';
 import { terapkanOperasi } from './model/usulan.js';
 
@@ -344,12 +344,18 @@ export default function MontaseEditor() {
   const tolakUsulan = useCallback(() => setUsulan(null), []);
   // Templat dari formulir proyek baru (JOB-5 P3): diusulkan sekali saat proyek
   // pertama dibuka, lalu parameternya dibuang dari alamat.
+  // Templat milik sendiri (P4) dicari dulu di server.
   useEffect(() => {
     const id = cari.get('templat');
     if (!dokumen || !id) return;
-    const ops = operasiTemplat(dokumen, id, Number(cari.get('variasi')) || 0, (k, isi) => t(`montase.templat.${k}`, isi));
-    if (ops.length) setUsulan({ operasi: ops, pilih: new Set(ops.map((o) => o.id)), sumber: 'lokal', peringatan: [] });
+    const variasi = Number(cari.get('variasi')) || 0;
     setCari({}, { replace: true });
+    const usulkan = (milik) => {
+      const ops = operasiPilihan(dokumen, id, variasi, milik, (k, isi) => t(`montase.templat.${k}`, isi));
+      if (ops.length) setUsulan({ operasi: ops, pilih: new Set(ops.map((o) => o.id)), sumber: 'lokal', peringatan: [] });
+    };
+    if (id.startsWith(AWALAN_SAYA)) daftarTemplatSaya().then(usulkan).catch(() => {});
+    else usulkan([]);
   }, [dokumen, cari, setCari, t]);
   // Draf lokal ditunda 400 ms: localStorage sinkron, dan menyeret item
   // mengubah dokumen tiap bingkai (kinerja M6.3 diukur dengan ini menyala).

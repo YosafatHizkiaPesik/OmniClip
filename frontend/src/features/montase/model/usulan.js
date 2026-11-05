@@ -7,8 +7,8 @@
  *
  * Jenis operasi (waktu dalam bingkai):
  *   klip     {bahan, bahan_info, mulai, potong_awal, durasi}
- *   animasi  {komponen, props, mulai, durasi}
- *   teks     {teks, mulai, durasi}
+ *   animasi  {komponen, props, mulai, durasi, versi?, ubah?, keyframe?}
+ *   teks     {teks, mulai, durasi, gaya?, ubah?, keyframe?}
  *   audio    {bahan, bahan_info, mulai, narasi?}
  *   potong   {item, dari, sampai}          buang rentang (jeda, kata isian)
  *   ubah     {item, ubah?, keyframe?}      bingkai ulang (posisi, skala)
@@ -45,6 +45,14 @@ function geserLajurLain(dokumen, lajurId, sampai, delta) {
   return { ...baru, durasi: durasiIsi(baru) };
 }
 
+/** Posisi dan keyframe yang dibawa templat milik sendiri (JOB-5 P4). */
+function letak(op) {
+  const x = {};
+  if (op.ubah) x.ubah = op.ubah;
+  if (op.keyframe) x.keyframe = op.keyframe;
+  return x;
+}
+
 function jalankanSatu(d, op) {
   switch (op.jenis) {
     case 'klip': {
@@ -56,11 +64,12 @@ function jalankanSatu(d, op) {
     case 'animasi': {
       const h = tambahMotion(d, { komponen: op.komponen, modul: { contohProps: op.props ?? {}, durasiBawaan: op.durasi },
         mulai: op.mulai });
-      return { dokumen: tandaiAi(h.dokumen, h.itemId, op), itemId: h.itemId };
+      return { dokumen: tandaiAi(h.dokumen, h.itemId, op, { ...letak(op), ...(op.versi ? { versi: op.versi } : {}) }),
+        itemId: h.itemId };
     }
     case 'teks': {
       const h = tambahTeks(d, { mulai: op.mulai, teks: op.teks });
-      const tambahan = { durasi: op.durasi };
+      const tambahan = { durasi: op.durasi, ...letak(op) };
       if (op.gaya) tambahan.gaya = { ...GAYA_TEKS_BAWAAN, ...op.gaya };
       return { dokumen: tandaiAi(h.dokumen, h.itemId, op, tambahan), itemId: h.itemId };
     }
