@@ -11,6 +11,7 @@ import React from 'react';
 import { AbsoluteFill, useCurrentFrame } from 'remotion';
 import { BAWAAN } from '../motion/index.js';
 import { useKomponen } from '../muatKomponen.js';
+import { useFontBanyak } from '../font.js';
 import { ubahPada } from '../keyframe.js';
 import { gayaUbah } from '../ubah.js';
 
@@ -41,6 +42,8 @@ export default function ItemMotion({ item, sumber }) {
   const kunci = `${item.komponen}@${item.versi ?? 1}`;
   const url = bawaan ? null : sumber?.komponen?.[kunci] ?? null;
   const dimuat = useKomponen(url);
+  // Animasi AI boleh memakai font bawaan mana pun (kontrak bagian 21).
+  useFontBanyak(bawaan ? null : sumber?.font);
   const modul = bawaan ?? dimuat;
   if (!modul) {
     return url ? null : <KotakGalat pesan={`Komponen tidak dikenal: ${kunci}`} />;
@@ -54,6 +57,9 @@ export default function ItemMotion({ item, sumber }) {
     const hasil = modul.skema.safeParse(props);
     if (!hasil.success) {
       const pesan = hasil.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('\n');
+      // Pemeriksaan mesin (periksa.mjs) butuh kegagalan yang terbaca, bukan
+      // kotak merah yang tetap "bergerak" di bingkai contoh.
+      if (item.periksa) throw new Error(`Props tidak sesuai skema:\n${pesan}`);
       return <KotakGalat pesan={`${kunci}\n${pesan}`} />;
     }
     return <Lapisan item={item}><Komponen {...hasil.data} /></Lapisan>;

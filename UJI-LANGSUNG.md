@@ -492,6 +492,52 @@ di menu). Hasil angka tiap tes ditulis juga di JOB-4.md bagian 24.
   - Diharapkan: hasilnya sama keras dengan video YouTube lain (-14 LUFS);
     gambarnya tidak berubah.
 
+### Tambahan 5 November 2026: Montase Tahap 4, animasi buatan AI (JOB-4)
+
+- [ ] **84. Project Claude.ai (sekali saja).** Montase → Bahan → **Animasi** →
+  Buat dengan AI → **Claude.ai (salin-tempel)** → **Unduh paket Project Claude**.
+  Di claude.ai buat Project "OmniClip Montase", tempel bagian 1 berkas itu ke
+  *Project instructions*, unggah berkasnya ke *Project knowledge*.
+  - Diharapkan: berkas `omniclip-montase-claude-v1.md` terunduh; tautannya
+    menulis "(v1)".
+- [ ] **85. Sepuluh permintaan lewat Claude.ai sungguhan.** Untuk tiap
+  permintaan di JOB-4 bagian 25: ketik permintaannya, **Salin permintaan**,
+  tempel di chat BARU dalam Project itu, salin SELURUH balasan Claude, tempel
+  di "Balasan Claude", **Periksa balasan**.
+  - Diharapkan: paling sedikit 8 dari 10 lolos pada percobaan pertama, dengan
+    lima gambar kecil yang cocok dengan permintaannya. Yang gagal punya daftar
+    masalah yang bisa dimengerti; **Salin pesan perbaikan untuk Claude**,
+    tempel di chat yang sama, dan balasan berikutnya lolos. Catat jumlah yang
+    lolos di percobaan pertama di bagian 25.
+- [ ] **86. Koreksi tanpa kode.** Tambahkan satu animasi yang lolos ke
+  linimasa, pilih itemnya.
+  - Diharapkan: panel kanan berisi kontrol sesuai animasinya (teks, penggeser,
+    warna, pilihan); mengubahnya langsung terlihat di pratinjau. Animasi yang
+    punya "Posisi" menampilkan titik kuning di pratinjau yang bisa diseret.
+    Nama di linimasa = nama animasinya. Ctrl+Z membatalkan perubahan props.
+- [ ] **87. Revisi dan versi.** Di kartu hasil ketik revisi ("warna merah,
+  lebih cepat"), **Salin revisi**, tempel di chat yang sama, tempel balasannya.
+  - Diharapkan: kartu menampilkan v2; pilihan versi bisa kembali ke v1; item
+    yang sudah di linimasa tetap memakai versinya sendiri.
+- [ ] **88. Pustaka.** Beri nama, **Simpan ke pustaka**, lalu buka proyek lain.
+  - Diharapkan: animasi muncul di "Pustaka saya", bisa dicari, dan tombol +
+    menaruhnya di garis putar. Animasi yang tidak lolos tidak punya tombol
+    simpan.
+- [ ] **89. Sesuaikan dengan video.** Pilih klip berbicara (sudah ada
+  subtitlenya), centang "Sesuaikan dengan video", minta "teks besar untuk
+  kalimat paling lucu", lanjutkan seperti tes 85.
+  - Diharapkan: permintaan yang disalin memuat kata-kata klip itu; animasi
+    diletakkan di dekat momennya (paling jauh 2 detik).
+- [ ] **90. Ekspor dengan animasi AI.** Ekspor proyek dari tes 86.
+  - Diharapkan: animasi tampil di hasil sama seperti di pratinjau; tidak ada
+    kotak merah atau bingkai kosong.
+- [ ] **91. Jalur API (hanya bila punya API key atau koneksi AI lain).**
+  Pengaturan → AI, tambahkan koneksi; di panel Animasi pilih **Koneksi AI**,
+  pilih koneksinya, **Buat animasi**.
+  - Diharapkan: kemajuan tampil ("Meminta AI menulis animasi", "Memeriksa
+    animasi", "Perbaikan ke-1"); hasilnya kartu yang sama seperti tes 85.
+    Dengan hanya AI lokal, ada peringatan bahwa model kecil jarang berhasil.
+
 ### Jalur fitur unggulan (urutan disarankan, ±30 menit)
 
 Satu video podcast pendek (10-20 menit) cukup untuk semuanya:

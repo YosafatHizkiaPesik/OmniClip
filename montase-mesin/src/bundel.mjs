@@ -24,7 +24,10 @@ import { bundle } from '@remotion/bundler';
 const AKAR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
 
-const DIPAKSA = ['react', 'react-dom', 'remotion', '@remotion/media', 'zod'];
+const DIPAKSA = [
+  'react', 'react-dom', 'remotion', '@remotion/media', 'zod', '@remotion/shapes', '@remotion/paths',
+  '@remotion/noise', '@remotion/zod-types', '@remotion/transitions',
+];
 
 function folderPaket(nama) {
   return path.dirname(require.resolve(`${nama}/package.json`));
@@ -35,6 +38,23 @@ function folderPaket(nama) {
  * (new Function); jaringan dibatasi ke asal halaman sendiri dan OmniClip di
  * 127.0.0.1 / localhost, jalur bertoken Montase saja.
  */
+/**
+ * Paket pihak ketiga (mis. simplex-noise di @remotion/noise) membawa komentar
+ * `//# sourceMappingURL=...` ke dalam bundel, padahal peta sumbernya tidak ikut
+ * (devtool: false). Saat ada galat, Remotion mencoba membaca peta itu untuk
+ * menerjemahkan jejak tumpukan, gagal dengan ENOENT, dan galat ASLINYA
+ * hilang. Komentar itu dibuang.
+ */
+export function buangPetaSumber(folder) {
+  for (const nama of fs.readdirSync(folder)) {
+    if (!nama.endsWith('.js')) continue;
+    const berkas = path.join(folder, nama);
+    const isi = fs.readFileSync(berkas, 'utf8');
+    const bersih = isi.replace(/\/\/# sourceMappingURL=[^\s"'`]+/g, '');
+    if (bersih !== isi) fs.writeFileSync(berkas, bersih);
+  }
+}
+
 export function sisipkanCsp(folder) {
   const berkas = path.join(folder, 'index.html');
   const html = fs.readFileSync(berkas, 'utf8');
@@ -71,6 +91,7 @@ async function utama() {
     }),
   });
   sisipkanCsp(hasil);
+  buangPetaSumber(hasil);
   console.log(JSON.stringify({ bundel: hasil, detik: (Date.now() - mulai) / 1000 }));
 }
 

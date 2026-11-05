@@ -160,3 +160,114 @@ def hapus_bahan(profil_id: int, bahan_id: str) -> bool:
         cur = c.execute("DELETE FROM montase_bahan WHERE id = ? AND profil_id = ?",
                         (bahan_id, profil_id))
     return cur.rowcount > 0
+
+
+# --- komponen animasi (Tahap 4) ------------------------------------------------
+#
+# Satu baris = satu VERSI komponen. Revisi lewat chat menambah versi, tidak
+# menimpa (JOB-4 M4.6), jadi pemilik bisa kembali ke versi mana pun dan
+# proyek lama yang merujuk `id@versi` tetap tergambar sama.
+
+_KOLOM_KOMPONEN = ("id", "versi", "nama", "asal", "sumber_tsx", "hasil_js", "skema_json",
+                   "contoh_props", "durasi_bawaan", "permintaan", "status", "catatan",
+                   "disimpan", "created_at")
+
+
+def _baris_komponen(row, *, dengan_kode: bool = False) -> dict:
+    d = {k: row[k] for k in _KOLOM_KOMPONEN}
+    d["disimpan"] = bool(d["disimpan"])
+    for k in ("contoh_props", "catatan"):
+        try:
+            d[k] = json.loads(d[k]) if d[k] else None
+        except ValueError:
+            pass
+    if not dengan_kode:
+        d.pop("hasil_js", None)
+    return d
+
+
+def catat_komponen(profil_id: int, data: dict[str, Any]) -> dict:
+    """Menambah versi baru (id baru bila `data['id']` kosong)."""
+    kid = data.get("id") or id_baru("km")
+    with tx() as c:
+        versi = (c.execute("SELECT MAX(versi) FROM montase_komponen WHERE id = ? AND profil_id = ?",
+                           (kid, profil_id)).fetchone()[0] or 0) + 1
+        c.execute(
+            """INSERT INTO montase_komponen (id, versi, profil_id, nama, asal, sumber_tsx, hasil_js,
+                 skema_json, contoh_props, durasi_bawaan, permintaan, status, catatan, disimpan,
+                 created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)""",
+            (kid, versi, profil_id, (data.get("nama") or "Animasi")[:80], data.get("asal", "ai"),
+             data["sumber_tsx"], data.get("hasil_js"), data.get("skema_json"),
+             json.dumps(data.get("contoh_props") or {}, ensure_ascii=False),
+             data.get("durasi_bawaan"), (data.get("permintaan") or "")[:2000],
+             data.get("status", "draf"), json.dumps(data.get("catatan") or {}, ensure_ascii=False),
+             now()))
+    return ambil_komponen(profil_id, kid, versi)
+
+
+def ambil_komponen(profil_id: int, komponen_id: str, versi: Optional[int] = None, *,
+                   dengan_kode: bool = False) -> Optional[dict]:
+    c = get_conn()
+    if versi is None:
+        row = c.execute("SELECT * FROM montase_komponen WHERE id = ? AND profil_id = ? "
+                        "ORDER BY versi DESC LIMIT 1", (komponen_id, profil_id)).fetchone()
+    else:
+        row = c.execute("SELECT * FROM montase_komponen WHERE id = ? AND versi = ? AND profil_id = ?",
+                        (komponen_id, versi, profil_id)).fetchone()
+    return _baris_komponen(row, dengan_kode=dengan_kode) if row else None
+
+
+def versi_komponen(profil_id: int, komponen_id: str) -> list[dict]:
+    rows = get_conn().execute("SELECT * FROM montase_komponen WHERE id = ? AND profil_id = ? "
+                              "ORDER BY versi", (komponen_id, profil_id)).fetchall()
+    return [_baris_komponen(r) for r in rows]
+
+
+def daftar_komponen(profil_id: int, *, hanya_disimpan: bool = False, cari: str = "") -> list[dict]:
+    """Versi terbaru tiap komponen; yang disimpan ke pustaka bertanda `disimpan`."""
+    rows = get_conn().execute(
+        """SELECT k.* FROM montase_komponen k
+           JOIN (SELECT id, MAX(versi) AS v FROM montase_komponen WHERE profil_id = ? GROUP BY id) m
+             ON m.id = k.id AND m.v = k.versi
+           WHERE k.profil_id = ? ORDER BY k.created_at DESC""", (profil_id, profil_id)).fetchall()
+    hasil = []
+    for r in rows:
+        d = _baris_komponen(r)
+        simpan = bool(get_conn().execute(
+            "SELECT 1 FROM montase_komponen WHERE id = ? AND profil_id = ? AND disimpan = 1",
+            (d["id"], profil_id)).fetchone())
+        d["di_pustaka"] = simpan
+        if hanya_disimpan and not simpan:
+            continue
+        if cari and cari.lower() not in f"{d['nama']} {d['permintaan']}".lower():
+            continue
+        hasil.append(d)
+    return hasil
+
+
+def tandai_simpan(profil_id: int, komponen_id: str, versi: int, nama: str) -> bool:
+    with tx() as c:
+        cur = c.execute("UPDATE montase_komponen SET disimpan = 1, nama = ? WHERE id = ? AND versi = ? "
+                        "AND profil_id = ? AND status = 'lolos'", (nama[:80], komponen_id, versi, profil_id))
+    return cur.rowcount > 0
+
+
+def hapus_dari_pustaka(profil_id: int, komponen_id: str) -> bool:
+    with tx() as c:
+        cur = c.execute("UPDATE montase_komponen SET disimpan = 0 WHERE id = ? AND profil_id = ?",
+                        (komponen_id, profil_id))
+    return cur.rowcount > 0
+
+
+def perbarui_komponen(profil_id: int, komponen_id: str, versi: int, **kolom) -> None:
+    izin = {"status", "hasil_js", "catatan", "nama", "skema_json"}
+    pasang = {k: v for k, v in kolom.items() if k in izin}
+    if "catatan" in pasang:
+        pasang["catatan"] = json.dumps(pasang["catatan"] or {}, ensure_ascii=False)
+    if not pasang:
+        return
+    with tx() as c:
+        c.execute(f"UPDATE montase_komponen SET {', '.join(f'{k} = ?' for k in pasang)} "
+                  "WHERE id = ? AND versi = ? AND profil_id = ?",
+                  (*pasang.values(), komponen_id, versi, profil_id))

@@ -72,7 +72,15 @@ def daftar_gaya() -> list[dict]:
 
 
 def font_dipakai(dokumen: dict) -> list[str]:
-    """Keluarga font yang dipakai item teks dokumen ini (untuk `sumber.font`)."""
+    """
+    Keluarga font untuk `sumber.font`: yang dipakai item teks, ditambah SEMUA
+    font bawaan bila ada animasi buatan AI (kontrak bagian 21 mengizinkannya
+    memakai font bawaan mana pun, dan kodenya tidak bisa dibaca dari sini).
+    """
+    ada_ai = any(i.get("jenis") == "motion" and not str(i.get("komponen", "")).startswith("ko_")
+                 for l in dokumen.get("lajur", []) for i in l.get("item", []))
+    if ada_ai:
+        return [f["keluarga"] for f in font_bawaan() if jalur_font(f["keluarga"])]
     hasil = []
     for lajur in dokumen.get("lajur", []):
         for item in lajur.get("item", []):

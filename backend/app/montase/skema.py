@@ -186,6 +186,9 @@ class Item(_Dasar):
     props: dict[str, Any] = Field(default_factory=dict)
     asal: Literal["tangan", "ai"] = "tangan"
     alasan: Optional[str] = Field(None, max_length=500)
+    # Nama tampilan animasi AI di linimasa; id komponen (km_...) tidak berarti
+    # apa-apa bagi orang.
+    nama: Optional[str] = Field(None, max_length=80)
 
     @field_validator("id")
     @classmethod

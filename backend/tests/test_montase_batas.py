@@ -14,6 +14,10 @@ AKAR = Path(__file__).resolve().parents[2]
 BACKEND_MONTASE = AKAR / "backend" / "app" / "montase"
 FRONTEND_MONTASE = AKAR / "frontend" / "src" / "features" / "montase"
 
+# Paket tambahan untuk komponen animasi AI (JOB-4 bagian 21).
+TAMBAHAN_AI = {"@remotion/shapes", "@remotion/paths", "@remotion/noise", "@remotion/zod-types",
+               "@remotion/transitions"}
+
 DILARANG_PY = (
     "services.pipeline", "services.render", "services.sutradara", "services.sutradara_ai",
     "routers.clips", "routers.projects", "services import pipeline", "services import render",
@@ -44,7 +48,7 @@ class BatasFrontend(unittest.TestCase):
         Mesin membundel komposisi dengan alias ke node_modules miliknya, dan
         hanya paket-paket ini yang dipaksa ke sana (montase-mesin/src/bundel.mjs).
         """
-        boleh = {"react", "react/jsx-runtime", "remotion", "@remotion/media", "zod"}
+        boleh = {"react", "react/jsx-runtime", "remotion", "@remotion/media", "zod", *TAMBAHAN_AI}
         komposisi = FRONTEND_MONTASE / "komposisi"
         for berkas in komposisi.rglob("*.js*"):
             if ".test." in berkas.name:
@@ -61,7 +65,17 @@ class BatasFrontend(unittest.TestCase):
         teks = (AKAR / "montase-mesin" / "src" / "bundel.mjs").read_text(encoding="utf-8")
         cocok = re.search(r"const DIPAKSA = \[([^\]]+)\]", teks)
         dipaksa = set(re.findall(r"'([^']+)'", cocok.group(1)))
-        self.assertEqual(dipaksa, {"react", "react-dom", "remotion", "@remotion/media", "zod"})
+        self.assertEqual(dipaksa, {"react", "react-dom", "remotion", "@remotion/media", "zod", *TAMBAHAN_AI})
+
+    def test_impor_komponen_ai_sama_di_peramban_dan_mesin(self):
+        """Yang lolos pemeriksa mesin harus bisa dimuat pratinjau, dan sebaliknya."""
+        mesin = (AKAR / "montase-mesin" / "src" / "kompilasi.mjs").read_text(encoding="utf-8")
+        cocok = re.search(r"IMPOR_DIIZINKAN = new Set\(\[([^\]]+)\]", mesin)
+        di_mesin = set(re.findall(r"'([^']+)'", cocok.group(1)))
+        peramban = (FRONTEND_MONTASE / "komposisi" / "muatKomponen.js").read_text(encoding="utf-8")
+        blok = re.search(r"MODUL_DIIZINKAN = Object.freeze\(\{(.+?)\}\)", peramban, re.S).group(1)
+        di_peramban = set(re.findall(r"'([^']+)'\s*:", blok))
+        self.assertEqual(di_mesin, di_peramban)
 
 
 class VersiRemotionSama(unittest.TestCase):

@@ -32,7 +32,10 @@ import { jalankan, tulis } from './alat.mjs';
 export const BATAS_KARAKTER = 30000;
 
 /** Sama dengan MODUL_DIIZINKAN di frontend/src/features/montase/komposisi/muatKomponen.js. */
-export const IMPOR_DIIZINKAN = new Set(['react', 'react/jsx-runtime', 'remotion', 'zod']);
+export const IMPOR_DIIZINKAN = new Set([
+  'react', 'react/jsx-runtime', 'remotion', 'zod', '@remotion/shapes', '@remotion/paths',
+  '@remotion/noise', '@remotion/zod-types', '@remotion/transitions',
+]);
 
 /**
  * Nama global yang boleh dipakai. Semua yang lain ditolak, termasuk `window`,
@@ -54,6 +57,11 @@ const ANGGOTA_DILARANG = new Set([
 ]);
 
 const EKSPOR_KONTRAK = ['skema', 'contohProps', 'durasiBawaan', 'kategori'];
+
+/** Alamat jaringan di teks (http, https, //, ws): bahan masuk lewat props, bukan URL luar. */
+const URL_LUAR = /(^|[\s("'=])(https?:|wss?:|\/\/[a-z0-9])/i;
+/** Kunci gaya yang menjalankan gerak menurut jam peramban. */
+const GAYA_DILARANG = /^(animation|transition)([A-Z].*)?$|^(webkit|Webkit)(Animation|Transition)/;
 
 function jelajah(simpul, kunjungi) {
   if (!simpul || typeof simpul.type !== 'string') return;
@@ -130,10 +138,29 @@ export function periksaModul(kodeEsm) {
         break;
       }
       case 'Literal':
-        if (typeof s.value === 'string' && ANGGOTA_DILARANG.has(s.value)) {
-          masalah.push(`Baris ${baris(s)}: teks "${s.value}" tidak diizinkan.`);
+      case 'TemplateElement': {
+        const teks = s.type === 'Literal' ? s.value : s.value?.cooked;
+        if (typeof teks !== 'string') break;
+        if (s.type === 'Literal' && ANGGOTA_DILARANG.has(teks)) {
+          masalah.push(`Baris ${baris(s)}: teks "${teks}" tidak diizinkan.`);
+        }
+        if (URL_LUAR.test(teks)) {
+          masalah.push(`Baris ${baris(s)}: alamat luar tidak diizinkan; gambar dan berkas masuk lewat props.`);
+        }
+        if (/@keyframes/i.test(teks)) {
+          masalah.push(`Baris ${baris(s)}: animasi CSS (@keyframes) tidak tertangkap saat render. Pakai useCurrentFrame().`);
         }
         break;
+      }
+      case 'Property': {
+        // style={{ animation: ..., transition: ... }}: gerak CSS berjalan
+        // menurut jam peramban, bukan bingkai, jadi render tidak menangkapnya.
+        const kunci = s.key?.type === 'Identifier' ? s.key.name : s.key?.value;
+        if (typeof kunci === 'string' && GAYA_DILARANG.test(kunci)) {
+          masalah.push(`Baris ${baris(s)}: gaya "${kunci}" (animasi/transisi CSS) tidak tertangkap saat render. Pakai useCurrentFrame().`);
+        }
+        break;
+      }
       default:
     }
   });

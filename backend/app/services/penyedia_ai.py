@@ -209,7 +209,8 @@ def tanya(bahan: list[dict], *, schema, sistem: str, api_key: str,
           kabar: Optional[Callable[[str], None]] = None,
           batal: Optional[Callable[[], None]] = None,
           batas_detik: float = BATAS_TOTAL_DETIK,
-          cadangan: Optional[Callable[[], list[dict]]] = None) -> tuple[dict, str, dict]:
+          cadangan: Optional[Callable[[], list[dict]]] = None,
+          utamakan: Optional[str] = None) -> tuple[dict, str, dict]:
     """
     Koneksi AI dicoba sesuai urutan di Pengaturan (services/koneksi_ai.py).
     (data, model, pakai).
@@ -227,6 +228,10 @@ def tanya(bahan: list[dict], *, schema, sistem: str, api_key: str,
 
     rincian: list[str] = []
     daftar = koneksi_ai.rantai()
+    # `utamakan`: id koneksi yang dicoba lebih dulu (mis. setelan "AI untuk
+    # Montase"); sisanya tetap menjadi cadangan sesuai urutan Pengaturan.
+    if utamakan:
+        daftar = sorted(daftar, key=lambda k: k["id"] != utamakan)
     if api_key and not any(k.get("kunci") == api_key for k in daftar):
         daftar = [{"id": "-", "nama": "Gemini", "penyedia": "gemini", "kunci": api_key,
                    "model": ""}] + daftar

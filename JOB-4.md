@@ -96,14 +96,14 @@ Tiga kemampuan besar, dibangun berurutan:
 | 1 | Kerangka: menu, daftar proyek, media, pratinjau, ekspor | ✅ Selesai 3 Nov 2026 | 10/10 |
 | 2 | Penyuntingan dasar: linimasa sungguhan | ✅ Selesai 3 Nov 2026 | 8/8 |
 | 3 | Teks, suara, efek, transisi, keyframe | ✅ Selesai 3 Nov 2026 | 10/10 |
-| 4 | AI pembuat animasi | ⬜ Belum mulai | 0/10 |
+| 4 | AI pembuat animasi | ✅ Selesai 5 Nov 2026 | 10/10 |
 | 5 | Asisten penyunting AI | ⬜ Belum mulai | 0/6 |
 | 6 | Rapikan dan rilis | ⬜ Belum mulai | 0/8 |
 | ✱ | Suara AI baru (ElevenLabs dan lainnya), kapan saja | ⬜ Menunggu pilihan pemilik | 0/3 |
 
 Tanda status: ⬜ belum mulai · 🟨 sedang dikerjakan · ✅ selesai · ⛔ tertahan (tulis alasannya).
 
-**Tugas berikutnya:** `M4.1`.
+**Tugas berikutnya:** `M5.1`.
 
 ## 3. Keputusan
 
@@ -554,9 +554,10 @@ Anda mengoreksi lewat panel properti, atau minta revisi lewat chat
 Yang disukai disimpan ke pustaka animasi, bisa dipakai di proyek lain
 ```
 
-- [ ] **M4.1** Kontrak komponen ditulis sebagai kode dan dokumentasi
+- [x] **M4.1** Kontrak komponen ditulis sebagai kode dan dokumentasi
   ([bagian 21](#21-kontrak-komponen-animasi-ai)).
-- [ ] **M4.2** Pustaka bawaan berisi 10 animasi yang ditulis tangan. Gunanya
+  (selesai 5 Nov 2026, commit d5042d3) Kontrak = `backend/app/montase/kontrak_komponen.md` (bernomor versi `VERSI_KONTRAK`, sekarang 1) yang dipakai prompt API dan paket Claude.ai, ditambah pemeriksa statis di `montase-mesin/src/kompilasi.mjs`. Daftar impor diizinkan ada di dua tempat (`kompilasi.mjs` `IMPOR_DIIZINKAN` dan `muatKomponen.js` `MODUL_DIIZINKAN`) dan `test_montase_batas.py` menjaga keduanya sama. Tambahan di luar tabel bagian 21: string berisi URL luar, `@keyframes`, dan properti gaya `animation*`/`transition*` juga ditolak.
+- [x] **M4.2** Pustaka bawaan berisi 10 animasi yang ditulis tangan. Gunanya
   dua: siap dipakai, dan menjadi contoh bagi AI. Ditulis saat pengembangan dan
   ikut di dalam aplikasi, jadi memakainya tidak butuh koneksi AI sama sekali.
 
@@ -573,7 +574,9 @@ Yang disukai disimpan ke pustaka animasi, bisa dipakai di proyek lain
   | Angka menghitung naik | Statistik |
   | Transisi kilat | Antarmomen |
 
-- [ ] **M4.3** `montase/motion_ai.py`: prompt sistem = panduan resmi Remotion
+  (selesai 5 Nov 2026, commit d5042d3) Sebelas dengan bilah progres dari M3.8, di `komposisi/motion/` (indeks `BAWAAN`). Paket `@remotion/shapes`, `paths`, `noise`, `zod-types`, dan `transitions` dipatok 4.0.537 di frontend dan mesin. Empat di antaranya (hitung mundur, label nama, lingkaran + panah, angka naik) ikut sebagai contoh di prompt dan paket Claude; di aplikasi terbungkus contohnya dibaca dari `montase_contoh/` (omniclip.spec).
+
+- [x] **M4.3** `montase/motion_ai.py`: prompt sistem = panduan resmi Remotion
   untuk LLM + kontrak kita + contoh dari pustaka bawaan + konteks proyek (ukuran
   kanvas, durasi, palet, font tersedia, zona aman). Keluarannya satu blok kode
   dan satu blok JSON metadata. Model dipilih dari rantai `koneksi_ai` dengan
@@ -593,7 +596,9 @@ Yang disukai disimpan ke pustaka animasi, bisa dipakai di proyek lain
   Angka sebenarnya diukur di M4.9 dan ditulis di sana. Prompt sistem yang
   panjang dan tetap (panduan Remotion, kontrak, contoh) diletakkan di depan
   supaya bisa di-cache.
-- [ ] **M4.4** `montase/periksa.py` beserta perintah `periksa` di mesin:
+
+  (selesai 5 Nov 2026, commit 32d0aad) Prompt sistem = kontrak + font + zona aman + contoh, ±14 ribu karakter (±4-5 ribu token), diletakkan di depan; pesan per permintaan hanya ±200 karakter plus lembar fakta. Paling banyak 3 percobaan (`PERCOBAAN`), galat pemeriksa dikirim balik apa adanya. Setelan "AI untuk Montase" (`montase.ai_koneksi`) menaruh koneksi pilihan di depan rantai lewat `penyedia_ai.tanya(..., utamakan=)`; pemakaian tercatat dengan nama pekerjaan `montase_animasi`. **Menyimpang dari rencana:** panduan resmi Remotion untuk LLM TIDAK disertakan; halaman itu tidak terbaca dari container (proxy), dan isinya berganti tiap versi. Kontrak kita menulis sendiri aturan yang sama (gerak dari `useCurrentFrame`, `interpolate`/`spring`, tanpa CSS animasi). Biaya API sebenarnya belum bisa diukur (pemilik tidak punya API key, K-15); perkiraan di M4.9.
+- [x] **M4.4** `montase/periksa.py` beserta perintah `periksa` di mesin:
   1. kompilasi (sucrase);
   2. pemeriksaan statis: hanya impor yang diizinkan, tidak ada yang dilarang
      ([bagian 21](#21-kontrak-komponen-animasi-ai));
@@ -602,7 +607,9 @@ Yang disukai disimpan ke pustaka animasi, bisa dipakai di proyek lain
      animasinya tidak bergerak;
   5. bila koneksi AI bisa melihat gambar: bingkai contoh dinilai terhadap
      permintaannya.
-- [ ] **M4.5** Panel properti otomatis dari skema zod:
+
+  (selesai 5 Nov 2026, commit 32d0aad; diperbaiki di 1907199) Satu Chrome untuk lima bingkai: satu pemeriksaan ±4-5 detik. Bingkai di 5/25/50/75/95% durasi. "Diam" = paling banyak 4 piksel berubah (selisih > 16) antara bingkai berurutan di gambar abu-abu 90x160; "kosong" = semua bingkai satu warna DAN tidak berubah. Ambang ini hasil M4.9: aturan lama (10-90%, rata-rata selisih di 36x64) menolak tiga animasi yang sah. Satu bingkai lebih dari 5 detik = gagal. Langkah 5 hanya peringatan (penilai AI bisa salah). Gambar bingkai disimpan (JPEG 480p) dan tampil di kartu hasil.
+- [x] **M4.5** Panel properti otomatis dari skema zod:
 
   | Tipe skema | Kontrol |
   |---|---|
@@ -613,10 +620,13 @@ Yang disukai disimpan ke pustaka animasi, bisa dipakai di proyek lain
   | `z.boolean()` | Sakelar |
   | `z.object({x, y})` bertanda posisi | Titik yang bisa diseret di pratinjau |
 
-- [ ] **M4.6** Revisi lewat chat: AI menerima kode yang sekarang + perintah, lalu
+  (selesai 5 Nov 2026, commit 32d0aad) Skema dibaca dengan `z.toJSONSchema` (zod 4). Untuk animasi AI pembacaannya terjadi DI DALAM iframe (pesan `skema?`), karena kodenya tidak dipercaya; induk hanya menerima JSON Schema. `zColor` dikenali dari deskripsi `__remotion-color`, posisi dari `.describe("posisi")` (persen 0-100). Selain tabel: `zTextarea` jadi kotak teks panjang, angka tanpa batas jadi kotak angka.
+
+- [x] **M4.6** Revisi lewat chat: AI menerima kode yang sekarang + perintah, lalu
   menghasilkan versi baru (`komponen@versi+1`). Riwayat versi tersimpan, dan
   bisa kembali ke versi mana pun.
-- [ ] **M4.7** Animasi yang **pas dengan video**. Kalau sebuah rentang atau item
+  (selesai 5 Nov 2026, commit 32d0aad) Revisi = versi baru dengan id yang sama (`komponen_id`); kartu hasil punya pilihan versi, dan item di linimasa menyimpan `versi`-nya sendiri, jadi versi lama tetap bisa dipakai. Di mode Claude.ai, tombol revisi menyalin pesan berisi kode sekarang + perintah.
+- [x] **M4.7** Animasi yang **pas dengan video**. Kalau sebuah rentang atau item
   dipilih, AI menerima lembar fakta rentang itu:
   - kata-kata yang diucapkan beserta waktunya;
   - momen tawa, sorak, teriak, dan lonjakan suara (`momen.py`,
@@ -627,11 +637,15 @@ Yang disukai disimpan ke pustaka animasi, bisa dipakai di proyek lain
   Animasi diletakkan di waktu bukti terdekat (paling jauh ±2 detik, seperti
   `TEMPEL_DETIK` di `sutradara_ai.py`). Posisi yang mengikuti wajah dikirim
   sebagai keyframe properti, bukan dikarang AI.
-- [ ] **M4.8** Pustaka animasi per profil: simpan, beri nama, cari, dan pakai di
+
+  (selesai 5 Nov 2026, commit 32d0aad) `motion_ai.lembar_fakta`: kata dari lajur subtitle atau `kata.json` bahan, momen dari `momen.cari_momen`, warna dominan dari ffmpeg, zona aman dari kanvas. `taruh_di` dari AI ditempel ke bukti terdekat (±2 detik, `TEMPEL_DETIK`). **Menyimpang:** letak wajah belum masuk lembar fakta, jadi belum ada keyframe posisi yang mengikuti wajah; posisi diatur lewat titik di pratinjau. Dicatat untuk Tahap 6 bila dibutuhkan.
+- [x] **M4.8** Pustaka animasi per profil: simpan, beri nama, cari, dan pakai di
   proyek lain. Animasi AI yang belum lolos pemeriksaan tidak bisa disimpan.
-- [ ] **M4.9** Uji 10 permintaan dari [bagian 25](#25-daftar-uji-permintaan-animasi),
+  (selesai 5 Nov 2026, commit 32d0aad) Tabel `montase_komponen` (per profil, per versi). Kode hanya disajikan untuk versi `lolos`. Item di linimasa diberi nama animasinya (1907199).
+- [x] **M4.9** Uji 10 permintaan dari [bagian 25](#25-daftar-uji-permintaan-animasi),
   hasilnya dicatat di sana, termasuk biaya API sebenarnya.
-- [ ] **M4.10** Mode salin-tempel lewat **Project Claude.ai**, untuk memakai
+  (selesai 5 Nov 2026, commit 1907199) 10/10 lolos lewat jalur salin-tempel, sesudah pemeriksa diperbaiki (percobaan pertama 7/10, ketiga yang gagal ternyata salah pemeriksa). Lihat bagian 25 untuk catatan jujurnya: balasannya ditulis di sesi pengembangan dengan kontrak yang sama, bukan dari chat Claude.ai pemilik.
+- [x] **M4.10** Mode salin-tempel lewat **Project Claude.ai**, untuk memakai
   langganan Claude Pro (atau chat AI lain) tanpa API key (K-13, K-15).
 
   **Persiapan sekali saja:**
@@ -661,8 +675,16 @@ Yang disukai disimpan ke pustaka animasi, bisa dipakai di proyek lain
   langganan. Format permintaan dan balasan sama dengan jalur API (M4.3), jadi
   pemeriksa, panel properti, dan pustaka tidak tahu jalur mana yang dipakai.
 
+  (selesai 5 Nov 2026, commit 32d0aad dan d916a44) `GET /komponen/paket-claude` memberi `omniclip-montase-claude-v1.md` (±15 KB). Pengurai balasan menerima teks pembuka/penutup di sekitar blok kode. Versi paket yang terakhir diunduh diingat peramban; bila kontrak naik versi, panel menampilkan peringatan untuk mengganti berkas di Project knowledge. Langkah "layar bergambar" berupa daftar langkah bernomor di panel, belum bergambar.
+
 **Selesai bila:** paling sedikit 8 dari 10 permintaan uji lolos pemeriksaan
 tanpa campur tangan, dan semuanya bisa dikoreksi lewat panel properti.
+
+**Gerbang Tahap 4 (5 Nov 2026):** 10/10 lolos (bagian 25). Uji antarmuka
+Playwright: salin permintaan, tempel balasan no. 6, lolos dalam 4,4-5,4 detik
+dengan lima gambar, simpan ke pustaka, tambah ke linimasa, ubah jari dan warna
+dari panel, seret titik posisi ke (40, 55), ekspor. Bingkai 50 pratinjau lawan
+ekspor: SSIM 0,94 (selisihnya pegangan dan titik yang hanya ada di pratinjau).
 
 ---
 
@@ -940,18 +962,23 @@ Semua di bawah `/api/montase`, membawa profil aktif lewat header
 | GET | `/token` | Token `bahan:<profil>` (6 jam) untuk iframe dan `<img>` |
 | GET | `/t/{token}/bahan/{id}` | Berkas asli (render) atau salinan sunting (`?sunting=1`). Tanpa sesi. |
 | GET | `/t/{token}/bahan/{id}/{sampul,strip,gelombang}` | Turunan bahan. Lewat token karena `<img>` tidak membawa header profil. |
-| GET, POST | `/setelan` | Sakelar "Montase (beta)" (`{aktif}`) |
+| GET, POST | `/setelan` | Sakelar "Montase (beta)" (`{aktif}`), "AI untuk Montase" (`{ai_koneksi}`), daftar koneksi, `versi_paket` |
 | POST | `/proyek/{id}/subtitle` | Subtitle otomatis (pekerjaan `montase_subtitle`), menjawab potongan untuk dipasang editor (M3.2) |
 | GET | `/suara` | Katalog suara narasi (`tts.py`) dan kesiapannya (M3.3) |
 | POST | `/rekam` | Rekaman mikrofon (WebM) -> M4A -> bahan `rekam` (M3.3) |
 | GET | `/gaya-teks` | Tema teks dari `tema_judul.py` dalam bentuk `item.gaya`, dan daftar font bawaan (M3.1) |
 | GET | `/t/{token}/font/{keluarga}` | Berkas font bawaan untuk iframe dan mesin render |
 | POST | `/narasi` | `{teks, suara, kecepatan}`: hasil TTS menjadi bahan audio `tts`, narasi yang sama dipakai ulang |
-| GET | `/komponen` | Pustaka animasi (bawaan + tersimpan) |
-| GET | `/komponen/{id}/{versi}.js` | Hasil kompilasi, untuk iframe dan mesin. Menerima token. |
-| POST | `/motion/buat` | `{permintaan, proyek_id, rentang?}`: pekerjaan AI, menjawab `job_id` |
-| POST | `/motion/{id}/revisi` | `{perintah}`: versi baru |
-| POST | `/motion/{id}/simpan` | Masukkan ke pustaka |
+| GET | `/komponen?pustaka=&cari=` | Versi terakhir tiap animasi AI profil ini (bawaan ada di frontend) |
+| GET | `/komponen/{id}` | Semua versi satu animasi |
+| POST | `/komponen/buat` | `{permintaan, proyek_id, rentang?, durasi?, komponen_id?}`: pekerjaan `montase_motion` lewat koneksi AI; `komponen_id` = revisi |
+| POST | `/komponen/tempel` | `{balasan, permintaan, ...}`: balasan Claude.ai diperiksa (pekerjaan yang sama) |
+| POST | `/komponen/permintaan-claude` | Pesan siap salin untuk chat Project Claude.ai |
+| GET | `/komponen/paket-claude` | Berkas `.md` untuk Project knowledge |
+| POST | `/komponen/{id}/{versi}/simpan` | `{nama}`: masukkan ke pustaka (hanya versi lolos) |
+| DELETE | `/komponen/{id}/pustaka` | Keluarkan dari pustaka |
+| GET | `/t/{token}/komponen/{id}/{versi}/kode.js` | Hasil kompilasi untuk iframe dan mesin (hanya versi lolos) |
+| GET | `/t/{token}/komponen/{id}/{versi}/gambar/{n}` | Bingkai contoh hasil pemeriksaan |
 | POST | `/asisten` | `{perintah, proyek_id}`: menjawab daftar operasi usulan |
 | GET | `/mesin` | Status mesin: terpasang, versi, ukuran |
 | POST | `/mesin/siapkan` | Mulai mengunduh mesin |
@@ -959,8 +986,8 @@ Semua di bawah `/api/montase`, membawa profil aktif lewat header
 Kemajuan pekerjaan (render, AI, unduh mesin) memakai saluran peristiwa yang
 sudah ada (`events.py`, `JobProgress`), bukan saluran baru.
 
-Status 3 Nov 2026: semua baris di atas sudah ada **kecuali** `/komponen*` dan
-`/motion/*` (Tahap 4), dan `/asisten` (Tahap 5). `/narasi` menerima juga
+Status 5 Nov 2026: semua baris di atas sudah ada **kecuali** `/asisten`
+(Tahap 5). Rute `/motion/*` di rencana awal jadi `/komponen/*`. `/narasi` menerima juga
 `kecepatan` (tempo 0,6-1,6).
 
 ## 19. Mesin Montase
@@ -1102,6 +1129,10 @@ export default function HitungMundur({ angka, judul, warna }: z.infer<typeof ske
 | `window.parent`, `window.top`, `postMessage`, `document.domain` | Tidak boleh keluar dari kotak pasir |
 | Gambar/font/berkas dari URL luar | Bahan masuk lewat props (URL bertoken dari OmniClip) |
 
+Juga ditolak: string berisi alamat `http(s):`, `ws(s):`, atau `//host`;
+`@keyframes`; properti gaya `animation*` dan `transition*`. Ekspor wajib:
+`skema` dan `contohProps`, dan `contohProps` harus lolos `skema`.
+
 **Batas ukuran:** sumber paling panjang 30 KB. Satu bingkai contoh harus selesai
 dirender dalam 5 detik.
 
@@ -1109,6 +1140,7 @@ dirender dalam 5 detik.
 Remotion Code using LLMs" (remotion.dev/docs/ai/generate). Dokumentasi Remotion
 bisa dibaca sebagai markdown dengan menambahkan `.md` di ujung alamat halaman.
 Dibaca ulang saat M4.3 dikerjakan, karena isinya ikut berubah setiap versi.
+(5 Nov 2026: tidak terbaca dari container; lihat catatan M4.3.)
 
 ## 22. Hasil ekspor dan Klip jadi
 
@@ -1194,6 +1226,8 @@ detik). Kolom **Pemilik** = komputer pemilik (tes 60-63 di UJI-LANGSUNG.md).
 | Tahap 3: ekspor = pratinjau | SSIM 0,87-0,96 | | | Sepuluh tema teks, keyframe, transisi, warna, efek, subtitle bersorot. |
 | Tahap 3: kekerasan ekspor | -14,0 LUFS (uji efek), -13,7 LUFS (Top 5 lengkap) | | | Dari -28,9 LUFS; gambar disalin tanpa dikode ulang. |
 | Tahap 3: perendam musik | -27,2 dB -> -39,3 dB saat narasi | | | Musik 220 Hz diukur dengan bandpass di ekspor. |
+| Tahap 4: satu pemeriksaan animasi | 4,4-5,4 dtk (kompilasi + 5 bingkai + nilai gerak) | | | Satu Chrome untuk kelima bingkai. |
+| Tahap 4: animasi AI, ekspor = pratinjau | SSIM 0,94 | | | Lingkaran + panah sesudah props diubah dan titik posisi diseret. |
 
 ## 25. Daftar uji permintaan animasi
 
@@ -1201,16 +1235,33 @@ Dipakai di M4.9. Setiap permintaan dicoba sekali, tanpa campur tangan.
 
 | No | Permintaan | Lolos periksa? | Sesuai permintaan? | Catatan |
 |---|---|---|---|---|
-| 1 | Hitung mundur "#5" bergaya neon dengan judul "Momen paling kacau" | | | |
-| 2 | Teks "GILA!" memantul masuk lalu pecah jadi serpihan | | | |
-| 3 | Label nama "Dr. Tirta, dokter" di kiri bawah, masuk dari kiri | | | |
-| 4 | Ledakan emoji 😂 di sekitar satu titik yang bisa diatur | | | |
-| 5 | Garis kejut gaya manga dari tepi ke tengah selama 1 detik | | | |
-| 6 | Lingkaran merah menggambar dirinya mengelilingi satu titik, lalu panah menunjuk | | | |
-| 7 | Kartu ajakan berlangganan, tombolnya ditekan kursor | | | |
-| 8 | Bilah peringkat 5 segmen di atas layar, segmen aktif menyala | | | |
-| 9 | Kilat putih dengan guncangan sebagai transisi | | | |
-| 10 | Angka "1.000.000 penonton" menghitung naik dari nol | | | |
+| 1 | Hitung mundur "#5" bergaya neon dengan judul "Momen paling kacau" | Ya | Ya | Cahaya neon dari `textShadow` berlapis, judul dalam pelat bergaris. |
+| 2 | Teks "GILA!" memantul masuk lalu pecah jadi serpihan | Ya | Ya | Serpihan acak lewat `random(seed)`, jadi sama setiap render. |
+| 3 | Label nama "Dr. Tirta, dokter" di kiri bawah, masuk dari kiri | Ya (dulu ditolak) | Ya | Percobaan pertama ditolak "tidak bergerak": di 10-90% durasinya label memang diam. Pemeriksa diubah, bukan balasannya. |
+| 4 | Ledakan emoji 😂 di sekitar satu titik yang bisa diatur | Ya | Ya | Titik ledak = props `posisi`, bisa diseret di pratinjau. |
+| 5 | Garis kejut gaya manga dari tepi ke tengah selama 1 detik | Ya | Ya | |
+| 6 | Lingkaran merah menggambar dirinya mengelilingi satu titik, lalu panah menunjuk | Ya (dulu ditolak) | Ya | `evolvePath`. Dulu ditolak karena garis 14 px hampir hilang di gambar banding 36x64. |
+| 7 | Kartu ajakan berlangganan, tombolnya ditekan kursor | Ya | Ya | |
+| 8 | Bilah peringkat 5 segmen di atas layar, segmen aktif menyala | Ya | Ya | |
+| 9 | Kilat putih dengan guncangan sebagai transisi | Ya (dulu ditolak) | Ya | `noise2D`. Dulu ditolak "kosong": tiap bingkai memang satu warna, tetapi kecerahannya naik turun. |
+| 10 | Angka "1.000.000 penonton" menghitung naik dari nol | Ya | Sebagian | Angka 1.000.000 baru tercapai di bingkai terakhir (kurva `Easing.out`), di 95% masih 999.023. Bisa diperbaiki lewat revisi "selesai di 80%". |
+
+**Catatan jujur (5 Nov 2026):** pemilik tidak punya API key (K-15) dan container
+tidak bisa membuka Claude.ai, jadi kesepuluh balasan ditulis di sesi
+pengembangan, dalam format yang sama persis dengan balasan Project Claude
+(blok ```tsx + ```json; teks pembuka/penutup di sekitarnya diuji terpisah di
+`test_montase_komponen.py`), memakai paket kontrak v1. Yang
+diuji di sini adalah jalurnya: pengurai balasan, pemeriksa, gambar bingkai,
+panel props, pustaka, dan ekspor. Seberapa sering Claude.ai sungguhan menulis
+kode yang lolos pada percobaan pertama diuji pemilik (UJI-LANGSUNG tes 84-85).
+Waktu per permintaan: ±5 detik (pemeriksaan), ditambah waktu menyalin.
+
+**Biaya:** jalur salin-tempel tidak memakai API, jadi tanpa biaya di luar
+langganan Claude Pro. Perkiraan jalur API dari ukuran prompt yang sebenarnya
+(±4,5 ribu token masukan, ±0,8 ribu keluaran per percobaan; paling banyak 3
+percobaan, ditambah penilaian 5 gambar): Opus 5.5 ±$0,035 per percobaan, Sonnet
+5.5 ±$0,017. Jauh di bawah perkiraan awal M4.3 karena prompt tidak memuat
+panduan Remotion. Angka sebenarnya dicatat bila ada API key.
 
 ## 26. Di luar cakupan
 

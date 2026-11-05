@@ -123,7 +123,10 @@ def ekspor(pid: int, proyek_id: str, *, kabar=None, batal=None, dasar_url: Optio
     sumber = {"bahan": {b: f"{dasar}/api/montase/t/{tkn}/bahan/{b}" for b in dokumen["bahan"]},
               "font": {f: f"{dasar}/api/montase/t/{tkn}/font/{quote(f)}"
                        for f in teks.font_dipakai(dokumen)},
-              "komponen": {}}
+              "komponen": {f"{i['komponen']}@{i.get('versi') or 1}":
+                           f"{dasar}/api/montase/t/{tkn}/komponen/{i['komponen']}/{i.get('versi') or 1}/kode.js"
+                           for l in dokumen["lajur"] for i in l["item"]
+                           if i["jenis"] == "motion" and not str(i.get("komponen", "")).startswith("ko_")}}
     sementara = STORAGE_DIR / "montase" / "render" / f"{proyek_id}.mp4"
     mulai_t = time.monotonic()
     hasil = mesin.render(dokumen, sumber, sementara, kabar=kabar, batal=batal)

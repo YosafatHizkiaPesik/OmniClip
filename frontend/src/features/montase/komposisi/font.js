@@ -58,3 +58,26 @@ export function useFont(keluarga, url) {
     return () => { hidup = false; lepas(); };
   }, [tahan, keluarga, url]);
 }
+
+/**
+ * Banyak font sekaligus untuk animasi buatan AI (kontrak bagian 21): AI boleh
+ * memakai keluarga font bawaan mana pun, jadi semua yang ada di `peta`
+ * ({keluarga: alamat}) dimuat dan render ditahan sampai semuanya siap.
+ */
+export function useFontBanyak(peta) {
+  const entri = Object.entries(peta ?? {});
+  const kunci = entri.map(([k]) => k).sort().join('|');
+  const [tahan] = useState(() => (entri.some(([k]) => !siap.has(k))
+    ? delayRender('Font animasi', { timeoutInMilliseconds: 30000 })
+    : null));
+  useEffect(() => {
+    let dilepas = false;
+    const lepas = () => {
+      if (tahan !== null && !dilepas) { dilepas = true; continueRender(tahan); }
+    };
+    Promise.all(Object.entries(peta ?? {}).map(([k, u]) => muatFont(k, u))).then(lepas, lepas);
+    return lepas;
+    // `kunci` mewakili isi `peta`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kunci, tahan]);
+}
