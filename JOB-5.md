@@ -19,10 +19,10 @@ lupa untuk selalu mencatatnya agar ... sesi lain masih bisa melanjutkannya".
 | O3 Kemiripan antar video | ✅ 8fad116 | sidik ekspor, pola trigram |
 | O4 Pembuka kuat | ✅ a1e7e6e | cek 3 detik + cuplikan |
 | O5 Rekam reaksi kamera | ✅ 9b20252 | PiP sinkron dengan pratinjau |
-| O6 Akhir menyambung | ⬜ | |
+| O6 Akhir menyambung | ✅ bacd105 | ekor mati + sambung ke awal |
 | O7 Keterangan unik + bab | ⬜ | |
 
-**Tugas berikutnya:** `O6`.
+**Tugas berikutnya:** `O7`.
 
 **Melanjutkan di sesi baru:** baca papan ini dan bagian 4. Kerjakan tugas
 berikutnya; bila ada catatan "SEBAGIAN" di bawah butirnya, lanjutkan dari
@@ -115,7 +115,8 @@ Urutan dari dampak terbesar terhadap penilaian orisinalitas.
   (selesai 5 Nov 2026, commit a1e7e6e) orisinalitas.periksaPembuka + bagian Pembuka di panel meter; montase/pembuka.py (POST /proyek/{id}/pembuka) mengusulkan geser_semua 2 dtk + klip momen terkuat + teks pengait. Momen dicari di SELURUH bahan lalu disaring: pendeteksi lonjakan butuh suara sebelum lonjakan (terukur: rentang mulai 4 dtk sebelum puncak tidak menemukan apa pun). Playwright 4/4 termasuk Ctrl+Z.
 - [x] **O5** Rekam reaksi kamera.
   (selesai 5 Nov 2026, commit 9b20252) editor/RekamReaksi.jsx (kamera + putar pratinjau bersamaan), model tambahReaksi (PiP 42% lebar kanvas tegak, kanan bawah di atas 72% tinggi), server POST /rekam-video (commit 20828c7). Lapisan reaksi dihitung penuh. Playwright dengan kamera palsu Chromium 4/4; meter 42% -> 63%.
-- [ ] **O6** Akhir menyambung.
+- [x] **O6** Akhir menyambung.
+  (selesai 5 Nov 2026, commit bacd105) model/akhir.js periksaAkhir + usulanAkhir (potong ekor tanpa gambar, sambung 1 dtk pertama di ujung); bagian Akhir video + tombol usulan di panel meter; tanpa server. Playwright 4/4 termasuk Ctrl+Z.
 - [ ] **O7** Keterangan unik dan bab.
 
 ## Sumber
