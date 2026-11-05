@@ -74,9 +74,70 @@ def _sumber_kredit(pid: int, dokumen: dict) -> list[dict]:
     return hasil
 
 
+_AWALAN_PERINGKAT = re.compile(r"^\s*(nomor|number|peringkat|rank)\s*\d+\s*[.:,!-]?\s*", re.I)
+
+
+def baris_teks(dokumen: dict) -> list[dict]:
+    """
+    Tulisan dan ucapan yang ADA di video, dalam detik: item teks (termasuk
+    subtitle), teks narasi, dan judul animasi. Masuk ke `subtitles` sidecar
+    supaya saran caption dan tagar (keterangan.py, M5.6) membaca isi videonya,
+    bukan hanya nama proyek.
+    """
+    fps = dokumen["kanvas"]["fps"]
+    hasil = []
+    for lajur in dokumen["lajur"]:
+        if lajur.get("sembunyi"):
+            continue
+        for i in lajur["item"]:
+            teks_item = ""
+            if i["jenis"] == "teks":
+                teks_item = i.get("teks") or ""
+            elif i["jenis"] == "audio":
+                # "Nomor 5." di awal narasi peringkat bukan isi videonya: tanpa
+                # dibuang, tagar lokal yang terpilih malah #nomor.
+                teks_item = _AWALAN_PERINGKAT.sub("", (i.get("narasi") or {}).get("teks") or "")
+            elif i["jenis"] == "motion":
+                props = i.get("props") or {}
+                teks_item = " ".join(str(props[k]) for k in ("judul", "teks", "nama", "label")
+                                     if isinstance(props.get(k), str) and props[k].strip())
+            teks_item = " ".join(teks_item.split())
+            if teks_item:
+                hasil.append({"start": round(i["mulai"] / fps, 2),
+                              "end": round((i["mulai"] + i["durasi"]) / fps, 2), "text": teks_item[:500]})
+    hasil.sort(key=lambda b: b["start"])
+    # Narasi peringkat biasanya mengulang judul kartunya; baris yang sama
+    # (abaikan huruf besar dan tanda baca) cukup sekali, kalau tidak caption
+    # lokal memuat kalimat yang sama dua kali.
+    sudah, unik = set(), []
+    for b in hasil:
+        kunci = re.sub(r"[^\w]+", " ", b["text"].lower()).strip()
+        if kunci and kunci not in sudah:
+            sudah.add(kunci)
+            unik.append(b)
+    return unik
+
+
+def _bersuara_sintetis(pid: int, dokumen: dict) -> bool:
+    """Ada narasi TTS di linimasa: label konten sintetis saat diunggah (JOB-2 F0-7)."""
+    for lajur in dokumen["lajur"]:
+        if lajur.get("bisu") or lajur.get("sembunyi"):
+            continue
+        for i in lajur["item"]:
+            if i["jenis"] != "audio":
+                continue
+            if i.get("narasi"):
+                return True
+            b = repo.ambil_bahan(pid, i.get("bahan") or "")
+            if b and b.get("asal") == "tts":
+                return True
+    return False
+
+
 def sidecar(dokumen: dict, *, pid: int, berkas: str, detik: float) -> dict:
     k = dokumen["kanvas"]
     ada_ai = any(i.get("asal") == "ai" for lajur in dokumen["lajur"] for i in lajur["item"])
+    baris = baris_teks(dokumen)
     return {
         "jenis": "montase",
         "montase_id": dokumen["id"],
@@ -85,9 +146,10 @@ def sidecar(dokumen: dict, *, pid: int, berkas: str, detik: float) -> dict:
         "hashtags": [],
         "duration": round(detik, 3),
         "aspect_ratio": _rasio(k["lebar"], k["tinggi"]),
-        "subtitles": [],
+        "subtitles": baris,
+        "hook_text": baris[0]["text"][:160] if baris else "",
         "sumber_banyak": _sumber_kredit(pid, dokumen),
-        "suara_sintetis": False,
+        "suara_sintetis": _bersuara_sintetis(pid, dokumen),
         "motion_ai": ada_ai,
         "created_at": time.time(),
     }

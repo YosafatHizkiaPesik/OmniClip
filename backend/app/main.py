@@ -163,6 +163,14 @@ async def lifespan(app: FastAPI):
     queue.register("montase_subtitle", montase_subtitle.run_subtitle, lane="cpu")
     from .montase import komponen as montase_komponen
     queue.register("montase_motion", montase_komponen.run_motion, lane="net")
+    # Lajur cpu: Whisper (bila transkripnya belum ada) dan pendengar momen
+    # lebih berat daripada menunggu AI.
+    from .montase import asisten_ai as montase_asisten
+    queue.register("montase_asisten", montase_asisten.run_asisten, lane="cpu")
+    from .montase import jeda as montase_jeda
+    queue.register("montase_jeda", montase_jeda.run_jeda, lane="cpu")
+    from .montase import bingkai as montase_bingkai
+    queue.register("montase_bingkai", montase_bingkai.run_bingkai, lane="cpu")
     # Lajur jaringan: sebagian besar waktunya menunggu model menonton klip, dan
     # di lajur cpu itu menahan render yang tidak ada hubungannya.
     from .services.sutradara_ai import run_sutradara

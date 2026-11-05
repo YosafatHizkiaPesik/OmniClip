@@ -20,11 +20,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
-  ArrowLeft, Check, CloudOff, Download, Loader2, MonitorSmartphone, RefreshCw,
+  ArrowLeft, Check, CloudOff, Download, Loader2, MonitorSmartphone, RefreshCw, Send,
 } from 'lucide-react';
 import { useT } from '../../lib/i18n';
 import { useJobRunner } from '../../hooks/useJob';
 import JobProgress from '../../components/JobProgress';
+import SiapkanTerbit from '../../components/SiapkanTerbit';
 import { BAWAAN } from './komposisi/index.js';
 import {
   ambilProyek, ambilToken, buatNarasi, fontDipakai, komponenDipakai, simpanProyek, sumberPratinjau,
@@ -48,6 +49,8 @@ import PanelProperti from './editor/PanelProperti.jsx';
 import Linimasa from './editor/Linimasa.jsx';
 import PeganganUbah from './editor/PeganganUbah.jsx';
 import { buatGaris } from './editor/garisPutar.js';
+import { TombolUsulan } from './editor/PanelAsisten.jsx';
+import { terapkanOperasi } from './model/usulan.js';
 
 const JEDA_SIMPAN = 1500;
 const ULANG_GAGAL = 5000;
@@ -55,6 +58,8 @@ const KUNCI_TATA = 'omniclip.montase.tata';
 const KUNCI_MAGNET = 'omniclip.montase.magnet';
 const TATA_BAWAAN = { kiri: 280, kanan: 300, bawah: 300 };
 const DETIK_BEKU = 3;
+// Selama usulan tampil, linimasa tidak menyunting: terima atau tolak dulu.
+const abaikan = () => {};
 
 // Papan klip di luar komponen: Ctrl+C di satu proyek, Ctrl+V di proyek lain.
 // Metadata bahannya ikut, jadi item tetap bisa dirender di proyek tujuan.
@@ -166,6 +171,11 @@ export default function MontaseEditor() {
   const [tata, setTata] = useState(bacaTata);
   const [bahanSiap, setBahanSiap] = useState(() => new Set());
   const [garis] = useState(() => buatGaris(0));
+  // Usulan asisten (M5.2): {operasi, pilih: Set, sumber, peringatan}. Selama ada,
+  // pratinjau dan linimasa memperlihatkan dokumen + operasi terpilih.
+  const [usulan, setUsulan] = useState(null);
+  // Saran judul, caption, dan tagar untuk hasil ekspor (M5.6, keterangan.py).
+  const [terbit, setTerbit] = useState(null);
   const catatBahan = useCallback((daftar) => {
     setBahanSiap(new Set(daftar.filter((b) => b.siap).map((b) => b.id)));
   }, []);
@@ -265,13 +275,25 @@ export default function MontaseEditor() {
     setRiwayat(baru);
   }, []);
 
+  const tampilUsulan = useMemo(
+    () => (dokumen && usulan ? terapkanOperasi(dokumen, usulan.operasi, usulan.pilih) : null),
+    [dokumen, usulan],
+  );
+  const dTampil = tampilUsulan?.dokumen ?? dokumen;
   const sumber = useMemo(
-    () => (dokumen ? sumberPratinjau(dokumen, token) : null),
+    () => (dTampil ? sumberPratinjau(dTampil, token) : null),
     // Hanya daftar bahan dan font yang menentukan alamat; perubahan item tidak.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [dokumen && Object.keys(dokumen.bahan).join(','), dokumen && fontDipakai(dokumen).join(','),
-      dokumen && Object.keys(komponenDipakai(dokumen, '-')).join(','), token],
+    [dTampil && Object.keys(dTampil.bahan).join(','), dTampil && fontDipakai(dTampil).join(','),
+      dTampil && Object.keys(komponenDipakai(dTampil, '-')).join(','), token],
   );
+  const terimaUsulan = useCallback((pilih) => {
+    if (!usulan) return;
+    const { dokumen: baru } = terapkanOperasi(riwayatRef.current.kini, usulan.operasi, pilih);
+    terapkan(baru);
+    setUsulan(null);
+  }, [usulan, terapkan]);
+  const tolakUsulan = useCallback(() => setUsulan(null), []);
 
   const semuaId = useMemo(
     () => new Set((dokumen?.lajur ?? []).flatMap((l) => l.item.map((i) => i.id))),
@@ -578,6 +600,13 @@ export default function MontaseEditor() {
         {hasil && (
           <Link className="btn-secondary" to="/clips">{t('montase.editor.lihat_klip', { berkas: hasil.berkas })}</Link>
         )}
+        {hasil && (
+          <button type="button" className="btn-secondary" onClick={() => setTerbit({ file_name: hasil.berkas, metadata: {} })}
+                  title={t('klip.siapkan_judul')}
+          >
+            <Send size={14} />{t('klip.siapkan')}
+          </button>
+        )}
         <button type="button" className="btn-primary" onClick={mulaiEkspor}
                 disabled={ekspor.active || status === 'bentrok'}
         >
@@ -594,12 +623,22 @@ export default function MontaseEditor() {
                     animasi={{
                       proyekId, dokumen, garis, terpilih, onSimpanDulu: simpanSekarang,
                       onTambahBawaan: tambahAnimasiDiGaris, onTambahAi: tambahAnimasiAi,
+                    }}
+                    asisten={{
+                      proyekId, terpilih, fps, usulan, onUsulan: setUsulan, onTerima: terimaUsulan,
+                      onTolak: tolakUsulan, onSimpanDulu: simpanSekarang,
                     }} />
         <Pembatas arah="tegak" onGeser={geser('kiri', 1, [220, 520])} />
         <section className="montase-panel montase-panel-pratinjau" aria-label={t('montase.pratinjau.judul')}>
           {galat && status !== 'bentrok' && status !== 'gagal' && <p className="montase-galat" role="alert">{galat}</p>}
           {galatPratinjau && <p className="montase-galat" role="alert">{galatPratinjau}</p>}
-          <PratinjauKotakPasir ref={pratinjau} dokumen={dokumen} sumber={sumber} lengkap
+          {usulan && (
+            <div className="montase-bilah-usulan" role="status">
+              <span>{t('montase.asisten.bilah', { n: usulan.pilih.size, total: usulan.operasi.length })}</span>
+              <TombolUsulan usulan={usulan} onTerima={terimaUsulan} onTolak={tolakUsulan} ringkas />
+            </div>
+          )}
+          <PratinjauKotakPasir ref={pratinjau} dokumen={dTampil} sumber={sumber} lengkap
                                onBingkai={keGaris} onGalat={setGalatPratinjau} onMain={setMain}
                                onTombol={tombolPratinjau}
           >
@@ -653,7 +692,8 @@ export default function MontaseEditor() {
       <Pembatas arah="datar" onGeser={geser('bawah', -1, [150, 520])} />
       <Linimasa
         ref={linimasa}
-        dokumen={dokumen}
+        dokumen={dTampil}
+        itemUsulan={tampilUsulan?.itemUsulan}
         token={token}
         bahanSiap={bahanSiap}
         pilihan={pilihanSah}
@@ -661,7 +701,7 @@ export default function MontaseEditor() {
         garis={garis}
         main={main}
         onKe={keBingkai}
-        onUbah={ubah}
+        onUbah={usulan ? abaikan : ubah}
         onUbahLajur={aksiUbahLajur}
         magnet={magnet}
         lajurDipilih={lajurDipilih}
@@ -671,6 +711,7 @@ export default function MontaseEditor() {
         bisaUlang={bisaUlang(riwayat)}
         onJatuhBahan={tambahKeLinimasa}
       />
+      {terbit && <SiapkanTerbit clip={terbit} onClose={() => setTerbit(null)} onSelesai={() => {}} />}
     </div>
   );
 }

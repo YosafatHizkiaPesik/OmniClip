@@ -114,7 +114,7 @@ function Gelombang({ token, bahanId, potongAwal, durasi, fps, kecepatan, lebar }
 }
 
 const ItemLinimasa = memo(function ItemLinimasa({
-  item, pps, fps, token, dipilih, siap, bahan, kunci, onTekan,
+  item, pps, fps, token, dipilih, siap, bahan, kunci, onTekan, usulan = false,
 }) {
   const t = useT();
   const kiri = (item.mulai / fps) * pps;
@@ -142,13 +142,14 @@ const ItemLinimasa = memo(function ItemLinimasa({
     <div
       role="button"
       tabIndex={-1}
-      className={`montase-item montase-item-${item.jenis} ${dipilih ? 'dipilih' : ''} ${kunci ? 'terkunci' : ''}`}
+      className={`montase-item montase-item-${item.jenis} ${dipilih ? 'dipilih' : ''} ${kunci ? 'terkunci' : ''} ${usulan ? 'usulan' : ''}`}
       style={gaya}
       onPointerDown={(e) => onTekan(e, item)}
       title={`${label} · ${kodeWaktu(item.durasi, fps)}`}
       aria-pressed={dipilih}
       aria-label={t('montase.linimasa.item', { nama: label })}
       data-item={item.id}
+      data-usulan={usulan ? 'ya' : undefined}
     >
       {bersuara && siap && (
         <Gelombang token={token} bahanId={item.bahan} potongAwal={item.potong_awal || 0}
@@ -278,7 +279,7 @@ function labelPenggaris(detik, langkah, fps) {
 
 const Linimasa = forwardRef(function Linimasa({
   dokumen, token, bahanSiap, pilihan, onPilih, garis, main, onKe, onUbah, onUbahLajur,
-  magnet, lajurDipilih, onPilihLajur, aksi, bisaBatal, bisaUlang, onJatuhBahan,
+  magnet, lajurDipilih, onPilihLajur, aksi, bisaBatal, bisaUlang, onJatuhBahan, itemUsulan = null,
 }, ref) {
   const t = useT();
   const wadah = useRef(null);
@@ -728,6 +729,7 @@ const Linimasa = forwardRef(function Linimasa({
                                 dipilih={pilihanSet.has(item.id)} kunci={Boolean(lajur.kunci)}
                                 bahan={item.bahan ? dokumen.bahan[item.bahan] : null}
                                 siap={Boolean(item.bahan && bahanSiap?.has(item.bahan))}
+                                usulan={Boolean(itemUsulan?.has(item.id))}
                                 onTekan={tekanItem} />
                 ))}
               </div>

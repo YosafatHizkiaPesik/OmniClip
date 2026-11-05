@@ -147,6 +147,12 @@ def rujuk(asal: str, rujukan: str, *, nama: Optional[str] = None) -> dict:
             nama = _judul_video(rujukan)
         elif asal in ("aset", "impor"):
             nama = (aset_svc.info(rujukan) or {}).get("nama") or jalur.stem
+        elif asal == "klip_jadi":
+            # Judul klip dari sidecar, sama dengan yang tampil di panel "Klip jadi".
+            try:
+                nama = json.loads(jalur.with_suffix(".json").read_text(encoding="utf-8")).get("title") or jalur.stem
+            except (OSError, ValueError):
+                nama = jalur.stem
         else:
             nama = jalur.stem
     data = {

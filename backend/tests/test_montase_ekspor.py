@@ -67,6 +67,21 @@ class TanpaMesin(Dasar):
                       "aspect_ratio", "subtitles", "sumber_banyak", "suara_sintetis", "created_at"):
             self.assertIn(kunci, s)
         self.assertEqual((s["jenis"], s["aspect_ratio"], s["duration"]), ("montase", "9:16", 12.5))
+        self.assertEqual((s["subtitles"], s["suara_sintetis"]), ([], False))
+
+    def test_sidecar_membawa_tulisan_dan_narasi(self):
+        dok = router.ambil_proyek(self.proyek()["id"])["dokumen"]
+        lajur = {l["jenis"]: l for l in dok["lajur"]}
+        lajur["motion"]["item"].append({"id": "m1", "jenis": "motion", "komponen": "ko_hitung_mundur",
+                                        "mulai": 0, "durasi": 60, "props": {"angka": 5, "judul": "Kucing jatuh"}})
+        lajur["audio"]["item"].append({"id": "a1", "jenis": "audio", "bahan": "bh_x", "mulai": 0, "durasi": 45,
+                                       "narasi": {"teks": "Nomor 5. Kucing jatuh.", "suara": "edge-ardi"}})
+        lajur["teks"]["item"].append({"id": "t1", "jenis": "teks", "mulai": 90, "durasi": 30, "teks": "Ikuti!"})
+        s = ekspor.sidecar(dok, pid=PID, berkas="x.mp4", detik=4)
+        self.assertEqual([b["text"] for b in s["subtitles"]], ["Kucing jatuh", "Ikuti!"])
+        self.assertEqual(s["subtitles"][1]["start"], 3.0)
+        self.assertEqual(s["hook_text"], "Kucing jatuh")
+        self.assertTrue(s["suara_sintetis"])
 
     def test_linimasa_kosong_ditolak(self):
         with self.assertRaisesRegex(ekspor.GagalEkspor, "kosong"):

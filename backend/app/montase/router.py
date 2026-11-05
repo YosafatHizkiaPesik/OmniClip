@@ -225,6 +225,46 @@ def subtitle_proyek(proyek_id: str):
         raise NotFound("Proyek tidak ditemukan.") from e
 
 
+class Asisten(BaseModel):
+    perintah: str = Field(..., min_length=3, max_length=1000)
+    bahan: list[str] = Field(..., min_length=1, max_length=20)
+    narasi: bool = False
+    suara: str = Field("", max_length=80)
+    maks_detik: float = Field(20.0, ge=3, le=120)
+    pakai_ai: bool = True
+
+
+@router.post("/proyek/{proyek_id}/asisten")
+def asisten_proyek(proyek_id: str, b: Asisten):
+    """Asisten penyunting (M5.1): pekerjaan `montase_asisten`, hasilnya daftar operasi usulan."""
+    from . import asisten_ai
+    if repo.ambil_proyek(profil.kini(), proyek_id) is None:
+        raise NotFound("Proyek tidak ditemukan.")
+    return {"job_id": asisten_ai.mulai(proyek_id, b.model_dump())}
+
+
+class Jeda(BaseModel):
+    item: str = Field(..., min_length=1, max_length=40)
+
+
+@router.post("/proyek/{proyek_id}/jeda")
+def jeda_proyek(proyek_id: str, b: Jeda):
+    """Usulan potongan jeda dan kata isian untuk satu item (M5.4), pekerjaan `montase_jeda`."""
+    from . import jeda
+    if repo.ambil_proyek(profil.kini(), proyek_id) is None:
+        raise NotFound("Proyek tidak ditemukan.")
+    return {"job_id": jeda.mulai(proyek_id, b.item)}
+
+
+@router.post("/proyek/{proyek_id}/bingkai")
+def bingkai_proyek(proyek_id: str, b: Jeda):
+    """Usulan bingkai ulang 9:16 mengikuti wajah untuk satu item video (M5.5)."""
+    from . import bingkai
+    if repo.ambil_proyek(profil.kini(), proyek_id) is None:
+        raise NotFound("Proyek tidak ditemukan.")
+    return {"job_id": bingkai.mulai(proyek_id, b.item)}
+
+
 # --- bahan --------------------------------------------------------------------
 
 class Rujuk(BaseModel):
