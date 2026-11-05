@@ -97,13 +97,13 @@ Tiga kemampuan besar, dibangun berurutan:
 | 2 | Penyuntingan dasar: linimasa sungguhan | ✅ Selesai 3 Nov 2026 | 8/8 |
 | 3 | Teks, suara, efek, transisi, keyframe | ✅ Selesai 3 Nov 2026 | 10/10 |
 | 4 | AI pembuat animasi | ✅ Selesai 5 Nov 2026 | 10/10 |
-| 5 | Asisten penyunting AI | ⬜ Belum mulai | 0/6 |
-| 6 | Rapikan dan rilis | ⬜ Belum mulai | 0/8 |
+| 5 | Asisten penyunting AI | ✅ Selesai 5 Nov 2026 (penilaian draf oleh pemilik menunggu, K-17) | 6/6 |
+| 6 | Rapikan dan rilis | ⬜ Belum mulai | 0/9 |
 | ✱ | Suara AI baru (ElevenLabs dan lainnya), kapan saja | ⬜ Menunggu pilihan pemilik | 0/3 |
 
 Tanda status: ⬜ belum mulai · 🟨 sedang dikerjakan · ✅ selesai · ⛔ tertahan (tulis alasannya).
 
-**Tugas berikutnya:** `M5.1`.
+**Tugas berikutnya:** `M6.1`.
 
 ## 3. Keputusan
 
@@ -698,23 +698,41 @@ seterusnya). Daftar itu dijalankan oleh fungsi `model/` yang sama dengan yang
 dipakai tangan manusia, lalu ditampilkan sebagai **usulan perubahan**. Anda
 memilih untuk menerima semua, sebagian, atau menolaknya.
 
-- [ ] **M5.1** `montase/asisten_ai.py`: perintah tingkat proyek, misalnya "susun
+- [x] **M5.1** `montase/asisten_ai.py`: perintah tingkat proyek, misalnya "susun
   Top 5 momen paling lucu dari klip-klip ini". AI menerima daftar bahan
   (transkrip, skor klip bila dari Klip jadi, momen), lalu mengeluarkan daftar
   operasi.
-- [ ] **M5.2** Tampilan usulan perubahan: item usulan tampil bergaris putus di
+  (selesai 5 Nov 2026, commit 2214e95 dan c98d47e) Pekerjaan `montase_asisten` (lajur cpu). Per klip: judul dan hook sidecar Klip jadi, transkrip (subtitle sidecar, kata.json, transkrip Unduhan, atau Whisper), momen (`momen.cari_momen`). **Menyimpang, sengaja:** AI menulis RENCANA kecil {bahan, dari, sampai, peringkat, judul, narasi, alasan}, bukan operasi mentah; rencana diperiksa (id bahan harus ada, rentang di dalam durasi, tiap bahan sekali) lalu dikompilasi jadi operasi berbingkai di server (`susun_operasi`), supaya letak bingkai tidak mungkin tumpang tindih. Tanpa AI, atau bila AI gagal, rencana lokal dari skor momen (terkuat + 0,3 x sisanya, dibobot dua kali bila jenisnya cocok dengan kata di perintah: lucu -> tawa, kaget -> kejut, seru -> sorak). **Menyimpang:** "skor klip" dari tabel `clips` tidak dipakai, karena Montase dilarang membaca tabel itu (bagian 15); gantinya judul/hook sidecar dan momen. Jalur AI hanya diuji dengan AI tiruan (tidak ada API key di container).
+- [x] **M5.2** Tampilan usulan perubahan: item usulan tampil bergaris putus di
   linimasa, dengan tombol Terima semua / Terima yang dipilih / Tolak.
-- [ ] **M5.3** Naskah narasi per peringkat dalam bahasa dari `bahasa_ai.py`,
+  (selesai 5 Nov 2026, commit 2214e95 dan c98d47e) `model/usulan.js` menjalankan operasi (klip, animasi, teks, audio, potong, ubah) dengan fungsi model yang sama dengan tangan. Usulan diputar di pratinjau sebelum diterima, dipilih per operasi atau per peringkat, dan diterima sebagai SATU langkah batal. Selama usulan tampil, linimasa tidak menyunting (bilah kuning di atas pratinjau menjelaskannya).
+- [x] **M5.3** Naskah narasi per peringkat dalam bahasa dari `bahasa_ai.py`,
   dibacakan dengan suara pilihan (M3.3).
-- [ ] **M5.4** Buang jeda sunyi dan kata isian ("eh", "em") memakai waktu per
+  (selesai 5 Nov 2026, commit 2214e95 dan c98d47e) Naskah dari AI, atau "Nomor N. <judul>." lokal; dibacakan `narasi.buat_narasi` sebelum klipnya, di atas kartu hitung mundur yang panjangnya mengikuti narasi (+0,4 dtk). Item narasi membawa `narasi` {teks, suara}, jadi "Buat ulang suara" tetap jalan. Ekspor kini menandai `suara_sintetis` bila ada narasi TTS (sebelumnya selalu false).
+- [x] **M5.4** Buang jeda sunyi dan kata isian ("eh", "em") memakai waktu per
   kata, sebagai usulan potongan.
-- [ ] **M5.5** Bingkai ulang otomatis ke 9:16 untuk bahan horizontal: jejak wajah
+  (selesai 5 Nov 2026, commit 2214e95 dan c98d47e) `montase/jeda.py`, pekerjaan `montase_jeda`: celah > 0,6 dtk (disisakan 0,15 dtk di tiap sisi), kata isian dianggap diam lalu ikut terpotong seluruhnya, potongan < 0,25 dtk dibuang. Potongan meriak di lajurnya DAN menggeser item lajur lain yang sesudahnya, supaya kartu dan narasi tetap menempel pada klipnya (ditemukan di gerbang: kartu #1 menimpa klipnya).
+- [x] **M5.5** Bingkai ulang otomatis ke 9:16 untuk bahan horizontal: jejak wajah
   dari `reframe.py` menjadi keyframe posisi dan ukuran.
-- [ ] **M5.6** Saran judul, deskripsi, dan tagar saat ekspor (pakai
+  (selesai 5 Nov 2026, commit 2214e95 dan c98d47e) `montase/bingkai.py`, pekerjaan `montase_bingkai`: `plan_reframe(track_only=True)` wajah, lalu pusat gerakan bila wajah tidak terbaca; skala dasar menutup tinggi kanvas, keyframe `x` tiap 0,5 dtk dijepit supaya tidak ada tepi kosong, titik yang bisa ditebak garis lurus (< 10 px) dibuang. **Belum teruji di sini:** jalur wajah, karena model YuNet tidak ada di container (hanya jalur gerak yang teruji; UJI-LANGSUNG tes 95).
+- [x] **M5.6** Saran judul, deskripsi, dan tagar saat ekspor (pakai
   `keterangan.py`).
+  (selesai 5 Nov 2026, commit 2214e95 dan c98d47e) Sesudah ekspor, tombol "Siapkan untuk diterbitkan" membuka `components/SiapkanTerbit.jsx` (sama dengan Klip jadi). Supaya sarannya membaca isi video, sidecar ekspor kini membawa `subtitles` (teks, narasi tanpa awalan "Nomor N.", judul animasi, tanpa baris ganda) dan `hook_text`. Dengan konten uji sintetis, tagar lokal kosong; jalur AI menulis tagarnya sendiri.
 
 **Selesai bila:** dari 5 Klip jadi, satu perintah menghasilkan video Top 5 yang
 tinggal dikoreksi, dan pemilik menilai hasilnya layak sebagai draf.
+
+**Gerbang Tahap 5 (5 Nov 2026):** 14 pemeriksaan Playwright lolos. Lima Klip
+jadi uji (15 dtk, mendatar, sidecar bersubtitle). Hasilnya:
+- "Susun Top 5 momen paling seru" (lokal, 1,9-3,4 dtk) -> 15 operasi
+  bergaris putus, hitung mundur #5..#1, dokumen belum berubah;
+- terima tanpa #5 = 4 klip; satu Ctrl+Z kosong lagi; terima semua = 5 klip,
+  5 kartu, 5 narasi, tanpa tumpang tindih;
+- buang jeda klip pertama: 3 potongan (2 diam, 1 "eh"), 2,5 dtk lebih
+  pendek, kartu tetap menempel;
+- bingkai ulang klip terakhir: 16 keyframe (jalur gerak);
+- ekspor 48 dtk; "Siapkan terbit" menampilkan caption dari isi video.
+Penilaian "layak sebagai draf" menunggu pemilik (K-17, UJI-LANGSUNG tes 92).
 
 ---
 
@@ -736,6 +754,10 @@ tinggal dikoreksi, dan pemilik menilai hasilnya layak sebagai draf.
 - [ ] **M6.7** `UJI-LANGSUNG.md` bagian Montase lengkap, dan halaman bantuan
   singkat di dalam aplikasi.
 - [ ] **M6.8** Rilis: label "beta" dilepas, versi dinaikkan di `version.py`.
+- [ ] **M6.9** Pesan server Montase dalam bahasa Inggris: string Tahap 0-4
+  (galat, kabar pekerjaan, masalah pemeriksa animasi) belum ada di
+  `kamus_en.py`, jadi tetap berbahasa Indonesia di mode English. Tahap 5 sudah
+  (ditemukan 5 Nov 2026).
 
 ---
 
@@ -979,16 +1001,17 @@ Semua di bawah `/api/montase`, membawa profil aktif lewat header
 | DELETE | `/komponen/{id}/pustaka` | Keluarkan dari pustaka |
 | GET | `/t/{token}/komponen/{id}/{versi}/kode.js` | Hasil kompilasi untuk iframe dan mesin (hanya versi lolos) |
 | GET | `/t/{token}/komponen/{id}/{versi}/gambar/{n}` | Bingkai contoh hasil pemeriksaan |
-| POST | `/asisten` | `{perintah, proyek_id}`: menjawab daftar operasi usulan |
+| POST | `/proyek/{id}/asisten` | `{perintah, bahan[], narasi, suara, maks_detik}`: pekerjaan `montase_asisten`, hasilnya daftar operasi usulan (M5.1) |
+| POST | `/proyek/{id}/jeda` | `{item}`: usulan potongan jeda dan kata isian (`montase_jeda`, M5.4) |
+| POST | `/proyek/{id}/bingkai` | `{item}`: usulan bingkai ulang 9:16 mengikuti wajah/gerak (`montase_bingkai`, M5.5) |
 | GET | `/mesin` | Status mesin: terpasang, versi, ukuran |
 | POST | `/mesin/siapkan` | Mulai mengunduh mesin |
 
 Kemajuan pekerjaan (render, AI, unduh mesin) memakai saluran peristiwa yang
 sudah ada (`events.py`, `JobProgress`), bukan saluran baru.
 
-Status 5 Nov 2026: semua baris di atas sudah ada **kecuali** `/asisten`
-(Tahap 5). Rute `/motion/*` di rencana awal jadi `/komponen/*`. `/narasi` menerima juga
-`kecepatan` (tempo 0,6-1,6).
+Status 5 Nov 2026: semua baris di atas sudah ada. Rute `/motion/*` di rencana awal
+jadi `/komponen/*`, dan `/asisten` jadi `/proyek/{id}/asisten`.
 
 ## 19. Mesin Montase
 
@@ -1228,6 +1251,7 @@ detik). Kolom **Pemilik** = komputer pemilik (tes 60-63 di UJI-LANGSUNG.md).
 | Tahap 3: perendam musik | -27,2 dB -> -39,3 dB saat narasi | | | Musik 220 Hz diukur dengan bandpass di ekspor. |
 | Tahap 4: satu pemeriksaan animasi | 4,4-5,4 dtk (kompilasi + 5 bingkai + nilai gerak) | | | Satu Chrome untuk kelima bingkai. |
 | Tahap 4: animasi AI, ekspor = pratinjau | SSIM 0,94 | | | Lingkaran + panah sesudah props diubah dan titik posisi diseret. |
+| Tahap 5: asisten Top 5 dari 5 klip | 1,9-3,4 dtk (lokal, tanpa Whisper) | | | Termasuk 5 narasi TTS tiruan dan pendengar momen tanpa YAMNet. |
 
 ## 25. Daftar uji permintaan animasi
 

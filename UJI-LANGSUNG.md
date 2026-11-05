@@ -538,6 +538,35 @@ di menu). Hasil angka tiap tes ditulis juga di JOB-4.md bagian 24.
     animasi", "Perbaikan ke-1"); hasilnya kartu yang sama seperti tes 85.
     Dengan hanya AI lokal, ada peringatan bahwa model kecil jarang berhasil.
 
+### Tambahan 5 November 2026: Montase Tahap 5, asisten penyunting (JOB-4)
+
+- [ ] **92. Top 5 satu perintah (penilaian draf).** Ambil 5 Klip jadi sungguhan
+  ke Bahan saya (tab Klip jadi, lalu hapus dari linimasa bila perlu). Proyek
+  baru → Bahan → **Asisten**, ketik "Susun Top 5 momen paling lucu dari
+  klip-klip ini", narasi menyala, **Susun usulan**.
+  - Diharapkan: item bergaris putus di linimasa (kartu #5..#1, narasi, klip),
+    pratinjau memutarnya sebelum diterima, tiap usulan punya alasan. Dengan
+    koneksi AI aktif, kepalanya menulis "Usulan AI"; tanpa AI, "Usulan lokal".
+  - **Penilaian pemilik:** apakah urutan dan potongannya layak sebagai draf
+    yang tinggal dikoreksi? Catat jawabannya di JOB-4 Tahap 5.
+- [ ] **93. Terima sebagian dan batal.** Hilangkan centang satu peringkat,
+  **Terima yang dipilih**, lalu Ctrl+Z.
+  - Diharapkan: peringkat itu tidak ada; Ctrl+Z sekali mengembalikan proyek
+    seperti sebelum usulan diterima.
+- [ ] **94. Buang jeda.** Pilih klip yang banyak "eh"/diamnya, Asisten →
+  **Cari jeda** → **Terima semua**, putar hasilnya.
+  - Diharapkan: diam panjang dan "eh"/"em" hilang tanpa sambungan yang
+    terdengar memotong kata; kartu dan narasi sesudahnya ikut bergeser.
+- [ ] **95. Bingkai ulang mengikuti wajah.** Proyek 9:16, klip mendatar dari
+  podcast (wajah terlihat), pilih klipnya → **Ikuti wajah** → terima.
+  - Diharapkan: klip menutup layar tegak dan wajah tetap di tengah saat orang
+    bergerak; alasannya menyebut "Mengikuti wajah". Wajik keyframe X muncul
+    dan bisa dikoreksi di panel Properti.
+- [ ] **96. Saran caption sesudah ekspor.** Ekspor proyek tes 92, tekan
+  **Siapkan untuk diterbitkan**.
+  - Diharapkan: caption dan tagar menyebut isi videonya (judul peringkat),
+    bukan hanya nama proyek; label konten sintetis berlaku karena ada narasi.
+
 ### Jalur fitur unggulan (urutan disarankan, ±30 menit)
 
 Satu video podcast pendek (10-20 menit) cukup untuk semuanya:
