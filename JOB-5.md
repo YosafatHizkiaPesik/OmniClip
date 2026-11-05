@@ -7,6 +7,37 @@ youtube sekarang dan buatkan fitur yang menunjang".
 
 Format centang sama dengan JOB-2/JOB-4: `- [x] **O1** ... (selesai <tanggal>, commit <hash>)`.
 
+## 0. Papan status (perbarui SETIAP tugas selesai atau terhenti)
+
+Disetujui pemilik 5 November 2026: "lanjut saja kerjakan hingga o7 dan jangan
+lupa untuk selalu mencatatnya agar ... sesi lain masih bisa melanjutkannya".
+
+| Tugas | Status | Catatan singkat |
+|---|---|---|
+| O1 Meter orisinalitas | ✅ 298209a | |
+| O2 Rekam narasi dari naskah | ⬜ | |
+| O3 Kemiripan antar video | ⬜ | |
+| O4 Pembuka kuat | ⬜ | |
+| O5 Rekam reaksi kamera | ⬜ | |
+| O6 Akhir menyambung | ⬜ | |
+| O7 Keterangan unik + bab | ⬜ | |
+
+**Tugas berikutnya:** `O2`.
+
+**Melanjutkan di sesi baru:** baca papan ini dan bagian 4. Kerjakan tugas
+berikutnya; bila ada catatan "SEBAGIAN" di bawah butirnya, lanjutkan dari
+situ. Sesudah setiap tugas: tes (`cd backend && python -m unittest discover
+tests`, `cd frontend && npm test && npm run lint && npm run build`), commit
+kode, centang butir di bagian 4 dengan hash-nya, perbarui papan ini, commit,
+push ke cabang kerja. Cabang: `claude/ecstatic-davinci-scqbbm` (sesi ini).
+Sesudah O7: satu PR untuk JOB-5, CI (`bangun-aplikasi.yml`, workflow_dispatch),
+merge bila hijau, UJI-LANGSUNG tes 103 dan seterusnya.
+
+Kebiasaan Montase tetap berlaku (lihat JOB-4 bagian 5 dan 15): batas modul
+(`test_montase_batas.py`), semua teks lewat `t()` dengan kunci di id.js dan
+en.js, pesan server baru masuk `kamus_en.py`, fitur otomatis MENGUSULKAN
+(lewat `model/usulan.js` bila mengubah linimasa).
+
 ## 1. Ketentuan YouTube yang berlaku (dibaca 5 November 2026)
 
 Dari halaman resmi YouTube Help (kebijakan monetisasi kanal, FAQ konten yang
