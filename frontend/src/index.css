@@ -2604,3 +2604,26 @@ button.tujuan, a.tujuan { cursor: pointer; }
 .montase-bantuan-jendela { max-width: 880px; width: 100%; max-height: 86vh; overflow: auto; padding: 18px 20px; }
 .montase-bantuan-kepala { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
 .montase-bantuan-kepala h2 { margin: 0; font-size: 1.05rem; }
+
+/* Montase: meter orisinalitas (JOB-5 O1) */
+.montase-orisinal { position: relative; }
+.montase-orisinal-lencana { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 999px;
+  border: 1px solid var(--rule-2); background: transparent; font: inherit; font-size: .78rem; font-weight: 600; cursor: pointer; }
+.montase-orisinal-lencana.baik { color: #1f9d55; border-color: #1f9d55; }
+.montase-orisinal-lencana.sedang { color: #b7791f; border-color: #d69e2e; }
+.montase-orisinal-lencana.kurang { color: var(--reh); border-color: var(--reh); }
+.montase-orisinal-panel { position: absolute; top: calc(100% + 6px); left: 0; z-index: 40; width: min(380px, 90vw);
+  padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; font-size: .8rem; }
+.montase-orisinal-panel h3, .montase-orisinal-panel h4 { margin: 0; font-size: .9rem; }
+.montase-orisinal-panel h4 { font-size: .8rem; }
+.montase-orisinal-status { margin: 0; font-weight: 600; }
+.montase-orisinal-status.baik { color: #1f9d55; }
+.montase-orisinal-status.sedang { color: #b7791f; }
+.montase-orisinal-status.kurang { color: var(--reh); }
+.montase-orisinal-panel dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin: 0; }
+.montase-orisinal-panel dt { color: var(--ink-2); }
+.montase-orisinal-panel dd { margin: 0; font-variant-numeric: tabular-nums; }
+.montase-orisinal-saran { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+.montase-orisinal-celah { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.montase-orisinal-celah li { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.montase-orisinal-celah .btn-secondary { padding: 3px 8px; }

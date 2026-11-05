@@ -53,6 +53,8 @@ import PeganganUbah from './editor/PeganganUbah.jsx';
 import { buatGaris } from './editor/garisPutar.js';
 import { TombolUsulan } from './editor/PanelAsisten.jsx';
 import RiwayatVersi from './editor/RiwayatVersi.jsx';
+import MeterOrisinalitas from './editor/MeterOrisinalitas.jsx';
+import { hitungOrisinalitas } from './model/orisinalitas.js';
 import { JendelaBantuan } from './BantuanMontase.jsx';
 import { terapkanOperasi } from './model/usulan.js';
 
@@ -187,6 +189,8 @@ export default function MontaseEditor() {
   const [status, setStatus] = useState('tersimpan');
   const [tata, setTata] = useState(bacaTata);
   const [bahanSiap, setBahanSiap] = useState(() => new Set());
+  // Asal tiap bahan (unduhan, klip_jadi, impor, tts, rekam, ...) untuk meter orisinalitas (JOB-5 O1).
+  const [asalBahan, setAsalBahan] = useState(() => new Map());
   const [garis] = useState(() => buatGaris(0));
   // Usulan asisten (M5.2): {operasi, pilih: Set, sumber, peringatan}. Selama ada,
   // pratinjau dan linimasa memperlihatkan dokumen + operasi terpilih.
@@ -199,6 +203,7 @@ export default function MontaseEditor() {
   const [bantuan, setBantuan] = useState(false);
   const catatBahan = useCallback((daftar) => {
     setBahanSiap(new Set(daftar.filter((b) => b.siap).map((b) => b.id)));
+    setAsalBahan(new Map(daftar.map((b) => [b.id, b.asal])));
   }, []);
   const tataSeret = useRef(tata);
   const pratinjau = useRef(null);
@@ -310,6 +315,8 @@ export default function MontaseEditor() {
     [dokumen, usulan],
   );
   const dTampil = tampilUsulan?.dokumen ?? dokumen;
+  // Dihitung dari yang TAMPIL: usulan asisten yang belum diterima ikut terlihat dampaknya.
+  const orisinal = useMemo(() => (dTampil ? hitungOrisinalitas(dTampil, asalBahan) : null), [dTampil, asalBahan]);
   const sumber = useMemo(
     () => (dTampil ? sumberPratinjau(dTampil, token) : null),
     // Hanya daftar bahan dan font yang menentukan alamat; perubahan item tidak.
@@ -644,6 +651,7 @@ export default function MontaseEditor() {
         </button>
         <h1 title={dokumen.nama}>{dokumen.nama}</h1>
         <StatusSimpan status={status} onMuatUlang={muat} onCobaLagi={simpanSekarang} />
+        {orisinal && <MeterOrisinalitas hasil={orisinal} onKe={keBingkai} />}
         <button type="button" className="btn-secondary montase-ikon" onClick={() => setBantuan(true)}
                 aria-label={t('montase.bantuan.judul')} title={t('montase.bantuan.judul')}
         >
