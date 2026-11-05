@@ -22,14 +22,14 @@ lupa untuk selalu mencatatnya agar ... sesi lain masih bisa melanjutkannya".
 | O6 Akhir menyambung | ✅ bacd105 | ekor mati + sambung ke awal |
 | O7 Keterangan unik + bab | ✅ 100d129 | judul unik + bab |
 
-| P1 Preset caption subtitle | ⬜ | |
+| P1 Preset caption subtitle | ✅ 9f6c433 | 10 gaya, sorot kotak/besar |
 | P2 Preset teks milik sendiri | ⬜ | |
 | P3 Templat video bawaan | ⬜ | |
 | P4 Templat milik sendiri | ⬜ | |
 | D1 Katalog fitur (FITUR.md) | ⬜ | |
 | D2 Saran fitur berikutnya | ⬜ | |
 
-**Tugas berikutnya:** `P1`. (O1-O7: PR #13 dibuka 5 Nov 2026, CI berjalan; merge bila hijau.)
+**Tugas berikutnya:** `P2`.
 
 **Melanjutkan di sesi baru:** baca papan ini dan bagian 4. Kerjakan tugas
 berikutnya; bila ada catatan "SEBAGIAN" di bawah butirnya, lanjutkan dari
@@ -137,7 +137,8 @@ menghasilkan video yang bersusun sama. Karena itu tiap templat bawaan punya
 pilihan variasi (warna, animasi pembuka, gaya caption), dan pemeriksa kemiripan
 O3 tetap memperingatkan bila hasilnya terlalu mirip video sebelumnya.
 
-- [ ] **P1** Preset caption subtitle: kira-kira sepuluh gaya untuk lajur
+- [x] **P1** Preset caption subtitle: kira-kira sepuluh gaya untuk lajur
+  (selesai 5 Nov 2026, commit 9f6c433) model/presetCaption.js (10 preset, terapkanCaption), editor/KisiCaption.jsx, ItemTeks gayaSorot (warna|kotak|besar), pasangSubtitle memakai lajur.gaya_caption. Playwright 2/2.
   subtitle (sorot warna, sorot kotak, kata aktif membesar, pelat, pita, neon,
   stiker, sinema, minimal), diterapkan ke seluruh lajur sekaligus dan dipakai
   untuk subtitle baru. Butuh mode sorot baru di ItemTeks (`sorot`: warna |
