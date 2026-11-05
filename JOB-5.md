@@ -74,7 +74,8 @@ geser nada). Variasi harus berasal dari isi, bukan dari pengelabuan.
 
 Urutan dari dampak terbesar terhadap penilaian orisinalitas.
 
-- [ ] **O1** Meter orisinalitas langsung di editor Montase.
+- [x] **O1** Meter orisinalitas langsung di editor Montase.
+  (selesai 5 Nov 2026, commit 298209a) Lencana + panel di kepala editor; rumus sama dengan gerbang tinjau; celah = video orang lain > 12 dtk tanpa tambahan dan tanpa narasi pengantar 3 dtk sebelumnya.
 - [ ] **O2** Rekam narasi dari naskah (teleprompter).
 - [ ] **O3** Pemeriksa kemiripan antar video.
 - [ ] **O4** Pembuka kuat.
