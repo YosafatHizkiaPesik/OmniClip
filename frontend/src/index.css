@@ -2674,3 +2674,12 @@ button.tujuan, a.tujuan { cursor: pointer; }
 .montase-preset-teks .montase-tema { flex: 1; }
 .montase-preset-hapus { position: absolute; top: 2px; right: 2px; display: grid; place-items: center; width: 18px; height: 18px;
   border-radius: 50%; border: 0; background: rgba(0,0,0,.55); color: #fff; cursor: pointer; }
+
+/* Montase: templat video (JOB-5 P3) */
+.montase-templat { display: flex; flex-direction: column; gap: 8px; }
+.montase-templat-kisi { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
+.montase-templat-pil { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 8px 10px; text-align: left;
+  border: 1px solid var(--rule-2); border-radius: var(--r-md); background: transparent; font: inherit; cursor: pointer; }
+.montase-templat-pil b { font-size: .82rem; }
+.montase-templat-pil small { font-size: .72rem; color: var(--ink-2); }
+.montase-templat-pil.aktif { border-color: var(--reh); box-shadow: inset 0 0 0 1px var(--reh); }

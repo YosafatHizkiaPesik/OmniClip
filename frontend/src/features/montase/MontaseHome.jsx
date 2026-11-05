@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { lokal, useT } from '../../lib/i18n';
 import { IsiBantuan } from './BantuanMontase.jsx';
+import PilihTemplat from './editor/PilihTemplat.jsx';
 import { formatTime } from '../../utils/timeFormat';
 import {
   alamatBahan, ambilToken, buatProyek, daftarProyek, gandakanProyek, hapusProyek,
@@ -39,6 +40,8 @@ function FormProyekBaru({ onBatal, onJadi }) {
   const [lebar, setLebar] = useState(1080);
   const [tinggi, setTinggi] = useState(1920);
   const [fps, setFps] = useState(30);
+  const [templat, setTemplat] = useState(null);
+  const [variasi, setVariasi] = useState(0);
   const [sibuk, setSibuk] = useState(false);
   const [galat, setGalat] = useState(null);
 
@@ -50,7 +53,7 @@ function FormProyekBaru({ onBatal, onJadi }) {
       const isi = { nama: nama.trim() || t('montase.home.tanpa_judul'), fps };
       if (preset === 'sendiri') Object.assign(isi, { lebar: Number(lebar), tinggi: Number(tinggi) });
       else isi.preset = preset;
-      onJadi(await buatProyek(isi));
+      onJadi(await buatProyek(isi), templat ? { templat, variasi } : null);
     } catch (err) {
       setGalat(err.message);
       setSibuk(false);
@@ -111,6 +114,10 @@ function FormProyekBaru({ onBatal, onJadi }) {
             {FPS.map((f) => <option key={f} value={f}>{f} fps</option>)}
           </select>
         </label>
+        <div className="montase-kolom">
+          <span>{t('montase.templat.judul')}</span>
+          <PilihTemplat nilai={templat} variasi={variasi} onUbah={setTemplat} onVariasi={setVariasi} denganKosong />
+        </div>
         {galat && <p className="montase-galat" role="alert">{galat}</p>}
         <button type="submit" className="btn-primary" disabled={sibuk}>
           {sibuk ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
@@ -218,7 +225,7 @@ export default function MontaseHome() {
       )}
       {formBaru && (
         <FormProyekBaru onBatal={() => setFormBaru(false)}
-                        onJadi={(p) => navigate(`/montase/${p.id}`)} />
+                        onJadi={(p, tpl) => navigate(tpl ? `/montase/${p.id}?templat=${tpl.templat}&variasi=${tpl.variasi}` : `/montase/${p.id}`)} />
       )}
 
       {proyek === null && <Loader2 size={18} className="animate-spin" />}

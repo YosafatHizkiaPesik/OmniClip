@@ -9,7 +9,7 @@
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Check, CheckCheck, Crop, Loader2, Mic, Scissors, Sparkles, X, Zap,
+  Check, CheckCheck, Crop, LayoutTemplate, Loader2, Mic, Scissors, Sparkles, X, Zap,
 } from 'lucide-react';
 import { useT } from '../../../lib/i18n';
 import { formatTime } from '../../../utils/timeFormat';
@@ -17,6 +17,8 @@ import { useJobRunner } from '../../../hooks/useJob';
 import JobProgress from '../../../components/JobProgress';
 import { daftarSuara } from '../api.js';
 import { kelompokOperasi } from '../model/usulan.js';
+import { operasiTemplat } from '../model/templat.js';
+import PilihTemplat from './PilihTemplat.jsx';
 
 export function DaftarUsulan({ usulan, onPilih, onTerima, onTolak, fps }) {
   const t = useT();
@@ -95,7 +97,7 @@ export function TombolUsulan({ usulan, onTerima, onTolak, ringkas = false }) {
 }
 
 export default function PanelAsisten({
-  proyekId, bahan, terpilih, fps, usulan, onUsulan, onTerima, onTolak, onSimpanDulu, onRekamNarasi, adaNarasi,
+  proyekId, bahan, terpilih, fps, usulan, onUsulan, onTerima, onTolak, onSimpanDulu, onRekamNarasi, adaNarasi, dokumen,
 }) {
   const t = useT();
   const [perintah, setPerintah] = useState('');
@@ -105,6 +107,8 @@ export default function PanelAsisten({
   const [suara, setSuara] = useState('');
   const [daftar, setDaftar] = useState([]);
   const [galat, setGalat] = useState(null);
+  const [templat, setTemplat] = useState('top_n');
+  const [variasi, setVariasi] = useState(0);
   const kerja = useJobRunner();
   const jeda = useJobRunner();
   const bingkai = useJobRunner();
@@ -237,6 +241,18 @@ export default function PanelAsisten({
           {t('montase.asisten.jeda_tombol')}
         </button>
         {(jeda.job || jeda.error) && <JobProgress job={jeda.job} error={jeda.error} onCancel={jeda.cancel} compact />}
+      </section>
+      <section className="montase-bagian">
+        <h3><span><LayoutTemplate size={13} /> {t('montase.templat.judul')}</span></h3>
+        <p className="montase-petunjuk">{t('montase.templat.ket')}</p>
+        <PilihTemplat nilai={templat} variasi={variasi} onUbah={setTemplat} onVariasi={setVariasi} />
+        <button type="button" className="btn-secondary" disabled={!templat || !dokumen} onClick={() => {
+          const ops = operasiTemplat(dokumen, templat, variasi, (k, isi) => t(`montase.templat.${k}`, isi));
+          if (ops.length) onUsulan({ operasi: ops, pilih: new Set(ops.map((o) => o.id)), sumber: 'lokal', peringatan: [] });
+        }}
+        >
+          <LayoutTemplate size={13} />{t('montase.templat.pakai')}
+        </button>
       </section>
       <section className="montase-bagian">
         <h3><span><Zap size={13} /> {t('montase.pembuka.usul_judul')}</span></h3>

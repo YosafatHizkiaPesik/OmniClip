@@ -18,7 +18,7 @@
  * simpan otomatis dan meminta muat ulang, bukan menimpa diam-diam.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, Check, CircleHelp, CloudOff, Download, Loader2, MonitorSmartphone, RefreshCw, Send, Upload,
 } from 'lucide-react';
@@ -60,6 +60,7 @@ import RekamReaksi from './editor/RekamReaksi.jsx';
 import { hitungOrisinalitas } from './model/orisinalitas.js';
 import { periksaAkhir, usulanAkhir } from './model/akhir.js';
 import { terapkanCaption } from './model/presetCaption.js';
+import { operasiTemplat } from './model/templat.js';
 import { JendelaBantuan } from './BantuanMontase.jsx';
 import { terapkanOperasi } from './model/usulan.js';
 
@@ -181,6 +182,7 @@ function StatusSimpan({ status, onMuatUlang, onCobaLagi }) {
 export default function MontaseEditor() {
   const t = useT();
   const { proyekId } = useParams();
+  const [cari, setCari] = useSearchParams();
   const navigate = useNavigate();
   const sempit = useLayarSempit();
   const [riwayat, setRiwayat] = useState(null);
@@ -340,6 +342,15 @@ export default function MontaseEditor() {
     setUsulan(null);
   }, [usulan, terapkan]);
   const tolakUsulan = useCallback(() => setUsulan(null), []);
+  // Templat dari formulir proyek baru (JOB-5 P3): diusulkan sekali saat proyek
+  // pertama dibuka, lalu parameternya dibuang dari alamat.
+  useEffect(() => {
+    const id = cari.get('templat');
+    if (!dokumen || !id) return;
+    const ops = operasiTemplat(dokumen, id, Number(cari.get('variasi')) || 0, (k, isi) => t(`montase.templat.${k}`, isi));
+    if (ops.length) setUsulan({ operasi: ops, pilih: new Set(ops.map((o) => o.id)), sumber: 'lokal', peringatan: [] });
+    setCari({}, { replace: true });
+  }, [dokumen, cari, setCari, t]);
   // Draf lokal ditunda 400 ms: localStorage sinkron, dan menyeret item
   // mengubah dokumen tiap bingkai (kinerja M6.3 diukur dengan ini menyala).
   useEffect(() => {
@@ -746,7 +757,7 @@ export default function MontaseEditor() {
                     }}
                     asisten={{
                       proyekId, terpilih, fps, usulan, onUsulan: setUsulan, onTerima: terimaUsulan,
-                      onRekamNarasi: () => bukaTeleprompter(), adaNarasi: Boolean(orisinal?.detik.suara),
+                      onRekamNarasi: () => bukaTeleprompter(), adaNarasi: Boolean(orisinal?.detik.suara), dokumen,
                       onTolak: tolakUsulan, onSimpanDulu: simpanSekarang,
                     }} />
         <Pembatas arah="tegak" onGeser={geser('kiri', 1, [220, 520])} />

@@ -13,12 +13,17 @@
  *   potong   {item, dari, sampai}          buang rentang (jeda, kata isian)
  *   ubah     {item, ubah?, keyframe?}      bingkai ulang (posisi, skala)
  *   geser_semua {delta}                    seluruh isi mundur `delta` bingkai (cuplikan pembuka, JOB-5 O4)
+ *   penanda  {t, label}                    penanda bernama (slot templat, JOB-5 P3)
+ *   lajur_caption {preset}                 lajur subtitle (dibuat bila belum ada) dengan preset caption
  * Semua operasi punya {id, kelompok, label, alasan}.
  */
 import {
-  cariItem, durasiIsi, tambahBahan, tambahMotion, tambahTeks, ubahItem,
+  cariItem, durasiIsi, GAYA_TEKS_BAWAAN, tambahBahan, tambahMotion, tambahTeks, ubahItem,
 } from './dokumen.js';
-import { belah, hapusBeriak, taruhSuara } from './suntingan.js';
+import {
+  belah, hapusBeriak, tambahLajur, tambahPenanda, taruhSuara, ubahLajur,
+} from './suntingan.js';
+import { terapkanCaption } from './presetCaption.js';
 
 function tandaiAi(dokumen, itemId, op, tambahan = {}) {
   return ubahItem(dokumen, itemId, { asal: 'ai', alasan: (op.alasan || '').slice(0, 500), ...tambahan });
@@ -55,7 +60,25 @@ function jalankanSatu(d, op) {
     }
     case 'teks': {
       const h = tambahTeks(d, { mulai: op.mulai, teks: op.teks });
-      return { dokumen: tandaiAi(h.dokumen, h.itemId, op, { durasi: op.durasi }), itemId: h.itemId };
+      const tambahan = { durasi: op.durasi };
+      if (op.gaya) tambahan.gaya = { ...GAYA_TEKS_BAWAAN, ...op.gaya };
+      return { dokumen: tandaiAi(h.dokumen, h.itemId, op, tambahan), itemId: h.itemId };
+    }
+    case 'penanda': {
+      const sebelum = d.penanda?.length ?? 0;
+      const x = tambahPenanda(d, Math.round(op.t), (op.label || '').slice(0, 60));
+      return { dokumen: x, itemId: null, berubah: (x.penanda?.length ?? 0) !== sebelum };
+    }
+    case 'lajur_caption': {
+      let x = d;
+      let lajur = x.lajur.find((l) => l.subtitle && !l.kunci);
+      if (!lajur) {
+        const h = tambahLajur(x, 'teks');
+        x = ubahLajur(h.dokumen, h.lajurId, { nama: 'Subtitle' });
+        x = { ...x, lajur: x.lajur.map((l) => (l.id === h.lajurId ? { ...l, subtitle: true } : l)) };
+        lajur = x.lajur.find((l) => l.id === h.lajurId);
+      }
+      return { dokumen: terapkanCaption(x, lajur.id, op.preset), itemId: null };
     }
     case 'audio': {
       const h = taruhSuara(d, { ...op.bahan_info, id: op.bahan, jenis: 'audio' },
@@ -124,7 +147,7 @@ export function terapkanOperasi(dokumen, operasi, pilih = null) {
     } catch {
       h = { dokumen: d, itemId: null };
     }
-    if (h.dokumen === d && op.jenis !== 'ubah' && op.jenis !== 'geser_semua') dilewati.push(op.id);
+    if (h.dokumen === d && !['ubah', 'geser_semua', 'lajur_caption'].includes(op.jenis)) dilewati.push(op.id);
     d = h.dokumen;
     if (h.itemId) itemUsulan.set(h.itemId, op.id);
   }
