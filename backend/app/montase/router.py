@@ -187,6 +187,17 @@ def simpan_proyek(proyek_id: str, b: SimpanProyek):
     return {"revisi": revisi, "durasi": dokumen["durasi"]}
 
 
+@router.get("/proyek/{proyek_id}/kemiripan")
+def kemiripan_proyek(proyek_id: str):
+    """Proyek ini lawan ekspor Montase sebelumnya di profil ini (JOB-5 O3)."""
+    from . import kemiripan
+    pid = profil.kini()
+    p = repo.ambil_proyek(pid, proyek_id)
+    if p is None:
+        raise NotFound("Proyek tidak ditemukan.")
+    return kemiripan.periksa(pid, p["dokumen"])
+
+
 @router.get("/proyek/{proyek_id}/versi")
 def daftar_versi(proyek_id: str):
     """Riwayat versi (M6.4): 10 potret terakhir, tanpa isi dokumennya."""

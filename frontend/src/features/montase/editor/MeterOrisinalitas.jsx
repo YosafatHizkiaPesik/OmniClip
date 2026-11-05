@@ -8,13 +8,55 @@
  * dengan rumus yang sama dengan gerbang tinjau di server.
  */
 import React, { useEffect, useRef, useState } from 'react';
-import { ShieldAlert, ShieldCheck, ShieldHalf } from 'lucide-react';
+import { Copy, Loader2, ShieldAlert, ShieldCheck, ShieldHalf } from 'lucide-react';
 import { useT } from '../../../lib/i18n';
 import { formatTime } from '../../../utils/timeFormat';
 
 const IKON = { baik: ShieldCheck, sedang: ShieldHalf, kurang: ShieldAlert };
 
-export default function MeterOrisinalitas({ hasil, onKe, onRekamNarasi }) {
+/**
+ * Kemiripan dengan ekspor sebelumnya (JOB-5 O3): dihitung server dari sidik
+ * ekspor lama, jadi hanya saat diminta.
+ */
+function Kemiripan({ onPeriksa }) {
+  const t = useT();
+  const [hasil, setHasil] = useState(null);
+  const [sibuk, setSibuk] = useState(false);
+  const [galat, setGalat] = useState(null);
+  const periksa = async () => {
+    setSibuk(true);
+    setGalat(null);
+    try { setHasil(await onPeriksa()); } catch (e) { setGalat(e.message); } finally { setSibuk(false); }
+  };
+  return (
+    <section className="montase-orisinal-mirip">
+      <h4>{t('montase.mirip.judul')}</h4>
+      <p className="montase-petunjuk">{t('montase.mirip.ket')}</p>
+      <button type="button" className="btn-secondary" onClick={periksa} disabled={sibuk}>
+        {sibuk ? <Loader2 size={13} className="animate-spin" /> : <Copy size={13} />}{t('montase.mirip.periksa')}
+      </button>
+      {galat && <p className="montase-galat" role="alert">{galat}</p>}
+      {hasil && (
+        <div className={`montase-mirip-hasil ${hasil.tingkat}`}>
+          <p><b>{t(`montase.mirip.tingkat_${hasil.tingkat}`, { n: hasil.mirip.length, total: hasil.jumlah_banding })}</b></p>
+          {hasil.mirip.length > 0 && (
+            <ul>
+              {hasil.mirip.slice(0, 5).map((m) => (
+                <li key={m.berkas}>
+                  {t('montase.mirip.baris', { persen: Math.round(m.skor * 100), judul: m.judul || m.berkas })}
+                  {m.sama.length > 0 && <small> · {m.sama.map((k) => t(`montase.mirip.dimensi_${k}`)).join(', ')}</small>}
+                </li>
+              ))}
+            </ul>
+          )}
+          {hasil.saran.length > 0 && <ul className="montase-orisinal-saran">{hasil.saran.map((s) => <li key={s}>{s}</li>)}</ul>}
+        </div>
+      )}
+    </section>
+  );
+}
+
+export default function MeterOrisinalitas({ hasil, onKe, onRekamNarasi, onPeriksaKemiripan }) {
   const t = useT();
   const [buka, setBuka] = useState(false);
   const wadah = useRef(null);
@@ -74,6 +116,7 @@ export default function MeterOrisinalitas({ hasil, onKe, onRekamNarasi }) {
               </ul>
             </>
           )}
+          {onPeriksaKemiripan && <Kemiripan onPeriksa={onPeriksaKemiripan} />}
           <p className="montase-petunjuk">{t('montase.orisinal.ket')}</p>
         </div>
       )}

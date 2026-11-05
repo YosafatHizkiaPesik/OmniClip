@@ -29,7 +29,8 @@ import SiapkanTerbit from '../../components/SiapkanTerbit';
 import UploadModal from '../../components/UploadModal';
 import { BAWAAN } from './komposisi/index.js';
 import {
-  ambilProyek, ambilToken, buatNarasi, fontDipakai, komponenDipakai, pulihkanVersi, simpanProyek,
+  ambilProyek, ambilToken, buatNarasi, fontDipakai, komponenDipakai, periksaKemiripan, pulihkanVersi,
+  simpanProyek,
   sumberPratinjau,
 } from './api.js';
 import useSkemaKomponen from './editor/useSkemaKomponen.js';
@@ -670,7 +671,10 @@ export default function MontaseEditor() {
         </button>
         <h1 title={dokumen.nama}>{dokumen.nama}</h1>
         <StatusSimpan status={status} onMuatUlang={muat} onCobaLagi={simpanSekarang} />
-        {orisinal && <MeterOrisinalitas hasil={orisinal} onKe={keBingkai} onRekamNarasi={() => bukaTeleprompter()} />}
+        {orisinal && (
+          <MeterOrisinalitas hasil={orisinal} onKe={keBingkai} onRekamNarasi={() => bukaTeleprompter()}
+                             onPeriksaKemiripan={async () => { await simpanSekarang(); return periksaKemiripan(proyekId); }} />
+        )}
         <button type="button" className="btn-secondary montase-ikon" onClick={() => setBantuan(true)}
                 aria-label={t('montase.bantuan.judul')} title={t('montase.bantuan.judul')}
         >

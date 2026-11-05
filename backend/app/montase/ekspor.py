@@ -195,6 +195,9 @@ def sidecar(dokumen: dict, *, pid: int, berkas: str, detik: float) -> dict:
     }
     # Disimpan seperti sidecar Studio (render.py), untuk lencana di Klip jadi.
     meta["nilai_tambah"] = hitung(meta)
+    # Sidik isi untuk pemeriksa kemiripan antar video (JOB-5 O3).
+    from . import kemiripan
+    meta["sidik"] = kemiripan.sidik(dokumen)
     return meta
 
 

@@ -2636,3 +2636,14 @@ button.tujuan, a.tujuan { cursor: pointer; }
 .montase-teleprompter-naskah.merekam { border-left-color: var(--reh); }
 .montase-teleprompter-tombol { justify-content: center; }
 .montase-orisinal-aksi { display: inline-flex; margin-left: 6px; padding: 2px 8px; font-size: .74rem; }
+
+/* Montase: kemiripan antar video (JOB-5 O3) */
+.montase-orisinal-mirip { border-top: 1px solid var(--rule-2); padding-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.montase-orisinal-mirip h4 { margin: 0; }
+.montase-orisinal-mirip > .btn-secondary { align-self: flex-start; padding: 4px 9px; }
+.montase-mirip-hasil p { margin: 0; }
+.montase-mirip-hasil ul { margin: 4px 0 0; padding-left: 18px; }
+.montase-mirip-hasil.aman b { color: #1f9d55; }
+.montase-mirip-hasil.waspada b { color: #b7791f; }
+.montase-mirip-hasil.pola b { color: var(--reh); }
+.montase-orisinal-panel { max-height: 78vh; overflow: auto; }
