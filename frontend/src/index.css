@@ -2647,3 +2647,10 @@ button.tujuan, a.tujuan { cursor: pointer; }
 .montase-mirip-hasil.waspada b { color: #b7791f; }
 .montase-mirip-hasil.pola b { color: var(--reh); }
 .montase-orisinal-panel { max-height: 78vh; overflow: auto; }
+
+/* Montase: pembuka (JOB-5 O4) */
+.montase-orisinal-pembuka { border-top: 1px solid var(--rule-2); padding-top: 8px; }
+.montase-orisinal-pembuka h4 { margin: 0 0 4px; }
+.montase-orisinal-pembuka ul { list-style: none; margin: 0; padding: 0; }
+.montase-orisinal-pembuka li.ya { color: #1f9d55; }
+.montase-orisinal-pembuka li.tidak { color: var(--reh); }

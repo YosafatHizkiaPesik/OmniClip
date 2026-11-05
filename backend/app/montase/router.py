@@ -187,6 +187,15 @@ def simpan_proyek(proyek_id: str, b: SimpanProyek):
     return {"revisi": revisi, "durasi": dokumen["durasi"]}
 
 
+@router.post("/proyek/{proyek_id}/pembuka")
+def pembuka_proyek(proyek_id: str):
+    """Usulan cuplikan pembuka dari momen terkuat (JOB-5 O4), pekerjaan `montase_pembuka`."""
+    from . import pembuka
+    if repo.ambil_proyek(profil.kini(), proyek_id) is None:
+        raise NotFound("Proyek tidak ditemukan.")
+    return {"job_id": pembuka.mulai(proyek_id)}
+
+
 @router.get("/proyek/{proyek_id}/kemiripan")
 def kemiripan_proyek(proyek_id: str):
     """Proyek ini lawan ekspor Montase sebelumnya di profil ini (JOB-5 O3)."""

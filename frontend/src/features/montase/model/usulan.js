@@ -12,6 +12,7 @@
  *   audio    {bahan, bahan_info, mulai, narasi?}
  *   potong   {item, dari, sampai}          buang rentang (jeda, kata isian)
  *   ubah     {item, ubah?, keyframe?}      bingkai ulang (posisi, skala)
+ *   geser_semua {delta}                    seluruh isi mundur `delta` bingkai (cuplikan pembuka, JOB-5 O4)
  * Semua operasi punya {id, kelompok, label, alasan}.
  */
 import {
@@ -68,6 +69,16 @@ function jalankanSatu(d, op) {
       if (op.keyframe) perubahan.keyframe = op.keyframe;
       return { dokumen: ubahItem(d, op.item, perubahan), itemId: op.item };
     }
+    case 'geser_semua': {
+      const delta = Math.max(0, Math.round(op.delta || 0));
+      if (!delta) return { dokumen: d, itemId: null };
+      const baru = {
+        ...d,
+        lajur: d.lajur.map((l) => (l.kunci ? l : { ...l, item: l.item.map((i) => ({ ...i, mulai: i.mulai + delta })) })),
+        penanda: (d.penanda ?? []).map((p) => ({ ...p, t: p.t + delta })),
+      };
+      return { dokumen: { ...baru, durasi: durasiIsi(baru) }, itemId: null };
+    }
     case 'potong': {
       const hit = cariItem(d, op.item);
       if (!hit) return { dokumen: d, itemId: null };
@@ -113,7 +124,7 @@ export function terapkanOperasi(dokumen, operasi, pilih = null) {
     } catch {
       h = { dokumen: d, itemId: null };
     }
-    if (h.dokumen === d && op.jenis !== 'ubah') dilewati.push(op.id);
+    if (h.dokumen === d && op.jenis !== 'ubah' && op.jenis !== 'geser_semua') dilewati.push(op.id);
     d = h.dokumen;
     if (h.itemId) itemUsulan.set(h.itemId, op.id);
   }

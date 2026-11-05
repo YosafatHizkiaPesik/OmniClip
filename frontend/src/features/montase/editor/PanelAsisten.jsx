@@ -9,7 +9,7 @@
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Check, CheckCheck, Crop, Loader2, Mic, Scissors, Sparkles, X,
+  Check, CheckCheck, Crop, Loader2, Mic, Scissors, Sparkles, X, Zap,
 } from 'lucide-react';
 import { useT } from '../../../lib/i18n';
 import { formatTime } from '../../../utils/timeFormat';
@@ -108,6 +108,7 @@ export default function PanelAsisten({
   const kerja = useJobRunner();
   const jeda = useJobRunner();
   const bingkai = useJobRunner();
+  const pembuka = useJobRunner();
 
   const video = useMemo(() => bahan.filter((b) => b.jenis === 'video'), [bahan]);
   const dipilih = pilih ?? new Set(video.map((b) => b.id));
@@ -129,6 +130,8 @@ export default function PanelAsisten({
   useEffect(() => terimaHasil(jeda.result), [jeda.result]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => terimaHasil(bingkai.result), [bingkai.result]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => terimaHasil(pembuka.result), [pembuka.result]);
 
   const susun = async () => {
     setGalat(null);
@@ -156,7 +159,12 @@ export default function PanelAsisten({
     if (nyala) baru.add(id); else baru.delete(id);
     setPilih(baru);
   };
-  const sibuk = kerja.active || jeda.active || bingkai.active;
+  const sibuk = kerja.active || jeda.active || bingkai.active || pembuka.active;
+  const usulkanPembuka = async () => {
+    setGalat(null);
+    await onSimpanDulu();
+    pembuka.run(`/montase/proyek/${proyekId}/pembuka`, {}).catch((e) => setGalat(e.message));
+  };
 
   if (usulan) {
     return (
@@ -229,6 +237,15 @@ export default function PanelAsisten({
           {t('montase.asisten.jeda_tombol')}
         </button>
         {(jeda.job || jeda.error) && <JobProgress job={jeda.job} error={jeda.error} onCancel={jeda.cancel} compact />}
+      </section>
+      <section className="montase-bagian">
+        <h3><span><Zap size={13} /> {t('montase.pembuka.usul_judul')}</span></h3>
+        <p className="montase-petunjuk">{t('montase.pembuka.usul_ket')}</p>
+        <button type="button" className="btn-secondary" onClick={usulkanPembuka} disabled={sibuk}>
+          {pembuka.active ? <Loader2 size={13} className="animate-spin" /> : <Zap size={13} />}
+          {t('montase.pembuka.usul_tombol')}
+        </button>
+        {(pembuka.job || pembuka.error) && <JobProgress job={pembuka.job} error={pembuka.error} onCancel={pembuka.cancel} compact />}
       </section>
       <section className="montase-bagian">
         <h3><span><Crop size={13} /> {t('montase.asisten.bingkai_judul')}</span></h3>

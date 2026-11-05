@@ -116,6 +116,17 @@ export default function MeterOrisinalitas({ hasil, onKe, onRekamNarasi, onPeriks
               </ul>
             </>
           )}
+          <section className="montase-orisinal-pembuka">
+            <h4>{t('montase.pembuka.judul')}</h4>
+            <ul>
+              {['gambar', 'tulisan', 'suara'].map((k) => (
+                <li key={k} className={hasil.pembuka[k] ? 'ya' : 'tidak'}>
+                  {hasil.pembuka[k] ? '✓' : '✗'} {t(`montase.pembuka.${k}`)}
+                </li>
+              ))}
+            </ul>
+            {!hasil.pembuka.baik && <p className="montase-petunjuk">{t('montase.pembuka.saran')}</p>}
+          </section>
           {onPeriksaKemiripan && <Kemiripan onPeriksa={onPeriksaKemiripan} />}
           <p className="montase-petunjuk">{t('montase.orisinal.ket')}</p>
         </div>

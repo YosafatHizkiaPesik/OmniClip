@@ -71,6 +71,18 @@ describe('hitungOrisinalitas', () => {
   });
 });
 
+describe('periksaPembuka', () => {
+  it('kartu + narasi di awal: lengkap; klip bisu di detik 2: kurang', () => {
+    const baik = dok([
+      ['motion', { id: 'k', jenis: 'motion', mulai: 0, durasi: 60 }],
+      ['audio', { id: 'n', jenis: 'audio', mulai: 0, durasi: 45 }],
+    ]);
+    expect(hitungOrisinalitas(baik, asal).pembuka).toEqual({ gambar: true, tulisan: true, suara: true, baik: true });
+    const lemah = dok([v(2, 10)]);
+    expect(hitungOrisinalitas(lemah, asal).pembuka.baik).toBe(false);
+  });
+});
+
 describe('gabung', () => {
   it('rentang bertumpuk disatukan', () => {
     expect(gabung([[5, 9], [0, 3], [2, 6]])).toEqual([[0, 9]]);

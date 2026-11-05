@@ -25,6 +25,24 @@ export const SKOR_MIN = 0.08;
 const BOBOT_SISIPAN = 0.5;
 const ASAL_LAIN = new Set(['unduhan', 'klip_jadi']);
 
+/**
+ * Tiga detik pertama (JOB-5 O4): di Shorts penonton memutuskan menonton atau
+ * menggeser di sini. Tiga hal yang bisa dinilai dari dokumen saja: ada
+ * gambar sejak bingkai pertama, ada tulisan/animasi di detik pertama, dan ada
+ * suara (ucapan, narasi, atau klip bersuara) dalam setengah detik pertama.
+ */
+export function periksaPembuka(dokumen) {
+  const fps = dokumen.kanvas.fps;
+  const ada = (cocok, sampai) => dokumen.lajur.some((l) => !l.sembunyi && l.item.some(
+    (i) => cocok(i, l) && i.mulai <= sampai && i.mulai + i.durasi > 0,
+  ));
+  const gambar = ada((i) => i.jenis === 'video' || i.jenis === 'gambar' || i.jenis === 'motion', 0);
+  const tulisan = ada((i) => i.jenis === 'teks' || i.jenis === 'motion', fps);
+  const suara = ada((i, l) => !l.bisu && (i.jenis === 'audio'
+    || (i.jenis === 'video' && dokumen.bahan?.[i.bahan]?.ada_suara)), Math.round(fps / 2));
+  return { gambar, tulisan, suara, baik: gambar && tulisan && suara };
+}
+
 /** Panjang gabungan rentang [a, b) yang mungkin bertumpuk. */
 export function gabung(rentang) {
   const urut = rentang.filter(([a, b]) => b > a).sort((x, y) => x[0] - y[0]);
@@ -111,6 +129,7 @@ export function hitungOrisinalitas(dokumen, asalBahan = new Map()) {
   else if (adaLain && (celah.length || skor < 0.15)) tingkat = 'sedang';
 
   return {
+    pembuka: periksaPembuka(dokumen),
     persen: Math.round(skor * 100),
     cukup,
     tingkat,
