@@ -18,11 +18,11 @@ lupa untuk selalu mencatatnya agar ... sesi lain masih bisa melanjutkannya".
 | O2 Rekam narasi dari naskah | ✅ fc2e23d | teleprompter, direkam bukan sintetis |
 | O3 Kemiripan antar video | ✅ 8fad116 | sidik ekspor, pola trigram |
 | O4 Pembuka kuat | ✅ a1e7e6e | cek 3 detik + cuplikan |
-| O5 Rekam reaksi kamera | ⬜ | |
+| O5 Rekam reaksi kamera | 🟨 sebagian 20828c7 | server selesai, sisa perekam peramban |
 | O6 Akhir menyambung | ⬜ | |
 | O7 Keterangan unik + bab | ⬜ | |
 
-**Tugas berikutnya:** `O5`.
+**Tugas berikutnya:** `O5` (lanjutan: perekam di peramban).
 
 **Melanjutkan di sesi baru:** baca papan ini dan bagian 4. Kerjakan tugas
 berikutnya; bila ada catatan "SEBAGIAN" di bawah butirnya, lanjutkan dari
@@ -114,6 +114,7 @@ Urutan dari dampak terbesar terhadap penilaian orisinalitas.
 - [x] **O4** Pembuka kuat.
   (selesai 5 Nov 2026, commit a1e7e6e) orisinalitas.periksaPembuka + bagian Pembuka di panel meter; montase/pembuka.py (POST /proyek/{id}/pembuka) mengusulkan geser_semua 2 dtk + klip momen terkuat + teks pengait. Momen dicari di SELURUH bahan lalu disaring: pendeteksi lonjakan butuh suara sebelum lonjakan (terukur: rentang mulai 4 dtk sebelum puncak tidak menemukan apa pun). Playwright 4/4 termasuk Ctrl+Z.
 - [ ] **O5** Rekam reaksi kamera.
+  **SEBAGIAN (commit 20828c7):** server selesai (POST /rekam-video -> narasi.simpan_reaksi, lapisan `reaksi` di ekspor, nilai_tambah menghitungnya penuh, tes test_montase_reaksi.py). Sisa: perekam di peramban (kamera + putar pratinjau dari garis putar), taruh sebagai gambar-dalam-gambar di lajur video kedua, meter menghitung video `rekam` sebagai suara sendiri.
 - [ ] **O6** Akhir menyambung.
 - [ ] **O7** Keterangan unik dan bab.
 
